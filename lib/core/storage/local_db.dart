@@ -1,5 +1,4 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
 import '../../shared/models/event.dart';
 
 class LocalDb {
@@ -11,7 +10,8 @@ class LocalDb {
   }
 
   static Future<Database> _initDb() async {
-    final path = join(await getDatabasesPath(), 'everlore_cache.db');
+    final dbPath = await getDatabasesPath();
+    final path = '$dbPath/everlore_cache.db';
     return openDatabase(path, version: 1, onCreate: (db, version) async {
       await db.execute('''
         CREATE TABLE events (
