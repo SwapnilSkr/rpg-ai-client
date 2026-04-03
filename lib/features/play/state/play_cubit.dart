@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/network/ws_manager.dart';
+import '../../../core/storage/secure_storage.dart';
 import '../../../core/storage/local_db.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/world_instance.dart';
@@ -52,8 +53,16 @@ class PlayState extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [instance, template, events, memories, isGenerating, isConnected, isLoading, error];
+  List<Object?> get props => [
+    instance,
+    template,
+    events,
+    memories,
+    isGenerating,
+    isConnected,
+    isLoading,
+    error,
+  ];
 }
 
 class PlayCubit extends Cubit<PlayState> {
@@ -65,17 +74,15 @@ class PlayCubit extends Cubit<PlayState> {
   late StreamSubscription _connectionSub;
   late StreamSubscription _instanceSub;
 
-  PlayCubit({
-    required this.instanceId,
-    WsManager? ws,
-  })  : _ws = ws ?? WsManager(),
-        super(const PlayState()) {
+  PlayCubit({required this.instanceId, WsManager? ws})
+    : _ws = ws ?? WsManager(),
+      super(const PlayState()) {
     _init();
   }
 
   void _init() {
     _loadCachedEvents();
-    _ws.loadInstance(instanceId);
+    _connectAndLoad();
 
     _instanceSub = _ws.onInstanceLoaded.listen((msg) {
       final data = msg['data'];
@@ -85,22 +92,26 @@ class PlayCubit extends Cubit<PlayState> {
       final template = data['template'] != null
           ? WorldTemplate.fromJson(data['template'])
           : null;
-      final events = (data['recentEvents'] as List?)
+      final events =
+          (data['recentEvents'] as List?)
               ?.map((e) => GameEvent.fromJson(e))
               .toList() ??
           [];
-      final memories = (data['memories'] as List?)
+      final memories =
+          (data['memories'] as List?)
               ?.map((e) => Memory.fromJson(e))
               .toList() ??
           [];
 
-      emit(state.copyWith(
-        instance: instance,
-        template: template,
-        events: events,
-        memories: memories,
-        isLoading: false,
-      ));
+      emit(
+        state.copyWith(
+          instance: instance,
+          template: template,
+          events: events,
+          memories: memories,
+          isLoading: false,
+        ),
+      );
     });
 
     _generationSub = _ws.onGenerationComplete.listen((msg) {
@@ -120,33 +131,52 @@ class PlayCubit extends Cubit<PlayState> {
 
       LocalDb.insertEvent(newEvent);
 
-      emit(state.copyWith(
-        events: [...state.events, newEvent],
-        isGenerating: false,
-        instance: state.instance?.applyStateDiff(eventData['state_diff']),
-      ));
+      emit(
+        state.copyWith(
+          events: [...state.events, newEvent],
+          isGenerating: false,
+          instance: state.instance?.applyStateDiff(eventData['state_diff']),
+        ),
+      );
     });
 
     _memorySub = _ws.onMemoriesCurated.listen((msg) {
       if (msg['instanceId'] != instanceId) return;
-      final newMems = (msg['memories'] as List?)
-              ?.map((m) => Memory.fromJson(m))
-              .toList() ??
+      final newMems =
+          (msg['memories'] as List?)?.map((m) => Memory.fromJson(m)).toList() ??
           [];
       emit(state.copyWith(memories: [...state.memories, ...newMems]));
     });
 
     _errorSub = _ws.onError.listen((msg) {
       if (msg['code'] == 'GENERATION_IN_PROGRESS') return;
-      emit(state.copyWith(
-        isGenerating: false,
-        error: msg['message'] ?? 'An error occurred',
-      ));
+      emit(
+        state.copyWith(
+          isGenerating: false,
+          error: msg['message'] ?? 'An error occurred',
+        ),
+      );
     });
 
     _connectionSub = _ws.onConnectionState.listen((connected) {
       emit(state.copyWith(isConnected: connected));
     });
+  }
+
+  Future<void> _connectAndLoad() async {
+    final token = await SecureStore.getToken();
+    if (token == null || token.isEmpty) {
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: 'Please sign in to load this world.',
+        ),
+      );
+      return;
+    }
+
+    await _ws.connect(token);
+    _ws.loadInstance(instanceId);
   }
 
   Future<void> _loadCachedEvents() async {
@@ -166,11 +196,13 @@ class PlayCubit extends Cubit<PlayState> {
       playerInput: message,
     );
 
-    emit(state.copyWith(
-      events: [...state.events, optimisticEvent],
-      isGenerating: true,
-      error: null,
-    ));
+    emit(
+      state.copyWith(
+        events: [...state.events, optimisticEvent],
+        isGenerating: true,
+        error: null,
+      ),
+    );
 
     _ws.sendChatMessage(instanceId, message);
   }

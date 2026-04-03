@@ -16,13 +16,13 @@ class WsManager {
   final int _maxReconnectAttempts = 10;
   Timer? _reconnectTimer;
   Timer? _pingTimer;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   final _generationCompleteController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _memoriesCuratedController =
       StreamController<Map<String, dynamic>>.broadcast();
-  final _errorController =
-      StreamController<Map<String, dynamic>>.broadcast();
+  final _errorController = StreamController<Map<String, dynamic>>.broadcast();
   final _connectionStateController = StreamController<bool>.broadcast();
   final _instanceLoadedController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -41,10 +41,11 @@ class WsManager {
   final List<Map<String, dynamic>> _offlineQueue = [];
 
   Future<void> connect(String token) async {
+    if (_isConnected && _token == token) return;
     _token = token;
     _attemptConnection();
 
-    Connectivity().onConnectivityChanged.listen((result) {
+    _connectivitySub ??= Connectivity().onConnectivityChanged.listen((result) {
       if (result.isNotEmpty &&
           result.first != ConnectivityResult.none &&
           !_isConnected) {
@@ -146,21 +147,20 @@ class WsManager {
   }
 
   void loadInstance(String instanceId) {
-    send({
-      'action': 'load_instance',
-      'instance_id': instanceId,
-    });
+    send({'action': 'load_instance', 'instance_id': instanceId});
   }
 
   Future<void> disconnect() async {
     _pingTimer?.cancel();
     _reconnectTimer?.cancel();
     await _channel?.sink.close();
+    _channel = null;
     _isConnected = false;
     _connectionStateController.add(false);
   }
 
   void dispose() {
+    _connectivitySub?.cancel();
     _generationCompleteController.close();
     _memoriesCuratedController.close();
     _errorController.close();

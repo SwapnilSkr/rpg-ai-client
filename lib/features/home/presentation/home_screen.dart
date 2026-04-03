@@ -53,13 +53,47 @@ class _HomeView extends StatelessWidget {
             );
           }
 
+          if (state.error != null &&
+              state.error!.contains('Unauthorized') &&
+              state.instances.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.lock_outline,
+                    color: Colors.white24,
+                    size: 64,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Sign in to access your worlds',
+                    style: TextStyle(color: Colors.white54, fontSize: 18),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () => context.push('/auth'),
+                    icon: const Icon(Icons.login),
+                    label: const Text('Open Auth'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purpleAccent,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
           if (state.instances.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.auto_stories,
-                      color: Colors.white24, size: 64),
+                  const Icon(
+                    Icons.auto_stories,
+                    color: Colors.white24,
+                    size: 64,
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'No worlds yet',
@@ -100,7 +134,8 @@ class _HomeView extends StatelessWidget {
                       builder: (ctx) => AlertDialog(
                         title: const Text('Archive World?'),
                         content: const Text(
-                            'This world will be archived. You can restore it later.'),
+                          'This world will be archived. You can restore it later.',
+                        ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(ctx),
@@ -109,9 +144,9 @@ class _HomeView extends StatelessWidget {
                           TextButton(
                             onPressed: () {
                               Navigator.pop(ctx);
-                              context
-                                  .read<HomeCubit>()
-                                  .archiveInstance(instance.id);
+                              context.read<HomeCubit>().archiveInstance(
+                                instance.id,
+                              );
                             },
                             child: const Text('Archive'),
                           ),

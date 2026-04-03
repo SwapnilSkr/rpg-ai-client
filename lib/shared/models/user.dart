@@ -24,17 +24,18 @@ class UserPreferences {
   }
 
   Map<String, dynamic> toJson() => {
-        'nsfw_enabled': nsfwEnabled,
-        'preferred_model': preferredModel,
-        'theme': theme,
-        'narration_length': narrationLength,
-        'auto_memory_curation': autoMemoryCuration,
-      };
+    'nsfw_enabled': nsfwEnabled,
+    'preferred_model': preferredModel,
+    'theme': theme,
+    'narration_length': narrationLength,
+    'auto_memory_curation': autoMemoryCuration,
+  };
 }
 
 class User {
   final String id;
   final String email;
+  final String? phone;
   final String username;
   final String tier;
   final UserPreferences preferences;
@@ -43,6 +44,7 @@ class User {
   const User({
     required this.id,
     required this.email,
+    this.phone,
     required this.username,
     required this.tier,
     this.preferences = const UserPreferences(),
@@ -53,6 +55,7 @@ class User {
     return User(
       id: json['id'] ?? '',
       email: json['email'] ?? '',
+      phone: json['phone'],
       username: json['username'] ?? '',
       tier: json['tier'] ?? 'free',
       preferences: json['preferences'] != null
@@ -63,11 +66,12 @@ class User {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'email': email,
-        'username': username,
-        'tier': tier,
-        'preferences': preferences.toJson(),
-        'token_balance': tokenBalance,
-      };
+    'id': id,
+    'email': email,
+    'phone': phone,
+    'username': username,
+    'tier': tier,
+    'preferences': preferences.toJson(),
+    'token_balance': tokenBalance,
+  };
 }
