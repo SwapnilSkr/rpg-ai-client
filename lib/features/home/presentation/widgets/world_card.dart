@@ -1,5 +1,23 @@
 import 'package:flutter/material.dart';
-import '../../../../shared/models/world_instance.dart';
+import '../../../../../shared/models/world_instance.dart';
+import '../../../../../app/theme/nexus_theme.dart';
+
+// Gradient palettes for realm cards — pick by hash of instanceId
+const List<List<Color>> _realmGradients = [
+  [Color(0xFF1A0A2E), Color(0xFF0D1A3E)], // Arcane Violet → Deep Navy
+  [Color(0xFF1A1500), Color(0xFF0E1A10)], // Dark Amber → Forest Dark
+  [Color(0xFF0A1A1A), Color(0xFF0A0E2A)], // Teal Void → Midnight
+  [Color(0xFF1A0D0D), Color(0xFF1A0A22)], // Crimson Dark → Violet
+  [Color(0xFF0A120A), Color(0xFF121A0A)], // Verdant Dark → Moss
+];
+
+const List<Color> _accentColors = [
+  EverloreTheme.violet,
+  EverloreTheme.gold,
+  EverloreTheme.cyanBright,
+  Color(0xFFEC4899), // rose
+  Color(0xFF34D399), // emerald
+];
 
 class WorldCard extends StatelessWidget {
   final WorldInstance instance;
@@ -15,92 +33,258 @@ class WorldCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = instance.template?['title'] ?? 'Untitled World';
-    final description = instance.template?['description'] ?? '';
-    final isSentient = instance.template?['is_sentient'] ?? false;
+    final title = instance.template?['title'] as String? ?? 'Untitled Realm';
+    final description =
+        instance.template?['description'] as String? ?? '';
+    final isSentient = instance.template?['is_sentient'] as bool? ?? false;
+    final sceneTag = instance.currentScene.tag;
 
-    return Card(
-      color: const Color(0xFF1a1a2e),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: InkWell(
+    final colorIdx = instance.id.hashCode.abs() % _realmGradients.length;
+    final gradColors = _realmGradients[colorIdx];
+    final accentColor = _accentColors[colorIdx];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      child: GestureDetector(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    isSentient ? Icons.psychology : Icons.auto_stories,
-                    color: isSentient
-                        ? Colors.purpleAccent
-                        : Colors.blueAccent,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  if (onArchive != null)
-                    IconButton(
-                      icon: const Icon(Icons.archive_outlined,
-                          color: Colors.white38, size: 20),
-                      onPressed: onArchive,
-                    ),
-                ],
-              ),
-              if (description.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white54, fontSize: 13),
-                ),
-              ],
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  _chip('${instance.meta.totalEvents} events'),
-                  const SizedBox(width: 8),
-                  _chip('${instance.meta.totalMemories} memories'),
-                  const Spacer(),
-                  Text(
-                    _timeAgo(instance.meta.lastActiveAt),
-                    style: const TextStyle(color: Colors.white38, fontSize: 11),
-                  ),
-                ],
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: gradColors,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: accentColor.withValues(alpha: 0.25),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: accentColor.withValues(alpha: 0.06),
+                blurRadius: 24,
+                offset: const Offset(0, 4),
               ),
             ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(18),
+              splashColor: accentColor.withValues(alpha: 0.08),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top row: icon + title + archive
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // World type icon
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: accentColor.withValues(alpha: 0.12),
+                            border: Border.all(
+                                color: accentColor.withValues(alpha: 0.3)),
+                          ),
+                          child: Icon(
+                            isSentient
+                                ? Icons.psychology_alt
+                                : Icons.auto_stories,
+                            color: accentColor,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: const TextStyle(
+                                  color: EverloreTheme.parchment,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                isSentient ? 'Sentient World' : 'Game Master World',
+                                style: TextStyle(
+                                  color: accentColor.withValues(alpha: 0.8),
+                                  fontSize: 11,
+                                  letterSpacing: 0.5,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (onArchive != null)
+                          GestureDetector(
+                            onTap: onArchive,
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                color: EverloreTheme.white10,
+                              ),
+                              child: const Icon(
+                                Icons.more_horiz,
+                                color: EverloreTheme.ash,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+
+                    if (description.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Text(
+                        description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: EverloreTheme.ash,
+                          fontSize: 13,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 16),
+
+                    // Divider
+                    Container(
+                      height: 1,
+                      color: accentColor.withValues(alpha: 0.1),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // Stats row
+                    Row(
+                      children: [
+                        _Stat(
+                          icon: Icons.chat_bubble_outline,
+                          label: '${instance.meta.totalEvents}',
+                          tooltip: 'Events',
+                          color: accentColor,
+                        ),
+                        const SizedBox(width: 16),
+                        _Stat(
+                          icon: Icons.bookmark_outline,
+                          label: '${instance.meta.totalMemories}',
+                          tooltip: 'Echoes',
+                          color: accentColor,
+                        ),
+                        const SizedBox(width: 12),
+                        _SceneTag(tag: sceneTag, color: accentColor),
+                        const Spacer(),
+                        _TimeAgo(
+                          dateTime: instance.meta.lastActiveAt,
+                          color: accentColor,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _chip(String text) {
+class _Stat extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final Color color;
+
+  const _Stat({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color.withValues(alpha: 0.6)),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(color: EverloreTheme.ash, fontSize: 12),
+        ),
+      ],
+    );
+  }
+}
+
+class _SceneTag extends StatelessWidget {
+  final String tag;
+  final Color color;
+
+  const _SceneTag({required this.tag, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.white10,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
+        color: color.withValues(alpha: 0.1),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
-      child: Text(text, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+      child: Text(
+        tag,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
+class _TimeAgo extends StatelessWidget {
+  final DateTime? dateTime;
+  final Color color;
+
+  const _TimeAgo({this.dateTime, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _format(dateTime),
+      style: TextStyle(
+        color: EverloreTheme.ash.withValues(alpha: 0.6),
+        fontSize: 11,
+      ),
     );
   }
 
-  String _timeAgo(DateTime? dt) {
+  String _format(DateTime? dt) {
     if (dt == null) return '';
     final diff = DateTime.now().difference(dt);
+    if (diff.inDays > 7) return '${(diff.inDays / 7).floor()}w ago';
     if (diff.inDays > 0) return '${diff.inDays}d ago';
     if (diff.inHours > 0) return '${diff.inHours}h ago';
     if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';

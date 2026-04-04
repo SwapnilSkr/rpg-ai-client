@@ -47,9 +47,9 @@ class _LoadingShimmerState extends State<LoadingShimmer>
               begin: Alignment(-1.0 + 2.0 * _controller.value, 0),
               end: Alignment(1.0 + 2.0 * _controller.value, 0),
               colors: const [
-                Color(0xFF1a1a2e),
-                Color(0xFF2a2a3e),
-                Color(0xFF1a1a2e),
+                Color(0xFF13132A),
+                Color(0xFF252548),
+                Color(0xFF13132A),
               ],
             ),
           ),

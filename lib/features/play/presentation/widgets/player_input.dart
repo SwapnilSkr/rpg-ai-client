@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../../app/theme/nexus_theme.dart';
 
 class PlayerInput extends StatefulWidget {
   final bool isGenerating;
@@ -19,6 +20,16 @@ class PlayerInput extends StatefulWidget {
 class _PlayerInputState extends State<PlayerInput> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
+  bool _hasText = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() {
+      final has = _controller.text.trim().isNotEmpty;
+      if (has != _hasText) setState(() => _hasText = has);
+    });
+  }
 
   @override
   void dispose() {
@@ -37,68 +48,125 @@ class _PlayerInputState extends State<PlayerInput> {
 
   @override
   Widget build(BuildContext context) {
+    final canSend = _hasText && !widget.isGenerating && widget.isConnected;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       decoration: const BoxDecoration(
-        color: Color(0xFF0d0d1a),
+        color: EverloreTheme.void0,
         border: Border(
-          top: BorderSide(color: Colors.white10),
+          top: BorderSide(color: EverloreTheme.white10),
         ),
       ),
       child: SafeArea(
         top: false,
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                enabled: !widget.isGenerating,
-                maxLines: 4,
-                minLines: 1,
-                style: const TextStyle(color: Colors.white, fontSize: 15),
-                decoration: InputDecoration(
-                  hintText: widget.isGenerating
-                      ? 'Waiting for response...'
-                      : widget.isConnected
-                          ? 'What do you do?'
-                          : 'Reconnecting...',
-                  hintStyle: const TextStyle(color: Colors.white30),
-                  filled: true,
-                  fillColor: const Color(0xFF1a1a2e),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 12, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: EverloreTheme.void2,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: _focusNode.hasFocus
+                          ? EverloreTheme.goldDim.withValues(alpha: 0.6)
+                          : EverloreTheme.goldDim.withValues(alpha: 0.2),
+                    ),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    enabled: !widget.isGenerating,
+                    maxLines: 5,
+                    minLines: 1,
+                    onTap: () => setState(() {}),
+                    style: const TextStyle(
+                      color: EverloreTheme.parchment,
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: _hintText(),
+                      hintStyle: TextStyle(
+                        color: EverloreTheme.ash.withValues(alpha: 0.4),
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                    textInputAction: TextInputAction.newline,
+                    onSubmitted: (_) => _submit(),
                   ),
                 ),
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _submit(),
               ),
-            ),
-            const SizedBox(width: 8),
-            FloatingActionButton.small(
-              onPressed: widget.isGenerating ? null : _submit,
-              backgroundColor: widget.isGenerating
-                  ? Colors.white12
-                  : Colors.purpleAccent,
-              child: widget.isGenerating
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white38,
-                      ),
-                    )
-                  : const Icon(Icons.send, size: 18),
-            ),
-          ],
+              const SizedBox(width: 10),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.isGenerating
+                      ? EverloreTheme.void3
+                      : canSend
+                          ? EverloreTheme.gold
+                          : EverloreTheme.void3,
+                  border: Border.all(
+                    color: widget.isGenerating || canSend
+                        ? Colors.transparent
+                        : EverloreTheme.goldDim.withValues(alpha: 0.2),
+                  ),
+                  boxShadow: canSend
+                      ? [
+                          BoxShadow(
+                            color: EverloreTheme.gold.withValues(alpha: 0.3),
+                            blurRadius: 12,
+                          )
+                        ]
+                      : null,
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: canSend ? _submit : null,
+                    borderRadius: BorderRadius.circular(22),
+                    child: Center(
+                      child: widget.isGenerating
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: EverloreTheme.gold,
+                              ),
+                            )
+                          : Icon(
+                              Icons.send_rounded,
+                              size: 18,
+                              color: canSend
+                                  ? EverloreTheme.void0
+                                  : EverloreTheme.ash.withValues(alpha: 0.3),
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  String _hintText() {
+    if (widget.isGenerating) return 'The story unfolds...';
+    if (!widget.isConnected) return 'Reconnecting to the realm...';
+    return 'What do you do?';
   }
 }
