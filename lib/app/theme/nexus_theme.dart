@@ -122,9 +122,23 @@ class EverloreTheme {
       );
 
   // ──────────────── ThemeData ────────────────
+  /// Horizontal slide in/out for push and pop (in-app bar + system back).
+  /// Avoids Material’s zoom-style transition on Android, which reads as a harsh “pop.”
+  static const PageTransitionsTheme _pageTransitions = PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
+    },
+  );
+
   static ThemeData get dark {
     return ThemeData(
       brightness: Brightness.dark,
+      pageTransitionsTheme: _pageTransitions,
       scaffoldBackgroundColor: void1,
       primaryColor: gold,
       colorScheme: const ColorScheme.dark(
