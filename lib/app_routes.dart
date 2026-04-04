@@ -7,6 +7,9 @@ import 'package:everlore/features/play/presentation/play_screen.dart';
 import 'package:everlore/features/chronicle/presentation/chronicle_screen.dart';
 import 'package:everlore/features/templates/presentation/browse_screen.dart';
 import 'package:everlore/features/templates/presentation/template_detail_screen.dart';
+import 'package:everlore/features/creator/presentation/my_worlds_screen.dart';
+import 'package:everlore/features/creator/presentation/forge_world_screen.dart';
+import 'package:everlore/shared/models/world_template.dart';
 
 final router = GoRouter(
   initialLocation: '/splash',
@@ -55,6 +58,23 @@ final router = GoRouter(
       name: 'template_detail',
       builder: (context, state) => TemplateDetailScreen(
         templateId: state.pathParameters['templateId']!,
+      ),
+    ),
+    GoRoute(
+      path: '/my-worlds',
+      name: 'my_worlds',
+      builder: (context, state) => const MyWorldsScreen(),
+    ),
+    GoRoute(
+      path: '/my-worlds/forge',
+      name: 'forge_world',
+      builder: (context, state) => const ForgeWorldScreen(),
+    ),
+    GoRoute(
+      path: '/my-worlds/:templateId/forge',
+      name: 'edit_world',
+      builder: (context, state) => ForgeWorldScreen(
+        existing: state.extra as WorldTemplate?,
       ),
     ),
   ],

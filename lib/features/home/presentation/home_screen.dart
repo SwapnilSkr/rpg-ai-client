@@ -98,6 +98,12 @@ class _HomeView extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       _HeaderButton(
+                        icon: Icons.auto_fix_high,
+                        tooltip: 'My Worlds',
+                        onTap: () => context.push('/my-worlds'),
+                      ),
+                      const SizedBox(width: 4),
+                      _HeaderButton(
                         icon: Icons.person_outline,
                         tooltip: 'Profile',
                         onTap: () => context.push('/auth'),
