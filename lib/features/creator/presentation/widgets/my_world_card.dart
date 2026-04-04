@@ -210,14 +210,12 @@ class MyWorldCard extends StatelessWidget {
                       style: const TextStyle(color: EverloreTheme.ash, fontSize: 11),
                     ),
                   ],
-                  // Action buttons (drafts only)
                   if (isDraft) ...[
                     const SizedBox(height: 12),
                     const Divider(color: Color(0xFF252548), height: 1),
                     const SizedBox(height: 10),
                     Row(
                       children: [
-                        // Edit
                         if (onEdit != null)
                           _ActionButton(
                             icon: Icons.edit_outlined,
@@ -226,7 +224,6 @@ class MyWorldCard extends StatelessWidget {
                             onTap: onEdit!,
                           ),
                         const Spacer(),
-                        // Publish
                         if (onPublish != null)
                           isPublishing
                               ? const SizedBox(
@@ -240,6 +237,29 @@ class MyWorldCard extends StatelessWidget {
                                   color: EverloreTheme.gold,
                                   onTap: onPublish!,
                                 ),
+                      ],
+                    ),
+                  ] else if (onEdit != null || onTap != null) ...[
+                    const SizedBox(height: 12),
+                    const Divider(color: Color(0xFF252548), height: 1),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        if (onEdit != null)
+                          _ActionButton(
+                            icon: Icons.edit_outlined,
+                            label: 'Edit',
+                            color: EverloreTheme.ash,
+                            onTap: onEdit!,
+                          ),
+                        const Spacer(),
+                        if (onTap != null)
+                          _ActionButton(
+                            icon: Icons.visibility_outlined,
+                            label: 'Preview',
+                            color: EverloreTheme.verdant,
+                            onTap: onTap!,
+                          ),
                       ],
                     ),
                   ],

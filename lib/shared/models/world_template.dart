@@ -78,8 +78,8 @@ class WorldTemplate {
     }
 
     return WorldTemplate(
-      id: json['_id'] ?? json['id'] ?? '',
-      creatorId: json['creator_id'] ?? '',
+      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+      creatorId: json['creator_id']?.toString() ?? '',
       title: json['title'] ?? '',
       slug: json['slug'] ?? '',
       description: json['description'] ?? '',
@@ -90,7 +90,7 @@ class WorldTemplate {
       seedPrompt: json['seed_prompt'] ?? '',
       globalLore: json['global_lore'] ?? '',
       baseStatsTemplate: statsMap,
-      flagDefinitions: json['flag_definitions'] ?? {},
+      flagDefinitions: Map<String, dynamic>.from(json['flag_definitions'] ?? {}),
       sceneTags: List<String>.from(json['scene_tags'] ?? []),
       modelPreferences: Map<String, String>.from(json['model_preferences'] ?? {}),
       maxContextMemories: json['max_context_memories'] ?? 25,

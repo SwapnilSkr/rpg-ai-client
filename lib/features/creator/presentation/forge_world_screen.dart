@@ -1208,16 +1208,16 @@ class _Step3Stats extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               color: EverloreTheme.void2,
               border: Border.all(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.15)),
+                  color: EverloreTheme.ember.withValues(alpha: 0.25)),
             ),
             child: const Row(
               children: [
-                Icon(Icons.info_outline,
-                    size: 14, color: EverloreTheme.ash),
+                Icon(Icons.priority_high,
+                    size: 14, color: EverloreTheme.ember),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Stats are optional. Worlds without stats focus purely on narrative.',
+                    'At least one Vital Force is required — define health, mana, or any tracked stat before continuing.',
                     style:
                         TextStyle(color: EverloreTheme.ash, fontSize: 12, height: 1.4),
                   ),
@@ -1285,6 +1285,56 @@ class _Step3Stats extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 28),
+          const Text('REALM FLAGS',
+              style: TextStyle(
+                  color: EverloreTheme.gold,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2)),
+          const SizedBox(height: 6),
+          Text(
+            'Boolean, numeric, or text flags for quests and story state (optional).',
+            style: TextStyle(
+                color: EverloreTheme.ash.withValues(alpha: 0.9),
+                fontSize: 12,
+                height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          if (state.flags.isNotEmpty) ...[
+            ...state.flags.asMap().entries.map((e) => _FlagRow(
+                  entry: e.value,
+                  index: e.key,
+                  cubit: cubit,
+                )),
+            const SizedBox(height: 10),
+          ],
+          GestureDetector(
+            onTap: () => _showFlagEditor(context, cubit, null, null),
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: EverloreTheme.violet.withValues(alpha: 0.35),
+                  style: BorderStyle.solid,
+                ),
+                color: EverloreTheme.void2,
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.flag_outlined, color: EverloreTheme.violet, size: 18),
+                  SizedBox(width: 8),
+                  Text('Add Realm Flag',
+                      style: TextStyle(
+                          color: EverloreTheme.violet,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 24),
         ],
       ),
@@ -1313,6 +1363,239 @@ class _Step3Stats extends StatelessWidget {
             cubit.addStat(stat);
           }
         },
+      ),
+    );
+  }
+
+  static void _showFlagEditor(
+    BuildContext context,
+    ForgeWorldCubit cubit,
+    FlagEntry? existing,
+    int? index,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _FlagEditorSheet(
+        existing: existing,
+        onSave: (flag) {
+          if (index != null) {
+            cubit.updateFlag(index, flag);
+          } else {
+            cubit.addFlag(flag);
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _FlagRow extends StatelessWidget {
+  final FlagEntry entry;
+  final int index;
+  final ForgeWorldCubit cubit;
+
+  const _FlagRow({
+    required this.entry,
+    required this.index,
+    required this.cubit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final typeLabel = switch (entry.kind) {
+      RealmFlagKind.boolean => 'bool',
+      RealmFlagKind.integer => 'int',
+      RealmFlagKind.string => 'text',
+    };
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        color: EverloreTheme.void2,
+        border: Border.all(color: EverloreTheme.violet.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.name,
+                  style: const TextStyle(
+                    color: EverloreTheme.parchment,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$typeLabel · default: ${entry.defaultValue}',
+                  style: const TextStyle(color: EverloreTheme.ash, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () => _Step3Stats._showFlagEditor(context, cubit, entry, index),
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(Icons.edit_outlined, color: EverloreTheme.ash, size: 18),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => cubit.removeFlag(index),
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(Icons.delete_outline, color: EverloreTheme.crimson, size: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FlagEditorSheet extends StatefulWidget {
+  final FlagEntry? existing;
+  final void Function(FlagEntry) onSave;
+
+  const _FlagEditorSheet({this.existing, required this.onSave});
+
+  @override
+  State<_FlagEditorSheet> createState() => _FlagEditorSheetState();
+}
+
+class _FlagEditorSheetState extends State<_FlagEditorSheet> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _descCtrl;
+  late final TextEditingController _defaultCtrl;
+  late RealmFlagKind _kind;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _kind = e?.kind ?? RealmFlagKind.boolean;
+    _nameCtrl = TextEditingController(text: e?.name ?? '');
+    _descCtrl = TextEditingController(text: e?.description ?? '');
+    _defaultCtrl = TextEditingController(
+      text: e == null ? '' : e.defaultValue.toString(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    _defaultCtrl.dispose();
+    super.dispose();
+  }
+
+  Object _parseDefault() {
+    final raw = _defaultCtrl.text.trim();
+    switch (_kind) {
+      case RealmFlagKind.boolean:
+        final lower = raw.toLowerCase();
+        return lower == 'true' || lower == '1' || lower == 'yes';
+      case RealmFlagKind.integer:
+        return int.tryParse(raw) ?? 0;
+      case RealmFlagKind.string:
+        return raw;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
+        top: 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Realm flag',
+            style: TextStyle(
+              color: EverloreTheme.parchment,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _nameCtrl,
+            style: const TextStyle(color: EverloreTheme.parchment),
+            decoration: const InputDecoration(
+              labelText: 'Key (e.g. dragon_slayer)',
+              labelStyle: TextStyle(color: EverloreTheme.ash),
+            ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<RealmFlagKind>(
+            value: _kind,
+            dropdownColor: EverloreTheme.void2,
+            decoration: const InputDecoration(
+              labelText: 'Type',
+              labelStyle: TextStyle(color: EverloreTheme.ash),
+            ),
+            items: const [
+              DropdownMenuItem(value: RealmFlagKind.boolean, child: Text('Boolean', style: TextStyle(color: EverloreTheme.parchment))),
+              DropdownMenuItem(value: RealmFlagKind.integer, child: Text('Integer', style: TextStyle(color: EverloreTheme.parchment))),
+              DropdownMenuItem(value: RealmFlagKind.string, child: Text('String', style: TextStyle(color: EverloreTheme.parchment))),
+            ],
+            onChanged: (v) => setState(() => _kind = v ?? RealmFlagKind.boolean),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _defaultCtrl,
+            style: const TextStyle(color: EverloreTheme.parchment),
+            decoration: InputDecoration(
+              labelText: _kind == RealmFlagKind.boolean
+                  ? 'Default (true/false)'
+                  : 'Default value',
+              labelStyle: const TextStyle(color: EverloreTheme.ash),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _descCtrl,
+            maxLines: 2,
+            style: const TextStyle(color: EverloreTheme.parchment),
+            decoration: const InputDecoration(
+              labelText: 'Description',
+              labelStyle: TextStyle(color: EverloreTheme.ash),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                final name = _nameCtrl.text.trim().toLowerCase().replaceAll(' ', '_');
+                if (name.isEmpty) return;
+                widget.onSave(FlagEntry(
+                  name: name,
+                  kind: _kind,
+                  defaultValue: _parseDefault(),
+                  description: _descCtrl.text.trim(),
+                ));
+                Navigator.pop(context);
+              },
+              child: const Text('Save flag'),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import '../../../core/network/api_client.dart';
 import '../../../shared/models/world_template.dart';
 import '../data/creator_repository.dart';
 
@@ -37,28 +38,55 @@ class StatEntry extends Equatable {
   List<Object?> get props => [name, defaultValue, min, max, description];
 }
 
+enum RealmFlagKind { boolean, integer, string }
+
+class FlagEntry extends Equatable {
+  final String name;
+  final RealmFlagKind kind;
+  final Object defaultValue;
+  final String description;
+
+  const FlagEntry({
+    required this.name,
+    required this.kind,
+    required this.defaultValue,
+    this.description = '',
+  });
+
+  FlagEntry copyWith({
+    String? name,
+    RealmFlagKind? kind,
+    Object? defaultValue,
+    String? description,
+  }) =>
+      FlagEntry(
+        name: name ?? this.name,
+        kind: kind ?? this.kind,
+        defaultValue: defaultValue ?? this.defaultValue,
+        description: description ?? this.description,
+      );
+
+  @override
+  List<Object?> get props => [name, kind, defaultValue, description];
+}
+
 class ForgeWorldState extends Equatable {
   final int step;
-  // Step 0 — The Essence
   final String title;
   final String description;
   final bool isSentient;
   final bool isNsfwCapable;
-  // Step 1 — Oracle's Voice
   final String seedPrompt;
-  // Step 2 — Ancient Lore
   final String globalLore;
   final List<String> sceneTags;
-  // Step 3 — Vital Forces
   final List<StatEntry> stats;
-  // Step 4 — Arcane Engine
+  final List<FlagEntry> flags;
   final String modelLogic;
   final String modelNarrationSfw;
   final String modelNarrationNsfw;
   final String modelSummary;
   final int maxContextMemories;
   final int maxLoreResults;
-  // Submission
   final bool isSubmitting;
   final String? error;
   final WorldTemplate? result;
@@ -73,6 +101,7 @@ class ForgeWorldState extends Equatable {
     this.globalLore = '',
     this.sceneTags = const [],
     this.stats = const [],
+    this.flags = const [],
     this.modelLogic = 'gpt-4o',
     this.modelNarrationSfw = 'gpt-4o',
     this.modelNarrationNsfw = 'pygmalionai/mythalion-13b',
@@ -94,6 +123,7 @@ class ForgeWorldState extends Equatable {
     String? globalLore,
     List<String>? sceneTags,
     List<StatEntry>? stats,
+    List<FlagEntry>? flags,
     String? modelLogic,
     String? modelNarrationSfw,
     String? modelNarrationNsfw,
@@ -115,6 +145,7 @@ class ForgeWorldState extends Equatable {
         globalLore: globalLore ?? this.globalLore,
         sceneTags: sceneTags ?? this.sceneTags,
         stats: stats ?? this.stats,
+        flags: flags ?? this.flags,
         modelLogic: modelLogic ?? this.modelLogic,
         modelNarrationSfw: modelNarrationSfw ?? this.modelNarrationSfw,
         modelNarrationNsfw: modelNarrationNsfw ?? this.modelNarrationNsfw,
@@ -130,6 +161,7 @@ class ForgeWorldState extends Equatable {
       title.trim().length >= 2 && description.trim().length >= 10;
   bool get step1Valid => seedPrompt.trim().length >= 10;
   bool get step2Valid => globalLore.trim().length >= 10;
+  bool get step3Valid => stats.isNotEmpty;
 
   bool get canProceed {
     switch (step) {
@@ -139,6 +171,8 @@ class ForgeWorldState extends Equatable {
         return step1Valid;
       case 2:
         return step2Valid;
+      case 3:
+        return step3Valid;
       default:
         return true;
     }
@@ -155,6 +189,7 @@ class ForgeWorldState extends Equatable {
         globalLore,
         sceneTags,
         stats,
+        flags,
         modelLogic,
         modelNarrationSfw,
         modelNarrationNsfw,
@@ -165,6 +200,36 @@ class ForgeWorldState extends Equatable {
         error,
         result,
       ];
+}
+
+List<FlagEntry> _flagsFromTemplate(Map<String, dynamic> raw) {
+  if (raw.isEmpty) return [];
+  return raw.entries.map((e) {
+    final m = Map<String, dynamic>.from(e.value as Map? ?? {});
+    final type = (m['type'] as String?) ?? 'boolean';
+    final kind = switch (type) {
+      'integer' => RealmFlagKind.integer,
+      'string' => RealmFlagKind.string,
+      _ => RealmFlagKind.boolean,
+    };
+    final def = m['default'];
+    Object dv;
+    if (def != null) {
+      dv = def;
+    } else {
+      dv = switch (kind) {
+        RealmFlagKind.boolean => false,
+        RealmFlagKind.integer => 0,
+        RealmFlagKind.string => '',
+      };
+    }
+    return FlagEntry(
+      name: e.key,
+      kind: kind,
+      defaultValue: dv,
+      description: m['description'] as String? ?? '',
+    );
+  }).toList();
 }
 
 class ForgeWorldCubit extends Cubit<ForgeWorldState> {
@@ -186,6 +251,8 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
               description: e.value.description,
             ))
         .toList();
+    final flags = _flagsFromTemplate(
+        Map<String, dynamic>.from(t.flagDefinitions));
     return ForgeWorldState(
       title: t.title,
       description: t.description,
@@ -195,6 +262,7 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       globalLore: t.globalLore,
       sceneTags: List<String>.from(t.sceneTags),
       stats: stats,
+      flags: flags,
       modelLogic: t.modelPreferences['logic'] ?? 'gpt-4o',
       modelNarrationSfw: t.modelPreferences['narration_sfw'] ?? 'gpt-4o',
       modelNarrationNsfw:
@@ -249,6 +317,20 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
     emit(state.copyWith(stats: updated));
   }
 
+  void addFlag(FlagEntry flag) {
+    emit(state.copyWith(flags: [...state.flags, flag]));
+  }
+
+  void updateFlag(int index, FlagEntry flag) {
+    final updated = [...state.flags]..[index] = flag;
+    emit(state.copyWith(flags: updated));
+  }
+
+  void removeFlag(int index) {
+    final updated = [...state.flags]..removeAt(index);
+    emit(state.copyWith(flags: updated));
+  }
+
   void clearError() => emit(state.copyWith(clearError: true));
 
   void setModelLogic(String v) => emit(state.copyWith(modelLogic: v));
@@ -262,6 +344,12 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   void setMaxLoreResults(int v) => emit(state.copyWith(maxLoreResults: v));
 
   Future<void> forge() async {
+    if (state.stats.isEmpty) {
+      emit(state.copyWith(
+          error:
+              'Define at least one Vital Force — adventurers need measurable attributes.'));
+      return;
+    }
     emit(state.copyWith(isSubmitting: true, clearError: true));
     try {
       final payload = _buildPayload();
@@ -284,6 +372,19 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
         'description': s.description,
       };
     }
+    final flagsMap = <String, dynamic>{};
+    for (final f in state.flags) {
+      final typeStr = switch (f.kind) {
+        RealmFlagKind.boolean => 'boolean',
+        RealmFlagKind.integer => 'integer',
+        RealmFlagKind.string => 'string',
+      };
+      flagsMap[f.name] = {
+        'type': typeStr,
+        'default': f.defaultValue,
+        'description': f.description,
+      };
+    }
     return {
       'title': state.title.trim(),
       'description': state.description.trim(),
@@ -292,6 +393,7 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       'seed_prompt': state.seedPrompt.trim(),
       'global_lore': state.globalLore.trim(),
       'base_stats_template': statsMap,
+      'flag_definitions': flagsMap,
       'scene_tags': state.sceneTags,
       'model_preferences': {
         'logic': state.modelLogic,
@@ -305,6 +407,19 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   }
 
   String _friendly(Object e) {
+    if (e is ApiException) {
+      final m = e.message;
+      if (e.statusCode == 429 &&
+          m.toLowerCase().contains('template creation rate')) {
+        return 'The forge needs rest — only 5 worlds may be crafted per day.';
+      }
+      if (e.statusCode == 403 &&
+          m.toLowerCase().contains('premium') &&
+          m.toLowerCase().contains('creator')) {
+        return 'Only Premium and Creator wielders may forge worlds.';
+      }
+      return m;
+    }
     final s = e.toString().toLowerCase();
     if (s.contains('rate limit')) {
       return 'The forge needs rest — only 5 worlds may be crafted per day.';
@@ -314,15 +429,6 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
     }
     if (s.contains('403')) {
       return 'Only Premium and Creator wielders may forge worlds.';
-    }
-    if (s.contains('title')) {
-      return 'A world without a name cannot be summoned.';
-    }
-    if (s.contains('seed_prompt')) {
-      return "The Oracle's Voice must be at least 10 characters.";
-    }
-    if (s.contains('global_lore')) {
-      return 'The Ancient Lore must be at least 10 characters.';
     }
     return 'The arcane forge flickered. Please try again.';
   }

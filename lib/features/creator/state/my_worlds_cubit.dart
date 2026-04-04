@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../shared/models/world_template.dart';
+import '../../../core/network/api_client.dart';
 import '../data/creator_repository.dart';
 
 class MyWorldsState extends Equatable {
@@ -69,6 +70,13 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
   void clearError() => emit(state.copyWith(clearError: true));
 
   String _friendly(Object e) {
+    if (e is ApiException) {
+      if (e.statusCode == 429 &&
+          e.message.toLowerCase().contains('template creation rate')) {
+        return 'The forge needs rest — only 5 worlds may be crafted per day.';
+      }
+      return e.message;
+    }
     final s = e.toString().toLowerCase();
     if (s.contains('rate limit')) {
       return 'The forge needs rest — only 5 worlds may be crafted per day.';

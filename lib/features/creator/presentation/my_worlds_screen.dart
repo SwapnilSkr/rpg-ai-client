@@ -133,6 +133,10 @@ class _MyWorldsView extends StatelessWidget {
                         (ctx, i) => MyWorldCard(
                           template: state.published[i],
                           isPublishing: false,
+                          onEdit: () => context.push(
+                            '/my-worlds/${state.published[i].id}/forge',
+                            extra: state.published[i],
+                          ),
                           onTap: () => context
                               .push('/templates/${state.published[i].id}'),
                         ),
@@ -293,7 +297,7 @@ class _MyWorldsView extends StatelessWidget {
           ],
         ),
         content: Text(
-          '"$title" will be revealed to all adventurers across the realm. Once released, it cannot be edited.',
+          '"$title" will be revealed to all adventurers across the realm. You can still edit it later from My Worlds.',
           style: const TextStyle(
               color: EverloreTheme.ash, fontSize: 14, height: 1.5),
         ),

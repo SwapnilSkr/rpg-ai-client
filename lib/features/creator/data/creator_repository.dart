@@ -2,6 +2,11 @@ import '../../../core/network/api_client.dart';
 import '../../../shared/models/world_template.dart';
 
 class CreatorRepository {
+  static Future<WorldTemplate> getById(String id) async {
+    final response = await ApiClient.get('/templates/$id');
+    return WorldTemplate.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
   static Future<List<WorldTemplate>> listMine() async {
     final response = await ApiClient.get('/templates/mine/list');
     final raw = response is List ? response : (response['templates'] as List);
