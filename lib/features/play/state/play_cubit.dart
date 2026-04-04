@@ -175,7 +175,7 @@ class PlayCubit extends Cubit<PlayState> {
       return;
     }
 
-    await _ws.connect(token);
+    await _ws.connect(token, force: true);
     _ws.loadInstance(instanceId);
   }
 
@@ -212,12 +212,13 @@ class PlayCubit extends Cubit<PlayState> {
   }
 
   @override
-  Future<void> close() {
-    _generationSub.cancel();
-    _memorySub.cancel();
-    _errorSub.cancel();
-    _connectionSub.cancel();
-    _instanceSub.cancel();
-    return super.close();
+  Future<void> close() async {
+    await _generationSub.cancel();
+    await _memorySub.cancel();
+    await _errorSub.cancel();
+    await _connectionSub.cancel();
+    await _instanceSub.cancel();
+    await _ws.disconnect();
+    await super.close();
   }
 }

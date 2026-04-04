@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../../../../shared/models/event.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 
@@ -144,10 +145,12 @@ class _NarratorBubble extends StatelessWidget {
           ),
           const SizedBox(height: 10),
 
-          // Narrative text
-          Text(
-            text,
-            style: EverloreTheme.aiText,
+          // Narrative text (model may emit **bold**, *italic*, lists, etc.)
+          MarkdownBody(
+            data: text,
+            selectable: true,
+            shrinkWrap: true,
+            styleSheet: _narrativeMarkdownStyle(),
           ),
 
           // Scene tag
@@ -199,6 +202,92 @@ class _SceneTagBadge extends StatelessWidget {
       _ => EverloreTheme.ash,
     };
   }
+}
+
+MarkdownStyleSheet _narrativeMarkdownStyle() {
+  const base = EverloreTheme.aiText;
+  return MarkdownStyleSheet(
+    p: base,
+    pPadding: EdgeInsets.zero,
+    blockSpacing: 10,
+    h1: base.copyWith(
+      fontSize: 22,
+      fontWeight: FontWeight.w700,
+      color: EverloreTheme.gold,
+      height: 1.3,
+    ),
+    h1Padding: const EdgeInsets.only(top: 4, bottom: 8),
+    h2: base.copyWith(
+      fontSize: 19,
+      fontWeight: FontWeight.w700,
+      color: EverloreTheme.gold,
+      height: 1.35,
+    ),
+    h2Padding: const EdgeInsets.only(top: 4, bottom: 6),
+    h3: base.copyWith(
+      fontSize: 17,
+      fontWeight: FontWeight.w600,
+      color: EverloreTheme.parchment,
+      height: 1.4,
+    ),
+    h3Padding: const EdgeInsets.only(top: 2, bottom: 6),
+    h4: base.copyWith(
+      fontSize: 16,
+      fontWeight: FontWeight.w600,
+      color: EverloreTheme.parchment,
+    ),
+    h4Padding: const EdgeInsets.only(bottom: 4),
+    h5: base.copyWith(fontWeight: FontWeight.w600),
+    h5Padding: const EdgeInsets.only(bottom: 4),
+    h6: base.copyWith(
+      fontWeight: FontWeight.w600,
+      color: EverloreTheme.ash,
+    ),
+    h6Padding: const EdgeInsets.only(bottom: 4),
+    em: base.copyWith(fontStyle: FontStyle.italic),
+    strong: base.copyWith(
+      fontWeight: FontWeight.w700,
+      color: EverloreTheme.parchment,
+    ),
+    del: base.copyWith(decoration: TextDecoration.lineThrough),
+    code: base.copyWith(
+      fontFamily: 'monospace',
+      fontSize: 13,
+      backgroundColor: EverloreTheme.void4,
+      color: EverloreTheme.goldGlow,
+    ),
+    blockquote: base.copyWith(
+      color: EverloreTheme.ash,
+      fontStyle: FontStyle.italic,
+    ),
+    blockquotePadding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
+    blockquoteDecoration: BoxDecoration(
+      border: Border(
+        left: BorderSide(
+          color: EverloreTheme.goldDim.withValues(alpha: 0.55),
+          width: 3,
+        ),
+      ),
+    ),
+    a: base.copyWith(
+      color: EverloreTheme.cyanBright,
+      decoration: TextDecoration.underline,
+      decorationColor: EverloreTheme.cyanBright.withValues(alpha: 0.45),
+    ),
+    listBullet: base,
+    listIndent: 22,
+    horizontalRuleDecoration: const BoxDecoration(
+      border: Border(
+        top: BorderSide(color: EverloreTheme.white10, width: 1),
+      ),
+    ),
+    codeblockDecoration: BoxDecoration(
+      color: EverloreTheme.void0,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: EverloreTheme.white10),
+    ),
+    codeblockPadding: const EdgeInsets.all(12),
+  );
 }
 
 class _GeneratingIndicator extends StatefulWidget {

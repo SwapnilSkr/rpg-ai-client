@@ -98,7 +98,7 @@ class AuthService {
   }
 
   static Future<void> logout() async {
-    await _wsManager.disconnect();
+    await _wsManager.disconnect(clearToken: true);
     await SecureStore.clearAll();
   }
 

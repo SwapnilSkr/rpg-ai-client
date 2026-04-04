@@ -10,13 +10,19 @@ class WsManager {
   WsManager._internal();
 
   WebSocketChannel? _channel;
+  StreamSubscription<dynamic>? _socketSub;
   String? _token;
   bool _isConnected = false;
+  bool _awaitingHandshake = false;
+  bool _userInitiatedDisconnect = false;
   int _reconnectAttempts = 0;
   final int _maxReconnectAttempts = 10;
   Timer? _reconnectTimer;
   Timer? _pingTimer;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+
+  /// Bumped when replacing the socket so stale [onDone]/[onError] never reconnect.
+  int _connectionEpoch = 0;
 
   final _generationCompleteController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -40,51 +46,128 @@ class WsManager {
 
   final List<Map<String, dynamic>> _offlineQueue = [];
 
-  Future<void> connect(String token) async {
-    if (_isConnected && _token == token) return;
-    _token = token;
-    _attemptConnection();
+  /// Connect to the play WebSocket.
+  ///
+  /// [force] — close any existing socket and open a new one (use when entering
+  /// play so re-entry is never stuck on a stale half-open channel).
+  Future<void> connect(String token, {bool force = false}) async {
+    if (token.isEmpty) return;
+    if (!force && _token == token && _isConnected && _channel != null) return;
 
-    _connectivitySub ??= Connectivity().onConnectivityChanged.listen((result) {
-      if (result.isNotEmpty &&
-          result.first != ConnectivityResult.none &&
-          !_isConnected) {
-        _attemptConnection();
-      }
+    if (force) _offlineQueue.clear();
+
+    _userInitiatedDisconnect = false;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+
+    final hadSocket = _channel != null;
+    await _closeChannelOnly(notifyDisconnected: hadSocket && _isConnected);
+
+    _token = token;
+    _reconnectAttempts = 0;
+    await _openChannel();
+
+    _connectivitySub ??=
+        Connectivity().onConnectivityChanged.listen((result) {
+      if (result.isEmpty || result.first == ConnectivityResult.none) return;
+      if (_userInitiatedDisconnect || _token == null) return;
+      if (_isConnected && _channel != null) return;
+      _reconnectAttempts = 0;
+      unawaited(_openChannel());
     });
   }
 
-  void _attemptConnection() {
-    if (_token == null) return;
+  Uri _playWsUri(String token) {
+    final base = AppConfig.wsBaseUrl.replaceAll(RegExp(r'/$'), '');
+    return Uri.parse('$base/ws/play')
+        .replace(queryParameters: {'token': token});
+  }
+
+  Future<void> _closeChannelOnly({required bool notifyDisconnected}) async {
+    _pingTimer?.cancel();
+    _pingTimer = null;
+    await _socketSub?.cancel();
+    _socketSub = null;
+
+    final ch = _channel;
+    _channel = null;
+    _awaitingHandshake = false;
+
+    final wasConnected = _isConnected;
+    _isConnected = false;
+
+    if (notifyDisconnected && wasConnected) {
+      _connectionStateController.add(false);
+    }
+
+    if (ch != null) {
+      try {
+        await ch.sink.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _openChannel() async {
+    if (_token == null || _userInitiatedDisconnect) return;
+
+    await _closeChannelOnly(notifyDisconnected: false);
+
     try {
-      final uri = Uri.parse('${AppConfig.wsBaseUrl}/ws/play?token=$_token');
-      _channel = WebSocketChannel.connect(uri);
+      final uri = _playWsUri(_token!);
+      final channel = WebSocketChannel.connect(uri);
+      _channel = channel;
+      _awaitingHandshake = true;
 
-      _channel!.stream.listen(
+      final epoch = ++_connectionEpoch;
+      _socketSub = channel.stream.listen(
         _onMessage,
-        onDone: _onDisconnected,
-        onError: (e) => _onDisconnected(),
+        onDone: () {
+          if (epoch != _connectionEpoch) return;
+          _onDisconnected();
+        },
+        onError: (_, __) {
+          if (epoch != _connectionEpoch) return;
+          _onDisconnected();
+        },
+        cancelOnError: true,
       );
 
-      _isConnected = true;
-      _reconnectAttempts = 0;
-      _connectionStateController.add(true);
-
-      _pingTimer?.cancel();
-      _pingTimer = Timer.periodic(
-        const Duration(seconds: 25),
-        (_) => send({'action': 'ping'}),
-      );
-
-      _flushOfflineQueue();
-    } catch (e) {
-      _scheduleReconnect();
+      // Do not set [_isConnected] / flush queue until server sends [connected].
+    } catch (_) {
+      _channel = null;
+      _awaitingHandshake = false;
+      if (!_userInitiatedDisconnect) {
+        _connectionStateController.add(false);
+        _scheduleReconnect();
+      }
     }
   }
 
   void _onMessage(dynamic data) {
-    final msg = jsonDecode(data as String) as Map<String, dynamic>;
+    Map<String, dynamic> msg;
+    try {
+      msg = jsonDecode(data as String) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+
     switch (msg['type']) {
+      case 'connected':
+        if (_awaitingHandshake) {
+          _awaitingHandshake = false;
+          _isConnected = true;
+          _reconnectAttempts = 0;
+          _connectionStateController.add(true);
+          _pingTimer?.cancel();
+          _pingTimer = Timer.periodic(
+            const Duration(seconds: 25),
+            (_) {
+              if (_isConnected) send({'action': 'ping'});
+            },
+          );
+          _flushOfflineQueue();
+        }
+        break;
       case 'generation_complete':
         _generationCompleteController.add(msg);
         break;
@@ -100,19 +183,31 @@ class WsManager {
         break;
       case 'pong':
       case 'ack':
-      case 'connected':
         break;
     }
   }
 
   void _onDisconnected() {
-    _isConnected = false;
-    _connectionStateController.add(false);
     _pingTimer?.cancel();
-    _scheduleReconnect();
+    _pingTimer = null;
+    _awaitingHandshake = false;
+    final was = _isConnected;
+    _isConnected = false;
+    _channel = null;
+    unawaited(_socketSub?.cancel());
+    _socketSub = null;
+
+    if (was) {
+      _connectionStateController.add(false);
+    }
+
+    if (!_userInitiatedDisconnect && _token != null) {
+      _scheduleReconnect();
+    }
   }
 
   void _scheduleReconnect() {
+    if (_userInitiatedDisconnect || _token == null) return;
     if (_reconnectAttempts >= _maxReconnectAttempts) return;
     _reconnectTimer?.cancel();
     final delay = Duration(
@@ -120,21 +215,30 @@ class WsManager {
     );
     _reconnectTimer = Timer(delay, () {
       _reconnectAttempts++;
-      _attemptConnection();
+      unawaited(_openChannel());
     });
   }
 
   void send(Map<String, dynamic> message) {
     if (_isConnected && _channel != null) {
-      _channel!.sink.add(jsonEncode(message));
+      try {
+        _channel!.sink.add(jsonEncode(message));
+      } catch (_) {
+        _onDisconnected();
+      }
     } else {
       _offlineQueue.add(message);
     }
   }
 
   void _flushOfflineQueue() {
-    while (_offlineQueue.isNotEmpty && _isConnected) {
-      send(_offlineQueue.removeAt(0));
+    while (_offlineQueue.isNotEmpty && _isConnected && _channel != null) {
+      try {
+        _channel!.sink.add(jsonEncode(_offlineQueue.removeAt(0)));
+      } catch (_) {
+        _onDisconnected();
+        break;
+      }
     }
   }
 
@@ -150,13 +254,14 @@ class WsManager {
     send({'action': 'load_instance', 'instance_id': instanceId});
   }
 
-  Future<void> disconnect() async {
-    _pingTimer?.cancel();
+  Future<void> disconnect({bool clearToken = false}) async {
+    _userInitiatedDisconnect = true;
     _reconnectTimer?.cancel();
-    await _channel?.sink.close();
-    _channel = null;
-    _isConnected = false;
-    _connectionStateController.add(false);
+    _reconnectTimer = null;
+    _offlineQueue.clear();
+    final had = _isConnected;
+    await _closeChannelOnly(notifyDisconnected: had);
+    if (clearToken) _token = null;
   }
 
   void dispose() {
