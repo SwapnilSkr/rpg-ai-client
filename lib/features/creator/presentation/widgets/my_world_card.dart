@@ -8,6 +8,7 @@ class MyWorldCard extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onPublish;
   final VoidCallback? onTap;
+  final VoidCallback? onDelete;
 
   const MyWorldCard({
     super.key,
@@ -16,12 +17,15 @@ class MyWorldCard extends StatelessWidget {
     this.onEdit,
     this.onPublish,
     this.onTap,
+    this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDraft = !template.isPublished;
-    final accent = template.isSentient ? EverloreTheme.violet : EverloreTheme.cyan;
+    final accent = template.isSentient
+        ? EverloreTheme.violet
+        : EverloreTheme.cyan;
 
     return GestureDetector(
       onTap: onTap ?? onEdit,
@@ -50,11 +54,19 @@ class MyWorldCard extends StatelessWidget {
             Container(
               height: 3,
               decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
                 gradient: LinearGradient(
                   colors: isDraft
-                      ? [EverloreTheme.ember.withValues(alpha: 0.6), EverloreTheme.ember.withValues(alpha: 0.2)]
-                      : [EverloreTheme.verdant.withValues(alpha: 0.6), EverloreTheme.verdant.withValues(alpha: 0.2)],
+                      ? [
+                          EverloreTheme.ember.withValues(alpha: 0.6),
+                          EverloreTheme.ember.withValues(alpha: 0.2),
+                        ]
+                      : [
+                          EverloreTheme.verdant.withValues(alpha: 0.6),
+                          EverloreTheme.verdant.withValues(alpha: 0.2),
+                        ],
                 ),
               ),
             ),
@@ -74,10 +86,14 @@ class MyWorldCard extends StatelessWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: accent.withValues(alpha: 0.12),
-                          border: Border.all(color: accent.withValues(alpha: 0.3)),
+                          border: Border.all(
+                            color: accent.withValues(alpha: 0.3),
+                          ),
                         ),
                         child: Icon(
-                          template.isSentient ? Icons.psychology_alt : Icons.auto_stories,
+                          template.isSentient
+                              ? Icons.psychology_alt
+                              : Icons.auto_stories,
                           color: accent,
                           size: 20,
                         ),
@@ -102,27 +118,54 @@ class MyWorldCard extends StatelessWidget {
                             Row(
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: accent.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: accent.withValues(alpha: 0.3)),
+                                    border: Border.all(
+                                      color: accent.withValues(alpha: 0.3),
+                                    ),
                                   ),
                                   child: Text(
-                                    template.isSentient ? 'Conscious Soul' : 'Game Master',
-                                    style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.w600),
+                                    template.isSentient
+                                        ? 'Conscious Soul'
+                                        : 'Game Master',
+                                    style: TextStyle(
+                                      color: accent,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 6),
                                 if (template.isNsfwCapable)
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: EverloreTheme.crimson.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: EverloreTheme.crimson.withValues(alpha: 0.3)),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
                                     ),
-                                    child: const Text('18+', style: TextStyle(color: EverloreTheme.crimson, fontSize: 10, fontWeight: FontWeight.w700)),
+                                    decoration: BoxDecoration(
+                                      color: EverloreTheme.crimson.withValues(
+                                        alpha: 0.1,
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: EverloreTheme.crimson.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      '18+',
+                                      style: TextStyle(
+                                        color: EverloreTheme.crimson,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
                                   ),
                               ],
                             ),
@@ -132,7 +175,10 @@ class MyWorldCard extends StatelessWidget {
                       const SizedBox(width: 8),
                       // Status badge
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: isDraft
                               ? EverloreTheme.ember.withValues(alpha: 0.12)
@@ -150,13 +196,17 @@ class MyWorldCard extends StatelessWidget {
                             Icon(
                               isDraft ? Icons.edit_note : Icons.public,
                               size: 11,
-                              color: isDraft ? EverloreTheme.ember : EverloreTheme.verdant,
+                              color: isDraft
+                                  ? EverloreTheme.ember
+                                  : EverloreTheme.verdant,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               isDraft ? 'DRAFT' : 'LIVE',
                               style: TextStyle(
-                                color: isDraft ? EverloreTheme.ember : EverloreTheme.verdant,
+                                color: isDraft
+                                    ? EverloreTheme.ember
+                                    : EverloreTheme.verdant,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.8,
@@ -171,12 +221,17 @@ class MyWorldCard extends StatelessWidget {
                   // Description
                   Text(
                     template.description,
-                    style: const TextStyle(color: EverloreTheme.ash, fontSize: 13, height: 1.45),
+                    style: const TextStyle(
+                      color: EverloreTheme.ash,
+                      fontSize: 13,
+                      height: 1.45,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   // Stats + tags row
-                  if (template.baseStatsTemplate.isNotEmpty || template.sceneTags.isNotEmpty) ...[
+                  if (template.baseStatsTemplate.isNotEmpty ||
+                      template.sceneTags.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 6,
@@ -188,11 +243,15 @@ class MyWorldCard extends StatelessWidget {
                             label: '${template.baseStatsTemplate.length} stats',
                             color: EverloreTheme.ash,
                           ),
-                        ...template.sceneTags.take(3).map((tag) => _InfoChip(
-                              icon: Icons.label_outline,
-                              label: tag,
-                              color: EverloreTheme.ash,
-                            )),
+                        ...template.sceneTags
+                            .take(3)
+                            .map(
+                              (tag) => _InfoChip(
+                                icon: Icons.label_outline,
+                                label: tag,
+                                color: EverloreTheme.ash,
+                              ),
+                            ),
                         if (template.sceneTags.length > 3)
                           _InfoChip(
                             icon: Icons.more_horiz,
@@ -207,7 +266,10 @@ class MyWorldCard extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       'Forged ${_timeAgo(template.createdAt!)}',
-                      style: const TextStyle(color: EverloreTheme.ash, fontSize: 11),
+                      style: const TextStyle(
+                        color: EverloreTheme.ash,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                   if (isDraft) ...[
@@ -223,13 +285,25 @@ class MyWorldCard extends StatelessWidget {
                             color: EverloreTheme.ash,
                             onTap: onEdit!,
                           ),
+                        if (onDelete != null) ...[
+                          const SizedBox(width: 16),
+                          _ActionButton(
+                            icon: Icons.delete_outline,
+                            label: 'Delete',
+                            color: EverloreTheme.crimson,
+                            onTap: () => _confirmDelete(context),
+                          ),
+                        ],
                         const Spacer(),
                         if (onPublish != null)
                           isPublishing
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 1.5, color: EverloreTheme.gold),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                    color: EverloreTheme.gold,
+                                  ),
                                 )
                               : _ActionButton(
                                   icon: Icons.public,
@@ -239,7 +313,9 @@ class MyWorldCard extends StatelessWidget {
                                 ),
                       ],
                     ),
-                  ] else if (onEdit != null || onTap != null) ...[
+                  ] else if (onEdit != null ||
+                      onTap != null ||
+                      onDelete != null) ...[
                     const SizedBox(height: 12),
                     const Divider(color: Color(0xFF252548), height: 1),
                     const SizedBox(height: 10),
@@ -253,6 +329,15 @@ class MyWorldCard extends StatelessWidget {
                             onTap: onEdit!,
                           ),
                         const Spacer(),
+                        if (onDelete != null)
+                          _ActionButton(
+                            icon: Icons.delete_outline,
+                            label: 'Delete',
+                            color: EverloreTheme.crimson,
+                            onTap: () => _confirmDelete(context),
+                          ),
+                        if (onDelete != null && onTap != null)
+                          const SizedBox(width: 16),
                         if (onTap != null)
                           _ActionButton(
                             icon: Icons.visibility_outlined,
@@ -272,6 +357,68 @@ class MyWorldCard extends StatelessWidget {
     );
   }
 
+  void _confirmDelete(BuildContext context) {
+    final isDraft = !template.isPublished;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: EverloreTheme.void2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: EverloreTheme.crimson.withValues(alpha: 0.3)),
+        ),
+        title: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber,
+              color: EverloreTheme.crimson,
+              size: 24,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                isDraft ? 'Unforge This World?' : 'Destroy This World?',
+                style: const TextStyle(
+                  color: EverloreTheme.parchment,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          isDraft
+              ? 'This draft will be permanently deleted. This action cannot be undone.'
+              : 'This will permanently delete your world and all adventurer realms created from it. This action cannot be undone.',
+          style: const TextStyle(
+            color: EverloreTheme.ash,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Keep World',
+              style: TextStyle(color: EverloreTheme.ash),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              onDelete?.call();
+            },
+            child: const Text(
+              'Destroy Forever',
+              style: TextStyle(color: EverloreTheme.crimson),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _timeAgo(DateTime dt) {
     final diff = DateTime.now().difference(dt);
     if (diff.inDays > 30) return '${(diff.inDays / 30).floor()} months ago';
@@ -287,7 +434,11 @@ class _InfoChip extends StatelessWidget {
   final String label;
   final Color color;
 
-  const _InfoChip({required this.icon, required this.label, required this.color});
+  const _InfoChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -331,7 +482,14 @@ class _ActionButton extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 5),
-          Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );

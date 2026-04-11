@@ -61,9 +61,21 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
       await CreatorRepository.publish(templateId);
       await load();
     } catch (e) {
-      final cleaned = Set<String>.from(state.publishingIds)
-        ..remove(templateId);
+      final cleaned = Set<String>.from(state.publishingIds)..remove(templateId);
       emit(state.copyWith(publishingIds: cleaned, error: _friendly(e)));
+    }
+  }
+
+  Future<void> delete(String templateId) async {
+    try {
+      await CreatorRepository.delete(templateId);
+      emit(
+        state.copyWith(
+          worlds: state.worlds.where((w) => w.id != templateId).toList(),
+        ),
+      );
+    } catch (e) {
+      emit(state.copyWith(error: _friendly(e)));
     }
   }
 

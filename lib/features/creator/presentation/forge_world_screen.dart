@@ -33,12 +33,6 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
   late final TextEditingController _loreCtrl;
   late final TextEditingController _tagInputCtrl;
 
-  // Step 4 controllers
-  late final TextEditingController _modelLogicCtrl;
-  late final TextEditingController _modelNarrSfwCtrl;
-  late final TextEditingController _modelNarrNsfwCtrl;
-  late final TextEditingController _modelSummaryCtrl;
-
   @override
   void initState() {
     super.initState();
@@ -49,10 +43,6 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
     _seedCtrl = TextEditingController(text: s.seedPrompt);
     _loreCtrl = TextEditingController(text: s.globalLore);
     _tagInputCtrl = TextEditingController();
-    _modelLogicCtrl = TextEditingController(text: s.modelLogic);
-    _modelNarrSfwCtrl = TextEditingController(text: s.modelNarrationSfw);
-    _modelNarrNsfwCtrl = TextEditingController(text: s.modelNarrationNsfw);
-    _modelSummaryCtrl = TextEditingController(text: s.modelSummary);
   }
 
   @override
@@ -63,10 +53,6 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
     _seedCtrl.dispose();
     _loreCtrl.dispose();
     _tagInputCtrl.dispose();
-    _modelLogicCtrl.dispose();
-    _modelNarrSfwCtrl.dispose();
-    _modelNarrNsfwCtrl.dispose();
-    _modelSummaryCtrl.dispose();
     super.dispose();
   }
 
@@ -154,18 +140,10 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
           state: state,
         );
       case 3:
-        return _Step3Stats(
-          key: const ValueKey(3),
-          cubit: _cubit,
-          state: state,
-        );
+        return _Step3Stats(key: const ValueKey(3), cubit: _cubit, state: state);
       case 4:
         return _Step4Engine(
           key: const ValueKey(4),
-          modelLogicCtrl: _modelLogicCtrl,
-          modelNarrSfwCtrl: _modelNarrSfwCtrl,
-          modelNarrNsfwCtrl: _modelNarrNsfwCtrl,
-          modelSummaryCtrl: _modelSummaryCtrl,
           cubit: _cubit,
           state: state,
         );
@@ -192,8 +170,11 @@ class _ForgeHeader extends StatelessWidget {
   final bool isEditing;
   final VoidCallback onBack;
 
-  const _ForgeHeader(
-      {required this.step, required this.isEditing, required this.onBack});
+  const _ForgeHeader({
+    required this.step,
+    required this.isEditing,
+    required this.onBack,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -203,12 +184,14 @@ class _ForgeHeader extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: onBack,
-            child: const Icon(Icons.arrow_back_ios_new,
-                size: 18, color: EverloreTheme.ash),
+            child: const Icon(
+              Icons.arrow_back_ios_new,
+              size: 18,
+              color: EverloreTheme.ash,
+            ),
           ),
           const SizedBox(width: 12),
-          const Icon(Icons.auto_fix_high,
-              color: EverloreTheme.gold, size: 16),
+          const Icon(Icons.auto_fix_high, color: EverloreTheme.gold, size: 16),
           const SizedBox(width: 6),
           Text(
             isEditing ? 'EDIT WORLD' : 'FORGE WORLD',
@@ -222,8 +205,7 @@ class _ForgeHeader extends StatelessWidget {
           const Spacer(),
           Text(
             '${step + 1} / 5',
-            style: const TextStyle(
-                color: EverloreTheme.ash, fontSize: 13),
+            style: const TextStyle(color: EverloreTheme.ash, fontSize: 13),
           ),
         ],
       ),
@@ -273,10 +255,9 @@ class _StepProgress extends StatelessWidget {
                     boxShadow: active
                         ? [
                             BoxShadow(
-                              color:
-                                  EverloreTheme.gold.withValues(alpha: 0.5),
+                              color: EverloreTheme.gold.withValues(alpha: 0.5),
                               blurRadius: 6,
-                            )
+                            ),
                           ]
                         : null,
                   ),
@@ -318,8 +299,8 @@ class _ForgeNavBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: EverloreTheme.void0,
         border: Border(
-            top: BorderSide(
-                color: EverloreTheme.goldDim.withValues(alpha: 0.15))),
+          top: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.15)),
+        ),
       ),
       child: Row(
         children: [
@@ -332,10 +313,8 @@ class _ForgeNavBar extends StatelessWidget {
           ],
           Expanded(
             child: isLast
-                ? _ForgeButton(
-                    isSubmitting: isSubmitting, onForge: onForge)
-                : _NextButton(
-                    canProceed: canProceed, onNext: onNext),
+                ? _ForgeButton(isSubmitting: isSubmitting, onForge: onForge)
+                : _NextButton(canProceed: canProceed, onNext: onNext),
           ),
         ],
       ),
@@ -359,14 +338,18 @@ class _NavSecondaryBtn extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           color: EverloreTheme.void3,
           border: Border.all(
-              color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+            color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+          ),
         ),
         child: const Center(
-          child: Text('Back',
-              style: TextStyle(
-                  color: EverloreTheme.ash,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600)),
+          child: Text(
+            'Back',
+            style: TextStyle(
+              color: EverloreTheme.ash,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
       ),
     );
@@ -400,7 +383,7 @@ class _NextButton extends StatelessWidget {
                   BoxShadow(
                     color: EverloreTheme.gold.withValues(alpha: 0.3),
                     blurRadius: 14,
-                  )
+                  ),
                 ]
               : null,
         ),
@@ -411,9 +394,7 @@ class _NextButton extends StatelessWidget {
               Text(
                 'Continue',
                 style: TextStyle(
-                  color: canProceed
-                      ? EverloreTheme.void1
-                      : EverloreTheme.ash,
+                  color: canProceed ? EverloreTheme.void1 : EverloreTheme.ash,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
@@ -422,8 +403,7 @@ class _NextButton extends StatelessWidget {
               Icon(
                 Icons.arrow_forward,
                 size: 16,
-                color:
-                    canProceed ? EverloreTheme.void1 : EverloreTheme.ash,
+                color: canProceed ? EverloreTheme.void1 : EverloreTheme.ash,
               ),
             ],
           ),
@@ -436,8 +416,7 @@ class _NextButton extends StatelessWidget {
 class _ForgeButton extends StatelessWidget {
   final bool isSubmitting;
   final VoidCallback onForge;
-  const _ForgeButton(
-      {required this.isSubmitting, required this.onForge});
+  const _ForgeButton({required this.isSubmitting, required this.onForge});
 
   @override
   Widget build(BuildContext context) {
@@ -473,8 +452,11 @@ class _ForgeButton extends StatelessWidget {
               : const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.auto_fix_high,
-                        color: EverloreTheme.void1, size: 18),
+                    Icon(
+                      Icons.auto_fix_high,
+                      color: EverloreTheme.void1,
+                      size: 18,
+                    ),
                     SizedBox(width: 10),
                     Text(
                       'FORGE THIS WORLD',
@@ -510,23 +492,34 @@ class _ErrorBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: EverloreTheme.crimson.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border:
-            Border.all(color: EverloreTheme.crimson.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: EverloreTheme.crimson.withValues(alpha: 0.35),
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline,
-              color: EverloreTheme.crimson, size: 16),
+          const Icon(
+            Icons.error_outline,
+            color: EverloreTheme.crimson,
+            size: 16,
+          ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(message,
-                style: const TextStyle(
-                    color: EverloreTheme.crimson, fontSize: 13)),
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: EverloreTheme.crimson,
+                fontSize: 13,
+              ),
+            ),
           ),
           GestureDetector(
             onTap: onDismiss,
-            child: const Icon(Icons.close,
-                color: EverloreTheme.crimson, size: 16),
+            child: const Icon(
+              Icons.close,
+              color: EverloreTheme.crimson,
+              size: 16,
+            ),
           ),
         ],
       ),
@@ -542,8 +535,7 @@ class _FormLabel extends StatelessWidget {
   final String label;
   final String? hint;
   final bool required;
-  const _FormLabel(
-      {required this.label, this.hint, this.required = false});
+  const _FormLabel({required this.label, this.hint, this.required = false});
 
   @override
   Widget build(BuildContext context) {
@@ -563,17 +555,23 @@ class _FormLabel extends StatelessWidget {
             ),
             if (required) ...[
               const SizedBox(width: 4),
-              const Text('*',
-                  style: TextStyle(
-                      color: EverloreTheme.gold, fontSize: 13)),
+              const Text(
+                '*',
+                style: TextStyle(color: EverloreTheme.gold, fontSize: 13),
+              ),
             ],
           ],
         ),
         if (hint != null) ...[
           const SizedBox(height: 3),
-          Text(hint!,
-              style: const TextStyle(
-                  color: EverloreTheme.ash, fontSize: 11, height: 1.4)),
+          Text(
+            hint!,
+            style: const TextStyle(
+              color: EverloreTheme.ash,
+              fontSize: 11,
+              height: 1.4,
+            ),
+          ),
         ],
       ],
     );
@@ -586,17 +584,18 @@ InputDecoration _fieldDecoration(String placeholder) {
     hintStyle: const TextStyle(color: EverloreTheme.ash, fontSize: 14),
     filled: true,
     fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
-    contentPadding:
-        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide:
-          BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+      borderSide: BorderSide(
+        color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+      ),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide:
-          BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+      borderSide: BorderSide(
+        color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+      ),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
@@ -652,28 +651,36 @@ class _ToggleCard extends StatelessWidget {
                     ? activeColor.withValues(alpha: 0.12)
                     : EverloreTheme.void3,
               ),
-              child: Icon(icon,
-                  color: value ? activeColor : EverloreTheme.ash, size: 20),
+              child: Icon(
+                icon,
+                color: value ? activeColor : EverloreTheme.ash,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: TextStyle(
-                        color: value
-                            ? EverloreTheme.parchment
-                            : EverloreTheme.ash,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      )),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: value
+                          ? EverloreTheme.parchment
+                          : EverloreTheme.ash,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: const TextStyle(
-                          color: EverloreTheme.ash,
-                          fontSize: 12,
-                          height: 1.3)),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: EverloreTheme.ash,
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -683,13 +690,11 @@ class _ToggleCard extends StatelessWidget {
               height: 26,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(13),
-                color:
-                    value ? activeColor : EverloreTheme.void4,
+                color: value ? activeColor : EverloreTheme.void4,
               ),
               child: AnimatedAlign(
                 duration: const Duration(milliseconds: 200),
-                alignment:
-                    value ? Alignment.centerRight : Alignment.centerLeft,
+                alignment: value ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
                   width: 20,
                   height: 20,
@@ -702,7 +707,7 @@ class _ToggleCard extends StatelessWidget {
                         BoxShadow(
                           color: activeColor.withValues(alpha: 0.4),
                           blurRadius: 6,
-                        )
+                        ),
                     ],
                   ),
                 ),
@@ -756,9 +761,12 @@ class _Step0Essence extends StatelessWidget {
             controller: titleCtrl,
             onChanged: cubit.setTitle,
             style: const TextStyle(
-                color: EverloreTheme.parchment, fontSize: 15),
+              color: EverloreTheme.parchment,
+              fontSize: 15,
+            ),
             decoration: _fieldDecoration(
-                'e.g. The Shattered Kingdoms, Veilborn...'),
+              'e.g. The Shattered Kingdoms, Veilborn...',
+            ),
             textCapitalization: TextCapitalization.words,
           ),
           const SizedBox(height: 20),
@@ -773,9 +781,13 @@ class _Step0Essence extends StatelessWidget {
             controller: descCtrl,
             onChanged: cubit.setDescription,
             style: const TextStyle(
-                color: EverloreTheme.parchment, fontSize: 14, height: 1.5),
+              color: EverloreTheme.parchment,
+              fontSize: 14,
+              height: 1.5,
+            ),
             decoration: _fieldDecoration(
-                'Describe the world, its tone, and what kind of adventure awaits...'),
+              'Describe the world, its tone, and what kind of adventure awaits...',
+            ),
             maxLines: 4,
             minLines: 3,
             textCapitalization: TextCapitalization.sentences,
@@ -872,25 +884,35 @@ class _Step1Voice extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               color: EverloreTheme.violet.withValues(alpha: 0.08),
               border: Border.all(
-                  color: EverloreTheme.violetDim.withValues(alpha: 0.3)),
+                color: EverloreTheme.violetDim.withValues(alpha: 0.3),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: const [
                 Row(
                   children: [
-                    Icon(Icons.lightbulb_outline,
-                        color: EverloreTheme.violetBright, size: 14),
+                    Icon(
+                      Icons.lightbulb_outline,
+                      color: EverloreTheme.violetBright,
+                      size: 14,
+                    ),
                     SizedBox(width: 6),
-                    Text('Tips for a powerful voice',
-                        style: TextStyle(
-                            color: EverloreTheme.violetBright,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600)),
+                    Text(
+                      'Tips for a powerful voice',
+                      style: TextStyle(
+                        color: EverloreTheme.violetBright,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
                 SizedBox(height: 8),
-                _Tip(text: 'Describe the narrator\'s tone (grim, whimsical, epic...)'),
+                _Tip(
+                  text:
+                      'Describe the narrator\'s tone (grim, whimsical, epic...)',
+                ),
                 _Tip(text: 'State the genre and setting explicitly'),
                 _Tip(text: 'List what the narrator should and should not do'),
                 _Tip(text: 'Include any special rules or game mechanics'),
@@ -921,9 +943,10 @@ class _Step1Voice extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _CharCount(
-              current: state.seedPrompt.trim().length,
-              min: 10,
-              max: 10000),
+            current: state.seedPrompt.trim().length,
+            min: 10,
+            max: 10000,
+          ),
           const SizedBox(height: 24),
         ],
       ),
@@ -942,13 +965,19 @@ class _Tip extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('·  ',
-              style:
-                  TextStyle(color: EverloreTheme.violetBright, fontSize: 12)),
+          const Text(
+            '·  ',
+            style: TextStyle(color: EverloreTheme.violetBright, fontSize: 12),
+          ),
           Expanded(
-            child: Text(text,
-                style: const TextStyle(
-                    color: EverloreTheme.ash, fontSize: 12, height: 1.4)),
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: EverloreTheme.ash,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
           ),
         ],
       ),
@@ -1062,10 +1091,12 @@ class _Step2LoreState extends State<_Step2Lore> {
               spacing: 8,
               runSpacing: 8,
               children: widget.state.sceneTags
-                  .map((tag) => _TagChip(
-                        label: tag,
-                        onRemove: () => widget.cubit.removeTag(tag),
-                      ))
+                  .map(
+                    (tag) => _TagChip(
+                      label: tag,
+                      onRemove: () => widget.cubit.removeTag(tag),
+                    ),
+                  )
                   .toList(),
             ),
             const SizedBox(height: 12),
@@ -1077,7 +1108,9 @@ class _Step2LoreState extends State<_Step2Lore> {
                 child: TextField(
                   controller: widget.tagInputCtrl,
                   style: const TextStyle(
-                      color: EverloreTheme.parchment, fontSize: 14),
+                    color: EverloreTheme.parchment,
+                    fontSize: 14,
+                  ),
                   decoration: _fieldDecoration('Add a thread (e.g. combat)'),
                   onSubmitted: (_) => _addTag(),
                   textInputAction: TextInputAction.done,
@@ -1093,10 +1126,14 @@ class _Step2LoreState extends State<_Step2Lore> {
                     borderRadius: BorderRadius.circular(10),
                     color: EverloreTheme.goldDim.withValues(alpha: 0.15),
                     border: Border.all(
-                        color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
+                      color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+                    ),
                   ),
-                  child: const Icon(Icons.add,
-                      color: EverloreTheme.gold, size: 20),
+                  child: const Icon(
+                    Icons.add,
+                    color: EverloreTheme.gold,
+                    size: 20,
+                  ),
                 ),
               ),
             ],
@@ -1108,31 +1145,42 @@ class _Step2LoreState extends State<_Step2Lore> {
             runSpacing: 6,
             children: suggested
                 .where((t) => !widget.state.sceneTags.contains(t))
-                .map((tag) => GestureDetector(
-                      onTap: () => widget.cubit.addTag(tag),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(6),
-                          color: EverloreTheme.void3,
-                          border: Border.all(
-                              color:
-                                  EverloreTheme.void4.withValues(alpha: 0.8)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.add,
-                                size: 11, color: EverloreTheme.ash),
-                            const SizedBox(width: 4),
-                            Text(tag,
-                                style: const TextStyle(
-                                    color: EverloreTheme.ash, fontSize: 12)),
-                          ],
+                .map(
+                  (tag) => GestureDetector(
+                    onTap: () => widget.cubit.addTag(tag),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        color: EverloreTheme.void3,
+                        border: Border.all(
+                          color: EverloreTheme.void4.withValues(alpha: 0.8),
                         ),
                       ),
-                    ))
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.add,
+                            size: 11,
+                            color: EverloreTheme.ash,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            tag,
+                            style: const TextStyle(
+                              color: EverloreTheme.ash,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
                 .toList(),
           ),
           const SizedBox(height: 24),
@@ -1154,20 +1202,23 @@ class _TagChip extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
         color: EverloreTheme.gold.withValues(alpha: 0.1),
-        border: Border.all(
-            color: EverloreTheme.goldDim.withValues(alpha: 0.4)),
+        border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label,
-              style: const TextStyle(
-                  color: EverloreTheme.gold, fontSize: 12)),
+          Text(
+            label,
+            style: const TextStyle(color: EverloreTheme.gold, fontSize: 12),
+          ),
           const SizedBox(width: 6),
           GestureDetector(
             onTap: onRemove,
-            child: const Icon(Icons.close,
-                size: 12, color: EverloreTheme.goldDim),
+            child: const Icon(
+              Icons.close,
+              size: 12,
+              color: EverloreTheme.goldDim,
+            ),
           ),
         ],
       ),
@@ -1183,11 +1234,7 @@ class _Step3Stats extends StatelessWidget {
   final ForgeWorldCubit cubit;
   final ForgeWorldState state;
 
-  const _Step3Stats({
-    super.key,
-    required this.cubit,
-    required this.state,
-  });
+  const _Step3Stats({super.key, required this.cubit, required this.state});
 
   @override
   Widget build(BuildContext context) {
@@ -1208,18 +1255,21 @@ class _Step3Stats extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               color: EverloreTheme.void2,
               border: Border.all(
-                  color: EverloreTheme.ember.withValues(alpha: 0.25)),
+                color: EverloreTheme.ember.withValues(alpha: 0.25),
+              ),
             ),
             child: const Row(
               children: [
-                Icon(Icons.priority_high,
-                    size: 14, color: EverloreTheme.ember),
+                Icon(Icons.priority_high, size: 14, color: EverloreTheme.ember),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'At least one Vital Force is required — define health, mana, or any tracked stat before continuing.',
-                    style:
-                        TextStyle(color: EverloreTheme.ash, fontSize: 12, height: 1.4),
+                    style: TextStyle(
+                      color: EverloreTheme.ash,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
                   ),
                 ),
               ],
@@ -1227,12 +1277,15 @@ class _Step3Stats extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           // Quick-add presets
-          const Text('QUICK ADD',
-              style: TextStyle(
-                  color: EverloreTheme.gold,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2)),
+          const Text(
+            'QUICK ADD',
+            style: TextStyle(
+              color: EverloreTheme.gold,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 2,
+            ),
+          ),
           const SizedBox(height: 8),
           _PresetButtons(cubit: cubit, existing: state.stats),
           const SizedBox(height: 20),
@@ -1243,19 +1296,18 @@ class _Step3Stats extends StatelessWidget {
                 Text(
                   '${state.stats.length} VITAL ${state.stats.length == 1 ? "FORCE" : "FORCES"}',
                   style: const TextStyle(
-                      color: EverloreTheme.parchment,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.5),
+                    color: EverloreTheme.parchment,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.5,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            ...state.stats.asMap().entries.map((e) => _StatCard(
-                  entry: e.value,
-                  index: e.key,
-                  cubit: cubit,
-                )),
+            ...state.stats.asMap().entries.map(
+              (e) => _StatCard(entry: e.value, index: e.key, cubit: cubit),
+            ),
             const SizedBox(height: 12),
           ],
           // Add custom stat
@@ -1276,37 +1328,42 @@ class _Step3Stats extends StatelessWidget {
                 children: [
                   Icon(Icons.add, color: EverloreTheme.gold, size: 18),
                   SizedBox(width: 8),
-                  Text('Add Custom Force',
-                      style: TextStyle(
-                          color: EverloreTheme.gold,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600)),
+                  Text(
+                    'Add Custom Force',
+                    style: TextStyle(
+                      color: EverloreTheme.gold,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 28),
-          const Text('REALM FLAGS',
-              style: TextStyle(
-                  color: EverloreTheme.gold,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2)),
+          const Text(
+            'REALM FLAGS',
+            style: TextStyle(
+              color: EverloreTheme.gold,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 2,
+            ),
+          ),
           const SizedBox(height: 6),
           Text(
             'Boolean, numeric, or text flags for quests and story state (optional).',
             style: TextStyle(
-                color: EverloreTheme.ash.withValues(alpha: 0.9),
-                fontSize: 12,
-                height: 1.4),
+              color: EverloreTheme.ash.withValues(alpha: 0.9),
+              fontSize: 12,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 12),
           if (state.flags.isNotEmpty) ...[
-            ...state.flags.asMap().entries.map((e) => _FlagRow(
-                  entry: e.value,
-                  index: e.key,
-                  cubit: cubit,
-                )),
+            ...state.flags.asMap().entries.map(
+              (e) => _FlagRow(entry: e.value, index: e.key, cubit: cubit),
+            ),
             const SizedBox(height: 10),
           ],
           GestureDetector(
@@ -1324,13 +1381,20 @@ class _Step3Stats extends StatelessWidget {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.flag_outlined, color: EverloreTheme.violet, size: 18),
+                  Icon(
+                    Icons.flag_outlined,
+                    color: EverloreTheme.violet,
+                    size: 18,
+                  ),
                   SizedBox(width: 8),
-                  Text('Add Realm Flag',
-                      style: TextStyle(
-                          color: EverloreTheme.violet,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600)),
+                  Text(
+                    'Add Realm Flag',
+                    style: TextStyle(
+                      color: EverloreTheme.violet,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1437,23 +1501,35 @@ class _FlagRow extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '$typeLabel · default: ${entry.defaultValue}',
-                  style: const TextStyle(color: EverloreTheme.ash, fontSize: 11),
+                  style: const TextStyle(
+                    color: EverloreTheme.ash,
+                    fontSize: 11,
+                  ),
                 ),
               ],
             ),
           ),
           GestureDetector(
-            onTap: () => _Step3Stats._showFlagEditor(context, cubit, entry, index),
+            onTap: () =>
+                _Step3Stats._showFlagEditor(context, cubit, entry, index),
             child: const Padding(
               padding: EdgeInsets.all(8),
-              child: Icon(Icons.edit_outlined, color: EverloreTheme.ash, size: 18),
+              child: Icon(
+                Icons.edit_outlined,
+                color: EverloreTheme.ash,
+                size: 18,
+              ),
             ),
           ),
           GestureDetector(
             onTap: () => cubit.removeFlag(index),
             child: const Padding(
               padding: EdgeInsets.all(8),
-              child: Icon(Icons.delete_outline, color: EverloreTheme.crimson, size: 18),
+              child: Icon(
+                Icons.delete_outline,
+                color: EverloreTheme.crimson,
+                size: 18,
+              ),
             ),
           ),
         ],
@@ -1550,11 +1626,30 @@ class _FlagEditorSheetState extends State<_FlagEditorSheet> {
               labelStyle: TextStyle(color: EverloreTheme.ash),
             ),
             items: const [
-              DropdownMenuItem(value: RealmFlagKind.boolean, child: Text('Boolean', style: TextStyle(color: EverloreTheme.parchment))),
-              DropdownMenuItem(value: RealmFlagKind.integer, child: Text('Integer', style: TextStyle(color: EverloreTheme.parchment))),
-              DropdownMenuItem(value: RealmFlagKind.string, child: Text('String', style: TextStyle(color: EverloreTheme.parchment))),
+              DropdownMenuItem(
+                value: RealmFlagKind.boolean,
+                child: Text(
+                  'Boolean',
+                  style: TextStyle(color: EverloreTheme.parchment),
+                ),
+              ),
+              DropdownMenuItem(
+                value: RealmFlagKind.integer,
+                child: Text(
+                  'Integer',
+                  style: TextStyle(color: EverloreTheme.parchment),
+                ),
+              ),
+              DropdownMenuItem(
+                value: RealmFlagKind.string,
+                child: Text(
+                  'String',
+                  style: TextStyle(color: EverloreTheme.parchment),
+                ),
+              ),
             ],
-            onChanged: (v) => setState(() => _kind = v ?? RealmFlagKind.boolean),
+            onChanged: (v) =>
+                setState(() => _kind = v ?? RealmFlagKind.boolean),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -1582,14 +1677,19 @@ class _FlagEditorSheetState extends State<_FlagEditorSheet> {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () {
-                final name = _nameCtrl.text.trim().toLowerCase().replaceAll(' ', '_');
+                final name = _nameCtrl.text.trim().toLowerCase().replaceAll(
+                  ' ',
+                  '_',
+                );
                 if (name.isEmpty) return;
-                widget.onSave(FlagEntry(
-                  name: name,
-                  kind: _kind,
-                  defaultValue: _parseDefault(),
-                  description: _descCtrl.text.trim(),
-                ));
+                widget.onSave(
+                  FlagEntry(
+                    name: name,
+                    kind: _kind,
+                    defaultValue: _parseDefault(),
+                    description: _descCtrl.text.trim(),
+                  ),
+                );
                 Navigator.pop(context);
               },
               child: const Text('Save flag'),
@@ -1627,17 +1727,18 @@ class _PresetButtons extends StatelessWidget {
         return GestureDetector(
           onTap: alreadyAdded
               ? null
-              : () => cubit.addStat(StatEntry(
+              : () => cubit.addStat(
+                  StatEntry(
                     name: p.$1,
                     defaultValue: p.$4,
                     min: p.$5,
                     max: p.$6,
                     description: '',
-                  )),
+                  ),
+                ),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               color: alreadyAdded
@@ -1652,19 +1753,23 @@ class _PresetButtons extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(alreadyAdded ? Icons.check : p.$3,
-                    size: 14,
+                Icon(
+                  alreadyAdded ? Icons.check : p.$3,
+                  size: 14,
+                  color: alreadyAdded
+                      ? EverloreTheme.verdant
+                      : EverloreTheme.ash,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  p.$2,
+                  style: TextStyle(
                     color: alreadyAdded
                         ? EverloreTheme.verdant
-                        : EverloreTheme.ash),
-                const SizedBox(width: 6),
-                Text(p.$2,
-                    style: TextStyle(
-                      color: alreadyAdded
-                          ? EverloreTheme.verdant
-                          : EverloreTheme.ash,
-                      fontSize: 13,
-                    )),
+                        : EverloreTheme.ash,
+                    fontSize: 13,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1679,8 +1784,11 @@ class _StatCard extends StatelessWidget {
   final int index;
   final ForgeWorldCubit cubit;
 
-  const _StatCard(
-      {required this.entry, required this.index, required this.cubit});
+  const _StatCard({
+    required this.entry,
+    required this.index,
+    required this.cubit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1690,8 +1798,7 @@ class _StatCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         color: EverloreTheme.void2,
-        border: Border.all(
-            color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+        border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
@@ -1712,20 +1819,25 @@ class _StatCard extends StatelessWidget {
                 Text(
                   entry.name,
                   style: const TextStyle(
-                      color: EverloreTheme.parchment,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600),
+                    color: EverloreTheme.parchment,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 Text(
                   '${entry.min} – ${entry.max}  ·  default: ${entry.defaultValue}',
                   style: const TextStyle(
-                      color: EverloreTheme.ash, fontSize: 11),
+                    color: EverloreTheme.ash,
+                    fontSize: 11,
+                  ),
                 ),
                 if (entry.description.isNotEmpty)
                   Text(
                     entry.description,
                     style: const TextStyle(
-                        color: EverloreTheme.ash, fontSize: 11),
+                      color: EverloreTheme.ash,
+                      fontSize: 11,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1734,12 +1846,15 @@ class _StatCard extends StatelessWidget {
           ),
           // Edit
           GestureDetector(
-            onTap: () => _Step3Stats._showStatEditor(
-                context, cubit, entry, index),
+            onTap: () =>
+                _Step3Stats._showStatEditor(context, cubit, entry, index),
             child: const Padding(
               padding: EdgeInsets.all(8),
-              child: Icon(Icons.edit_outlined,
-                  size: 16, color: EverloreTheme.ash),
+              child: Icon(
+                Icons.edit_outlined,
+                size: 16,
+                color: EverloreTheme.ash,
+              ),
             ),
           ),
           // Delete
@@ -1747,8 +1862,11 @@ class _StatCard extends StatelessWidget {
             onTap: () => cubit.removeStat(index),
             child: const Padding(
               padding: EdgeInsets.all(8),
-              child: Icon(Icons.delete_outline,
-                  size: 16, color: EverloreTheme.crimson),
+              child: Icon(
+                Icons.delete_outline,
+                size: 16,
+                color: EverloreTheme.crimson,
+              ),
             ),
           ),
         ],
@@ -1784,8 +1902,9 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
     super.initState();
     final e = widget.existing;
     _nameCtrl = TextEditingController(text: e?.name ?? '');
-    _defaultCtrl =
-        TextEditingController(text: (e?.defaultValue ?? 50).toString());
+    _defaultCtrl = TextEditingController(
+      text: (e?.defaultValue ?? 50).toString(),
+    );
     _minCtrl = TextEditingController(text: (e?.min ?? 0).toString());
     _maxCtrl = TextEditingController(text: (e?.max ?? 100).toString());
     _descCtrl = TextEditingController(text: e?.description ?? '');
@@ -1810,13 +1929,15 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
     final defaultVal = num.tryParse(_defaultCtrl.text) ?? 50;
     final min = num.tryParse(_minCtrl.text) ?? 0;
     final max = num.tryParse(_maxCtrl.text) ?? 100;
-    widget.onSave(StatEntry(
-      name: name,
-      defaultValue: defaultVal,
-      min: min,
-      max: max,
-      description: _descCtrl.text.trim(),
-    ));
+    widget.onSave(
+      StatEntry(
+        name: name,
+        defaultValue: defaultVal,
+        min: min,
+        max: max,
+        description: _descCtrl.text.trim(),
+      ),
+    );
     Navigator.pop(context);
   }
 
@@ -1861,7 +1982,9 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
             controller: _nameCtrl,
             onChanged: (_) => setState(() => _nameError = null),
             style: const TextStyle(
-                color: EverloreTheme.parchment, fontSize: 14),
+              color: EverloreTheme.parchment,
+              fontSize: 14,
+            ),
             decoration: _fieldDecoration('health, mana, honour...').copyWith(
               errorText: _nameError,
               errorStyle: const TextStyle(color: EverloreTheme.crimson),
@@ -1881,7 +2004,9 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
                     TextField(
                       controller: _minCtrl,
                       style: const TextStyle(
-                          color: EverloreTheme.parchment, fontSize: 14),
+                        color: EverloreTheme.parchment,
+                        fontSize: 14,
+                      ),
                       decoration: _fieldDecoration('0'),
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1899,7 +2024,9 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
                     TextField(
                       controller: _maxCtrl,
                       style: const TextStyle(
-                          color: EverloreTheme.parchment, fontSize: 14),
+                        color: EverloreTheme.parchment,
+                        fontSize: 14,
+                      ),
                       decoration: _fieldDecoration('100'),
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1917,7 +2044,9 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
                     TextField(
                       controller: _defaultCtrl,
                       style: const TextStyle(
-                          color: EverloreTheme.parchment, fontSize: 14),
+                        color: EverloreTheme.parchment,
+                        fontSize: 14,
+                      ),
                       decoration: _fieldDecoration('50'),
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1933,8 +2062,12 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
           TextField(
             controller: _descCtrl,
             style: const TextStyle(
-                color: EverloreTheme.parchment, fontSize: 14),
-            decoration: _fieldDecoration('e.g. The life force of the adventurer'),
+              color: EverloreTheme.parchment,
+              fontSize: 14,
+            ),
+            decoration: _fieldDecoration(
+              'e.g. The life force of the adventurer',
+            ),
             textCapitalization: TextCapitalization.sentences,
           ),
           const SizedBox(height: 20),
@@ -1942,9 +2075,9 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: _save,
-              child: Text(widget.existing != null
-                  ? 'Update Force'
-                  : 'Add Force'),
+              child: Text(
+                widget.existing != null ? 'Update Force' : 'Add Force',
+              ),
             ),
           ),
         ],
@@ -1957,30 +2090,11 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
 // Step 4 — Arcane Engine (Advanced)
 // ─────────────────────────────────────────────
 
-class _Step4Engine extends StatefulWidget {
-  final TextEditingController modelLogicCtrl;
-  final TextEditingController modelNarrSfwCtrl;
-  final TextEditingController modelNarrNsfwCtrl;
-  final TextEditingController modelSummaryCtrl;
+class _Step4Engine extends StatelessWidget {
   final ForgeWorldCubit cubit;
   final ForgeWorldState state;
 
-  const _Step4Engine({
-    super.key,
-    required this.modelLogicCtrl,
-    required this.modelNarrSfwCtrl,
-    required this.modelNarrNsfwCtrl,
-    required this.modelSummaryCtrl,
-    required this.cubit,
-    required this.state,
-  });
-
-  @override
-  State<_Step4Engine> createState() => _Step4EngineState();
-}
-
-class _Step4EngineState extends State<_Step4Engine> {
-  bool _showAdvanced = false;
+  const _Step4Engine({super.key, required this.cubit, required this.state});
 
   @override
   Widget build(BuildContext context) {
@@ -2003,17 +2117,15 @@ class _Step4EngineState extends State<_Step4Engine> {
           ),
           const SizedBox(height: 10),
           _SliderControl(
-            value: widget.state.maxContextMemories.toDouble(),
+            value: state.maxContextMemories.toDouble(),
             min: 5,
             max: 50,
             divisions: 9,
-            label: widget.state.maxContextMemories.toString(),
+            label: state.maxContextMemories.toString(),
             color: EverloreTheme.violet,
-            onChanged: (v) =>
-                widget.cubit.setMaxContextMemories(v.round()),
+            onChanged: (v) => cubit.setMaxContextMemories(v.round()),
           ),
-          _SliderLabels(
-              left: '5 (shallow)', right: '50 (deep)'),
+          _SliderLabels(left: '5 (shallow)', right: '50 (deep)'),
           const SizedBox(height: 20),
           // Lore recall
           const _FormLabel(
@@ -2023,145 +2135,21 @@ class _Step4EngineState extends State<_Step4Engine> {
           ),
           const SizedBox(height: 10),
           _SliderControl(
-            value: widget.state.maxLoreResults.toDouble(),
+            value: state.maxLoreResults.toDouble(),
             min: 3,
             max: 20,
             divisions: 17,
-            label: widget.state.maxLoreResults.toString(),
+            label: state.maxLoreResults.toString(),
             color: EverloreTheme.cyan,
-            onChanged: (v) =>
-                widget.cubit.setMaxLoreResults(v.round()),
+            onChanged: (v) => cubit.setMaxLoreResults(v.round()),
           ),
           _SliderLabels(left: '3 (focused)', right: '20 (expansive)'),
-          const SizedBox(height: 24),
-          // Advanced toggle
-          GestureDetector(
-            onTap: () => setState(() => _showAdvanced = !_showAdvanced),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: EverloreTheme.void2,
-                border: Border.all(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.tune,
-                      color: EverloreTheme.ash, size: 16),
-                  const SizedBox(width: 8),
-                  const Text('Advanced Model Settings',
-                      style: TextStyle(
-                          color: EverloreTheme.ash, fontSize: 14)),
-                  const Spacer(),
-                  Icon(
-                    _showAdvanced
-                        ? Icons.expand_less
-                        : Icons.expand_more,
-                    color: EverloreTheme.ash,
-                    size: 18,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_showAdvanced) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: EverloreTheme.void2,
-                border: Border.all(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.15)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'These models power different aspects of your world. Only change if you know what you\'re doing.',
-                    style: TextStyle(
-                        color: EverloreTheme.ash,
-                        fontSize: 12,
-                        height: 1.4),
-                  ),
-                  const SizedBox(height: 16),
-                  _ModelField(
-                    label: 'Logic Model',
-                    hint: 'Handles game mechanics and state',
-                    controller: widget.modelLogicCtrl,
-                    onChanged: widget.cubit.setModelLogic,
-                  ),
-                  const SizedBox(height: 12),
-                  _ModelField(
-                    label: 'Narration Model (Standard)',
-                    hint: 'Generates story text for most content',
-                    controller: widget.modelNarrSfwCtrl,
-                    onChanged: widget.cubit.setModelNarrationSfw,
-                  ),
-                  if (widget.state.isNsfwCapable) ...[
-                    const SizedBox(height: 12),
-                    _ModelField(
-                      label: 'Narration Model (Mature)',
-                      hint: 'Used when mature content is requested',
-                      controller: widget.modelNarrNsfwCtrl,
-                      onChanged: widget.cubit.setModelNarrationNsfw,
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  _ModelField(
-                    label: 'Summary Model',
-                    hint: 'Condenses long histories for context',
-                    controller: widget.modelSummaryCtrl,
-                    onChanged: widget.cubit.setModelSummary,
-                  ),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 28),
           // Summary card before forge
-          _ForgeSummary(state: widget.state),
+          _ForgeSummary(state: state),
           const SizedBox(height: 24),
         ],
       ),
-    );
-  }
-}
-
-class _ModelField extends StatelessWidget {
-  final String label;
-  final String hint;
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-
-  const _ModelField({
-    required this.label,
-    required this.hint,
-    required this.controller,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(
-                color: EverloreTheme.parchment,
-                fontSize: 12,
-                fontWeight: FontWeight.w600)),
-        const SizedBox(height: 4),
-        TextField(
-          controller: controller,
-          onChanged: onChanged,
-          style: const TextStyle(
-              color: EverloreTheme.parchment, fontSize: 13),
-          decoration: _fieldDecoration(hint),
-        ),
-      ],
     );
   }
 }
@@ -2194,8 +2182,10 @@ class _SliderControl extends StatelessWidget {
         thumbColor: color,
         overlayColor: color.withValues(alpha: 0.15),
         valueIndicatorColor: color,
-        valueIndicatorTextStyle:
-            const TextStyle(color: EverloreTheme.void1, fontSize: 12),
+        valueIndicatorTextStyle: const TextStyle(
+          color: EverloreTheme.void1,
+          fontSize: 12,
+        ),
         trackHeight: 3,
       ),
       child: Slider(
@@ -2222,12 +2212,14 @@ class _SliderLabels extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(left,
-              style: const TextStyle(
-                  color: EverloreTheme.ash, fontSize: 10)),
-          Text(right,
-              style: const TextStyle(
-                  color: EverloreTheme.ash, fontSize: 10)),
+          Text(
+            left,
+            style: const TextStyle(color: EverloreTheme.ash, fontSize: 10),
+          ),
+          Text(
+            right,
+            style: const TextStyle(color: EverloreTheme.ash, fontSize: 10),
+          ),
         ],
       ),
     );
@@ -2250,7 +2242,8 @@ class _ForgeSummary extends StatelessWidget {
           colors: [Color(0xFF1A1A38), Color(0xFF0F0F28)],
         ),
         border: Border.all(
-            color: EverloreTheme.goldDim.withValues(alpha: 0.35)),
+          color: EverloreTheme.goldDim.withValues(alpha: 0.35),
+        ),
         boxShadow: [
           BoxShadow(
             color: EverloreTheme.gold.withValues(alpha: 0.06),
@@ -2264,15 +2257,17 @@ class _ForgeSummary extends StatelessWidget {
         children: [
           const Row(
             children: [
-              Icon(Icons.auto_fix_high,
-                  color: EverloreTheme.gold, size: 16),
+              Icon(Icons.auto_fix_high, color: EverloreTheme.gold, size: 16),
               SizedBox(width: 8),
-              Text('READY TO FORGE',
-                  style: TextStyle(
-                      color: EverloreTheme.gold,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 2)),
+              Text(
+                'READY TO FORGE',
+                style: TextStyle(
+                  color: EverloreTheme.gold,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -2282,8 +2277,7 @@ class _ForgeSummary extends StatelessWidget {
           ),
           _SummaryRow(
             label: 'Type',
-            value:
-                state.isSentient ? 'Conscious Soul' : 'Game Master',
+            value: state.isSentient ? 'Conscious Soul' : 'Game Master',
           ),
           _SummaryRow(
             label: 'Content',
@@ -2316,7 +2310,10 @@ class _ForgeSummary extends StatelessWidget {
           const Text(
             'Your world will be saved as a draft. You can review and publish it from My Worlds.',
             style: TextStyle(
-                color: EverloreTheme.ash, fontSize: 12, height: 1.4),
+              color: EverloreTheme.ash,
+              fontSize: 12,
+              height: 1.4,
+            ),
           ),
         ],
       ),
@@ -2328,8 +2325,11 @@ class _SummaryRow extends StatelessWidget {
   final String label;
   final String value;
   final bool isLast;
-  const _SummaryRow(
-      {required this.label, required this.value, this.isLast = false});
+  const _SummaryRow({
+    required this.label,
+    required this.value,
+    this.isLast = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2340,18 +2340,22 @@ class _SummaryRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 110,
-            child: Text(label,
-                style: const TextStyle(
-                    color: EverloreTheme.ash, fontSize: 12)),
+            child: Text(
+              label,
+              style: const TextStyle(color: EverloreTheme.ash, fontSize: 12),
+            ),
           ),
           Expanded(
-            child: Text(value,
-                style: const TextStyle(
-                    color: EverloreTheme.parchment,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis),
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: EverloreTheme.parchment,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -2376,7 +2380,8 @@ class _StepIntro extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         color: EverloreTheme.void2,
         border: Border.all(
-            color: EverloreTheme.goldDim.withValues(alpha: 0.18)),
+          color: EverloreTheme.goldDim.withValues(alpha: 0.18),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2387,7 +2392,10 @@ class _StepIntro extends StatelessWidget {
             child: Text(
               text,
               style: const TextStyle(
-                  color: EverloreTheme.ash, fontSize: 13, height: 1.5),
+                color: EverloreTheme.ash,
+                fontSize: 13,
+                height: 1.5,
+              ),
             ),
           ),
         ],
@@ -2400,8 +2408,11 @@ class _CharCount extends StatelessWidget {
   final int current;
   final int min;
   final int max;
-  const _CharCount(
-      {required this.current, required this.min, required this.max});
+  const _CharCount({
+    required this.current,
+    required this.min,
+    required this.max,
+  });
 
   @override
   Widget build(BuildContext context) {

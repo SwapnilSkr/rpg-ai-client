@@ -36,7 +36,9 @@ class _MyWorldsView extends StatelessWidget {
                 width: 28,
                 height: 28,
                 child: CircularProgressIndicator(
-                    strokeWidth: 1.5, color: EverloreTheme.gold),
+                  strokeWidth: 1.5,
+                  color: EverloreTheme.gold,
+                ),
               ),
             ),
           );
@@ -57,9 +59,7 @@ class _MyWorldsView extends StatelessWidget {
           children: [
             _buildSimpleHeader(context),
             Expanded(
-              child: type == _GateType.unauth
-                  ? _UnauthGate()
-                  : _UpgradeGate(),
+              child: type == _GateType.unauth ? _UnauthGate() : _UpgradeGate(),
             ),
           ],
         ),
@@ -73,14 +73,19 @@ class _MyWorldsView extends StatelessWidget {
       body: BlocConsumer<MyWorldsCubit, MyWorldsState>(
         listener: (context, state) {
           if (state.error != null) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(state.error!,
-                  style: const TextStyle(color: EverloreTheme.parchment)),
-              backgroundColor: EverloreTheme.crimson.withValues(alpha: 0.9),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  state.error!,
+                  style: const TextStyle(color: EverloreTheme.parchment),
+                ),
+                backgroundColor: EverloreTheme.crimson.withValues(alpha: 0.9),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            );
             context.read<MyWorldsCubit>().clearError();
           }
         },
@@ -98,16 +103,20 @@ class _MyWorldsView extends StatelessWidget {
                 )
               else ...[
                 if (state.drafts.isNotEmpty) ...[
-                  _sectionHeader('${state.drafts.length} DRAFTS',
-                      Icons.edit_note, EverloreTheme.ember),
+                  _sectionHeader(
+                    '${state.drafts.length} DRAFTS',
+                    Icons.edit_note,
+                    EverloreTheme.ember,
+                  ),
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (ctx, i) => MyWorldCard(
                           template: state.drafts[i],
-                          isPublishing: state.publishingIds
-                              .contains(state.drafts[i].id),
+                          isPublishing: state.publishingIds.contains(
+                            state.drafts[i].id,
+                          ),
                           onEdit: () => context.push(
                             '/my-worlds/${state.drafts[i].id}/forge',
                             extra: state.drafts[i],
@@ -117,6 +126,9 @@ class _MyWorldsView extends StatelessWidget {
                             state.drafts[i].id,
                             state.drafts[i].title,
                           ),
+                          onDelete: () => context.read<MyWorldsCubit>().delete(
+                            state.drafts[i].id,
+                          ),
                         ),
                         childCount: state.drafts.length,
                       ),
@@ -124,8 +136,11 @@ class _MyWorldsView extends StatelessWidget {
                   ),
                 ],
                 if (state.published.isNotEmpty) ...[
-                  _sectionHeader('${state.published.length} PUBLISHED',
-                      Icons.public, EverloreTheme.verdant),
+                  _sectionHeader(
+                    '${state.published.length} PUBLISHED',
+                    Icons.public,
+                    EverloreTheme.verdant,
+                  ),
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                     sliver: SliverList(
@@ -137,8 +152,12 @@ class _MyWorldsView extends StatelessWidget {
                             '/my-worlds/${state.published[i].id}/forge',
                             extra: state.published[i],
                           ),
-                          onTap: () => context
-                              .push('/templates/${state.published[i].id}'),
+                          onTap: () => context.push(
+                            '/templates/${state.published[i].id}',
+                          ),
+                          onDelete: () => context.read<MyWorldsCubit>().delete(
+                            state.published[i].id,
+                          ),
                         ),
                         childCount: state.published.length,
                       ),
@@ -180,8 +199,7 @@ class _MyWorldsView extends StatelessWidget {
     );
   }
 
-  SliverAppBar _buildSliverHeader(
-      BuildContext context, MyWorldsState state) {
+  SliverAppBar _buildSliverHeader(BuildContext context, MyWorldsState state) {
     return SliverAppBar(
       backgroundColor: EverloreTheme.void0,
       expandedHeight: 110,
@@ -203,8 +221,11 @@ class _MyWorldsView extends StatelessWidget {
                     children: [
                       _BackButton(onTap: () => context.pop()),
                       const SizedBox(width: 10),
-                      const Icon(Icons.auto_fix_high,
-                          color: EverloreTheme.gold, size: 18),
+                      const Icon(
+                        Icons.auto_fix_high,
+                        color: EverloreTheme.gold,
+                        size: 18,
+                      ),
                       const SizedBox(width: 6),
                       const Text(
                         'MY WORLDS',
@@ -221,15 +242,18 @@ class _MyWorldsView extends StatelessWidget {
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: EverloreTheme.goldDim),
+                            strokeWidth: 1.5,
+                            color: EverloreTheme.goldDim,
+                          ),
                         )
                       else
                         GestureDetector(
-                          onTap: () =>
-                              context.read<MyWorldsCubit>().load(),
-                          child: const Icon(Icons.refresh,
-                              color: EverloreTheme.ash, size: 20),
+                          onTap: () => context.read<MyWorldsCubit>().load(),
+                          child: const Icon(
+                            Icons.refresh,
+                            color: EverloreTheme.ash,
+                            size: 20,
+                          ),
                         ),
                     ],
                   ),
@@ -276,44 +300,50 @@ class _MyWorldsView extends StatelessWidget {
     );
   }
 
-  void _confirmPublish(
-      BuildContext context, String id, String title) {
+  void _confirmPublish(BuildContext context, String id, String title) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: EverloreTheme.void2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(
-              color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
+          side: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
         ),
         title: const Row(
           children: [
             Icon(Icons.public, color: EverloreTheme.gold, size: 20),
             SizedBox(width: 8),
-            Text('Release This World?',
-                style: TextStyle(
-                    color: EverloreTheme.parchment, fontSize: 17)),
+            Text(
+              'Release This World?',
+              style: TextStyle(color: EverloreTheme.parchment, fontSize: 17),
+            ),
           ],
         ),
         content: Text(
           '"$title" will be revealed to all adventurers across the realm. You can still edit it later from My Worlds.',
           style: const TextStyle(
-              color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+            color: EverloreTheme.ash,
+            fontSize: 14,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Keep Hidden',
-                style: TextStyle(color: EverloreTheme.ash)),
+            child: const Text(
+              'Keep Hidden',
+              style: TextStyle(color: EverloreTheme.ash),
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               context.read<MyWorldsCubit>().publish(id);
             },
-            child: const Text('Release to the Realm',
-                style: TextStyle(color: EverloreTheme.gold)),
+            child: const Text(
+              'Release to the Realm',
+              style: TextStyle(color: EverloreTheme.gold),
+            ),
           ),
         ],
       ),
@@ -331,8 +361,11 @@ class _BackButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: const Icon(Icons.arrow_back_ios_new,
-          size: 18, color: EverloreTheme.ash),
+      child: const Icon(
+        Icons.arrow_back_ios_new,
+        size: 18,
+        color: EverloreTheme.ash,
+      ),
     );
   }
 }
@@ -353,23 +386,33 @@ class _UnauthGate extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: EverloreTheme.void2,
                 border: Border.all(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+                ),
               ),
-              child: const Icon(Icons.lock_outline,
-                  color: EverloreTheme.goldDim, size: 36),
+              child: const Icon(
+                Icons.lock_outline,
+                color: EverloreTheme.goldDim,
+                size: 36,
+              ),
             ),
             const SizedBox(height: 24),
-            const Text('Sign in to forge worlds',
-                style: TextStyle(
-                    color: EverloreTheme.parchment,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700)),
+            const Text(
+              'Sign in to forge worlds',
+              style: TextStyle(
+                color: EverloreTheme.parchment,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 10),
             const Text(
               'Only authenticated creators may wield the arcane forge and breathe life into new realms.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+                color: EverloreTheme.ash,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 28),
             SizedBox(
@@ -398,12 +441,15 @@ class _UpgradeGate extends StatelessWidget {
             height: 90,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: RadialGradient(colors: [
-                EverloreTheme.gold.withValues(alpha: 0.18),
-                EverloreTheme.void2,
-              ]),
+              gradient: RadialGradient(
+                colors: [
+                  EverloreTheme.gold.withValues(alpha: 0.18),
+                  EverloreTheme.void2,
+                ],
+              ),
               border: Border.all(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.5)),
+                color: EverloreTheme.goldDim.withValues(alpha: 0.5),
+              ),
               boxShadow: [
                 BoxShadow(
                   color: EverloreTheme.gold.withValues(alpha: 0.1),
@@ -412,8 +458,11 @@ class _UpgradeGate extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.auto_fix_high,
-                color: EverloreTheme.gold, size: 40),
+            child: const Icon(
+              Icons.auto_fix_high,
+              color: EverloreTheme.gold,
+              size: 40,
+            ),
           ),
           const SizedBox(height: 24),
           const Text(
@@ -430,7 +479,10 @@ class _UpgradeGate extends StatelessWidget {
             'World creation is granted to Premium and Creator tier wielders. Upgrade your pact to unlock the arcane forge and breathe life into your own realms.',
             textAlign: TextAlign.center,
             style: TextStyle(
-                color: EverloreTheme.ash, fontSize: 14, height: 1.6),
+              color: EverloreTheme.ash,
+              fontSize: 14,
+              height: 1.6,
+            ),
           ),
           const SizedBox(height: 28),
           Container(
@@ -439,7 +491,8 @@ class _UpgradeGate extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               color: EverloreTheme.void2,
               border: Border.all(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+                color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+              ),
             ),
             child: Column(
               children: const [
@@ -478,19 +531,22 @@ class _UpgradeGate extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.35)),
+                color: EverloreTheme.goldDim.withValues(alpha: 0.35),
+              ),
               color: EverloreTheme.goldDim.withValues(alpha: 0.05),
             ),
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.info_outline,
-                    color: EverloreTheme.goldDim, size: 15),
+                Icon(
+                  Icons.info_outline,
+                  color: EverloreTheme.goldDim,
+                  size: 15,
+                ),
                 SizedBox(width: 8),
                 Text(
                   'Upgrade available through your profile',
-                  style: TextStyle(
-                      color: EverloreTheme.goldDim, fontSize: 13),
+                  style: TextStyle(color: EverloreTheme.goldDim, fontSize: 13),
                 ),
               ],
             ),
@@ -534,14 +590,21 @@ class _UpgradeFeature extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: const TextStyle(
-                          color: EverloreTheme.parchment,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600)),
-                  Text(subtitle,
-                      style: const TextStyle(
-                          color: EverloreTheme.ash, fontSize: 12)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: EverloreTheme.parchment,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: EverloreTheme.ash,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -549,8 +612,7 @@ class _UpgradeFeature extends StatelessWidget {
         ),
         if (!isLast) ...[
           const SizedBox(height: 8),
-          const Divider(
-              color: Color(0xFF1E1E3C), height: 1, thickness: 1),
+          const Divider(color: Color(0xFF1E1E3C), height: 1, thickness: 1),
           const SizedBox(height: 8),
         ],
       ],
@@ -575,15 +637,21 @@ class _EmptyForgeView extends StatelessWidget {
               height: 90,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: RadialGradient(colors: [
-                  EverloreTheme.violet.withValues(alpha: 0.18),
-                  EverloreTheme.void2,
-                ]),
+                gradient: RadialGradient(
+                  colors: [
+                    EverloreTheme.violet.withValues(alpha: 0.18),
+                    EverloreTheme.void2,
+                  ],
+                ),
                 border: Border.all(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+                ),
               ),
-              child: const Icon(Icons.auto_fix_high,
-                  color: EverloreTheme.gold, size: 40),
+              child: const Icon(
+                Icons.auto_fix_high,
+                color: EverloreTheme.gold,
+                size: 40,
+              ),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -599,7 +667,10 @@ class _EmptyForgeView extends StatelessWidget {
               'No worlds crafted yet. Shape the lore, define the rules, and release your creation to adventurers.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+                color: EverloreTheme.ash,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 32),
             SizedBox(
@@ -630,11 +701,15 @@ class _LoadingView extends StatelessWidget {
             width: 28,
             height: 28,
             child: CircularProgressIndicator(
-                strokeWidth: 1.5, color: EverloreTheme.gold),
+              strokeWidth: 1.5,
+              color: EverloreTheme.gold,
+            ),
           ),
           SizedBox(height: 14),
-          Text('Consulting the archives...',
-              style: TextStyle(color: EverloreTheme.ash, fontSize: 14)),
+          Text(
+            'Consulting the archives...',
+            style: TextStyle(color: EverloreTheme.ash, fontSize: 14),
+          ),
         ],
       ),
     );

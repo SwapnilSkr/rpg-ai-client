@@ -13,14 +13,19 @@ class HomeRepository {
   }
 
   static Future<WorldInstance> createInstance(String templateId) async {
-    final response = await ApiClient.post('/instances', body: {
-      'template_id': templateId,
-    });
+    final response = await ApiClient.post(
+      '/instances',
+      body: {'template_id': templateId},
+    );
     final instance = response['instance'];
     return WorldInstance.fromJson(instance);
   }
 
   static Future<void> archiveInstance(String instanceId) async {
     await ApiClient.post('/instances/$instanceId/archive');
+  }
+
+  static Future<void> deleteInstance(String instanceId) async {
+    await ApiClient.delete('/instances/$instanceId');
   }
 }

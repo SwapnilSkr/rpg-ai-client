@@ -57,9 +57,24 @@ class HomeCubit extends Cubit<HomeState> {
   Future<void> archiveInstance(String instanceId) async {
     try {
       await HomeRepository.archiveInstance(instanceId);
-      emit(state.copyWith(
-        instances: state.instances.where((i) => i.id != instanceId).toList(),
-      ));
+      emit(
+        state.copyWith(
+          instances: state.instances.where((i) => i.id != instanceId).toList(),
+        ),
+      );
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<void> deleteInstance(String instanceId) async {
+    try {
+      await HomeRepository.deleteInstance(instanceId);
+      emit(
+        state.copyWith(
+          instances: state.instances.where((i) => i.id != instanceId).toList(),
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
     }

@@ -25,14 +25,13 @@ class StatEntry extends Equatable {
     num? min,
     num? max,
     String? description,
-  }) =>
-      StatEntry(
-        name: name ?? this.name,
-        defaultValue: defaultValue ?? this.defaultValue,
-        min: min ?? this.min,
-        max: max ?? this.max,
-        description: description ?? this.description,
-      );
+  }) => StatEntry(
+    name: name ?? this.name,
+    defaultValue: defaultValue ?? this.defaultValue,
+    min: min ?? this.min,
+    max: max ?? this.max,
+    description: description ?? this.description,
+  );
 
   @override
   List<Object?> get props => [name, defaultValue, min, max, description];
@@ -58,13 +57,12 @@ class FlagEntry extends Equatable {
     RealmFlagKind? kind,
     Object? defaultValue,
     String? description,
-  }) =>
-      FlagEntry(
-        name: name ?? this.name,
-        kind: kind ?? this.kind,
-        defaultValue: defaultValue ?? this.defaultValue,
-        description: description ?? this.description,
-      );
+  }) => FlagEntry(
+    name: name ?? this.name,
+    kind: kind ?? this.kind,
+    defaultValue: defaultValue ?? this.defaultValue,
+    description: description ?? this.description,
+  );
 
   @override
   List<Object?> get props => [name, kind, defaultValue, description];
@@ -102,10 +100,10 @@ class ForgeWorldState extends Equatable {
     this.sceneTags = const [],
     this.stats = const [],
     this.flags = const [],
-    this.modelLogic = 'gpt-4o',
-    this.modelNarrationSfw = 'gpt-4o',
-    this.modelNarrationNsfw = 'pygmalionai/mythalion-13b',
-    this.modelSummary = 'gpt-4o-mini',
+    this.modelLogic = 'gpt-5',
+    this.modelNarrationSfw = 'gpt-5',
+    this.modelNarrationNsfw = 'gpt-5',
+    this.modelSummary = 'gpt-5',
     this.maxContextMemories = 25,
     this.maxLoreResults = 10,
     this.isSubmitting = false,
@@ -134,28 +132,27 @@ class ForgeWorldState extends Equatable {
     String? error,
     WorldTemplate? result,
     bool clearError = false,
-  }) =>
-      ForgeWorldState(
-        step: step ?? this.step,
-        title: title ?? this.title,
-        description: description ?? this.description,
-        isSentient: isSentient ?? this.isSentient,
-        isNsfwCapable: isNsfwCapable ?? this.isNsfwCapable,
-        seedPrompt: seedPrompt ?? this.seedPrompt,
-        globalLore: globalLore ?? this.globalLore,
-        sceneTags: sceneTags ?? this.sceneTags,
-        stats: stats ?? this.stats,
-        flags: flags ?? this.flags,
-        modelLogic: modelLogic ?? this.modelLogic,
-        modelNarrationSfw: modelNarrationSfw ?? this.modelNarrationSfw,
-        modelNarrationNsfw: modelNarrationNsfw ?? this.modelNarrationNsfw,
-        modelSummary: modelSummary ?? this.modelSummary,
-        maxContextMemories: maxContextMemories ?? this.maxContextMemories,
-        maxLoreResults: maxLoreResults ?? this.maxLoreResults,
-        isSubmitting: isSubmitting ?? this.isSubmitting,
-        error: clearError ? null : (error ?? this.error),
-        result: result ?? this.result,
-      );
+  }) => ForgeWorldState(
+    step: step ?? this.step,
+    title: title ?? this.title,
+    description: description ?? this.description,
+    isSentient: isSentient ?? this.isSentient,
+    isNsfwCapable: isNsfwCapable ?? this.isNsfwCapable,
+    seedPrompt: seedPrompt ?? this.seedPrompt,
+    globalLore: globalLore ?? this.globalLore,
+    sceneTags: sceneTags ?? this.sceneTags,
+    stats: stats ?? this.stats,
+    flags: flags ?? this.flags,
+    modelLogic: modelLogic ?? this.modelLogic,
+    modelNarrationSfw: modelNarrationSfw ?? this.modelNarrationSfw,
+    modelNarrationNsfw: modelNarrationNsfw ?? this.modelNarrationNsfw,
+    modelSummary: modelSummary ?? this.modelSummary,
+    maxContextMemories: maxContextMemories ?? this.maxContextMemories,
+    maxLoreResults: maxLoreResults ?? this.maxLoreResults,
+    isSubmitting: isSubmitting ?? this.isSubmitting,
+    error: clearError ? null : (error ?? this.error),
+    result: result ?? this.result,
+  );
 
   bool get step0Valid =>
       title.trim().length >= 2 && description.trim().length >= 10;
@@ -180,26 +177,26 @@ class ForgeWorldState extends Equatable {
 
   @override
   List<Object?> get props => [
-        step,
-        title,
-        description,
-        isSentient,
-        isNsfwCapable,
-        seedPrompt,
-        globalLore,
-        sceneTags,
-        stats,
-        flags,
-        modelLogic,
-        modelNarrationSfw,
-        modelNarrationNsfw,
-        modelSummary,
-        maxContextMemories,
-        maxLoreResults,
-        isSubmitting,
-        error,
-        result,
-      ];
+    step,
+    title,
+    description,
+    isSentient,
+    isNsfwCapable,
+    seedPrompt,
+    globalLore,
+    sceneTags,
+    stats,
+    flags,
+    modelLogic,
+    modelNarrationSfw,
+    modelNarrationNsfw,
+    modelSummary,
+    maxContextMemories,
+    maxLoreResults,
+    isSubmitting,
+    error,
+    result,
+  ];
 }
 
 List<FlagEntry> _flagsFromTemplate(Map<String, dynamic> raw) {
@@ -236,23 +233,26 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   final String? existingId;
 
   ForgeWorldCubit({WorldTemplate? existing})
-      : existingId = existing?.id,
-        super(existing != null
-            ? _fromTemplate(existing)
-            : const ForgeWorldState());
+    : existingId = existing?.id,
+      super(
+        existing != null ? _fromTemplate(existing) : const ForgeWorldState(),
+      );
 
   static ForgeWorldState _fromTemplate(WorldTemplate t) {
     final stats = t.baseStatsTemplate.entries
-        .map((e) => StatEntry(
-              name: e.key,
-              defaultValue: e.value.defaultValue,
-              min: e.value.min,
-              max: e.value.max,
-              description: e.value.description,
-            ))
+        .map(
+          (e) => StatEntry(
+            name: e.key,
+            defaultValue: e.value.defaultValue,
+            min: e.value.min,
+            max: e.value.max,
+            description: e.value.description,
+          ),
+        )
         .toList();
     final flags = _flagsFromTemplate(
-        Map<String, dynamic>.from(t.flagDefinitions));
+      Map<String, dynamic>.from(t.flagDefinitions),
+    );
     return ForgeWorldState(
       title: t.title,
       description: t.description,
@@ -263,11 +263,10 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       sceneTags: List<String>.from(t.sceneTags),
       stats: stats,
       flags: flags,
-      modelLogic: t.modelPreferences['logic'] ?? 'gpt-4o',
-      modelNarrationSfw: t.modelPreferences['narration_sfw'] ?? 'gpt-4o',
-      modelNarrationNsfw:
-          t.modelPreferences['narration_nsfw'] ?? 'pygmalionai/mythalion-13b',
-      modelSummary: t.modelPreferences['summary'] ?? 'gpt-4o-mini',
+      modelLogic: 'gpt-5',
+      modelNarrationSfw: 'gpt-5',
+      modelNarrationNsfw: 'gpt-5',
+      modelSummary: 'gpt-5',
       maxContextMemories: t.maxContextMemories,
       maxLoreResults: t.maxLoreResults,
     );
@@ -299,8 +298,11 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   }
 
   void removeTag(String tag) {
-    emit(state.copyWith(
-        sceneTags: state.sceneTags.where((t) => t != tag).toList()));
+    emit(
+      state.copyWith(
+        sceneTags: state.sceneTags.where((t) => t != tag).toList(),
+      ),
+    );
   }
 
   void addStat(StatEntry stat) {
@@ -333,21 +335,18 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
 
   void clearError() => emit(state.copyWith(clearError: true));
 
-  void setModelLogic(String v) => emit(state.copyWith(modelLogic: v));
-  void setModelNarrationSfw(String v) =>
-      emit(state.copyWith(modelNarrationSfw: v));
-  void setModelNarrationNsfw(String v) =>
-      emit(state.copyWith(modelNarrationNsfw: v));
-  void setModelSummary(String v) => emit(state.copyWith(modelSummary: v));
   void setMaxContextMemories(int v) =>
       emit(state.copyWith(maxContextMemories: v));
   void setMaxLoreResults(int v) => emit(state.copyWith(maxLoreResults: v));
 
   Future<void> forge() async {
     if (state.stats.isEmpty) {
-      emit(state.copyWith(
+      emit(
+        state.copyWith(
           error:
-              'Define at least one Vital Force — adventurers need measurable attributes.'));
+              'Define at least one Vital Force — adventurers need measurable attributes.',
+        ),
+      );
       return;
     }
     emit(state.copyWith(isSubmitting: true, clearError: true));
@@ -395,12 +394,6 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       'base_stats_template': statsMap,
       'flag_definitions': flagsMap,
       'scene_tags': state.sceneTags,
-      'model_preferences': {
-        'logic': state.modelLogic,
-        'narration_sfw': state.modelNarrationSfw,
-        'narration_nsfw': state.modelNarrationNsfw,
-        'summary': state.modelSummary,
-      },
       'max_context_memories': state.maxContextMemories,
       'max_lore_results': state.maxLoreResults,
     };

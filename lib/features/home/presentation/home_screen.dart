@@ -30,9 +30,7 @@ class _HomeView extends StatelessWidget {
             slivers: [
               _buildAppBar(context, state),
               if (state.isLoading && state.instances.isEmpty)
-                const SliverFillRemaining(
-                  child: _LoadingView(),
-                )
+                const SliverFillRemaining(child: _LoadingView())
               else if (state.error != null &&
                   state.error!.contains('Unauthorized') &&
                   state.instances.isEmpty)
@@ -74,11 +72,14 @@ class _HomeView extends StatelessWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                              color: EverloreTheme.goldDim
-                                  .withValues(alpha: 0.5)),
+                            color: EverloreTheme.goldDim.withValues(alpha: 0.5),
+                          ),
                         ),
-                        child: const Icon(Icons.auto_stories,
-                            color: EverloreTheme.gold, size: 16),
+                        child: const Icon(
+                          Icons.auto_stories,
+                          color: EverloreTheme.gold,
+                          size: 16,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       const Text(
@@ -132,40 +133,37 @@ class _HomeView extends StatelessWidget {
 
   SliverList _buildInstanceList(BuildContext context, HomeState state) {
     return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          if (index == 0) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-              child: Row(
-                children: [
-                  Text(
-                    '${state.instances.length} ACTIVE',
-                    style: EverloreTheme.sectionHeader,
+      delegate: SliverChildBuilderDelegate((context, index) {
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+            child: Row(
+              children: [
+                Text(
+                  '${state.instances.length} ACTIVE',
+                  style: EverloreTheme.sectionHeader,
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => context.read<HomeCubit>().loadInstances(),
+                  child: const Text(
+                    'Refresh',
+                    style: TextStyle(color: EverloreTheme.gold, fontSize: 12),
                   ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => context.read<HomeCubit>().loadInstances(),
-                    child: const Text(
-                      'Refresh',
-                      style: TextStyle(
-                          color: EverloreTheme.gold, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-          if (index > state.instances.length) return null;
-          final instance = state.instances[index - 1];
-          return WorldCard(
-            instance: instance,
-            onTap: () => context.push('/play/${instance.id}'),
-            onArchive: () => _confirmArchive(context, instance.id),
+                ),
+              ],
+            ),
           );
-        },
-        childCount: state.instances.length + 1,
-      ),
+        }
+        if (index > state.instances.length) return null;
+        final instance = state.instances[index - 1];
+        return WorldCard(
+          instance: instance,
+          onTap: () => context.push('/play/${instance.id}'),
+          onArchive: () => _confirmArchive(context, instance.id),
+          onDelete: () => _confirmDelete(context, instance.id),
+        );
+      }, childCount: state.instances.length + 1),
     );
   }
 
@@ -189,16 +187,66 @@ class _HomeView extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Keep Open',
-                style: TextStyle(color: EverloreTheme.ash)),
+            child: const Text(
+              'Keep Open',
+              style: TextStyle(color: EverloreTheme.ash),
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               context.read<HomeCubit>().archiveInstance(instanceId);
             },
-            child: const Text('Seal Realm',
-                style: TextStyle(color: EverloreTheme.crimson)),
+            child: const Text(
+              'Seal Realm',
+              style: TextStyle(color: EverloreTheme.crimson),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, String instanceId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: EverloreTheme.void2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: EverloreTheme.crimson.withValues(alpha: 0.3)),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber, color: EverloreTheme.crimson, size: 24),
+            SizedBox(width: 10),
+            Text(
+              'Destroy This Realm?',
+              style: TextStyle(color: EverloreTheme.parchment, fontSize: 18),
+            ),
+          ],
+        ),
+        content: const Text(
+          'This will permanently delete your realm and all its history, memories, and echoes. This action cannot be undone.',
+          style: TextStyle(color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Keep Realm',
+              style: TextStyle(color: EverloreTheme.ash),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<HomeCubit>().deleteInstance(instanceId);
+            },
+            child: const Text(
+              'Destroy Forever',
+              style: TextStyle(color: EverloreTheme.crimson),
+            ),
           ),
         ],
       ),
@@ -231,7 +279,8 @@ class _HeaderButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             color: EverloreTheme.void2,
             border: Border.all(
-                color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+              color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+            ),
           ),
           child: Icon(icon, color: EverloreTheme.ash, size: 18),
         ),
@@ -286,10 +335,14 @@ class _UnauthView extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: EverloreTheme.void2,
                 border: Border.all(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+                ),
               ),
-              child: const Icon(Icons.lock_outline,
-                  color: EverloreTheme.goldDim, size: 36),
+              child: const Icon(
+                Icons.lock_outline,
+                color: EverloreTheme.goldDim,
+                size: 36,
+              ),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -306,7 +359,10 @@ class _UnauthView extends StatelessWidget {
               'Sign in to access your adventures and continue your story.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+                color: EverloreTheme.ash,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 32),
             SizedBox(
@@ -354,10 +410,14 @@ class _EmptyView extends StatelessWidget {
                   ],
                 ),
                 border: Border.all(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+                ),
               ),
-              child: const Icon(Icons.explore,
-                  color: EverloreTheme.gold, size: 40),
+              child: const Icon(
+                Icons.explore,
+                color: EverloreTheme.gold,
+                size: 40,
+              ),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -373,7 +433,10 @@ class _EmptyView extends StatelessWidget {
               'Your first adventure is waiting. Choose a world and begin your legend.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+                color: EverloreTheme.ash,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 32),
             SizedBox(

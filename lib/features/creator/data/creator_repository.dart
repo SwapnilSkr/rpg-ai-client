@@ -21,7 +21,10 @@ class CreatorRepository {
     return WorldTemplate.fromJson(json);
   }
 
-  static Future<WorldTemplate> update(String id, Map<String, dynamic> body) async {
+  static Future<WorldTemplate> update(
+    String id,
+    Map<String, dynamic> body,
+  ) async {
     final response = await ApiClient.put('/templates/$id', body: body);
     final json = (response is Map && response.containsKey('template'))
         ? response['template']
@@ -31,5 +34,9 @@ class CreatorRepository {
 
   static Future<void> publish(String id) async {
     await ApiClient.post('/templates/$id/publish');
+  }
+
+  static Future<void> delete(String id) async {
+    await ApiClient.delete('/templates/$id');
   }
 }

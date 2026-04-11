@@ -23,19 +23,20 @@ class WorldCard extends StatelessWidget {
   final WorldInstance instance;
   final VoidCallback onTap;
   final VoidCallback? onArchive;
+  final VoidCallback? onDelete;
 
   const WorldCard({
     super.key,
     required this.instance,
     required this.onTap,
     this.onArchive,
+    this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     final title = instance.template?['title'] as String? ?? 'Untitled Realm';
-    final description =
-        instance.template?['description'] as String? ?? '';
+    final description = instance.template?['description'] as String? ?? '';
     final isSentient = instance.template?['is_sentient'] as bool? ?? false;
     final sceneTag = instance.currentScene.tag;
 
@@ -90,7 +91,8 @@ class WorldCard extends StatelessWidget {
                             shape: BoxShape.circle,
                             color: accentColor.withValues(alpha: 0.12),
                             border: Border.all(
-                                color: accentColor.withValues(alpha: 0.3)),
+                              color: accentColor.withValues(alpha: 0.3),
+                            ),
                           ),
                           child: Icon(
                             isSentient
@@ -116,7 +118,9 @@ class WorldCard extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                isSentient ? 'Sentient World' : 'Game Master World',
+                                isSentient
+                                    ? 'Sentient World'
+                                    : 'Game Master World',
                                 style: TextStyle(
                                   color: accentColor.withValues(alpha: 0.8),
                                   fontSize: 11,
@@ -127,9 +131,9 @@ class WorldCard extends StatelessWidget {
                             ],
                           ),
                         ),
-                        if (onArchive != null)
+                        if (onArchive != null || onDelete != null)
                           GestureDetector(
-                            onTap: onArchive,
+                            onTap: () => _showOptions(context),
                             child: Container(
                               width: 32,
                               height: 32,
@@ -203,6 +207,145 @@ class WorldCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  void _showOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: EverloreTheme.void4,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (onArchive != null)
+                _OptionTile(
+                  icon: Icons.archive_outlined,
+                  label: 'Seal Realm (Archive)',
+                  subtitle:
+                      'Preserve your story but hide it from active realms',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    onArchive!();
+                  },
+                ),
+              if (onDelete != null)
+                _OptionTile(
+                  icon: Icons.delete_forever_outlined,
+                  label: 'Destroy Realm (Delete)',
+                  subtitle: 'Permanently erase this realm and all its echoes',
+                  isDestructive: true,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _confirmDelete(context);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: EverloreTheme.void2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: EverloreTheme.crimson.withValues(alpha: 0.3)),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber, color: EverloreTheme.crimson, size: 24),
+            SizedBox(width: 10),
+            Text(
+              'Destroy This Realm?',
+              style: TextStyle(color: EverloreTheme.parchment, fontSize: 18),
+            ),
+          ],
+        ),
+        content: const Text(
+          'This will permanently delete your realm and all its history, memories, and echoes. This action cannot be undone.',
+          style: TextStyle(color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Keep Realm',
+              style: TextStyle(color: EverloreTheme.ash),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              onDelete?.call();
+            },
+            child: const Text(
+              'Destroy Forever',
+              style: TextStyle(color: EverloreTheme.crimson),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OptionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final bool isDestructive;
+  final VoidCallback onTap;
+
+  const _OptionTile({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isDestructive
+        ? EverloreTheme.crimson
+        : EverloreTheme.parchment;
+    return ListTile(
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isDestructive
+              ? EverloreTheme.crimson.withValues(alpha: 0.1)
+              : EverloreTheme.void3,
+        ),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      title: Text(label, style: TextStyle(color: color, fontSize: 15)),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(color: EverloreTheme.ash, fontSize: 12),
+      ),
+      onTap: onTap,
     );
   }
 }
