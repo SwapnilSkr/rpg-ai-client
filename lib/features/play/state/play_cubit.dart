@@ -82,9 +82,16 @@ class PlayCubit extends Cubit<PlayState> {
   late StreamSubscription _connectionSub;
   late StreamSubscription _instanceSub;
   late StreamSubscription _characterCodexSub;
+  late StreamSubscription _replayDeltaSub;
+  late StreamSubscription _replayCompleteSub;
 
   /// Accumulates streamed narrative tokens for the in-progress turn.
   String _streamBuffer = '';
+
+  /// In-progress streaming replay of an existing turn.
+  String? _replayEventId;
+  String _replayBuffer = '';
+  String? _replayOriginalResponse;
 
   PlayCubit({required this.instanceId, WsManager? ws})
     : _ws = ws ?? WsManager(),
@@ -205,6 +212,50 @@ class PlayCubit extends Cubit<PlayState> {
       );
     });
 
+    // Replay streams an alternative for an existing turn — grow that event's
+    // narrator panel in place as tokens arrive.
+    _replayDeltaSub = _ws.onReplayDelta.listen((msg) {
+      if (msg['instanceId']?.toString() != instanceId) return;
+      final eventId = msg['eventId']?.toString();
+      if (eventId == null || eventId != _replayEventId) return;
+      _replayBuffer += msg['delta']?.toString() ?? '';
+
+      final events = [...state.events];
+      final idx = events.indexWhere((e) => e.id == eventId);
+      if (idx < 0) return;
+      events[idx] = events[idx].copyWith(aiResponse: _replayBuffer);
+      emit(state.copyWith(events: events));
+    });
+
+    _replayCompleteSub = _ws.onReplayComplete.listen((msg) {
+      if (msg['instanceId']?.toString() != instanceId) return;
+      final eventId = msg['eventId']?.toString();
+      if (eventId == null) return;
+
+      final variants = (msg['variants'] as List?)
+              ?.map((v) =>
+                  ReplayVariant.fromJson(Map<String, dynamic>.from(v as Map)))
+              .toList() ??
+          const <ReplayVariant>[];
+      final selected = (msg['selected_index'] as num?)?.toInt() ?? 0;
+      final narrative = msg['narrative']?.toString() ?? _replayBuffer;
+
+      final events = [...state.events];
+      final idx = events.indexWhere((e) => e.id == eventId);
+      if (idx >= 0) {
+        events[idx] = events[idx].copyWith(
+          aiResponse: narrative,
+          replayVariants: variants,
+          selectedReplayIndex: selected,
+        );
+        LocalDb.insertEvent(events[idx]);
+      }
+      _replayEventId = null;
+      _replayBuffer = '';
+      _replayOriginalResponse = null;
+      emit(state.copyWith(events: events, isGenerating: false));
+    });
+
     _memorySub = _ws.onMemoriesCurated.listen((msg) {
       if (msg['instanceId'] != instanceId) return;
       final newMems =
@@ -215,6 +266,26 @@ class PlayCubit extends Cubit<PlayState> {
 
     _errorSub = _ws.onError.listen((msg) {
       if (msg['code'] == 'GENERATION_IN_PROGRESS') return;
+
+      // If a streaming replay failed mid-flight, restore the original response.
+      if (_replayEventId != null) {
+        final events = [...state.events];
+        final idx = events.indexWhere((e) => e.id == _replayEventId);
+        if (idx >= 0 && _replayOriginalResponse != null) {
+          events[idx] =
+              events[idx].copyWith(aiResponse: _replayOriginalResponse);
+        }
+        _replayEventId = null;
+        _replayBuffer = '';
+        _replayOriginalResponse = null;
+        emit(state.copyWith(
+          events: events,
+          isGenerating: false,
+          error: msg['message'] ?? 'Could not replay this response.',
+        ));
+        return;
+      }
+
       _streamBuffer = '';
       // Drop the in-progress optimistic turn so the player can retry cleanly.
       final events =
@@ -399,6 +470,32 @@ class PlayCubit extends Cubit<PlayState> {
     }
   }
 
+  /// Stream a fresh alternative for [event] in place, the same way a normal
+  /// turn streams. The narration rewrites itself token-by-token.
+  void replayAiResponse(GameEvent event) {
+    if (state.isGenerating || event.id.isEmpty || event.isOptimistic) return;
+
+    _replayEventId = event.id;
+    _replayBuffer = '';
+    _replayOriginalResponse = event.aiResponse;
+    emit(state.copyWith(isGenerating: true, error: null));
+    _ws.sendReplay(instanceId, event.id);
+  }
+
+  Future<void> selectReplayVariant(GameEvent event, int index) async {
+    if (state.isGenerating || event.id.isEmpty || event.isOptimistic) return;
+    try {
+      final updated = await ChronicleRepository.selectReplayVariant(event.id, index);
+      final next = [...state.events];
+      final idx = next.indexWhere((e) => e.id == event.id);
+      if (idx >= 0) next[idx] = updated;
+      await LocalDb.insertEvent(updated);
+      emit(state.copyWith(events: next, error: null));
+    } catch (_) {
+      emit(state.copyWith(error: 'Could not switch replay variant.'));
+    }
+  }
+
   @override
   Future<void> close() async {
     await _generationSub.cancel();
@@ -408,6 +505,8 @@ class PlayCubit extends Cubit<PlayState> {
     await _connectionSub.cancel();
     await _instanceSub.cancel();
     await _characterCodexSub.cancel();
+    await _replayDeltaSub.cancel();
+    await _replayCompleteSub.cancel();
     await _ws.disconnect();
     await super.close();
   }

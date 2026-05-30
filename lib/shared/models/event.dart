@@ -12,6 +12,8 @@ class GameEvent {
   final DateTime createdAt;
   final bool isOptimistic;
   final bool isUserEdited;
+  final List<ReplayVariant> replayVariants;
+  final int selectedReplayIndex;
 
   const GameEvent({
     required this.id,
@@ -27,6 +29,8 @@ class GameEvent {
     required this.createdAt,
     this.isOptimistic = false,
     this.isUserEdited = false,
+    this.replayVariants = const [],
+    this.selectedReplayIndex = 0,
   });
 
   GameEvent copyWith({
@@ -35,6 +39,8 @@ class GameEvent {
     String? sceneTag,
     bool? isOptimistic,
     bool? isUserEdited,
+    List<ReplayVariant>? replayVariants,
+    int? selectedReplayIndex,
   }) {
     return GameEvent(
       id: id,
@@ -50,11 +56,18 @@ class GameEvent {
       createdAt: createdAt,
       isOptimistic: isOptimistic ?? this.isOptimistic,
       isUserEdited: isUserEdited ?? this.isUserEdited,
+      replayVariants: replayVariants ?? this.replayVariants,
+      selectedReplayIndex: selectedReplayIndex ?? this.selectedReplayIndex,
     );
   }
 
   factory GameEvent.fromJson(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>?;
+    final replay = (data?['replay_variants'] as List?)
+            ?.map((v) => ReplayVariant.fromJson(Map<String, dynamic>.from(v as Map)))
+            .toList() ??
+        const <ReplayVariant>[];
+    final selected = (data?['selected_replay_index'] as num?)?.toInt() ?? 0;
     return GameEvent(
       id: json['id'] ?? json['_id'] ?? '',
       instanceId: json['instance_id'] ?? json['instanceId'] ?? '',
@@ -70,6 +83,8 @@ class GameEvent {
           ? DateTime.tryParse(json['created_at']) ?? DateTime.now()
           : DateTime.now(),
       isUserEdited: json['is_user_edited'] ?? false,
+      replayVariants: replay,
+      selectedReplayIndex: selected,
     );
   }
 
@@ -113,4 +128,29 @@ class GameEvent {
         'created_at': createdAt.toIso8601String(),
         'is_optimistic': isOptimistic ? 1 : 0,
       };
+}
+
+class ReplayVariant {
+  final String id;
+  final String narrative;
+  final String modelUsed;
+  final DateTime? createdAt;
+
+  const ReplayVariant({
+    required this.id,
+    required this.narrative,
+    this.modelUsed = '',
+    this.createdAt,
+  });
+
+  factory ReplayVariant.fromJson(Map<String, dynamic> json) {
+    return ReplayVariant(
+      id: (json['id'] ?? '').toString(),
+      narrative: (json['narrative'] ?? '').toString(),
+      modelUsed: (json['model_used'] ?? '').toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
+    );
+  }
 }

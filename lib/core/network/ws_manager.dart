@@ -36,6 +36,10 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _characterCodexUpdatedController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _replayDeltaController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _replayCompleteController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get onGenerationDelta =>
       _generationDeltaController.stream;
@@ -49,6 +53,10 @@ class WsManager {
       _instanceLoadedController.stream;
   Stream<Map<String, dynamic>> get onCharacterCodexUpdated =>
       _characterCodexUpdatedController.stream;
+  Stream<Map<String, dynamic>> get onReplayDelta =>
+      _replayDeltaController.stream;
+  Stream<Map<String, dynamic>> get onReplayComplete =>
+      _replayCompleteController.stream;
 
   bool get isConnected => _isConnected;
 
@@ -195,6 +203,12 @@ class WsManager {
       case 'character_codex_updated':
         _characterCodexUpdatedController.add(msg);
         break;
+      case 'replay_delta':
+        _replayDeltaController.add(msg);
+        break;
+      case 'replay_complete':
+        _replayCompleteController.add(msg);
+        break;
       case 'pong':
       case 'ack':
         break;
@@ -273,6 +287,11 @@ class WsManager {
     send({'action': 'continue', 'instance_id': instanceId});
   }
 
+  /// Request a streaming alternative response for an existing turn.
+  void sendReplay(String instanceId, String eventId) {
+    send({'action': 'replay', 'instance_id': instanceId, 'event_id': eventId});
+  }
+
   Future<void> disconnect({bool clearToken = false}) async {
     _userInitiatedDisconnect = true;
     _reconnectTimer?.cancel();
@@ -292,5 +311,7 @@ class WsManager {
     _connectionStateController.close();
     _instanceLoadedController.close();
     _characterCodexUpdatedController.close();
+    _replayDeltaController.close();
+    _replayCompleteController.close();
   }
 }

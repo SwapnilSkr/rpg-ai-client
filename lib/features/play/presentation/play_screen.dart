@@ -165,6 +165,24 @@ class _PlayViewState extends State<_PlayView> {
             const SizedBox(height: 8),
             if ((event.aiResponse ?? '').trim().isNotEmpty)
               ListTile(
+                leading: const Icon(Icons.refresh_rounded,
+                    color: EverloreTheme.cyanBright),
+                title: Text('Replay response',
+                    style: EverloreTheme.ui(
+                        size: 15, color: EverloreTheme.parchment)),
+                subtitle: Text(
+                  'Generate an improved alternative for this turn.',
+                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  cubit.replayAiResponse(event);
+                },
+              ),
+            if ((event.aiResponse ?? '').trim().isNotEmpty)
+              const Divider(color: EverloreTheme.white10, height: 1),
+            if ((event.aiResponse ?? '').trim().isNotEmpty)
+              ListTile(
                 leading: const Icon(Icons.edit_outlined,
                     color: EverloreTheme.violetBright),
                 title: Text('Edit response',
@@ -392,6 +410,15 @@ class _PlayViewState extends State<_PlayView> {
                                             event.sequence > 0)
                                         ? () => _showTurnMenu(context, event)
                                         : null,
+                                    onReplay: (!event.isOptimistic &&
+                                            event.sequence > 0)
+                                        ? () => context
+                                            .read<PlayCubit>()
+                                            .replayAiResponse(event)
+                                        : null,
+                                    onSelectReplayVariant: (index) => context
+                                        .read<PlayCubit>()
+                                        .selectReplayVariant(event, index),
                                   );
                                 },
                               ),

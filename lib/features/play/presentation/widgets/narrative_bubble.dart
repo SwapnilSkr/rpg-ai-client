@@ -7,11 +7,15 @@ import '../../../../../app/theme/nexus_theme.dart';
 class NarrativeBubble extends StatelessWidget {
   final GameEvent event;
   final VoidCallback? onLongPress;
+  final VoidCallback? onReplay;
+  final ValueChanged<int>? onSelectReplayVariant;
 
   const NarrativeBubble({
     super.key,
     required this.event,
     this.onLongPress,
+    this.onReplay,
+    this.onSelectReplayVariant,
   });
 
   @override
@@ -29,6 +33,10 @@ class NarrativeBubble extends StatelessWidget {
               text: event.aiResponse!,
               sceneTag: event.sceneTag,
               isEdited: event.isUserEdited,
+              replayVariants: event.replayVariants,
+              selectedReplayIndex: event.selectedReplayIndex,
+              onReplay: onReplay,
+              onSelectReplayVariant: onSelectReplayVariant,
             ),
           ),
 
@@ -136,11 +144,19 @@ class _NarratorPanel extends StatelessWidget {
   final String text;
   final String? sceneTag;
   final bool isEdited;
+  final List<ReplayVariant> replayVariants;
+  final int selectedReplayIndex;
+  final VoidCallback? onReplay;
+  final ValueChanged<int>? onSelectReplayVariant;
 
   const _NarratorPanel({
     required this.text,
     this.sceneTag,
     this.isEdited = false,
+    this.replayVariants = const [],
+    this.selectedReplayIndex = 0,
+    this.onReplay,
+    this.onSelectReplayVariant,
   });
 
   @override
@@ -201,7 +217,21 @@ class _NarratorPanel extends StatelessWidget {
                     children: [
                       if (sceneTag != null)
                         _SceneTagBadge(tag: sceneTag!, accent: accent),
+                      if (replayVariants.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        _ReplayArrows(
+                          count: replayVariants.length,
+                          selectedIndex: selectedReplayIndex.clamp(
+                            0,
+                            replayVariants.length - 1,
+                          ),
+                          onSelect: onSelectReplayVariant,
+                        ),
+                      ],
                       const Spacer(),
+                      if (onReplay != null)
+                        _ReplayButton(onTap: onReplay!),
+                      if (onReplay != null) const SizedBox(width: 6),
                       _CopyButton(text: text),
                     ],
                   ),
@@ -229,6 +259,111 @@ class _NarratorPanel extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ReplayButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ReplayButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.refresh_rounded,
+                size: 13, color: EverloreTheme.cyanBright.withValues(alpha: 0.85)),
+            const SizedBox(width: 4),
+            Text(
+              'Replay',
+              style: EverloreTheme.ui(
+                size: 11,
+                color: EverloreTheme.cyanBright.withValues(alpha: 0.85),
+                spacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReplayArrows extends StatelessWidget {
+  final int count;
+  final int selectedIndex;
+  final ValueChanged<int>? onSelect;
+  const _ReplayArrows({
+    required this.count,
+    required this.selectedIndex,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (count <= 1) return const SizedBox.shrink();
+    final canPrev = selectedIndex > 0;
+    final canNext = selectedIndex < count - 1;
+
+    Widget arrow({
+      required IconData icon,
+      required bool enabled,
+      required VoidCallback onTap,
+    }) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.all(2),
+          child: Icon(
+            icon,
+            size: 15,
+            color: enabled
+                ? EverloreTheme.gold.withValues(alpha: 0.85)
+                : EverloreTheme.ash.withValues(alpha: 0.3),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: EverloreTheme.void3.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: EverloreTheme.white10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          arrow(
+            icon: Icons.chevron_left_rounded,
+            enabled: canPrev,
+            onTap: () => onSelect?.call(selectedIndex - 1),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '${selectedIndex + 1}/$count',
+            style: EverloreTheme.ui(
+              size: 10,
+              color: EverloreTheme.ash,
+              weight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 4),
+          arrow(
+            icon: Icons.chevron_right_rounded,
+            enabled: canNext,
+            onTap: () => onSelect?.call(selectedIndex + 1),
+          ),
+        ],
       ),
     );
   }

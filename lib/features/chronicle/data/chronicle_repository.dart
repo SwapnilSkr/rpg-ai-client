@@ -60,6 +60,22 @@ class ChronicleRepository {
     });
   }
 
+  static Future<GameEvent> replayEvent(String eventId) async {
+    final response = await ApiClient.post('/chronicle/replay/$eventId');
+    return GameEvent.fromJson(Map<String, dynamic>.from(response['event']));
+  }
+
+  static Future<GameEvent> selectReplayVariant(
+    String eventId,
+    int variantIndex,
+  ) async {
+    final response = await ApiClient.post(
+      '/chronicle/replay/select/$eventId',
+      body: {'variant_index': variantIndex},
+    );
+    return GameEvent.fromJson(Map<String, dynamic>.from(response['event']));
+  }
+
   /// Rewind a playthrough to [sequence]: removes that turn and everything after,
   /// rolling back state, memories, and summaries on the server.
   static Future<void> rewind(String instanceId, int sequence) async {
