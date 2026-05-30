@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../../shared/models/event.dart';
 import '../../../../../app/theme/nexus_theme.dart';
@@ -71,12 +70,20 @@ class _PlayerBubble extends StatelessWidget {
           ),
           boxShadow: EverloreTheme.glow(EverloreTheme.violet, blur: 16, alpha: 0.22),
         ),
-        child: Text(
-          text,
-          style: EverloreTheme.ui(
-            size: 15,
-            color: EverloreTheme.parchment,
-            height: 1.45,
+        child: Text.rich(
+          TextSpan(
+            children: _narrativeSpans(
+              text,
+              // The player's voice uses the UI font; their *actions* italic, speech upright.
+              dialogueStyle: EverloreTheme.ui(
+                  size: 15, color: EverloreTheme.parchment, height: 1.45),
+              narrationStyle: EverloreTheme.ui(
+                size: 15,
+                color: EverloreTheme.parchment.withValues(alpha: 0.9),
+                height: 1.45,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
           ),
         ),
       ),
@@ -145,11 +152,8 @@ class _NarratorPanel extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  MarkdownBody(
-                    data: text,
-                    selectable: true,
-                    shrinkWrap: true,
-                    styleSheet: _narrativeMarkdownStyle(),
+                  SelectableText.rich(
+                    TextSpan(children: _narrativeSpans(text)),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -261,63 +265,79 @@ class _CopyButton extends StatelessWidget {
   }
 }
 
-MarkdownStyleSheet _narrativeMarkdownStyle() {
+/// Renders narrative prose by deriving style from QUOTE boundaries rather than
+/// trusting the model's markdown: text inside double quotes is spoken dialogue
+/// (bright, upright); everything else is narration (italic, muted) — including
+/// dialogue tags like *she said*. This is deterministic and model-independent,
+/// and streaming-stable (a trailing unclosed quote reads as in-progress speech).
+/// `**bold**` is preserved; stray single `*`/`_` emphasis markers are stripped.
+List<InlineSpan> _narrativeSpans(
+  String text, {
+  TextStyle? dialogueStyle,
+  TextStyle? narrationStyle,
+}) {
   final base = EverloreTheme.aiText;
-  return MarkdownStyleSheet(
-    p: base,
-    pPadding: EdgeInsets.zero,
-    blockSpacing: 12,
-    h1: GoogleFonts.cinzel(
-        fontSize: 22, fontWeight: FontWeight.w700, color: EverloreTheme.gold, height: 1.3),
-    h1Padding: const EdgeInsets.only(top: 4, bottom: 8),
-    h2: GoogleFonts.cinzel(
-        fontSize: 19, fontWeight: FontWeight.w700, color: EverloreTheme.gold, height: 1.35),
-    h2Padding: const EdgeInsets.only(top: 4, bottom: 6),
-    h3: base.copyWith(
-        fontSize: 18, fontWeight: FontWeight.w600, color: EverloreTheme.parchment, height: 1.4),
-    h3Padding: const EdgeInsets.only(top: 2, bottom: 6),
-    h4: base.copyWith(fontSize: 17, fontWeight: FontWeight.w600, color: EverloreTheme.parchment),
-    h4Padding: const EdgeInsets.only(bottom: 4),
-    h5: base.copyWith(fontWeight: FontWeight.w600),
-    h5Padding: const EdgeInsets.only(bottom: 4),
-    h6: base.copyWith(fontWeight: FontWeight.w600, color: EverloreTheme.ash),
-    h6Padding: const EdgeInsets.only(bottom: 4),
-    // Italic = narration / scene / inner thoughts: softer, cooler, like stage
-    // directions. Plain text (p) = spoken dialogue, which stays bright and clear.
-    em: base.copyWith(
-        fontStyle: FontStyle.italic, color: const Color(0xFFAEA690)),
-    strong: base.copyWith(fontWeight: FontWeight.w700, color: EverloreTheme.goldGlow),
-    del: base.copyWith(decoration: TextDecoration.lineThrough),
-    code: base.copyWith(
-      fontFamily: 'monospace',
-      fontSize: 14,
-      backgroundColor: EverloreTheme.void4,
-      color: EverloreTheme.goldGlow,
-    ),
-    blockquote: base.copyWith(color: EverloreTheme.ash, fontStyle: FontStyle.italic),
-    blockquotePadding: const EdgeInsets.only(left: 14, top: 4, bottom: 4),
-    blockquoteDecoration: BoxDecoration(
-      border: Border(
-        left: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.55), width: 3),
-      ),
-    ),
-    a: base.copyWith(
-      color: EverloreTheme.cyanBright,
-      decoration: TextDecoration.underline,
-      decorationColor: EverloreTheme.cyanBright.withValues(alpha: 0.45),
-    ),
-    listBullet: base,
-    listIndent: 22,
-    horizontalRuleDecoration: const BoxDecoration(
-      border: Border(top: BorderSide(color: EverloreTheme.white10, width: 1)),
-    ),
-    codeblockDecoration: BoxDecoration(
-      color: EverloreTheme.void0,
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: EverloreTheme.white10),
-    ),
-    codeblockPadding: const EdgeInsets.all(12),
-  );
+  final narration = narrationStyle ??
+      base.copyWith(fontStyle: FontStyle.italic, color: const Color(0xFFAEA690));
+  final dialogue =
+      dialogueStyle ?? base.copyWith(fontStyle: FontStyle.normal, color: EverloreTheme.parchment);
+
+  final spans = <InlineSpan>[];
+  final buf = StringBuffer();
+  var inQuote = false;
+  var bold = false;
+
+  TextStyle styleNow() {
+    var s = inQuote ? dialogue : narration;
+    if (bold) {
+      s = s.copyWith(
+          fontWeight: FontWeight.w700, color: EverloreTheme.goldGlow);
+    }
+    return s;
+  }
+
+  void flush() {
+    if (buf.isEmpty) return;
+    spans.add(TextSpan(text: buf.toString(), style: styleNow()));
+    buf.clear();
+  }
+
+  bool isDoubleQuote(String c) => c == '"' || c == '“' || c == '”';
+
+  for (var i = 0; i < text.length; i++) {
+    final c = text[i];
+
+    // Bold toggle on `**`
+    if (c == '*' && i + 1 < text.length && text[i + 1] == '*') {
+      flush();
+      bold = !bold;
+      i++;
+      continue;
+    }
+    // Strip single emphasis markers — narration italics come from quote logic
+    if (c == '*' || c == '_') continue;
+
+    if (isDoubleQuote(c)) {
+      if (!inQuote) {
+        flush();
+        inQuote = true;
+        buf.write(c);
+      } else {
+        buf.write(c);
+        flush();
+        inQuote = false;
+      }
+      continue;
+    }
+
+    buf.write(c);
+  }
+  flush();
+
+  if (spans.isEmpty) {
+    spans.add(TextSpan(text: text, style: narration));
+  }
+  return spans;
 }
 
 class _GeneratingIndicator extends StatefulWidget {
