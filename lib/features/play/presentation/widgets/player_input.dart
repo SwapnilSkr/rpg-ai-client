@@ -5,12 +5,14 @@ class PlayerInput extends StatefulWidget {
   final bool isGenerating;
   final bool isConnected;
   final ValueChanged<String> onSend;
+  final VoidCallback onContinue;
 
   const PlayerInput({
     super.key,
     required this.isGenerating,
     required this.isConnected,
     required this.onSend,
+    required this.onContinue,
   });
 
   @override
@@ -71,6 +73,12 @@ class _PlayerInputState extends State<PlayerInput> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  // Continue: let the world advance on its own (no typing).
+                  _ContinueButton(
+                    enabled: !widget.isGenerating && widget.isConnected,
+                    onTap: widget.onContinue,
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
@@ -143,6 +151,49 @@ class _PlayerInputState extends State<PlayerInput> {
     if (widget.isGenerating) return 'The story unfolds…';
     if (!widget.isConnected) return 'Reconnecting to the realm…';
     return 'What do you do?';
+  }
+}
+
+class _ContinueButton extends StatelessWidget {
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _ContinueButton({required this.enabled, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Let the story continue on its own',
+      child: SizedBox(
+        width: 46,
+        height: 46,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: enabled ? onTap : null,
+            borderRadius: BorderRadius.circular(23),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: EverloreTheme.void2.withValues(alpha: 0.85),
+                border: Border.all(
+                  color: enabled
+                      ? EverloreTheme.violet.withValues(alpha: 0.4)
+                      : EverloreTheme.goldDim.withValues(alpha: 0.18),
+                ),
+              ),
+              child: Icon(
+                Icons.fast_forward_rounded,
+                size: 20,
+                color: enabled
+                    ? EverloreTheme.violetBright
+                    : EverloreTheme.ash.withValues(alpha: 0.3),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

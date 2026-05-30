@@ -67,4 +67,20 @@ class ChronicleRepository {
       'sequence': sequence,
     });
   }
+
+  /// Update in-chat session settings (narration POV, tone) for an instance.
+  static Future<void> updateSettings(
+    String instanceId, {
+    String? narrationPov,
+    String? tone,
+    String? focusCharacterId,
+    bool clearFocusCharacter = false,
+  }) async {
+    await ApiClient.patch('/instances/$instanceId/settings', body: {
+      if (narrationPov != null) 'narration_pov': narrationPov,
+      if (tone != null) 'tone': tone,
+      if (focusCharacterId != null) 'focus_character_id': focusCharacterId,
+      if (clearFocusCharacter) 'focus_character_id': null,
+    });
+  }
 }

@@ -30,16 +30,18 @@ class GameEvent {
   });
 
   GameEvent copyWith({
+    String? playerInput,
     String? aiResponse,
     String? sceneTag,
     bool? isOptimistic,
+    bool? isUserEdited,
   }) {
     return GameEvent(
       id: id,
       instanceId: instanceId,
       sequence: sequence,
       type: type,
-      playerInput: playerInput,
+      playerInput: playerInput ?? this.playerInput,
       aiResponse: aiResponse ?? this.aiResponse,
       sceneTag: sceneTag ?? this.sceneTag,
       stateMutations: stateMutations,
@@ -47,7 +49,7 @@ class GameEvent {
       emotionalTone: emotionalTone,
       createdAt: createdAt,
       isOptimistic: isOptimistic ?? this.isOptimistic,
-      isUserEdited: isUserEdited,
+      isUserEdited: isUserEdited ?? this.isUserEdited,
     );
   }
 

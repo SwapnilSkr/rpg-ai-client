@@ -34,6 +34,8 @@ class WsManager {
   final _connectionStateController = StreamController<bool>.broadcast();
   final _instanceLoadedController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _characterCodexUpdatedController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get onGenerationDelta =>
       _generationDeltaController.stream;
@@ -45,6 +47,8 @@ class WsManager {
   Stream<bool> get onConnectionState => _connectionStateController.stream;
   Stream<Map<String, dynamic>> get onInstanceLoaded =>
       _instanceLoadedController.stream;
+  Stream<Map<String, dynamic>> get onCharacterCodexUpdated =>
+      _characterCodexUpdatedController.stream;
 
   bool get isConnected => _isConnected;
 
@@ -188,6 +192,9 @@ class WsManager {
       case 'instance_loaded':
         _instanceLoadedController.add(msg);
         break;
+      case 'character_codex_updated':
+        _characterCodexUpdatedController.add(msg);
+        break;
       case 'pong':
       case 'ack':
         break;
@@ -261,6 +268,11 @@ class WsManager {
     send({'action': 'load_instance', 'instance_id': instanceId});
   }
 
+  /// Ask the world to advance the story on its own (no player input).
+  void sendContinue(String instanceId) {
+    send({'action': 'continue', 'instance_id': instanceId});
+  }
+
   Future<void> disconnect({bool clearToken = false}) async {
     _userInitiatedDisconnect = true;
     _reconnectTimer?.cancel();
@@ -279,5 +291,6 @@ class WsManager {
     _errorController.close();
     _connectionStateController.close();
     _instanceLoadedController.close();
+    _characterCodexUpdatedController.close();
   }
 }

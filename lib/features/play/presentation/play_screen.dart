@@ -7,6 +7,9 @@ import 'widgets/player_input.dart';
 import 'widgets/world_state_bar.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../shared/models/event.dart';
+import '../../../shared/models/character_profile.dart';
+import '../../../core/storage/local_db.dart';
+import '../../home/data/home_repository.dart';
 
 class PlayScreen extends StatelessWidget {
   final String instanceId;
@@ -39,6 +42,105 @@ class _PlayViewState extends State<_PlayView> {
     super.dispose();
   }
 
+  void _showChatMenu(BuildContext context) {
+    final cubit = context.read<PlayCubit>();
+    final instance = cubit.state.instance;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => _SettingsSheet(
+        initialPov: instance?.narrationPov ?? 'third',
+        initialTone: instance?.tone ?? '',
+        onPov: (pov) => cubit.updateSettings(narrationPov: pov),
+        onTone: (tone) => cubit.updateSettings(tone: tone),
+        onDelete: () {
+          Navigator.pop(sheetCtx);
+          _confirmDeleteChat(context, cubit.instanceId);
+        },
+      ),
+    );
+  }
+
+  void _showThoughtsSheet(BuildContext context) {
+    final cubit = context.read<PlayCubit>();
+    final characters = cubit.state.characters;
+    final focusedId = cubit.state.instance?.focusCharacterId;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => _ThoughtsSheet(
+        characters: characters,
+        focusedCharacterId: focusedId,
+        onFocus: (id) {
+          cubit.updateSettings(focusCharacterId: id);
+          Navigator.pop(sheetCtx);
+        },
+        onClearFocus: () {
+          cubit.updateSettings(clearFocusCharacter: true);
+          Navigator.pop(sheetCtx);
+        },
+      ),
+    );
+  }
+
+  void _confirmDeleteChat(BuildContext context, String instanceId) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: EverloreTheme.void2,
+        title: Text('Delete this chat?',
+            style: EverloreTheme.serifDisplay(
+                size: 18, color: EverloreTheme.parchment)),
+        content: Text(
+          'This playthrough, its entire story, and all its memories will be '
+          'permanently deleted. This cannot be undone.',
+          style: EverloreTheme.ui(
+              size: 14, color: EverloreTheme.ash, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text('Cancel',
+                style: EverloreTheme.ui(color: EverloreTheme.ash)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              final messenger = ScaffoldMessenger.of(context);
+              final router = GoRouter.of(context);
+              try {
+                await HomeRepository.deleteInstance(instanceId);
+                await LocalDb.clearInstanceCache(instanceId);
+                router.go('/home');
+              } catch (_) {
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Could not delete the chat. Try again.',
+                        style: EverloreTheme.ui(
+                            size: 13, color: EverloreTheme.parchment)),
+                    backgroundColor: EverloreTheme.void3,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: Text('Delete',
+                style: EverloreTheme.ui(
+                    color: EverloreTheme.crimson, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showTurnMenu(BuildContext context, GameEvent event) {
     final cubit = context.read<PlayCubit>();
     showModalBottomSheet(
@@ -61,6 +163,24 @@ class _PlayViewState extends State<_PlayView> {
               ),
             ),
             const SizedBox(height: 8),
+            if ((event.aiResponse ?? '').trim().isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined,
+                    color: EverloreTheme.violetBright),
+                title: Text('Edit response',
+                    style: EverloreTheme.ui(
+                        size: 15, color: EverloreTheme.parchment)),
+                subtitle: Text(
+                  'Rewrite this AI turn and re-curate its memories.',
+                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _showEditResponseDialog(context, cubit, event);
+                },
+              ),
+            if ((event.aiResponse ?? '').trim().isNotEmpty)
+              const Divider(color: EverloreTheme.white10, height: 1),
             ListTile(
               leading: const Icon(Icons.history_toggle_off,
                   color: EverloreTheme.crimson),
@@ -79,6 +199,76 @@ class _PlayViewState extends State<_PlayView> {
             const SizedBox(height: 8),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showEditResponseDialog(
+    BuildContext context,
+    PlayCubit cubit,
+    GameEvent event,
+  ) {
+    final controller = TextEditingController(text: event.aiResponse ?? '');
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: EverloreTheme.void2,
+        title: Text('Edit AI response',
+            style: EverloreTheme.serifDisplay(
+                size: 18, color: EverloreTheme.parchment)),
+        content: SizedBox(
+          width: 560,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLines: 14,
+            minLines: 6,
+            maxLength: 10000,
+            style: EverloreTheme.aiText.copyWith(
+              color: EverloreTheme.parchment,
+              height: 1.45,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Rewrite the response...',
+              hintStyle: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+              filled: true,
+              fillColor: EverloreTheme.void3,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    BorderSide(color: EverloreTheme.violet.withValues(alpha: 0.5)),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child:
+                Text('Cancel', style: EverloreTheme.ui(color: EverloreTheme.ash)),
+          ),
+          TextButton(
+            onPressed: () {
+              final edited = controller.text.trim();
+              Navigator.pop(dialogCtx);
+              cubit.editAiResponse(event, edited);
+            },
+            child: Text('Save edit',
+                style: EverloreTheme.ui(
+                    color: EverloreTheme.violetBright,
+                    weight: FontWeight.w700)),
+          ),
+        ],
       ),
     );
   }
@@ -164,6 +354,8 @@ class _PlayViewState extends State<_PlayView> {
                     onChronicle: () => context.push(
                       '/chronicle/${context.read<PlayCubit>().instanceId}',
                     ),
+                    onMenu: () => _showChatMenu(context),
+                    onThoughts: () => _showThoughtsSheet(context),
                   ),
 
                   if (state.instance != null &&
@@ -210,6 +402,8 @@ class _PlayViewState extends State<_PlayView> {
                     isConnected: state.isConnected,
                     onSend: (msg) =>
                         context.read<PlayCubit>().sendMessage(msg),
+                    onContinue: () =>
+                        context.read<PlayCubit>().continueStory(),
                   ),
                 ],
               ),
@@ -293,6 +487,8 @@ class _PlayHeader extends StatelessWidget {
   final bool hasInstance;
   final VoidCallback onBack;
   final VoidCallback onChronicle;
+  final VoidCallback onMenu;
+  final VoidCallback onThoughts;
 
   const _PlayHeader({
     required this.title,
@@ -301,6 +497,8 @@ class _PlayHeader extends StatelessWidget {
     required this.hasInstance,
     required this.onBack,
     required this.onChronicle,
+    required this.onMenu,
+    required this.onThoughts,
   });
 
   @override
@@ -378,13 +576,28 @@ class _PlayHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              if (hasInstance)
+              if (hasInstance) ...[
                 _RuneButton(
                   icon: Icons.history_edu,
                   onTap: onChronicle,
                   accent: EverloreTheme.gold,
                   tooltip: 'Lore Tome',
                 ),
+                const SizedBox(width: 4),
+                _RuneButton(
+                  icon: Icons.psychology_alt_outlined,
+                  onTap: onThoughts,
+                  accent: EverloreTheme.cyanBright,
+                  tooltip: 'Character Thoughts',
+                ),
+                const SizedBox(width: 4),
+                _RuneButton(
+                  icon: Icons.more_vert,
+                  onTap: onMenu,
+                  accent: EverloreTheme.ash,
+                  tooltip: 'More',
+                ),
+              ],
             ],
           ),
         ),
@@ -524,6 +737,356 @@ class _EmptyNarrative extends StatelessWidget {
                 fontStyle: FontStyle.italic,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// In-chat scene settings: narration POV, tone, and delete.
+class _SettingsSheet extends StatefulWidget {
+  final String initialPov;
+  final String initialTone;
+  final ValueChanged<String> onPov;
+  final ValueChanged<String> onTone;
+  final VoidCallback onDelete;
+
+  const _SettingsSheet({
+    required this.initialPov,
+    required this.initialTone,
+    required this.onPov,
+    required this.onTone,
+    required this.onDelete,
+  });
+
+  @override
+  State<_SettingsSheet> createState() => _SettingsSheetState();
+}
+
+class _SettingsSheetState extends State<_SettingsSheet> {
+  late String _pov;
+  late String _tone;
+
+  static const _tonePresets = [
+    ('', 'Default'),
+    ('casual', 'Casual'),
+    ('romantic', 'Romantic'),
+    ('tense', 'Tense'),
+    ('playful', 'Playful'),
+    ('mysterious', 'Mysterious'),
+    ('erotic', 'Erotic'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _pov = widget.initialPov;
+    _tone = widget.initialTone;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: EverloreTheme.void4,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Scene Settings',
+                style: EverloreTheme.serifDisplay(
+                    size: 18, color: EverloreTheme.parchment)),
+            const SizedBox(height: 18),
+
+            // Narration POV
+            Text('NARRATION',
+                style: EverloreTheme.ui(
+                    size: 11,
+                    weight: FontWeight.w700,
+                    spacing: 1.5,
+                    color: EverloreTheme.gold)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _SegOption(
+                  label: 'Third person',
+                  selected: _pov == 'third',
+                  onTap: () {
+                    setState(() => _pov = 'third');
+                    widget.onPov('third');
+                  },
+                ),
+                const SizedBox(width: 8),
+                _SegOption(
+                  label: 'First person',
+                  selected: _pov == 'first',
+                  onTap: () {
+                    setState(() => _pov = 'first');
+                    widget.onPov('first');
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Tone
+            Text('TONE',
+                style: EverloreTheme.ui(
+                    size: 11,
+                    weight: FontWeight.w700,
+                    spacing: 1.5,
+                    color: EverloreTheme.gold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _tonePresets.map((p) {
+                final selected = _tone == p.$1;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() => _tone = p.$1);
+                    widget.onTone(p.$1);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: selected
+                          ? EverloreTheme.gold.withValues(alpha: 0.12)
+                          : EverloreTheme.void3,
+                      border: Border.all(
+                        color: selected
+                            ? EverloreTheme.gold.withValues(alpha: 0.5)
+                            : EverloreTheme.goldDim.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Text(
+                      p.$2,
+                      style: EverloreTheme.ui(
+                        size: 13,
+                        color: selected
+                            ? EverloreTheme.gold
+                            : EverloreTheme.ash,
+                        weight:
+                            selected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            if (_tone == 'erotic') ...[
+              const SizedBox(height: 8),
+              Text(
+                'Mature tone applies only in mature worlds with NSFW enabled in your preferences.',
+                style: EverloreTheme.ui(
+                    size: 11, color: EverloreTheme.ash, height: 1.4),
+              ),
+            ],
+            const SizedBox(height: 22),
+            const Divider(color: EverloreTheme.white10, height: 1),
+            const SizedBox(height: 6),
+
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.delete_outline,
+                  color: EverloreTheme.crimson),
+              title: Text('Delete this chat',
+                  style: EverloreTheme.ui(
+                      size: 15, color: EverloreTheme.crimson)),
+              onTap: widget.onDelete,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SegOption extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SegOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: selected
+                ? EverloreTheme.violet.withValues(alpha: 0.15)
+                : EverloreTheme.void3,
+            border: Border.all(
+              color: selected
+                  ? EverloreTheme.violet.withValues(alpha: 0.5)
+                  : EverloreTheme.goldDim.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: EverloreTheme.ui(
+                size: 13,
+                color: selected
+                    ? EverloreTheme.parchment
+                    : EverloreTheme.ash,
+                weight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThoughtsSheet extends StatelessWidget {
+  final List<CharacterProfile> characters;
+  final String? focusedCharacterId;
+  final ValueChanged<String> onFocus;
+  final VoidCallback onClearFocus;
+
+  const _ThoughtsSheet({
+    required this.characters,
+    required this.focusedCharacterId,
+    required this.onFocus,
+    required this.onClearFocus,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: EverloreTheme.void4,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Character Thoughts',
+                style: EverloreTheme.serifDisplay(
+                    size: 18, color: EverloreTheme.parchment)),
+            const SizedBox(height: 6),
+            Text(
+              'Private attitudes and inner thoughts inferred from the story. '
+              'These are not spoken dialogue.',
+              style: EverloreTheme.ui(
+                  size: 12, color: EverloreTheme.ash, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            if (focusedCharacterId != null)
+              TextButton.icon(
+                onPressed: onClearFocus,
+                icon: const Icon(Icons.clear, size: 16, color: EverloreTheme.ash),
+                label: Text('Clear focus',
+                    style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash)),
+              ),
+            if (characters.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'No side-character profiles yet. Keep playing and the codex will build itself.',
+                  style: EverloreTheme.ui(
+                      size: 13, color: EverloreTheme.ash, height: 1.5),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: characters.length,
+                  separatorBuilder: (_, __) =>
+                      const Divider(color: EverloreTheme.white10, height: 1),
+                  itemBuilder: (_, i) {
+                    final c = characters[i];
+                    final isFocused = c.id == focusedCharacterId;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        c.canonicalName,
+                        style: EverloreTheme.ui(
+                          size: 15,
+                          color: EverloreTheme.parchment,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (c.dispositionToPlayer.trim().isNotEmpty)
+                              Text(
+                                'Disposition: ${c.dispositionToPlayer}',
+                                style: EverloreTheme.ui(
+                                    size: 12, color: EverloreTheme.goldDim),
+                              ),
+                            if (c.hiddenThought.trim().isNotEmpty)
+                              Text(
+                                '"${c.hiddenThought}"',
+                                style: EverloreTheme.ui(
+                                  size: 13,
+                                  color: EverloreTheme.ash,
+                                  height: 1.45,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      trailing: TextButton(
+                        onPressed: isFocused ? null : () => onFocus(c.id),
+                        child: Text(
+                          isFocused ? 'Focused' : 'Focus',
+                          style: EverloreTheme.ui(
+                            size: 12,
+                            color: isFocused
+                                ? EverloreTheme.gold
+                                : EverloreTheme.violetBright,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
           ],
         ),
       ),
