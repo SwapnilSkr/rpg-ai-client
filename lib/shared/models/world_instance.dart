@@ -1,4 +1,5 @@
 class WorldInstance {
+  static const _unset = Object();
   final String id;
   final String templateId;
   final int templateVersion;
@@ -6,6 +7,9 @@ class WorldInstance {
   final Map<String, num> worldState;
   final Map<String, dynamic> activeFlags;
   final SceneInfo currentScene;
+  final String narrationPov; // 'first' | 'third'
+  final String tone; // '' = default
+  final String? focusCharacterId;
   final InstanceMeta meta;
   final DateTime? createdAt;
   // Enriched from list endpoint
@@ -19,10 +23,36 @@ class WorldInstance {
     this.worldState = const {},
     this.activeFlags = const {},
     this.currentScene = const SceneInfo(),
+    this.narrationPov = 'third',
+    this.tone = '',
+    this.focusCharacterId,
     this.meta = const InstanceMeta(),
     this.createdAt,
     this.template,
   });
+
+  WorldInstance copyWith({
+    String? narrationPov,
+    String? tone,
+    Object? focusCharacterId = _unset,
+  }) {
+    return WorldInstance(
+      id: id,
+      templateId: templateId,
+      templateVersion: templateVersion,
+      playerId: playerId,
+      worldState: worldState,
+      activeFlags: activeFlags,
+      currentScene: currentScene,
+      narrationPov: narrationPov ?? this.narrationPov,
+      tone: tone ?? this.tone,
+      focusCharacterId:
+          identical(focusCharacterId, _unset) ? this.focusCharacterId : focusCharacterId as String?,
+      meta: meta,
+      createdAt: createdAt,
+      template: template,
+    );
+  }
 
   factory WorldInstance.fromJson(Map<String, dynamic> json) {
     final ws = <String, num>{};
@@ -42,6 +72,9 @@ class WorldInstance {
       currentScene: json['current_scene'] != null
           ? SceneInfo.fromJson(json['current_scene'])
           : const SceneInfo(),
+      narrationPov: json['narration_pov'] ?? 'third',
+      tone: json['tone'] ?? '',
+      focusCharacterId: json['focus_character_id']?.toString(),
       meta: json['meta'] != null
           ? InstanceMeta.fromJson(json['meta'])
           : const InstanceMeta(),
@@ -75,6 +108,9 @@ class WorldInstance {
       worldState: newState,
       activeFlags: newFlags,
       currentScene: currentScene,
+      narrationPov: narrationPov,
+      tone: tone,
+      focusCharacterId: focusCharacterId,
       meta: meta,
       createdAt: createdAt,
       template: template,
