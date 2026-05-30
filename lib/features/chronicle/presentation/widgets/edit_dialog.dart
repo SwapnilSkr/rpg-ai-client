@@ -100,7 +100,7 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
             const SizedBox(height: 20),
 
             // Text field
-            const Text('Memory', style: EverloreTheme.sectionHeader),
+            Text('Memory', style: EverloreTheme.sectionHeader),
             const SizedBox(height: 8),
             TextField(
               controller: _textController,
@@ -134,7 +134,7 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
             const SizedBox(height: 20),
 
             // Type selector
-            const Text('Type', style: EverloreTheme.sectionHeader),
+            Text('Type', style: EverloreTheme.sectionHeader),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -189,7 +189,7 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
             // Importance
             Row(
               children: [
-                const Text('Importance', style: EverloreTheme.sectionHeader),
+                Text('Importance', style: EverloreTheme.sectionHeader),
                 const Spacer(),
                 ...List.generate(
                   5,
