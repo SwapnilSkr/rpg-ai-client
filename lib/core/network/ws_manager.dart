@@ -24,6 +24,8 @@ class WsManager {
   /// Bumped when replacing the socket so stale [onDone]/[onError] never reconnect.
   int _connectionEpoch = 0;
 
+  final _generationDeltaController =
+      StreamController<Map<String, dynamic>>.broadcast();
   final _generationCompleteController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _memoriesCuratedController =
@@ -33,6 +35,8 @@ class WsManager {
   final _instanceLoadedController =
       StreamController<Map<String, dynamic>>.broadcast();
 
+  Stream<Map<String, dynamic>> get onGenerationDelta =>
+      _generationDeltaController.stream;
   Stream<Map<String, dynamic>> get onGenerationComplete =>
       _generationCompleteController.stream;
   Stream<Map<String, dynamic>> get onMemoriesCurated =>
@@ -168,6 +172,9 @@ class WsManager {
           _flushOfflineQueue();
         }
         break;
+      case 'generation_delta':
+        _generationDeltaController.add(msg);
+        break;
       case 'generation_complete':
         _generationCompleteController.add(msg);
         break;
@@ -266,6 +273,7 @@ class WsManager {
 
   void dispose() {
     _connectivitySub?.cancel();
+    _generationDeltaController.close();
     _generationCompleteController.close();
     _memoriesCuratedController.close();
     _errorController.close();

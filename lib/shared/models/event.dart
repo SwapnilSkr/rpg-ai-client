@@ -29,6 +29,28 @@ class GameEvent {
     this.isUserEdited = false,
   });
 
+  GameEvent copyWith({
+    String? aiResponse,
+    String? sceneTag,
+    bool? isOptimistic,
+  }) {
+    return GameEvent(
+      id: id,
+      instanceId: instanceId,
+      sequence: sequence,
+      type: type,
+      playerInput: playerInput,
+      aiResponse: aiResponse ?? this.aiResponse,
+      sceneTag: sceneTag ?? this.sceneTag,
+      stateMutations: stateMutations,
+      flagMutations: flagMutations,
+      emotionalTone: emotionalTone,
+      createdAt: createdAt,
+      isOptimistic: isOptimistic ?? this.isOptimistic,
+      isUserEdited: isUserEdited,
+    );
+  }
+
   factory GameEvent.fromJson(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>?;
     return GameEvent(

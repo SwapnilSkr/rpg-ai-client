@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import '../../../core/network/ws_manager.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../../../core/storage/local_db.dart';
+import '../../chronicle/data/chronicle_repository.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/world_instance.dart';
 import '../../../shared/models/world_template.dart';
@@ -69,10 +70,14 @@ class PlayCubit extends Cubit<PlayState> {
   final WsManager _ws;
   final String instanceId;
   late StreamSubscription _generationSub;
+  late StreamSubscription _deltaSub;
   late StreamSubscription _memorySub;
   late StreamSubscription _errorSub;
   late StreamSubscription _connectionSub;
   late StreamSubscription _instanceSub;
+
+  /// Accumulates streamed narrative tokens for the in-progress turn.
+  String _streamBuffer = '';
 
   PlayCubit({required this.instanceId, WsManager? ws})
     : _ws = ws ?? WsManager(),
@@ -114,26 +119,53 @@ class PlayCubit extends Cubit<PlayState> {
       );
     });
 
+    // Tokens stream in here as the world weaves the tale — grow the in-progress
+    // turn's narrator panel in place so the player reads it as it's written.
+    _deltaSub = _ws.onGenerationDelta.listen((msg) {
+      if (msg['instanceId']?.toString() != instanceId) return;
+      _streamBuffer += msg['delta']?.toString() ?? '';
+
+      final events = [...state.events];
+      final idx = events.lastIndexWhere((e) => e.isOptimistic);
+      if (idx < 0) return;
+      events[idx] = events[idx].copyWith(aiResponse: _streamBuffer);
+      emit(state.copyWith(events: events));
+    });
+
     _generationSub = _ws.onGenerationComplete.listen((msg) {
-      if (msg['instanceId'] != instanceId) return;
+      if (msg['instanceId']?.toString() != instanceId) return;
 
       final eventData = msg['event'] as Map<String, dynamic>;
-      final newEvent = GameEvent(
+      final events = [...state.events];
+      final idx = events.lastIndexWhere((e) => e.isOptimistic);
+      final playerInput = idx >= 0 ? events[idx].playerInput : null;
+
+      // Finalize the streamed turn as one event (player input + AI response),
+      // matching how the server persists and reloads turns.
+      final finalEvent = GameEvent(
         id: eventData['id'] ?? '',
         instanceId: instanceId,
         sequence: eventData['sequence'] ?? 0,
         type: 'narration',
-        aiResponse: eventData['narrative'],
+        playerInput: playerInput,
+        aiResponse: eventData['narrative'] ?? _streamBuffer,
         sceneTag: eventData['scene_tag'],
         emotionalTone: eventData['emotional_tone'],
         createdAt: DateTime.now(),
       );
 
-      LocalDb.insertEvent(newEvent);
+      if (idx >= 0) {
+        events[idx] = finalEvent;
+      } else {
+        events.add(finalEvent);
+      }
+
+      LocalDb.insertEvent(finalEvent);
+      _streamBuffer = '';
 
       emit(
         state.copyWith(
-          events: [...state.events, newEvent],
+          events: events,
           isGenerating: false,
           instance: state.instance?.applyStateDiff(eventData['state_diff']),
         ),
@@ -150,8 +182,13 @@ class PlayCubit extends Cubit<PlayState> {
 
     _errorSub = _ws.onError.listen((msg) {
       if (msg['code'] == 'GENERATION_IN_PROGRESS') return;
+      _streamBuffer = '';
+      // Drop the in-progress optimistic turn so the player can retry cleanly.
+      final events =
+          state.events.where((e) => !e.isOptimistic).toList();
       emit(
         state.copyWith(
+          events: events,
           isGenerating: false,
           error: msg['message'] ?? 'An error occurred',
         ),
@@ -191,6 +228,7 @@ class PlayCubit extends Cubit<PlayState> {
   void sendMessage(String message) {
     if (state.isGenerating || message.trim().isEmpty) return;
 
+    _streamBuffer = '';
     final optimisticEvent = GameEvent.optimistic(
       instanceId: instanceId,
       playerInput: message,
@@ -211,9 +249,31 @@ class PlayCubit extends Cubit<PlayState> {
     emit(state.copyWith(error: null));
   }
 
+  /// Rewind the story to [sequence]: removes that turn and everything after it.
+  /// Optimistically trims the UI, asks the server to roll back state/memories,
+  /// then reloads the authoritative state.
+  Future<void> rewind(int sequence) async {
+    if (state.isGenerating) return;
+
+    final kept =
+        state.events.where((e) => e.sequence < sequence).toList();
+    emit(state.copyWith(events: kept, error: null));
+
+    try {
+      await ChronicleRepository.rewind(instanceId, sequence);
+      await LocalDb.clearInstanceCache(instanceId);
+      // Pull the rolled-back state (events, stats, memories) back from the server.
+      _ws.loadInstance(instanceId);
+    } catch (_) {
+      emit(state.copyWith(error: 'Could not rewind. Please try again.'));
+      _ws.loadInstance(instanceId); // resync to server truth on failure
+    }
+  }
+
   @override
   Future<void> close() async {
     await _generationSub.cancel();
+    await _deltaSub.cancel();
     await _memorySub.cancel();
     await _errorSub.cancel();
     await _connectionSub.cancel();

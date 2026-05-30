@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../../shared/models/event.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 
@@ -18,22 +20,19 @@ class NarrativeBubble extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Player action — right aligned, violet tint
         if (event.playerInput != null && event.playerInput!.isNotEmpty)
           _PlayerBubble(text: event.playerInput!),
 
-        // AI narrative response — left aligned, styled like a tome
         if (event.aiResponse != null && event.aiResponse!.isNotEmpty)
           GestureDetector(
             onLongPress: onLongPress,
-            child: _NarratorBubble(
+            child: _NarratorPanel(
               text: event.aiResponse!,
               sceneTag: event.sceneTag,
               isEdited: event.isUserEdited,
             ),
           ),
 
-        // Generating indicator
         if (event.isOptimistic && event.aiResponse == null)
           const _GeneratingIndicator(),
       ],
@@ -50,33 +49,34 @@ class _PlayerBubble extends StatelessWidget {
     return Align(
       alignment: Alignment.centerRight,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(64, 8, 16, 4),
+        margin: const EdgeInsets.fromLTRB(60, 10, 16, 6),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              EverloreTheme.violetDim.withValues(alpha: 0.8),
-              EverloreTheme.violet.withValues(alpha: 0.4),
+              EverloreTheme.violet.withValues(alpha: 0.85),
+              EverloreTheme.violetDim.withValues(alpha: 0.85),
             ],
           ),
           borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(4),
-            bottomLeft: Radius.circular(16),
-            bottomRight: Radius.circular(16),
+            topLeft: Radius.circular(18),
+            topRight: Radius.circular(6),
+            bottomLeft: Radius.circular(18),
+            bottomRight: Radius.circular(18),
           ),
           border: Border.all(
-            color: EverloreTheme.violetBright.withValues(alpha: 0.2),
+            color: EverloreTheme.violetBright.withValues(alpha: 0.3),
           ),
+          boxShadow: EverloreTheme.glow(EverloreTheme.violet, blur: 16, alpha: 0.22),
         ),
         child: Text(
           text,
-          style: const TextStyle(
+          style: EverloreTheme.ui(
+            size: 15,
             color: EverloreTheme.parchment,
-            fontSize: 15,
-            height: 1.5,
+            height: 1.45,
           ),
         ),
       ),
@@ -84,12 +84,12 @@ class _PlayerBubble extends StatelessWidget {
   }
 }
 
-class _NarratorBubble extends StatelessWidget {
+class _NarratorPanel extends StatelessWidget {
   final String text;
   final String? sceneTag;
   final bool isEdited;
 
-  const _NarratorBubble({
+  const _NarratorPanel({
     required this.text,
     this.sceneTag,
     this.isEdited = false,
@@ -97,68 +97,93 @@ class _NarratorBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = EverloreTheme.sceneAccent(sceneTag);
+
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 4, 64, 8),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(16, 6, 40, 10),
       decoration: BoxDecoration(
-        color: EverloreTheme.void2,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(4),
-          topRight: Radius.circular(16),
-          bottomLeft: Radius.circular(16),
-          bottomRight: Radius.circular(16),
-        ),
-        border: Border.all(
-          color: EverloreTheme.goldDim.withValues(alpha: 0.18),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Narrator label
-          Row(
-            children: [
-              Icon(
-                Icons.auto_stories,
-                size: 11,
-                color: EverloreTheme.gold.withValues(alpha: 0.5),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                'NARRATOR',
-                style: TextStyle(
-                  color: EverloreTheme.gold.withValues(alpha: 0.5),
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              if (isEdited) ...[
-                const SizedBox(width: 6),
-                Icon(
-                  Icons.edit,
-                  size: 9,
-                  color: EverloreTheme.ash.withValues(alpha: 0.4),
-                ),
-              ],
-            ],
+        borderRadius: BorderRadius.circular(16),
+        color: const Color(0xFF13132A).withValues(alpha: 0.72),
+        border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
-          const SizedBox(height: 10),
-
-          // Narrative text (model may emit **bold**, *italic*, lists, etc.)
-          MarkdownBody(
-            data: text,
-            selectable: true,
-            shrinkWrap: true,
-            styleSheet: _narrativeMarkdownStyle(),
-          ),
-
-          // Scene tag
-          if (sceneTag != null) ...[
-            const SizedBox(height: 12),
-            _SceneTagBadge(tag: sceneTag!),
-          ],
         ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(17, 14, 16, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.auto_stories,
+                          size: 11, color: accent.withValues(alpha: 0.7)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'NARRATOR',
+                        style: EverloreTheme.ui(
+                          size: 9,
+                          weight: FontWeight.w700,
+                          spacing: 2.0,
+                          color: accent.withValues(alpha: 0.7),
+                        ),
+                      ),
+                      if (isEdited) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.edit,
+                            size: 9,
+                            color: EverloreTheme.ash.withValues(alpha: 0.4)),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  MarkdownBody(
+                    data: text,
+                    selectable: true,
+                    shrinkWrap: true,
+                    styleSheet: _narrativeMarkdownStyle(),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (sceneTag != null)
+                        _SceneTagBadge(tag: sceneTag!, accent: accent),
+                      const Spacer(),
+                      _CopyButton(text: text),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Scene-tinted illuminated spine, stretched to the panel's height
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 3,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      accent.withValues(alpha: 0.7),
+                      accent.withValues(alpha: 0.15),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -166,107 +191,114 @@ class _NarratorBubble extends StatelessWidget {
 
 class _SceneTagBadge extends StatelessWidget {
   final String tag;
-  const _SceneTagBadge({required this.tag});
+  final Color accent;
+  const _SceneTagBadge({required this.tag, required this.accent});
 
   @override
   Widget build(BuildContext context) {
-    final color = _tagColor(tag);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: color.withValues(alpha: 0.1),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        color: accent.withValues(alpha: 0.1),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
       ),
       child: Text(
         tag.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.2,
+        style: EverloreTheme.ui(
+          size: 9,
+          weight: FontWeight.w700,
+          spacing: 1.4,
+          color: accent,
         ),
       ),
     );
   }
+}
 
-  Color _tagColor(String tag) {
-    return switch (tag) {
-      'combat' => EverloreTheme.crimson,
-      'intimate' => const Color(0xFFEC4899),
-      'exploration' => EverloreTheme.verdant,
-      'existential' => EverloreTheme.cyanBright,
-      'cosmic' => EverloreTheme.violetBright,
-      'dialogue' => EverloreTheme.gold,
-      'mundane' => EverloreTheme.ash,
-      _ => EverloreTheme.ash,
-    };
+class _CopyButton extends StatelessWidget {
+  final String text;
+  const _CopyButton({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () {
+        Clipboard.setData(ClipboardData(text: text));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Copied to clipboard',
+              style: EverloreTheme.ui(size: 13, color: EverloreTheme.parchment),
+            ),
+            duration: const Duration(seconds: 1),
+            backgroundColor: EverloreTheme.void3,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.copy_rounded,
+                size: 13, color: EverloreTheme.ash.withValues(alpha: 0.7)),
+            const SizedBox(width: 4),
+            Text(
+              'Copy',
+              style: EverloreTheme.ui(
+                size: 11,
+                color: EverloreTheme.ash.withValues(alpha: 0.7),
+                spacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
 MarkdownStyleSheet _narrativeMarkdownStyle() {
-  const base = EverloreTheme.aiText;
+  final base = EverloreTheme.aiText;
   return MarkdownStyleSheet(
     p: base,
     pPadding: EdgeInsets.zero,
-    blockSpacing: 10,
-    h1: base.copyWith(
-      fontSize: 22,
-      fontWeight: FontWeight.w700,
-      color: EverloreTheme.gold,
-      height: 1.3,
-    ),
+    blockSpacing: 12,
+    h1: GoogleFonts.cinzel(
+        fontSize: 22, fontWeight: FontWeight.w700, color: EverloreTheme.gold, height: 1.3),
     h1Padding: const EdgeInsets.only(top: 4, bottom: 8),
-    h2: base.copyWith(
-      fontSize: 19,
-      fontWeight: FontWeight.w700,
-      color: EverloreTheme.gold,
-      height: 1.35,
-    ),
+    h2: GoogleFonts.cinzel(
+        fontSize: 19, fontWeight: FontWeight.w700, color: EverloreTheme.gold, height: 1.35),
     h2Padding: const EdgeInsets.only(top: 4, bottom: 6),
     h3: base.copyWith(
-      fontSize: 17,
-      fontWeight: FontWeight.w600,
-      color: EverloreTheme.parchment,
-      height: 1.4,
-    ),
+        fontSize: 18, fontWeight: FontWeight.w600, color: EverloreTheme.parchment, height: 1.4),
     h3Padding: const EdgeInsets.only(top: 2, bottom: 6),
-    h4: base.copyWith(
-      fontSize: 16,
-      fontWeight: FontWeight.w600,
-      color: EverloreTheme.parchment,
-    ),
+    h4: base.copyWith(fontSize: 17, fontWeight: FontWeight.w600, color: EverloreTheme.parchment),
     h4Padding: const EdgeInsets.only(bottom: 4),
     h5: base.copyWith(fontWeight: FontWeight.w600),
     h5Padding: const EdgeInsets.only(bottom: 4),
-    h6: base.copyWith(
-      fontWeight: FontWeight.w600,
-      color: EverloreTheme.ash,
-    ),
+    h6: base.copyWith(fontWeight: FontWeight.w600, color: EverloreTheme.ash),
     h6Padding: const EdgeInsets.only(bottom: 4),
-    em: base.copyWith(fontStyle: FontStyle.italic),
-    strong: base.copyWith(
-      fontWeight: FontWeight.w700,
-      color: EverloreTheme.parchment,
-    ),
+    // Italic = narration / scene / inner thoughts: softer, cooler, like stage
+    // directions. Plain text (p) = spoken dialogue, which stays bright and clear.
+    em: base.copyWith(
+        fontStyle: FontStyle.italic, color: const Color(0xFFAEA690)),
+    strong: base.copyWith(fontWeight: FontWeight.w700, color: EverloreTheme.goldGlow),
     del: base.copyWith(decoration: TextDecoration.lineThrough),
     code: base.copyWith(
       fontFamily: 'monospace',
-      fontSize: 13,
+      fontSize: 14,
       backgroundColor: EverloreTheme.void4,
       color: EverloreTheme.goldGlow,
     ),
-    blockquote: base.copyWith(
-      color: EverloreTheme.ash,
-      fontStyle: FontStyle.italic,
-    ),
-    blockquotePadding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
+    blockquote: base.copyWith(color: EverloreTheme.ash, fontStyle: FontStyle.italic),
+    blockquotePadding: const EdgeInsets.only(left: 14, top: 4, bottom: 4),
     blockquoteDecoration: BoxDecoration(
       border: Border(
-        left: BorderSide(
-          color: EverloreTheme.goldDim.withValues(alpha: 0.55),
-          width: 3,
-        ),
+        left: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.55), width: 3),
       ),
     ),
     a: base.copyWith(
@@ -277,9 +309,7 @@ MarkdownStyleSheet _narrativeMarkdownStyle() {
     listBullet: base,
     listIndent: 22,
     horizontalRuleDecoration: const BoxDecoration(
-      border: Border(
-        top: BorderSide(color: EverloreTheme.white10, width: 1),
-      ),
+      border: Border(top: BorderSide(color: EverloreTheme.white10, width: 1)),
     ),
     codeblockDecoration: BoxDecoration(
       color: EverloreTheme.void0,
@@ -321,19 +351,12 @@ class _GeneratingIndicatorState extends State<_GeneratingIndicator>
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 4, 64, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      margin: const EdgeInsets.fromLTRB(16, 6, 40, 10),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
-        color: EverloreTheme.void2,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(4),
-          topRight: Radius.circular(16),
-          bottomLeft: Radius.circular(16),
-          bottomRight: Radius.circular(16),
-        ),
-        border: Border.all(
-          color: EverloreTheme.goldDim.withValues(alpha: 0.18),
-        ),
+        color: const Color(0xFF13132A).withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.16)),
       ),
       child: AnimatedBuilder(
         animation: _pulse,
@@ -345,15 +368,15 @@ class _GeneratingIndicatorState extends State<_GeneratingIndicator>
               size: 14,
               color: EverloreTheme.gold.withValues(alpha: 0.4 + 0.4 * _pulse.value),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Text(
-              'The world is weaving your tale...',
-              style: TextStyle(
+              'The world is weaving your tale…',
+              style: EverloreTheme.ui(
+                size: 14,
                 color: EverloreTheme.ash.withValues(alpha: 0.5 + 0.3 * _pulse.value),
-                fontSize: 13,
+                spacing: 0.2,
                 fontStyle: FontStyle.italic,
-                letterSpacing: 0.2,
-              ),
+              ).copyWith(fontFamily: GoogleFonts.ebGaramond().fontFamily),
             ),
           ],
         ),

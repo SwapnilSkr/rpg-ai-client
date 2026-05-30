@@ -18,9 +18,9 @@ class WorldStateBar extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
-      decoration: const BoxDecoration(
-        color: EverloreTheme.void0,
-        border: Border(
+      decoration: BoxDecoration(
+        color: EverloreTheme.void0.withValues(alpha: 0.45),
+        border: const Border(
           bottom: BorderSide(color: EverloreTheme.white10),
         ),
       ),

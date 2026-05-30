@@ -59,4 +59,12 @@ class ChronicleRepository {
       if (playerInput != null) 'player_input': playerInput,
     });
   }
+
+  /// Rewind a playthrough to [sequence]: removes that turn and everything after,
+  /// rolling back state, memories, and summaries on the server.
+  static Future<void> rewind(String instanceId, int sequence) async {
+    await ApiClient.post('/chronicle/rewind/$instanceId', body: {
+      'sequence': sequence,
+    });
+  }
 }
