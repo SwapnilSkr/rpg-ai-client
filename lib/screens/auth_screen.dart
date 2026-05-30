@@ -26,6 +26,7 @@ class _AuthScreenState extends State<AuthScreen>
   User? _currentUser;
   bool _googleReady = false;
   bool _isLoading = false;
+  bool _isUpdatingPreferences = false;
   bool _codeSent = false;
   String? _errorMessage;
   String? _successMessage;
@@ -162,6 +163,50 @@ class _AuthScreenState extends State<AuthScreen>
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleNsfwToggle(bool enabled) async {
+    if (_currentUser == null || _isUpdatingPreferences) return;
+
+    setState(() {
+      _isUpdatingPreferences = true;
+      _clearMessages();
+    });
+
+    try {
+      final updated = await AuthService.setNsfwEnabled(enabled);
+      if (!mounted) return;
+      setState(() {
+        _currentUser = updated;
+        _successMessage = enabled
+            ? 'Mature content enabled for eligible worlds.'
+            : 'Mature content disabled.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            enabled
+                ? 'NSFW preference enabled.'
+                : 'NSFW preference disabled.',
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMessage = e.message);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update preference: ${e.message}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceFirst('Exception: ', '');
+      setState(() => _errorMessage = message);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update preference: $message')),
+      );
+    } finally {
+      if (mounted) setState(() => _isUpdatingPreferences = false);
     }
   }
 
@@ -313,6 +358,33 @@ class _AuthScreenState extends State<AuthScreen>
                   () => context.push('/templates')),
               const Divider(color: EverloreTheme.white10, height: 24),
               _profileRow(Icons.auto_stories, 'Your Realms', () => context.go('/')),
+              const Divider(color: EverloreTheme.white10, height: 24),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: user.preferences.nsfwEnabled,
+                onChanged: (_isUpdatingPreferences || _isLoading)
+                    ? null
+                    : _handleNsfwToggle,
+                activeColor: EverloreTheme.crimson,
+                activeTrackColor:
+                    EverloreTheme.crimson.withValues(alpha: 0.35),
+                title: const Text(
+                  'Enable Mature Content (NSFW)',
+                  style: TextStyle(
+                    color: EverloreTheme.parchment,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  _isUpdatingPreferences
+                      ? 'Updating...'
+                      : 'Required for erotic tone and NSFW-capable worlds.',
+                  style: const TextStyle(
+                    color: EverloreTheme.ash,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
             ],
           ),
         ),

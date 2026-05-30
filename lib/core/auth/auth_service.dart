@@ -87,6 +87,23 @@ class AuthService {
     }
   }
 
+  /// Update user preferences and refresh the locally cached user snapshot.
+  static Future<User> updatePreferences(Map<String, dynamic> updates) async {
+    if (updates.isEmpty) {
+      throw Exception('No preference changes supplied.');
+    }
+
+    await ApiClient.put('/auth/preferences', body: updates);
+    final response = await ApiClient.get('/auth/me');
+    final user = User.fromJson(response);
+    await SecureStore.saveUserData(jsonEncode(user.toJson()));
+    return user;
+  }
+
+  static Future<User> setNsfwEnabled(bool enabled) {
+    return updatePreferences({'nsfw_enabled': enabled});
+  }
+
   static Future<User?> getCachedUser() async {
     final data = await SecureStore.getUserData();
     if (data == null) return null;
