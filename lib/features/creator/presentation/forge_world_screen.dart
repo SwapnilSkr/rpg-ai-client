@@ -141,12 +141,6 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
         );
       case 3:
         return _Step3Stats(key: const ValueKey(3), cubit: _cubit, state: state);
-      case 4:
-        return _Step4Engine(
-          key: const ValueKey(4),
-          cubit: _cubit,
-          state: state,
-        );
       default:
         return const SizedBox.shrink();
     }
@@ -162,7 +156,6 @@ const _stepNames = [
   "ORACLE'S VOICE",
   'ANCIENT LORE',
   'VITAL FORCES',
-  'ARCANE ENGINE',
 ];
 
 class _ForgeHeader extends StatelessWidget {
@@ -204,7 +197,7 @@ class _ForgeHeader extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            '${step + 1} / 5',
+            '${step + 1} / 4',
             style: const TextStyle(color: EverloreTheme.ash, fontSize: 13),
           ),
         ],
@@ -239,14 +232,14 @@ class _StepProgress extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Row(
-            children: List.generate(5, (i) {
+            children: List.generate(4, (i) {
               final filled = i <= step;
               final active = i == step;
               return Expanded(
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   height: active ? 3 : 2,
-                  margin: EdgeInsets.only(right: i < 4 ? 4 : 0),
+                  margin: EdgeInsets.only(right: i < 3 ? 4 : 0),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(2),
                     color: filled
@@ -292,7 +285,7 @@ class _ForgeNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLast = step == 4;
+    final isLast = step == 3;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -1399,6 +1392,8 @@ class _Step3Stats extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 28),
+          _ForgeSummary(state: state),
           const SizedBox(height: 24),
         ],
       ),
@@ -2087,144 +2082,8 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
 }
 
 // ─────────────────────────────────────────────
-// Step 4 — Arcane Engine (Advanced)
+// Forge review summary
 // ─────────────────────────────────────────────
-
-class _Step4Engine extends StatelessWidget {
-  final ForgeWorldCubit cubit;
-  final ForgeWorldState state;
-
-  const _Step4Engine({super.key, required this.cubit, required this.state});
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _StepIntro(
-            icon: Icons.settings_suggest,
-            text:
-                'Fine-tune the arcane engine that powers your world. The defaults work great for most worlds.',
-          ),
-          const SizedBox(height: 20),
-          // Memory depth
-          const _FormLabel(
-            label: 'Memory Depth',
-            hint:
-                'How many Echoes the AI considers when generating responses (5–50)',
-          ),
-          const SizedBox(height: 10),
-          _SliderControl(
-            value: state.maxContextMemories.toDouble(),
-            min: 5,
-            max: 50,
-            divisions: 9,
-            label: state.maxContextMemories.toString(),
-            color: EverloreTheme.violet,
-            onChanged: (v) => cubit.setMaxContextMemories(v.round()),
-          ),
-          _SliderLabels(left: '5 (shallow)', right: '50 (deep)'),
-          const SizedBox(height: 20),
-          // Lore recall
-          const _FormLabel(
-            label: 'Lore Recall',
-            hint:
-                'How many lore passages the AI retrieves from Ancient Lore per response (3–20)',
-          ),
-          const SizedBox(height: 10),
-          _SliderControl(
-            value: state.maxLoreResults.toDouble(),
-            min: 3,
-            max: 20,
-            divisions: 17,
-            label: state.maxLoreResults.toString(),
-            color: EverloreTheme.cyan,
-            onChanged: (v) => cubit.setMaxLoreResults(v.round()),
-          ),
-          _SliderLabels(left: '3 (focused)', right: '20 (expansive)'),
-          const SizedBox(height: 28),
-          // Summary card before forge
-          _ForgeSummary(state: state),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
-}
-
-class _SliderControl extends StatelessWidget {
-  final double value;
-  final double min;
-  final double max;
-  final int divisions;
-  final String label;
-  final Color color;
-  final ValueChanged<double> onChanged;
-
-  const _SliderControl({
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.divisions,
-    required this.label,
-    required this.color,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SliderTheme(
-      data: SliderTheme.of(context).copyWith(
-        activeTrackColor: color,
-        inactiveTrackColor: EverloreTheme.void4,
-        thumbColor: color,
-        overlayColor: color.withValues(alpha: 0.15),
-        valueIndicatorColor: color,
-        valueIndicatorTextStyle: const TextStyle(
-          color: EverloreTheme.void1,
-          fontSize: 12,
-        ),
-        trackHeight: 3,
-      ),
-      child: Slider(
-        value: value,
-        min: min,
-        max: max,
-        divisions: divisions,
-        label: label,
-        onChanged: onChanged,
-      ),
-    );
-  }
-}
-
-class _SliderLabels extends StatelessWidget {
-  final String left;
-  final String right;
-  const _SliderLabels({required this.left, required this.right});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            left,
-            style: const TextStyle(color: EverloreTheme.ash, fontSize: 10),
-          ),
-          Text(
-            right,
-            style: const TextStyle(color: EverloreTheme.ash, fontSize: 10),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _ForgeSummary extends StatelessWidget {
   final ForgeWorldState state;
@@ -2294,14 +2153,6 @@ class _ForgeSummary extends StatelessWidget {
             value: state.sceneTags.isEmpty
                 ? 'None'
                 : state.sceneTags.join(', '),
-          ),
-          _SummaryRow(
-            label: 'Memory Depth',
-            value: '${state.maxContextMemories} Echoes',
-          ),
-          _SummaryRow(
-            label: 'Lore Recall',
-            value: '${state.maxLoreResults} passages',
             isLast: true,
           ),
           const SizedBox(height: 8),

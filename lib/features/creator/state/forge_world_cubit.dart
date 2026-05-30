@@ -79,10 +79,6 @@ class ForgeWorldState extends Equatable {
   final List<String> sceneTags;
   final List<StatEntry> stats;
   final List<FlagEntry> flags;
-  final String modelLogic;
-  final String modelNarrationSfw;
-  final String modelNarrationNsfw;
-  final String modelSummary;
   final int maxContextMemories;
   final int maxLoreResults;
   final bool isSubmitting;
@@ -100,10 +96,6 @@ class ForgeWorldState extends Equatable {
     this.sceneTags = const [],
     this.stats = const [],
     this.flags = const [],
-    this.modelLogic = 'gpt-5',
-    this.modelNarrationSfw = 'gpt-5',
-    this.modelNarrationNsfw = 'gpt-5',
-    this.modelSummary = 'gpt-5',
     this.maxContextMemories = 25,
     this.maxLoreResults = 10,
     this.isSubmitting = false,
@@ -122,10 +114,6 @@ class ForgeWorldState extends Equatable {
     List<String>? sceneTags,
     List<StatEntry>? stats,
     List<FlagEntry>? flags,
-    String? modelLogic,
-    String? modelNarrationSfw,
-    String? modelNarrationNsfw,
-    String? modelSummary,
     int? maxContextMemories,
     int? maxLoreResults,
     bool? isSubmitting,
@@ -143,10 +131,6 @@ class ForgeWorldState extends Equatable {
     sceneTags: sceneTags ?? this.sceneTags,
     stats: stats ?? this.stats,
     flags: flags ?? this.flags,
-    modelLogic: modelLogic ?? this.modelLogic,
-    modelNarrationSfw: modelNarrationSfw ?? this.modelNarrationSfw,
-    modelNarrationNsfw: modelNarrationNsfw ?? this.modelNarrationNsfw,
-    modelSummary: modelSummary ?? this.modelSummary,
     maxContextMemories: maxContextMemories ?? this.maxContextMemories,
     maxLoreResults: maxLoreResults ?? this.maxLoreResults,
     isSubmitting: isSubmitting ?? this.isSubmitting,
@@ -168,10 +152,8 @@ class ForgeWorldState extends Equatable {
         return step1Valid;
       case 2:
         return step2Valid;
-      case 3:
-        return step3Valid;
       default:
-        return true;
+        return step3Valid;
     }
   }
 
@@ -187,10 +169,6 @@ class ForgeWorldState extends Equatable {
     sceneTags,
     stats,
     flags,
-    modelLogic,
-    modelNarrationSfw,
-    modelNarrationNsfw,
-    modelSummary,
     maxContextMemories,
     maxLoreResults,
     isSubmitting,
@@ -263,17 +241,13 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       sceneTags: List<String>.from(t.sceneTags),
       stats: stats,
       flags: flags,
-      modelLogic: 'gpt-5',
-      modelNarrationSfw: 'gpt-5',
-      modelNarrationNsfw: 'gpt-5',
-      modelSummary: 'gpt-5',
       maxContextMemories: t.maxContextMemories,
       maxLoreResults: t.maxLoreResults,
     );
   }
 
   void nextStep() {
-    if (state.step < 4 && state.canProceed) {
+    if (state.step < 3 && state.canProceed) {
       emit(state.copyWith(step: state.step + 1, clearError: true));
     }
   }
