@@ -9,6 +9,7 @@ import 'package:everlore/features/templates/presentation/browse_screen.dart';
 import 'package:everlore/features/templates/presentation/template_detail_screen.dart';
 import 'package:everlore/features/creator/presentation/my_worlds_screen.dart';
 import 'package:everlore/features/creator/presentation/forge_world_route.dart';
+import 'package:everlore/features/creator/presentation/create_character_screen.dart';
 import 'package:everlore/shared/models/world_template.dart';
 
 final router = GoRouter(
@@ -64,6 +65,11 @@ final router = GoRouter(
       path: '/my-worlds',
       name: 'my_worlds',
       builder: (context, state) => const MyWorldsScreen(),
+    ),
+    GoRoute(
+      path: '/characters/new',
+      name: 'create_character',
+      builder: (context, state) => const CreateCharacterScreen(),
     ),
     GoRoute(
       path: '/my-worlds/forge',

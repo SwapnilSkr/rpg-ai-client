@@ -34,6 +34,7 @@ class WorldTemplate {
   final String title;
   final String slug;
   final String description;
+  final String kind; // 'world' | 'character'
   final bool isPublished;
   final bool isSentient;
   final bool isNsfwCapable;
@@ -54,6 +55,7 @@ class WorldTemplate {
     required this.title,
     required this.slug,
     required this.description,
+    this.kind = 'world',
     this.isPublished = false,
     this.isSentient = false,
     this.isNsfwCapable = false,
@@ -69,6 +71,8 @@ class WorldTemplate {
     this.createdAt,
   });
 
+  bool get isCharacter => kind == 'character';
+
   factory WorldTemplate.fromJson(Map<String, dynamic> json) {
     final statsMap = <String, StatDefinition>{};
     if (json['base_stats_template'] is Map) {
@@ -83,6 +87,7 @@ class WorldTemplate {
       title: json['title'] ?? '',
       slug: json['slug'] ?? '',
       description: json['description'] ?? '',
+      kind: (json['kind'] ?? 'world').toString(),
       isPublished: json['is_published'] ?? false,
       isSentient: json['is_sentient'] ?? false,
       isNsfwCapable: json['is_nsfw_capable'] ?? false,

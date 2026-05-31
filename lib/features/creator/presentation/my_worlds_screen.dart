@@ -170,8 +170,14 @@ class _MyWorldsView extends StatelessWidget {
           );
         },
       ),
-      floatingActionButton: _ForgeFAB(
-        onTap: () => context.push('/my-worlds/forge'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _CharacterFAB(onTap: () => context.push('/characters/new')),
+          const SizedBox(height: 12),
+          _ForgeFAB(onTap: () => context.push('/my-worlds/forge')),
+        ],
       ),
     );
   }
@@ -711,6 +717,48 @@ class _LoadingView extends StatelessWidget {
             style: TextStyle(color: EverloreTheme.ash, fontSize: 14),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CharacterFAB extends StatelessWidget {
+  final VoidCallback onTap;
+  const _CharacterFAB({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 46,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(23),
+          color: EverloreTheme.violet,
+          border: Border.all(color: EverloreTheme.violetBright.withValues(alpha: 0.5)),
+          boxShadow: [
+            BoxShadow(
+              color: EverloreTheme.violet.withValues(alpha: 0.35),
+              blurRadius: 16,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.person_add_alt_1,
+                color: EverloreTheme.parchment, size: 18),
+            const SizedBox(width: 8),
+            Text('NEW CHARACTER',
+                style: EverloreTheme.ui(
+                    size: 11,
+                    color: EverloreTheme.parchment,
+                    weight: FontWeight.w800,
+                    spacing: 1.2)),
+          ],
+        ),
       ),
     );
   }

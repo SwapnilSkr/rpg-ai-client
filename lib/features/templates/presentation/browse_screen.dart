@@ -15,7 +15,18 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
   List<WorldTemplate> _templates = [];
   bool _isLoading = true;
   String? _error;
+  String _kindFilter = 'all'; // 'all' | 'world' | 'character'
   final _searchController = TextEditingController();
+
+  List<WorldTemplate> get _visible {
+    if (_kindFilter == 'character') {
+      return _templates.where((t) => t.isCharacter).toList();
+    }
+    if (_kindFilter == 'world') {
+      return _templates.where((t) => !t.isCharacter).toList();
+    }
+    return _templates;
+  }
 
   @override
   void initState() {
@@ -52,12 +63,67 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: EverloreTheme.void1,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push('/characters/new'),
+        backgroundColor: EverloreTheme.violet,
+        icon: const Icon(Icons.person_add_alt_1, color: EverloreTheme.parchment, size: 18),
+        label: Text('Character',
+            style: EverloreTheme.ui(
+                size: 13,
+                color: EverloreTheme.parchment,
+                weight: FontWeight.w700)),
+      ),
       body: CustomScrollView(
         slivers: [
           _buildHeader(context),
           _buildSearchBar(),
+          _buildSegments(),
           _buildContent(context),
         ],
+      ),
+    );
+  }
+
+  SliverToBoxAdapter _buildSegments() {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+        child: Row(
+          children: [
+            _segChip('all', 'All'),
+            const SizedBox(width: 8),
+            _segChip('world', 'Worlds'),
+            const SizedBox(width: 8),
+            _segChip('character', 'Characters'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _segChip(String value, String label) {
+    final active = _kindFilter == value;
+    final accent = value == 'character'
+        ? EverloreTheme.violetBright
+        : EverloreTheme.gold;
+    return GestureDetector(
+      onTap: () => setState(() => _kindFilter = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: active ? accent.withValues(alpha: 0.14) : EverloreTheme.void2,
+          border: Border.all(
+            color: active
+                ? accent.withValues(alpha: 0.5)
+                : EverloreTheme.white10,
+          ),
+        ),
+        child: Text(label,
+            style: EverloreTheme.ui(
+                size: 12.5,
+                color: active ? accent : EverloreTheme.ash,
+                weight: active ? FontWeight.w700 : FontWeight.w500)),
       ),
     );
   }
@@ -203,26 +269,30 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
       );
     }
 
-    if (_templates.isEmpty) {
-      return const SliverFillRemaining(
+    final visible = _visible;
+    if (visible.isEmpty) {
+      final isChar = _kindFilter == 'character';
+      return SliverFillRemaining(
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.explore_off,
+              Icon(isChar ? Icons.person_off_outlined : Icons.explore_off,
                   color: EverloreTheme.goldDim, size: 48),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Text(
-                'No worlds found',
-                style: TextStyle(
+                isChar ? 'No characters yet' : 'No worlds found',
+                style: const TextStyle(
                     color: EverloreTheme.parchment,
                     fontSize: 16,
                     fontWeight: FontWeight.w600),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
-                'Try a different search term.',
-                style: TextStyle(color: EverloreTheme.ash, fontSize: 13),
+                isChar
+                    ? 'Tap “Character” to create someone to talk to.'
+                    : 'Try a different search term.',
+                style: const TextStyle(color: EverloreTheme.ash, fontSize: 13),
               ),
             ],
           ),
@@ -230,27 +300,28 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
       );
     }
 
+    final label = _kindFilter == 'character'
+        ? '${visible.length} CHARACTER${visible.length == 1 ? '' : 'S'}'
+        : '${visible.length} WORLD${visible.length == 1 ? '' : 'S'} FOUND';
+
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 80),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 90),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             if (index == 0) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  '${_templates.length} WORLDS FOUND',
-                  style: EverloreTheme.sectionHeader,
-                ),
+                child: Text(label, style: EverloreTheme.sectionHeader),
               );
             }
-            final t = _templates[index - 1];
+            final t = visible[index - 1];
             return _WorldCard(
               template: t,
               onTap: () => context.push('/templates/${t.id}'),
             );
           },
-          childCount: _templates.length + 1,
+          childCount: visible.length + 1,
         ),
       ),
     );
@@ -305,9 +376,11 @@ class _WorldCard extends StatelessWidget {
                                 color: accentColor.withValues(alpha: 0.3)),
                           ),
                           child: Icon(
-                            template.isSentient
-                                ? Icons.psychology_alt
-                                : Icons.auto_stories,
+                            template.isCharacter
+                                ? Icons.person
+                                : template.isSentient
+                                    ? Icons.psychology_alt
+                                    : Icons.auto_stories,
                             color: accentColor,
                             size: 18,
                           ),
@@ -326,9 +399,11 @@ class _WorldCard extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                template.isSentient
-                                    ? 'Sentient World'
-                                    : 'Game Master World',
+                                template.isCharacter
+                                    ? 'Character'
+                                    : template.isSentient
+                                        ? 'Sentient World'
+                                        : 'Game Master World',
                                 style: TextStyle(
                                   color: accentColor.withValues(alpha: 0.8),
                                   fontSize: 11,
