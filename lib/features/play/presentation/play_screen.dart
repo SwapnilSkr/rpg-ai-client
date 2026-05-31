@@ -101,8 +101,6 @@ class _PlayViewState extends State<_PlayView> {
 
   void _showThoughtsSheet(BuildContext context) {
     final cubit = context.read<PlayCubit>();
-    final characters = cubit.state.characters;
-    final focusedId = cubit.state.instance?.focusCharacterId;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -110,16 +108,41 @@ class _PlayViewState extends State<_PlayView> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetCtx) => _ThoughtsSheet(
-        characters: characters,
-        focusedCharacterId: focusedId,
-        onFocus: (id) {
-          cubit.updateSettings(focusCharacterId: id);
-          Navigator.pop(sheetCtx);
-        },
-        onClearFocus: () {
-          cubit.updateSettings(clearFocusCharacter: true);
-          Navigator.pop(sheetCtx);
+      builder: (sheetCtx) => BlocProvider.value(
+        value: cubit,
+        child: BlocBuilder<PlayCubit, PlayState>(
+          builder: (ctx, state) => _ThoughtsSheet(
+            characters: state.characters,
+            focusedCharacterId: state.instance?.focusCharacterId,
+            onFocus: (id) {
+              cubit.updateSettings(focusCharacterId: id);
+              Navigator.pop(sheetCtx);
+            },
+            onClearFocus: () {
+              cubit.updateSettings(clearFocusCharacter: true);
+              Navigator.pop(sheetCtx);
+            },
+            onEdit: (c) => _showCharacterEdit(ctx, cubit, c),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCharacterEdit(
+      BuildContext context, PlayCubit cubit, CharacterProfile character) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (editCtx) => _CharacterEditSheet(
+        character: character,
+        onSave: (updates) {
+          cubit.editCharacter(character.id, updates);
+          Navigator.pop(editCtx);
         },
       ),
     );
@@ -1036,12 +1059,14 @@ class _ThoughtsSheet extends StatelessWidget {
   final String? focusedCharacterId;
   final ValueChanged<String> onFocus;
   final VoidCallback onClearFocus;
+  final ValueChanged<CharacterProfile> onEdit;
 
   const _ThoughtsSheet({
     required this.characters,
     required this.focusedCharacterId,
     required this.onFocus,
     required this.onClearFocus,
+    required this.onEdit,
   });
 
   @override
@@ -1166,9 +1191,18 @@ class _ThoughtsSheet extends StatelessWidget {
                           ],
                         ),
                       ),
-                      trailing: c.isProtagonist
-                          ? null
-                          : TextButton(
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: () => onEdit(c),
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.edit_outlined,
+                                size: 17, color: EverloreTheme.ash),
+                            tooltip: 'Edit',
+                          ),
+                          if (!c.isProtagonist)
+                            TextButton(
                               onPressed: isFocused ? null : () => onFocus(c.id),
                               child: Text(
                                 isFocused ? 'Focused' : 'Focus',
@@ -1181,6 +1215,8 @@ class _ThoughtsSheet extends StatelessWidget {
                                 ),
                               ),
                             ),
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -1381,4 +1417,210 @@ class _ProtagonistOnboardingSheetState
           borderSide: const BorderSide(color: EverloreTheme.gold, width: 1.2),
         ),
       );
+}
+
+/// Player edit of a character/protagonist card. Facts & current-state are edited
+/// as one-per-line text. Removing a fact triggers server-side memory
+/// supersession so stale memories can't resurface and fight the edit.
+class _CharacterEditSheet extends StatefulWidget {
+  final CharacterProfile character;
+  final ValueChanged<Map<String, dynamic>> onSave;
+
+  const _CharacterEditSheet({required this.character, required this.onSave});
+
+  @override
+  State<_CharacterEditSheet> createState() => _CharacterEditSheetState();
+}
+
+class _CharacterEditSheetState extends State<_CharacterEditSheet> {
+  late final TextEditingController _name;
+  late final TextEditingController _role;
+  late final TextEditingController _appearance;
+  late final TextEditingController _persona;
+  late final TextEditingController _facts;
+  late final TextEditingController _state;
+  late final TextEditingController _disposition;
+  late final TextEditingController _thought;
+
+  @override
+  void initState() {
+    super.initState();
+    final c = widget.character;
+    _name = TextEditingController(text: c.canonicalName);
+    _role = TextEditingController(text: c.role);
+    _appearance = TextEditingController(text: c.appearance);
+    _persona = TextEditingController(text: c.persona);
+    _facts = TextEditingController(text: c.immutableFacts.join('\n'));
+    _state = TextEditingController(text: c.mutableState.join('\n'));
+    _disposition = TextEditingController(text: c.dispositionToPlayer);
+    _thought = TextEditingController(text: c.hiddenThought);
+  }
+
+  @override
+  void dispose() {
+    for (final ctrl in [
+      _name, _role, _appearance, _persona, _facts, _state, _disposition, _thought
+    ]) {
+      ctrl.dispose();
+    }
+    super.dispose();
+  }
+
+  List<String> _lines(String raw) => raw
+      .split('\n')
+      .map((l) => l.trim())
+      .where((l) => l.isNotEmpty)
+      .toList();
+
+  void _save() {
+    final updates = <String, dynamic>{
+      'canonical_name': _name.text.trim(),
+      'role': _role.text.trim(),
+      'appearance': _appearance.text.trim(),
+      'persona': _persona.text.trim(),
+      'immutable_facts': _lines(_facts.text),
+      'mutable_state': _lines(_state.text),
+      'disposition_to_player': _disposition.text.trim(),
+      'hidden_thought': _thought.text.trim(),
+    };
+    widget.onSave(updates);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isProtagonist = widget.character.isProtagonist;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 14,
+          bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: EverloreTheme.void4,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Text(isProtagonist ? 'Edit Protagonist' : 'Edit Character',
+                      style: EverloreTheme.serifDisplay(
+                          size: 18, color: EverloreTheme.parchment)),
+                  if (isProtagonist) ...[
+                    const SizedBox(width: 8),
+                    const Icon(Icons.star, size: 14, color: EverloreTheme.gold),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Your edits are canon — the story honors them next turn. '
+                'Removing a fact also clears stale memories about it.',
+                style: EverloreTheme.ui(
+                    size: 12, color: EverloreTheme.ash, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              _field('Name', _name),
+              _field('Role', _role),
+              _field('Appearance', _appearance, maxLines: 2),
+              _field('Persona', _persona, maxLines: 3),
+              _field('Facts (one per line)', _facts, maxLines: 5),
+              _field('Current state (one per line)', _state, maxLines: 3),
+              if (!isProtagonist) ...[
+                _field('Disposition toward you', _disposition, maxLines: 2),
+                _field('Hidden thought', _thought, maxLines: 2),
+              ],
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Cancel',
+                        style:
+                            EverloreTheme.ui(size: 14, color: EverloreTheme.ash)),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: _name.text.trim().length >= 2 ? _save : null,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: const LinearGradient(
+                            colors: [EverloreTheme.goldGlow, EverloreTheme.gold]),
+                      ),
+                      child: Text('Save',
+                          style: EverloreTheme.ui(
+                              size: 14,
+                              color: EverloreTheme.void1,
+                              weight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _field(String label, TextEditingController ctrl, {int maxLines = 1}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: EverloreTheme.ui(
+                  size: 12,
+                  color: EverloreTheme.parchment,
+                  weight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: ctrl,
+            maxLines: maxLines,
+            minLines: 1,
+            onChanged: (_) => setState(() {}),
+            textCapitalization: TextCapitalization.sentences,
+            style: EverloreTheme.ui(
+                size: 14, color: EverloreTheme.parchment, height: 1.4),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                    color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                    color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: EverloreTheme.gold, width: 1.2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

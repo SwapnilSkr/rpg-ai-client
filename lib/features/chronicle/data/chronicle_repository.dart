@@ -1,6 +1,7 @@
 import '../../../core/network/api_client.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/memory.dart';
+import '../../../shared/models/character_profile.dart';
 
 class ChronicleRepository {
   static Future<Map<String, dynamic>> getEvents(
@@ -82,6 +83,18 @@ class ChronicleRepository {
     await ApiClient.post('/chronicle/rewind/$instanceId', body: {
       'sequence': sequence,
     });
+  }
+
+  /// Edit a character/protagonist card. Removed facts trigger memory
+  /// supersession server-side so stale memories can't resurface.
+  static Future<CharacterProfile> editCharacter(
+    String characterId,
+    Map<String, dynamic> updates,
+  ) async {
+    final response =
+        await ApiClient.put('/chronicle/character/$characterId', body: updates);
+    return CharacterProfile.fromJson(
+        Map<String, dynamic>.from(response['character'] as Map));
   }
 
   /// GM onboarding: set the player's own character as this instance's locked

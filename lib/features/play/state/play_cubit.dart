@@ -385,6 +385,23 @@ class PlayCubit extends Cubit<PlayState> {
 
   void skipProtagonistOnboarding() => _protagonistPrompted = true;
 
+  /// Persist a player edit to a character/protagonist card and reflect it locally.
+  Future<void> editCharacter(
+    String characterId,
+    Map<String, dynamic> updates,
+  ) async {
+    try {
+      final updated =
+          await ChronicleRepository.editCharacter(characterId, updates);
+      final list = state.characters
+          .map((c) => c.id == characterId ? updated : c)
+          .toList();
+      emit(state.copyWith(characters: list));
+    } catch (_) {
+      emit(state.copyWith(error: 'Could not save character changes.'));
+    }
+  }
+
   /// Establish the player's character as the instance protagonist.
   Future<void> setPlayerProtagonist(String name, {String? identity}) async {
     _protagonistPrompted = true;
