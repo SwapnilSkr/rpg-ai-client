@@ -84,6 +84,19 @@ class ChronicleRepository {
     });
   }
 
+  /// GM onboarding: set the player's own character as this instance's locked
+  /// protagonist (first play).
+  static Future<void> setProtagonist(
+    String instanceId, {
+    required String name,
+    String? identity,
+  }) async {
+    await ApiClient.post('/instances/$instanceId/protagonist', body: {
+      'name': name,
+      if (identity != null && identity.isNotEmpty) 'identity': identity,
+    });
+  }
+
   /// Update in-chat session settings (narration POV, tone) for an instance.
   static Future<void> updateSettings(
     String instanceId, {

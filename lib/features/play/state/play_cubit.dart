@@ -372,6 +372,43 @@ class PlayCubit extends Cubit<PlayState> {
     emit(state.copyWith(error: null));
   }
 
+  bool _protagonistPrompted = false;
+
+  /// GM worlds (non-sentient) need the player to define their own character
+  /// (the locked protagonist) on first play. True until done or skipped.
+  bool get shouldOnboardProtagonist {
+    final t = state.template;
+    if (t == null || state.isLoading || _protagonistPrompted) return false;
+    if (t.isSentient) return false; // sentient protagonist is the AI persona
+    return !state.characters.any((c) => c.isProtagonist);
+  }
+
+  void skipProtagonistOnboarding() => _protagonistPrompted = true;
+
+  /// Establish the player's character as the instance protagonist.
+  Future<void> setPlayerProtagonist(String name, {String? identity}) async {
+    _protagonistPrompted = true;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    // Optimistically add a protagonist card so onboarding won't re-trigger.
+    final optimistic = CharacterProfile(
+      id: 'pending-protagonist',
+      canonicalName: trimmed,
+      role: 'protagonist (the player)',
+      isProtagonist: true,
+    );
+    emit(state.copyWith(characters: [optimistic, ...state.characters]));
+    try {
+      await ChronicleRepository.setProtagonist(
+        instanceId,
+        name: trimmed,
+        identity: identity,
+      );
+    } catch (_) {
+      // Best-effort: the card still seeds emergently on the next turn.
+    }
+  }
+
   /// Update in-chat settings (narration POV, tone). Optimistically reflects the
   /// change locally, then persists; the server busts its session cache so the
   /// next turn uses the new values.

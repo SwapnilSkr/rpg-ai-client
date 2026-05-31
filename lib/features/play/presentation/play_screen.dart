@@ -35,11 +35,45 @@ class _PlayView extends StatefulWidget {
 class _PlayViewState extends State<_PlayView> {
   final _scrollController = ScrollController();
   bool _statsExpanded = false;
+  bool _onboardingShown = false;
 
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _maybeShowOnboarding(BuildContext context) {
+    final cubit = context.read<PlayCubit>();
+    if (_onboardingShown || !cubit.shouldOnboardProtagonist) return;
+    _onboardingShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showProtagonistOnboarding(context, cubit);
+    });
+  }
+
+  void _showProtagonistOnboarding(BuildContext context, PlayCubit cubit) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => _ProtagonistOnboardingSheet(
+        onBegin: (name, identity) {
+          cubit.setPlayerProtagonist(name, identity: identity);
+          Navigator.pop(sheetCtx);
+        },
+        onSkip: () {
+          cubit.skipProtagonistOnboarding();
+          Navigator.pop(sheetCtx);
+        },
+      ),
+    );
   }
 
   void _showChatMenu(BuildContext context) {
@@ -343,10 +377,16 @@ class _PlayViewState extends State<_PlayView> {
     return BlocConsumer<PlayCubit, PlayState>(
       listenWhen: (prev, curr) =>
           prev.events.length != curr.events.length ||
+          prev.isLoading != curr.isLoading ||
+          prev.template != curr.template ||
+          prev.characters.length != curr.characters.length ||
           (curr.events.isNotEmpty &&
               (prev.events.isNotEmpty ? prev.events.last.aiResponse : null) !=
                   curr.events.last.aiResponse),
-      listener: (_, __) => _scrollToBottom(),
+      listener: (ctx, __) {
+        _scrollToBottom();
+        _maybeShowOnboarding(ctx);
+      },
       builder: (context, state) {
         final title = state.template?.title ?? '';
         final latestTag =
@@ -1126,19 +1166,21 @@ class _ThoughtsSheet extends StatelessWidget {
                           ],
                         ),
                       ),
-                      trailing: TextButton(
-                        onPressed: isFocused ? null : () => onFocus(c.id),
-                        child: Text(
-                          isFocused ? 'Focused' : 'Focus',
-                          style: EverloreTheme.ui(
-                            size: 12,
-                            color: isFocused
-                                ? EverloreTheme.gold
-                                : EverloreTheme.violetBright,
-                            weight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
+                      trailing: c.isProtagonist
+                          ? null
+                          : TextButton(
+                              onPressed: isFocused ? null : () => onFocus(c.id),
+                              child: Text(
+                                isFocused ? 'Focused' : 'Focus',
+                                style: EverloreTheme.ui(
+                                  size: 12,
+                                  color: isFocused
+                                      ? EverloreTheme.gold
+                                      : EverloreTheme.violetBright,
+                                  weight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
                     );
                   },
                 ),
@@ -1190,4 +1232,153 @@ class _ErrorBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// GM onboarding: the player names their own character (the protagonist) on
+/// first entry into a Game Master world. Minimal + skippable.
+class _ProtagonistOnboardingSheet extends StatefulWidget {
+  final void Function(String name, String? identity) onBegin;
+  final VoidCallback onSkip;
+
+  const _ProtagonistOnboardingSheet({required this.onBegin, required this.onSkip});
+
+  @override
+  State<_ProtagonistOnboardingSheet> createState() =>
+      _ProtagonistOnboardingSheetState();
+}
+
+class _ProtagonistOnboardingSheetState
+    extends State<_ProtagonistOnboardingSheet> {
+  final _nameCtrl = TextEditingController();
+  final _identityCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _identityCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = _nameCtrl.text.trim().length >= 2;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 18,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: EverloreTheme.void4,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Who are you in this world?',
+              style: EverloreTheme.serifDisplay(
+                  size: 18, color: EverloreTheme.parchment)),
+          const SizedBox(height: 6),
+          Text(
+            'Name your character — the world will remember you and the story '
+            'will revolve around your journey.',
+            style: EverloreTheme.ui(
+                size: 12.5, color: EverloreTheme.ash, height: 1.45),
+          ),
+          const SizedBox(height: 18),
+          TextField(
+            controller: _nameCtrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            style: EverloreTheme.ui(size: 15, color: EverloreTheme.parchment),
+            onChanged: (_) => setState(() {}),
+            decoration: _dec('Your name (e.g. Kael, Aria…)'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _identityCtrl,
+            textCapitalization: TextCapitalization.sentences,
+            maxLines: 2,
+            minLines: 1,
+            style: EverloreTheme.ui(size: 14, color: EverloreTheme.parchment),
+            decoration: _dec('Optional: who are you? (a wandering knight…)'),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              TextButton(
+                onPressed: widget.onSkip,
+                child: Text('Skip',
+                    style: EverloreTheme.ui(size: 14, color: EverloreTheme.ash)),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: ready
+                    ? () => widget.onBegin(
+                          _nameCtrl.text.trim(),
+                          _identityCtrl.text.trim().isEmpty
+                              ? null
+                              : _identityCtrl.text.trim(),
+                        )
+                    : null,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: ready
+                        ? const LinearGradient(colors: [
+                            EverloreTheme.goldGlow,
+                            EverloreTheme.gold
+                          ])
+                        : null,
+                    color: ready ? null : EverloreTheme.void3,
+                  ),
+                  child: Text('Begin',
+                      style: EverloreTheme.ui(
+                          size: 14,
+                          color: ready
+                              ? EverloreTheme.void1
+                              : EverloreTheme.ash,
+                          weight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _dec(String hint) => InputDecoration(
+        hintText: hint,
+        hintStyle: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+        filled: true,
+        fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide:
+              BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide:
+              BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: EverloreTheme.gold, width: 1.2),
+        ),
+      );
 }
