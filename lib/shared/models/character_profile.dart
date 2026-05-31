@@ -10,6 +10,7 @@ class CharacterProfile {
   final String dispositionToPlayer;
   final String hiddenThought;
   final int mentionCount;
+  final bool isProtagonist;
 
   const CharacterProfile({
     required this.id,
@@ -23,6 +24,7 @@ class CharacterProfile {
     this.dispositionToPlayer = '',
     this.hiddenThought = '',
     this.mentionCount = 0,
+    this.isProtagonist = false,
   });
 
   factory CharacterProfile.fromJson(Map<String, dynamic> json) {
@@ -40,6 +42,7 @@ class CharacterProfile {
       dispositionToPlayer: (json['disposition_to_player'] ?? '').toString(),
       hiddenThought: (json['hidden_thought'] ?? '').toString(),
       mentionCount: (json['mention_count'] as num?)?.toInt() ?? 0,
+      isProtagonist: json['is_protagonist'] == true,
     );
   }
 }

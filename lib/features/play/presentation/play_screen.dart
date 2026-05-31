@@ -1064,13 +1064,42 @@ class _ThoughtsSheet extends StatelessWidget {
                     final isFocused = c.id == focusedCharacterId;
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        c.canonicalName,
-                        style: EverloreTheme.ui(
-                          size: 15,
-                          color: EverloreTheme.parchment,
-                          weight: FontWeight.w600,
-                        ),
+                      title: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              c.canonicalName,
+                              style: EverloreTheme.ui(
+                                size: 15,
+                                color: EverloreTheme.parchment,
+                                weight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (c.isProtagonist) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: EverloreTheme.gold.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color:
+                                      EverloreTheme.goldDim.withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Text(
+                                'PROTAGONIST',
+                                style: EverloreTheme.ui(
+                                  size: 9,
+                                  color: EverloreTheme.gold,
+                                  weight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       subtitle: Padding(
                         padding: const EdgeInsets.only(top: 6),
