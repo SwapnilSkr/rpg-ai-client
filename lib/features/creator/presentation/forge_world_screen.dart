@@ -28,6 +28,7 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
 
   // Step 1 controllers
   late final TextEditingController _seedCtrl;
+  late final TextEditingController _openingCtrl;
 
   // Step 2 controllers
   late final TextEditingController _loreCtrl;
@@ -41,6 +42,7 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
     _titleCtrl = TextEditingController(text: s.title);
     _descCtrl = TextEditingController(text: s.description);
     _seedCtrl = TextEditingController(text: s.seedPrompt);
+    _openingCtrl = TextEditingController(text: s.openingLine);
     _loreCtrl = TextEditingController(text: s.globalLore);
     _tagInputCtrl = TextEditingController();
   }
@@ -51,6 +53,7 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
     _titleCtrl.dispose();
     _descCtrl.dispose();
     _seedCtrl.dispose();
+    _openingCtrl.dispose();
     _loreCtrl.dispose();
     _tagInputCtrl.dispose();
     super.dispose();
@@ -128,6 +131,7 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
         return _Step1Voice(
           key: const ValueKey(1),
           seedCtrl: _seedCtrl,
+          openingCtrl: _openingCtrl,
           cubit: _cubit,
           state: state,
         );
@@ -848,12 +852,14 @@ class _Step0Essence extends StatelessWidget {
 
 class _Step1Voice extends StatelessWidget {
   final TextEditingController seedCtrl;
+  final TextEditingController openingCtrl;
   final ForgeWorldCubit cubit;
   final ForgeWorldState state;
 
   const _Step1Voice({
     super.key,
     required this.seedCtrl,
+    required this.openingCtrl,
     required this.cubit,
     required this.state,
   });
@@ -939,6 +945,29 @@ class _Step1Voice extends StatelessWidget {
             current: state.seedPrompt.trim().length,
             min: 10,
             max: 10000,
+          ),
+          const SizedBox(height: 24),
+          const _FormLabel(
+            label: 'Opening Line',
+            hint:
+                'Optional — the first thing said when a player enters. A greeting, '
+                'or a scene that sets the stage. Leave blank to start on a clean slate.',
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: openingCtrl,
+            onChanged: cubit.setOpeningLine,
+            style: const TextStyle(
+              color: EverloreTheme.parchment,
+              fontSize: 13,
+              height: 1.6,
+            ),
+            decoration: _fieldDecoration(
+              'e.g. "You stand at the gates of Eldrath as rain begins to fall..."',
+            ),
+            maxLines: 5,
+            minLines: 3,
+            textCapitalization: TextCapitalization.sentences,
           ),
           const SizedBox(height: 24),
         ],

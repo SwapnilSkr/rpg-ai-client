@@ -76,6 +76,7 @@ class ForgeWorldState extends Equatable {
   final bool isNsfwCapable;
   final String seedPrompt;
   final String globalLore;
+  final String openingLine;
   final List<String> sceneTags;
   final List<StatEntry> stats;
   final List<FlagEntry> flags;
@@ -93,6 +94,7 @@ class ForgeWorldState extends Equatable {
     this.isNsfwCapable = false,
     this.seedPrompt = '',
     this.globalLore = '',
+    this.openingLine = '',
     this.sceneTags = const [],
     this.stats = const [],
     this.flags = const [],
@@ -111,6 +113,7 @@ class ForgeWorldState extends Equatable {
     bool? isNsfwCapable,
     String? seedPrompt,
     String? globalLore,
+    String? openingLine,
     List<String>? sceneTags,
     List<StatEntry>? stats,
     List<FlagEntry>? flags,
@@ -128,6 +131,7 @@ class ForgeWorldState extends Equatable {
     isNsfwCapable: isNsfwCapable ?? this.isNsfwCapable,
     seedPrompt: seedPrompt ?? this.seedPrompt,
     globalLore: globalLore ?? this.globalLore,
+    openingLine: openingLine ?? this.openingLine,
     sceneTags: sceneTags ?? this.sceneTags,
     stats: stats ?? this.stats,
     flags: flags ?? this.flags,
@@ -166,6 +170,7 @@ class ForgeWorldState extends Equatable {
     isNsfwCapable,
     seedPrompt,
     globalLore,
+    openingLine,
     sceneTags,
     stats,
     flags,
@@ -238,6 +243,7 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       isNsfwCapable: t.isNsfwCapable,
       seedPrompt: t.seedPrompt,
       globalLore: t.globalLore,
+      openingLine: t.openingLine,
       sceneTags: List<String>.from(t.sceneTags),
       stats: stats,
       flags: flags,
@@ -264,6 +270,7 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   void setIsNsfwCapable(bool v) => emit(state.copyWith(isNsfwCapable: v));
   void setSeedPrompt(String v) => emit(state.copyWith(seedPrompt: v));
   void setGlobalLore(String v) => emit(state.copyWith(globalLore: v));
+  void setOpeningLine(String v) => emit(state.copyWith(openingLine: v));
 
   void addTag(String tag) {
     final t = tag.trim().toLowerCase().replaceAll(' ', '_');
@@ -365,6 +372,7 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       'is_nsfw_capable': state.isNsfwCapable,
       'seed_prompt': state.seedPrompt.trim(),
       'global_lore': state.globalLore.trim(),
+      'opening_line': state.openingLine.trim(),
       'base_stats_template': statsMap,
       'flag_definitions': flagsMap,
       'scene_tags': state.sceneTags,
