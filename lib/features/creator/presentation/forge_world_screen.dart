@@ -6,6 +6,7 @@ import '../state/forge_world_cubit.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/models/world_template.dart';
 import 'widgets/voice_picker.dart';
+import 'widgets/image_forge.dart';
 
 // ─────────────────────────────────────────────
 // Entry point
@@ -954,6 +955,15 @@ class _Step1Voice extends StatelessWidget {
             onSelect: cubit.setNarrativeStyle,
             notes: state.styleNotes,
             onNotesChanged: cubit.setStyleNotes,
+          ),
+          const SizedBox(height: 24),
+          ImageForge(
+            imageUrl: state.imageUrl,
+            prompt: state.imagePrompt,
+            busy: state.isImageBusy,
+            error: state.imageError,
+            onPromptChanged: cubit.setImagePrompt,
+            onGenerate: cubit.generateImage,
           ),
           const SizedBox(height: 24),
           const _FormLabel(

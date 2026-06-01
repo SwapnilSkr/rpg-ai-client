@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../state/create_character_cubit.dart';
 import 'widgets/voice_picker.dart';
+import 'widgets/image_forge.dart';
 
 /// Lightweight, Character.AI-style creation: name a character, describe them,
 /// and start chatting immediately. No stats, no RPG scaffolding.
@@ -76,6 +77,15 @@ class _CreateCharacterView extends StatelessWidget {
                           onSelect: cubit.setNarrativeStyle,
                           notes: state.styleNotes,
                           onNotesChanged: cubit.setStyleNotes,
+                        ),
+                        const SizedBox(height: 24),
+                        ImageForge(
+                          imageUrl: state.imageUrl,
+                          prompt: state.imagePrompt,
+                          busy: state.isImageBusy,
+                          error: state.imageError,
+                          onPromptChanged: cubit.setImagePrompt,
+                          onGenerate: cubit.generateImage,
                         ),
                         const _SectionLabel('OPTIONAL'),
                         _field(

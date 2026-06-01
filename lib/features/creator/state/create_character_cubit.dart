@@ -12,6 +12,10 @@ class CreateCharacterState extends Equatable {
   final String backstory;
   final String narrativeStyle; // voice preset key; '' = default
   final String styleNotes; // optional free-text refinements
+  final String imagePrompt; // visual prompt (auto-suggested, editable)
+  final String imageUrl; // generated avatar/background CDN url
+  final bool isImageBusy; // suggesting or generating
+  final String? imageError;
   final bool isNsfwCapable;
   final bool isSubmitting;
   final String? error;
@@ -27,6 +31,10 @@ class CreateCharacterState extends Equatable {
     this.backstory = '',
     this.narrativeStyle = '',
     this.styleNotes = '',
+    this.imagePrompt = '',
+    this.imageUrl = '',
+    this.isImageBusy = false,
+    this.imageError,
     this.isNsfwCapable = false,
     this.isSubmitting = false,
     this.error,
@@ -41,6 +49,11 @@ class CreateCharacterState extends Equatable {
     String? backstory,
     String? narrativeStyle,
     String? styleNotes,
+    String? imagePrompt,
+    String? imageUrl,
+    bool? isImageBusy,
+    String? imageError,
+    bool clearImageError = false,
     bool? isNsfwCapable,
     bool? isSubmitting,
     String? error,
@@ -54,6 +67,10 @@ class CreateCharacterState extends Equatable {
         backstory: backstory ?? this.backstory,
         narrativeStyle: narrativeStyle ?? this.narrativeStyle,
         styleNotes: styleNotes ?? this.styleNotes,
+        imagePrompt: imagePrompt ?? this.imagePrompt,
+        imageUrl: imageUrl ?? this.imageUrl,
+        isImageBusy: isImageBusy ?? this.isImageBusy,
+        imageError: clearImageError ? null : (imageError ?? this.imageError),
         isNsfwCapable: isNsfwCapable ?? this.isNsfwCapable,
         isSubmitting: isSubmitting ?? this.isSubmitting,
         error: clearError ? null : (error ?? this.error),
@@ -74,6 +91,10 @@ class CreateCharacterState extends Equatable {
         backstory,
         narrativeStyle,
         styleNotes,
+        imagePrompt,
+        imageUrl,
+        isImageBusy,
+        imageError,
         isNsfwCapable,
         isSubmitting,
         error,
@@ -91,8 +112,42 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
   void setBackstory(String v) => emit(state.copyWith(backstory: v));
   void setNarrativeStyle(String v) => emit(state.copyWith(narrativeStyle: v));
   void setStyleNotes(String v) => emit(state.copyWith(styleNotes: v));
+  void setImagePrompt(String v) => emit(state.copyWith(imagePrompt: v));
   void setNsfw(bool v) => emit(state.copyWith(isNsfwCapable: v));
   void clearError() => emit(state.copyWith(clearError: true));
+
+  /// Generate (or re-roll) the avatar. If no prompt has been authored yet, an
+  /// editable visual prompt is auto-suggested from the character details first.
+  Future<void> generateImage() async {
+    if (state.isImageBusy) return;
+    emit(state.copyWith(isImageBusy: true, clearImageError: true));
+    try {
+      var prompt = state.imagePrompt.trim();
+      if (prompt.isEmpty) {
+        prompt = await CreatorRepository.suggestImagePrompt({
+          'title': state.name.trim().isEmpty ? 'Character' : state.name.trim(),
+          'description': state.tagline.trim(),
+          'seed_prompt': state.persona.trim(),
+          'global_lore': state.backstory.trim(),
+          'narrative_style': state.narrativeStyle,
+          'is_sentient': true,
+        });
+      }
+      final url = await CreatorRepository.generateImage(prompt);
+      emit(state.copyWith(imagePrompt: prompt, imageUrl: url, isImageBusy: false));
+    } catch (e) {
+      emit(state.copyWith(isImageBusy: false, imageError: _imageErr(e)));
+    }
+  }
+
+  String _imageErr(Object e) {
+    if (e is ApiException) {
+      if (e.statusCode == 403) return 'Image generation needs Premium or Creator.';
+      if (e.statusCode == 429) return 'Too many image generations — try again shortly.';
+      return e.message;
+    }
+    return 'Could not generate the image. Please try again.';
+  }
 
   /// Builds the character template, publishes it, spins up an instance, and
   /// returns the instance id so the UI can jump straight into the chat.
@@ -120,6 +175,8 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
         'global_lore': state.backstory.trim(),
         'narrative_style': state.narrativeStyle,
         'style_notes': state.styleNotes.trim(),
+        'image_url': state.imageUrl,
+        'image_prompt': state.imagePrompt.trim(),
         'opening_line': state.greeting.trim(),
         'protagonist': {
           'name': name,

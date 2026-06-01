@@ -78,6 +78,10 @@ class ForgeWorldState extends Equatable {
   final String globalLore;
   final String narrativeStyle; // voice preset key; '' = default
   final String styleNotes; // optional free-text refinements
+  final String imagePrompt; // visual prompt (auto-suggested, editable)
+  final String imageUrl; // generated avatar/background CDN url
+  final bool isImageBusy;
+  final String? imageError;
   final String openingLine;
   final List<String> sceneTags;
   final List<StatEntry> stats;
@@ -98,6 +102,10 @@ class ForgeWorldState extends Equatable {
     this.globalLore = '',
     this.narrativeStyle = '',
     this.styleNotes = '',
+    this.imagePrompt = '',
+    this.imageUrl = '',
+    this.isImageBusy = false,
+    this.imageError,
     this.openingLine = '',
     this.sceneTags = const [],
     this.stats = const [],
@@ -119,6 +127,11 @@ class ForgeWorldState extends Equatable {
     String? globalLore,
     String? narrativeStyle,
     String? styleNotes,
+    String? imagePrompt,
+    String? imageUrl,
+    bool? isImageBusy,
+    String? imageError,
+    bool clearImageError = false,
     String? openingLine,
     List<String>? sceneTags,
     List<StatEntry>? stats,
@@ -139,6 +152,10 @@ class ForgeWorldState extends Equatable {
     globalLore: globalLore ?? this.globalLore,
     narrativeStyle: narrativeStyle ?? this.narrativeStyle,
     styleNotes: styleNotes ?? this.styleNotes,
+    imagePrompt: imagePrompt ?? this.imagePrompt,
+    imageUrl: imageUrl ?? this.imageUrl,
+    isImageBusy: isImageBusy ?? this.isImageBusy,
+    imageError: clearImageError ? null : (imageError ?? this.imageError),
     openingLine: openingLine ?? this.openingLine,
     sceneTags: sceneTags ?? this.sceneTags,
     stats: stats ?? this.stats,
@@ -180,6 +197,10 @@ class ForgeWorldState extends Equatable {
     globalLore,
     narrativeStyle,
     styleNotes,
+    imagePrompt,
+    imageUrl,
+    isImageBusy,
+    imageError,
     openingLine,
     sceneTags,
     stats,
@@ -255,6 +276,8 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       globalLore: t.globalLore,
       narrativeStyle: t.narrativeStyle,
       styleNotes: t.styleNotes,
+      imagePrompt: t.imagePrompt,
+      imageUrl: t.imageUrl,
       openingLine: t.openingLine,
       sceneTags: List<String>.from(t.sceneTags),
       stats: stats,
@@ -284,6 +307,40 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   void setGlobalLore(String v) => emit(state.copyWith(globalLore: v));
   void setNarrativeStyle(String v) => emit(state.copyWith(narrativeStyle: v));
   void setStyleNotes(String v) => emit(state.copyWith(styleNotes: v));
+  void setImagePrompt(String v) => emit(state.copyWith(imagePrompt: v));
+
+  /// Generate (or re-roll) the world image. Auto-suggests an editable visual
+  /// prompt from the world details if none exists yet.
+  Future<void> generateImage() async {
+    if (state.isImageBusy) return;
+    emit(state.copyWith(isImageBusy: true, clearImageError: true));
+    try {
+      var prompt = state.imagePrompt.trim();
+      if (prompt.isEmpty) {
+        prompt = await CreatorRepository.suggestImagePrompt({
+          'title': state.title.trim().isEmpty ? 'World' : state.title.trim(),
+          'description': state.description.trim(),
+          'seed_prompt': state.seedPrompt.trim(),
+          'global_lore': state.globalLore.trim(),
+          'narrative_style': state.narrativeStyle,
+          'is_sentient': state.isSentient,
+        });
+      }
+      final url = await CreatorRepository.generateImage(prompt);
+      emit(state.copyWith(imagePrompt: prompt, imageUrl: url, isImageBusy: false));
+    } catch (e) {
+      emit(state.copyWith(isImageBusy: false, imageError: _imageErr(e)));
+    }
+  }
+
+  String _imageErr(Object e) {
+    if (e is ApiException) {
+      if (e.statusCode == 403) return 'Image generation needs Premium or Creator.';
+      if (e.statusCode == 429) return 'Too many image generations — try again shortly.';
+      return e.message;
+    }
+    return 'Could not generate the image. Please try again.';
+  }
   void setOpeningLine(String v) => emit(state.copyWith(openingLine: v));
 
   void addTag(String tag) {
@@ -387,6 +444,8 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       'seed_prompt': state.seedPrompt.trim(),
       'narrative_style': state.narrativeStyle,
       'style_notes': state.styleNotes.trim(),
+      'image_url': state.imageUrl,
+      'image_prompt': state.imagePrompt.trim(),
       'global_lore': state.globalLore.trim(),
       'opening_line': state.openingLine.trim(),
       'base_stats_template': statsMap,
