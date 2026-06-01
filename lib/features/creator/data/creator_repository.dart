@@ -39,4 +39,20 @@ class CreatorRepository {
   static Future<void> delete(String id) async {
     await ApiClient.delete('/templates/$id');
   }
+
+  /// Auto-suggest an editable visual prompt for the avatar/background.
+  static Future<String> suggestImagePrompt(Map<String, dynamic> body) async {
+    final response = await ApiClient.post('/templates/image/suggest', body: body);
+    final map = Map<String, dynamic>.from(response as Map);
+    return (map['prompt'] ?? '').toString();
+  }
+
+  /// Generate a preview image from a prompt → returns its CDN URL. Re-callable
+  /// to re-roll until the creator is satisfied.
+  static Future<String> generateImage(String prompt) async {
+    final response =
+        await ApiClient.post('/templates/image/generate', body: {'prompt': prompt});
+    final map = Map<String, dynamic>.from(response as Map);
+    return (map['url'] ?? '').toString();
+  }
 }
