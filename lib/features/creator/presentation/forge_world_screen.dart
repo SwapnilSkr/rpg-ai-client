@@ -556,7 +556,19 @@ class _FormLabel extends StatelessWidget {
   final String label;
   final String? hint;
   final bool required;
-  const _FormLabel({required this.label, this.hint, this.required = false});
+
+  /// When both [maxLength] and [counterFor] are provided, a live "n / max"
+  /// counter is shown to the right of the label.
+  final int? maxLength;
+  final TextEditingController? counterFor;
+
+  const _FormLabel({
+    required this.label,
+    this.hint,
+    this.required = false,
+    this.maxLength,
+    this.counterFor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -565,22 +577,32 @@ class _FormLabel extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: EverloreTheme.parchment,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.3,
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        color: EverloreTheme.parchment,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                  if (required) ...[
+                    const SizedBox(width: 4),
+                    const Text(
+                      '*',
+                      style: TextStyle(color: EverloreTheme.gold, fontSize: 13),
+                    ),
+                  ],
+                ],
               ),
             ),
-            if (required) ...[
-              const SizedBox(width: 4),
-              const Text(
-                '*',
-                style: TextStyle(color: EverloreTheme.gold, fontSize: 13),
-              ),
-            ],
+            if (maxLength != null && counterFor != null)
+              _LiveCount(controller: counterFor!, max: maxLength!),
           ],
         ),
         if (hint != null) ...[
@@ -603,6 +625,7 @@ InputDecoration _fieldDecoration(String placeholder) {
   return InputDecoration(
     hintText: placeholder,
     hintStyle: const TextStyle(color: EverloreTheme.ash, fontSize: 14),
+    counterText: '',
     filled: true,
     fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -783,15 +806,18 @@ class _Step0Essence extends StatelessWidget {
             onGenerate: (brief) => cubit.autofillAll(brief: brief),
           ),
           const SizedBox(height: 24),
-          const _FormLabel(
+          _FormLabel(
             label: 'World Name',
             hint: 'The name adventurers will know it by',
             required: true,
+            maxLength: 60,
+            counterFor: titleCtrl,
           ),
           const SizedBox(height: 8),
           TextField(
             controller: titleCtrl,
             onChanged: cubit.setTitle,
+            maxLength: 60,
             style: const TextStyle(
               color: EverloreTheme.parchment,
               fontSize: 15,
@@ -802,16 +828,19 @@ class _Step0Essence extends StatelessWidget {
             textCapitalization: TextCapitalization.words,
           ),
           const SizedBox(height: 20),
-          const _FormLabel(
+          _FormLabel(
             label: 'World Description',
             hint:
                 'A compelling summary shown to adventurers in the world browser',
             required: true,
+            maxLength: 400,
+            counterFor: descCtrl,
           ),
           const SizedBox(height: 8),
           TextField(
             controller: descCtrl,
             onChanged: cubit.setDescription,
+            maxLength: 400,
             style: const TextStyle(
               color: EverloreTheme.parchment,
               fontSize: 14,
@@ -994,15 +1023,18 @@ class _Step1Voice extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          const _FormLabel(
+          _FormLabel(
             label: "Oracle's Voice",
             hint: 'System prompt — the AI reads this before every response',
             required: true,
+            maxLength: 1500,
+            counterFor: seedCtrl,
           ),
           const SizedBox(height: 8),
           TextField(
             controller: seedCtrl,
             onChanged: cubit.setSeedPrompt,
+            maxLength: 1500,
             style: const TextStyle(
               color: EverloreTheme.parchment,
               fontSize: 13,
@@ -1015,12 +1047,6 @@ class _Step1Voice extends StatelessWidget {
             minLines: 10,
             textCapitalization: TextCapitalization.sentences,
           ),
-          const SizedBox(height: 8),
-          _CharCount(
-            current: state.seedPrompt.trim().length,
-            min: 10,
-            max: 10000,
-          ),
           const SizedBox(height: 24),
           VoicePicker(
             label: "NARRATIVE VOICE",
@@ -1030,16 +1056,19 @@ class _Step1Voice extends StatelessWidget {
             onNotesChanged: cubit.setStyleNotes,
           ),
           const SizedBox(height: 24),
-          const _FormLabel(
+          _FormLabel(
             label: 'Opening Line',
             hint:
                 'Optional — the first thing said when a player enters. A greeting, '
                 'or a scene that sets the stage. Leave blank to start on a clean slate.',
+            maxLength: 400,
+            counterFor: openingCtrl,
           ),
           const SizedBox(height: 8),
           TextField(
             controller: openingCtrl,
             onChanged: cubit.setOpeningLine,
+            maxLength: 400,
             style: const TextStyle(
               color: EverloreTheme.parchment,
               fontSize: 13,
@@ -1147,15 +1176,18 @@ class _Step2LoreState extends State<_Step2Lore> {
                 'The Ancient Lore is your world\'s foundational knowledge — history, geography, factions, mythology. The AI uses this as its encyclopedia.',
           ),
           const SizedBox(height: 20),
-          const _FormLabel(
+          _FormLabel(
             label: 'Ancient Lore',
             hint: 'World history, lore, geography, factions, rules of magic...',
             required: true,
+            maxLength: 2500,
+            counterFor: widget.loreCtrl,
           ),
           const SizedBox(height: 8),
           TextField(
             controller: widget.loreCtrl,
             onChanged: widget.cubit.setGlobalLore,
+            maxLength: 2500,
             style: const TextStyle(
               color: EverloreTheme.parchment,
               fontSize: 13,
@@ -1167,12 +1199,6 @@ class _Step2LoreState extends State<_Step2Lore> {
             maxLines: 14,
             minLines: 10,
             textCapitalization: TextCapitalization.sentences,
-          ),
-          const SizedBox(height: 8),
-          _CharCount(
-            current: widget.state.globalLore.trim().length,
-            min: 10,
-            max: 50000,
           ),
           const SizedBox(height: 24),
           const Text(
@@ -1212,6 +1238,7 @@ class _Step2LoreState extends State<_Step2Lore> {
               Expanded(
                 child: TextField(
                   controller: widget.tagInputCtrl,
+                  maxLength: 24,
                   style: const TextStyle(
                     color: EverloreTheme.parchment,
                     fontSize: 14,
@@ -1718,10 +1745,12 @@ class _FlagEditorSheetState extends State<_FlagEditorSheet> {
           const SizedBox(height: 16),
           TextField(
             controller: _nameCtrl,
+            maxLength: 32,
             style: const TextStyle(color: EverloreTheme.parchment),
             decoration: const InputDecoration(
               labelText: 'Key (e.g. dragon_slayer)',
               labelStyle: TextStyle(color: EverloreTheme.ash),
+              counterText: '',
             ),
           ),
           const SizedBox(height: 12),
@@ -1761,22 +1790,26 @@ class _FlagEditorSheetState extends State<_FlagEditorSheet> {
           const SizedBox(height: 12),
           TextField(
             controller: _defaultCtrl,
+            maxLength: 80,
             style: const TextStyle(color: EverloreTheme.parchment),
             decoration: InputDecoration(
               labelText: _kind == RealmFlagKind.boolean
                   ? 'Default (true/false)'
                   : 'Default value',
               labelStyle: const TextStyle(color: EverloreTheme.ash),
+              counterText: '',
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _descCtrl,
             maxLines: 2,
+            maxLength: 120,
             style: const TextStyle(color: EverloreTheme.parchment),
             decoration: const InputDecoration(
               labelText: 'Description',
               labelStyle: TextStyle(color: EverloreTheme.ash),
+              counterText: '',
             ),
           ),
           const SizedBox(height: 20),
@@ -2083,11 +2116,17 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
           ),
           const SizedBox(height: 20),
           // Name
-          const _FormLabel(label: 'Name', required: true),
+          _FormLabel(
+            label: 'Name',
+            required: true,
+            maxLength: 32,
+            counterFor: _nameCtrl,
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: _nameCtrl,
             onChanged: (_) => setState(() => _nameError = null),
+            maxLength: 32,
             style: const TextStyle(
               color: EverloreTheme.parchment,
               fontSize: 14,
@@ -2164,10 +2203,16 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
             ],
           ),
           const SizedBox(height: 16),
-          const _FormLabel(label: 'Description', hint: 'Optional'),
+          _FormLabel(
+            label: 'Description',
+            hint: 'Optional',
+            maxLength: 120,
+            counterFor: _descCtrl,
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: _descCtrl,
+            maxLength: 120,
             style: const TextStyle(
               color: EverloreTheme.parchment,
               fontSize: 14,
@@ -2367,30 +2412,32 @@ class _StepIntro extends StatelessWidget {
   }
 }
 
-class _CharCount extends StatelessWidget {
-  final int current;
-  final int min;
+/// Live "n / max" counter that listens to a controller. Shown beside a field's
+/// label; turns gold as the value approaches the cap.
+class _LiveCount extends StatelessWidget {
+  final TextEditingController controller;
   final int max;
-  const _CharCount({
-    required this.current,
-    required this.min,
-    required this.max,
-  });
+  const _LiveCount({required this.controller, required this.max});
 
   @override
   Widget build(BuildContext context) {
-    final ok = current >= min;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Text(
-          '$current / $max',
-          style: TextStyle(
-            color: ok ? EverloreTheme.ash : EverloreTheme.ember,
-            fontSize: 11,
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (_, value, __) {
+        final n = value.text.characters.length;
+        final near = n >= max * 0.9;
+        return Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Text(
+            '$n / $max',
+            style: TextStyle(
+              color: near ? EverloreTheme.gold : EverloreTheme.ash,
+              fontSize: 11,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }

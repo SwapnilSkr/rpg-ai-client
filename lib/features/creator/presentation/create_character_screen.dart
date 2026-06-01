@@ -158,6 +158,7 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
             hint: 'e.g. Mira, Captain Vale, Aria…',
             controller: _nameCtrl,
             required: true,
+            maxLength: 60,
             onChanged: cubit.setName,
             textCapitalization: TextCapitalization.words,
           ),
@@ -166,6 +167,7 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
             hint: 'A short line — who are they at a glance?',
             controller: _taglineCtrl,
             required: true,
+            maxLength: 120,
             onChanged: cubit.setTagline,
             textCapitalization: TextCapitalization.sentences,
           ),
@@ -175,9 +177,10 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
                 'How do they think, talk, and treat you? Their mood, quirks, and relationship to you.',
             controller: _personaCtrl,
             required: true,
-            onChanged: cubit.setPersona,
             maxLines: 6,
             minLines: 4,
+            maxLength: 1500,
+            onChanged: cubit.setPersona,
             textCapitalization: TextCapitalization.sentences,
           ),
           const SizedBox(height: 8),
@@ -214,6 +217,7 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
             onChanged: cubit.setGreeting,
             maxLines: 3,
             minLines: 2,
+            maxLength: 400,
             textCapitalization: TextCapitalization.sentences,
           ),
           _field(
@@ -224,6 +228,7 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
             onChanged: cubit.setBackstory,
             maxLines: 5,
             minLines: 3,
+            maxLength: 2500,
             textCapitalization: TextCapitalization.sentences,
           ),
         ],
@@ -267,6 +272,7 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
     bool required = false,
     int maxLines = 1,
     int minLines = 1,
+    int? maxLength,
     TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
     return Padding(
@@ -276,15 +282,25 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
         children: [
           Row(
             children: [
-              Text(label,
-                  style: EverloreTheme.ui(
-                      size: 13,
-                      color: EverloreTheme.parchment,
-                      weight: FontWeight.w600)),
-              if (required)
-                Text('  *',
-                    style:
-                        EverloreTheme.ui(size: 13, color: EverloreTheme.gold)),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(label,
+                          style: EverloreTheme.ui(
+                              size: 13,
+                              color: EverloreTheme.parchment,
+                              weight: FontWeight.w600)),
+                    ),
+                    if (required)
+                      Text('  *',
+                          style: EverloreTheme.ui(
+                              size: 13, color: EverloreTheme.gold)),
+                  ],
+                ),
+              ),
+              if (maxLength != null && controller != null)
+                _CharLiveCount(controller: controller, max: maxLength),
             ],
           ),
           const SizedBox(height: 8),
@@ -293,12 +309,14 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
             onChanged: onChanged,
             maxLines: maxLines,
             minLines: minLines,
+            maxLength: maxLength,
             textCapitalization: textCapitalization,
             style: EverloreTheme.ui(
                 size: 14, color: EverloreTheme.parchment, height: 1.5),
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+              counterText: '',
               filled: true,
               fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
               contentPadding:
@@ -322,6 +340,34 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Live "n / max" counter shown beside a field label; turns gold near the cap.
+class _CharLiveCount extends StatelessWidget {
+  final TextEditingController controller;
+  final int max;
+  const _CharLiveCount({required this.controller, required this.max});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (_, value, __) {
+        final n = value.text.characters.length;
+        final near = n >= max * 0.9;
+        return Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Text(
+            '$n / $max',
+            style: EverloreTheme.ui(
+              size: 11,
+              color: near ? EverloreTheme.gold : EverloreTheme.ash,
+            ),
+          ),
+        );
+      },
     );
   }
 }
