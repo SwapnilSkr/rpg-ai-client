@@ -43,6 +43,8 @@ class WorldTemplate {
   final String globalLore;
   final String narrativeStyle;
   final String styleNotes;
+  final String imageUrl;
+  final String imagePrompt;
   final String openingLine;
   final Map<String, StatDefinition> baseStatsTemplate;
   final Map<String, dynamic> flagDefinitions;
@@ -67,6 +69,8 @@ class WorldTemplate {
     this.globalLore = '',
     this.narrativeStyle = '',
     this.styleNotes = '',
+    this.imageUrl = '',
+    this.imagePrompt = '',
     this.openingLine = '',
     this.baseStatsTemplate = const {},
     this.flagDefinitions = const {},
@@ -102,6 +106,8 @@ class WorldTemplate {
       globalLore: json['global_lore'] ?? '',
       narrativeStyle: json['narrative_style'] ?? '',
       styleNotes: json['style_notes'] ?? '',
+      imageUrl: json['image_url'] ?? '',
+      imagePrompt: json['image_prompt'] ?? '',
       openingLine: json['opening_line'] ?? '',
       baseStatsTemplate: statsMap,
       flagDefinitions: Map<String, dynamic>.from(json['flag_definitions'] ?? {}),
