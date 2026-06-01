@@ -10,6 +10,8 @@ class CreateCharacterState extends Equatable {
   final String persona;
   final String greeting;
   final String backstory;
+  final String narrativeStyle; // voice preset key; '' = default
+  final String styleNotes; // optional free-text refinements
   final bool isNsfwCapable;
   final bool isSubmitting;
   final String? error;
@@ -23,6 +25,8 @@ class CreateCharacterState extends Equatable {
     this.persona = '',
     this.greeting = '',
     this.backstory = '',
+    this.narrativeStyle = '',
+    this.styleNotes = '',
     this.isNsfwCapable = false,
     this.isSubmitting = false,
     this.error,
@@ -35,6 +39,8 @@ class CreateCharacterState extends Equatable {
     String? persona,
     String? greeting,
     String? backstory,
+    String? narrativeStyle,
+    String? styleNotes,
     bool? isNsfwCapable,
     bool? isSubmitting,
     String? error,
@@ -46,6 +52,8 @@ class CreateCharacterState extends Equatable {
         persona: persona ?? this.persona,
         greeting: greeting ?? this.greeting,
         backstory: backstory ?? this.backstory,
+        narrativeStyle: narrativeStyle ?? this.narrativeStyle,
+        styleNotes: styleNotes ?? this.styleNotes,
         isNsfwCapable: isNsfwCapable ?? this.isNsfwCapable,
         isSubmitting: isSubmitting ?? this.isSubmitting,
         error: clearError ? null : (error ?? this.error),
@@ -64,6 +72,8 @@ class CreateCharacterState extends Equatable {
         persona,
         greeting,
         backstory,
+        narrativeStyle,
+        styleNotes,
         isNsfwCapable,
         isSubmitting,
         error,
@@ -79,6 +89,8 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
   void setPersona(String v) => emit(state.copyWith(persona: v));
   void setGreeting(String v) => emit(state.copyWith(greeting: v));
   void setBackstory(String v) => emit(state.copyWith(backstory: v));
+  void setNarrativeStyle(String v) => emit(state.copyWith(narrativeStyle: v));
+  void setStyleNotes(String v) => emit(state.copyWith(styleNotes: v));
   void setNsfw(bool v) => emit(state.copyWith(isNsfwCapable: v));
   void clearError() => emit(state.copyWith(clearError: true));
 
@@ -106,6 +118,8 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
         'is_nsfw_capable': state.isNsfwCapable,
         'seed_prompt': seed,
         'global_lore': state.backstory.trim(),
+        'narrative_style': state.narrativeStyle,
+        'style_notes': state.styleNotes.trim(),
         'opening_line': state.greeting.trim(),
         'protagonist': {
           'name': name,

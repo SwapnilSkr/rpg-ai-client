@@ -41,6 +41,8 @@ class WorldTemplate {
   final int version;
   final String seedPrompt;
   final String globalLore;
+  final String narrativeStyle;
+  final String styleNotes;
   final String openingLine;
   final Map<String, StatDefinition> baseStatsTemplate;
   final Map<String, dynamic> flagDefinitions;
@@ -63,6 +65,8 @@ class WorldTemplate {
     this.version = 1,
     this.seedPrompt = '',
     this.globalLore = '',
+    this.narrativeStyle = '',
+    this.styleNotes = '',
     this.openingLine = '',
     this.baseStatsTemplate = const {},
     this.flagDefinitions = const {},
@@ -96,6 +100,8 @@ class WorldTemplate {
       version: json['version'] ?? 1,
       seedPrompt: json['seed_prompt'] ?? '',
       globalLore: json['global_lore'] ?? '',
+      narrativeStyle: json['narrative_style'] ?? '',
+      styleNotes: json['style_notes'] ?? '',
       openingLine: json['opening_line'] ?? '',
       baseStatsTemplate: statsMap,
       flagDefinitions: Map<String, dynamic>.from(json['flag_definitions'] ?? {}),

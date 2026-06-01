@@ -76,6 +76,8 @@ class ForgeWorldState extends Equatable {
   final bool isNsfwCapable;
   final String seedPrompt;
   final String globalLore;
+  final String narrativeStyle; // voice preset key; '' = default
+  final String styleNotes; // optional free-text refinements
   final String openingLine;
   final List<String> sceneTags;
   final List<StatEntry> stats;
@@ -94,6 +96,8 @@ class ForgeWorldState extends Equatable {
     this.isNsfwCapable = false,
     this.seedPrompt = '',
     this.globalLore = '',
+    this.narrativeStyle = '',
+    this.styleNotes = '',
     this.openingLine = '',
     this.sceneTags = const [],
     this.stats = const [],
@@ -113,6 +117,8 @@ class ForgeWorldState extends Equatable {
     bool? isNsfwCapable,
     String? seedPrompt,
     String? globalLore,
+    String? narrativeStyle,
+    String? styleNotes,
     String? openingLine,
     List<String>? sceneTags,
     List<StatEntry>? stats,
@@ -131,6 +137,8 @@ class ForgeWorldState extends Equatable {
     isNsfwCapable: isNsfwCapable ?? this.isNsfwCapable,
     seedPrompt: seedPrompt ?? this.seedPrompt,
     globalLore: globalLore ?? this.globalLore,
+    narrativeStyle: narrativeStyle ?? this.narrativeStyle,
+    styleNotes: styleNotes ?? this.styleNotes,
     openingLine: openingLine ?? this.openingLine,
     sceneTags: sceneTags ?? this.sceneTags,
     stats: stats ?? this.stats,
@@ -170,6 +178,8 @@ class ForgeWorldState extends Equatable {
     isNsfwCapable,
     seedPrompt,
     globalLore,
+    narrativeStyle,
+    styleNotes,
     openingLine,
     sceneTags,
     stats,
@@ -243,6 +253,8 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       isNsfwCapable: t.isNsfwCapable,
       seedPrompt: t.seedPrompt,
       globalLore: t.globalLore,
+      narrativeStyle: t.narrativeStyle,
+      styleNotes: t.styleNotes,
       openingLine: t.openingLine,
       sceneTags: List<String>.from(t.sceneTags),
       stats: stats,
@@ -270,6 +282,8 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   void setIsNsfwCapable(bool v) => emit(state.copyWith(isNsfwCapable: v));
   void setSeedPrompt(String v) => emit(state.copyWith(seedPrompt: v));
   void setGlobalLore(String v) => emit(state.copyWith(globalLore: v));
+  void setNarrativeStyle(String v) => emit(state.copyWith(narrativeStyle: v));
+  void setStyleNotes(String v) => emit(state.copyWith(styleNotes: v));
   void setOpeningLine(String v) => emit(state.copyWith(openingLine: v));
 
   void addTag(String tag) {
@@ -371,6 +385,8 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       'is_sentient': state.isSentient,
       'is_nsfw_capable': state.isNsfwCapable,
       'seed_prompt': state.seedPrompt.trim(),
+      'narrative_style': state.narrativeStyle,
+      'style_notes': state.styleNotes.trim(),
       'global_lore': state.globalLore.trim(),
       'opening_line': state.openingLine.trim(),
       'base_stats_template': statsMap,

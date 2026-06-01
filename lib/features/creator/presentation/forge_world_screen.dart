@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../state/forge_world_cubit.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/models/world_template.dart';
+import 'widgets/voice_picker.dart';
 
 // ─────────────────────────────────────────────
 // Entry point
@@ -945,6 +946,14 @@ class _Step1Voice extends StatelessWidget {
             current: state.seedPrompt.trim().length,
             min: 10,
             max: 10000,
+          ),
+          const SizedBox(height: 24),
+          VoicePicker(
+            label: "NARRATIVE VOICE",
+            selected: state.narrativeStyle,
+            onSelect: cubit.setNarrativeStyle,
+            notes: state.styleNotes,
+            onNotesChanged: cubit.setStyleNotes,
           ),
           const SizedBox(height: 24),
           const _FormLabel(

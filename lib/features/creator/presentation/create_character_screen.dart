@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../state/create_character_cubit.dart';
+import 'widgets/voice_picker.dart';
 
 /// Lightweight, Character.AI-style creation: name a character, describe them,
 /// and start chatting immediately. No stats, no RPG scaffolding.
@@ -68,6 +69,13 @@ class _CreateCharacterView extends StatelessWidget {
                           maxLines: 6,
                           minLines: 4,
                           textCapitalization: TextCapitalization.sentences,
+                        ),
+                        const SizedBox(height: 20),
+                        VoicePicker(
+                          selected: state.narrativeStyle,
+                          onSelect: cubit.setNarrativeStyle,
+                          notes: state.styleNotes,
+                          onNotesChanged: cubit.setStyleNotes,
                         ),
                         const _SectionLabel('OPTIONAL'),
                         _field(
