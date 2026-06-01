@@ -121,7 +121,15 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                 background: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Gradient bg
+                    // Generated hero image (behind the gradient scrim)
+                    if (t.imageUrl.isNotEmpty)
+                      Positioned.fill(
+                        child: Image.network(t.imageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                const SizedBox.shrink()),
+                      ),
+                    // Gradient bg / scrim
                     Container(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -162,6 +170,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                             Container(
                               width: 64,
                               height: 64,
+                              clipBehavior: Clip.antiAlias,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: accentColor.withValues(alpha: 0.12),
@@ -169,14 +178,22 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                                     color:
                                         accentColor.withValues(alpha: 0.4),
                                     width: 1.5),
+                                image: t.imageUrl.isNotEmpty
+                                    ? DecorationImage(
+                                        image: NetworkImage(t.imageUrl),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
                               ),
-                              child: Icon(
-                                t.isSentient
-                                    ? Icons.psychology_alt
-                                    : Icons.auto_stories,
-                                color: accentColor,
-                                size: 28,
-                              ),
+                              child: t.imageUrl.isNotEmpty
+                                  ? null
+                                  : Icon(
+                                      t.isSentient
+                                          ? Icons.psychology_alt
+                                          : Icons.auto_stories,
+                                      color: accentColor,
+                                      size: 28,
+                                    ),
                             ),
                             const SizedBox(width: 16),
                             Expanded(

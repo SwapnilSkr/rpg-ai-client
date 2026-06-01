@@ -369,21 +369,30 @@ class _WorldCard extends StatelessWidget {
                         Container(
                           width: 40,
                           height: 40,
+                          clipBehavior: Clip.antiAlias,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: accentColor.withValues(alpha: 0.1),
                             border: Border.all(
                                 color: accentColor.withValues(alpha: 0.3)),
+                            image: template.imageUrl.isNotEmpty
+                                ? DecorationImage(
+                                    image: NetworkImage(template.imageUrl),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
                           ),
-                          child: Icon(
-                            template.isCharacter
-                                ? Icons.person
-                                : template.isSentient
-                                    ? Icons.psychology_alt
-                                    : Icons.auto_stories,
-                            color: accentColor,
-                            size: 18,
-                          ),
+                          child: template.imageUrl.isNotEmpty
+                              ? null
+                              : Icon(
+                                  template.isCharacter
+                                      ? Icons.person
+                                      : template.isSentient
+                                          ? Icons.psychology_alt
+                                          : Icons.auto_stories,
+                                  color: accentColor,
+                                  size: 18,
+                                ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(

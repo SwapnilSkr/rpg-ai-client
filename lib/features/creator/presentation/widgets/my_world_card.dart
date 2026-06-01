@@ -79,24 +79,33 @@ class MyWorldCard extends StatelessWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Icon
+                      // Avatar thumbnail (generated image) or a type icon
                       Container(
                         width: 40,
                         height: 40,
+                        clipBehavior: Clip.antiAlias,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: accent.withValues(alpha: 0.12),
                           border: Border.all(
                             color: accent.withValues(alpha: 0.3),
                           ),
+                          image: template.imageUrl.isNotEmpty
+                              ? DecorationImage(
+                                  image: NetworkImage(template.imageUrl),
+                                  fit: BoxFit.cover,
+                                )
+                              : null,
                         ),
-                        child: Icon(
-                          template.isSentient
-                              ? Icons.psychology_alt
-                              : Icons.auto_stories,
-                          color: accent,
-                          size: 20,
-                        ),
+                        child: template.imageUrl.isNotEmpty
+                            ? null
+                            : Icon(
+                                template.isSentient
+                                    ? Icons.psychology_alt
+                                    : Icons.auto_stories,
+                                color: accent,
+                                size: 20,
+                              ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(

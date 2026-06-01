@@ -38,6 +38,7 @@ class WorldCard extends StatelessWidget {
     final title = instance.template?['title'] as String? ?? 'Untitled Realm';
     final description = instance.template?['description'] as String? ?? '';
     final isSentient = instance.template?['is_sentient'] as bool? ?? false;
+    final imageUrl = instance.template?['image_url'] as String? ?? '';
     final sceneTag = instance.currentScene.tag;
 
     final colorIdx = instance.id.hashCode.abs() % _realmGradients.length;
@@ -55,6 +56,18 @@ class WorldCard extends StatelessWidget {
               end: Alignment.bottomRight,
               colors: gradColors,
             ),
+            // The world's generated image as the card backdrop (darkened so the
+            // light title/description stay legible); falls back to the gradient.
+            image: imageUrl.isNotEmpty
+                ? DecorationImage(
+                    image: NetworkImage(imageUrl),
+                    fit: BoxFit.cover,
+                    colorFilter: ColorFilter.mode(
+                      Colors.black.withValues(alpha: 0.5),
+                      BlendMode.darken,
+                    ),
+                  )
+                : null,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: accentColor.withValues(alpha: 0.25),

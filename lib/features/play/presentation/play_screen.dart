@@ -526,6 +526,7 @@ class _PlayViewState extends State<_PlayView> {
       },
       builder: (context, state) {
         final title = state.template?.title ?? '';
+        final bgUrl = state.template?.imageUrl ?? '';
         final latestTag =
             state.events.isNotEmpty ? state.events.last.sceneTag : null;
         final accent = EverloreTheme.sceneAccent(latestTag);
@@ -534,8 +535,35 @@ class _PlayViewState extends State<_PlayView> {
           backgroundColor: EverloreTheme.void0,
           body: Stack(
             children: [
-              // Immersive, scene-tinted backdrop (full-bleed)
-              Positioned.fill(child: _AtmosphereBackground(accent: accent)),
+              // Full-bleed backdrop: the world's generated image (with a dark
+              // readability scrim) when present, else the scene-tinted gradient.
+              if (bgUrl.isNotEmpty) ...[
+                Positioned.fill(
+                  child: Image.network(
+                    bgUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) =>
+                        _AtmosphereBackground(accent: accent),
+                  ),
+                ),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          EverloreTheme.void0.withValues(alpha: 0.82),
+                          EverloreTheme.void0.withValues(alpha: 0.62),
+                          EverloreTheme.void0.withValues(alpha: 0.88),
+                        ],
+                        stops: const [0.0, 0.45, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+              ] else
+                Positioned.fill(child: _AtmosphereBackground(accent: accent)),
 
               // Content
               Column(
