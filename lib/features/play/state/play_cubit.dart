@@ -5,11 +5,16 @@ import '../../../core/network/ws_manager.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../../../core/storage/local_db.dart';
 import '../../chronicle/data/chronicle_repository.dart';
+import '../../home/data/home_repository.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/world_instance.dart';
 import '../../../shared/models/world_template.dart';
 import '../../../shared/models/memory.dart';
 import '../../../shared/models/character_profile.dart';
+
+/// Sentinel so [PlayState.copyWith] can distinguish "leave unchanged" from
+/// "set to null" for nullable fields like [replayingEventId].
+const Object _kUnset = Object();
 
 class PlayState extends Equatable {
   final WorldInstance? instance;
@@ -22,6 +27,11 @@ class PlayState extends Equatable {
   final bool isLoading;
   final String? error;
 
+  /// Id of the event whose AI turn is currently being re-woven (streaming a
+  /// replay variant). Drives the in-bubble weaving/streaming treatment and is
+  /// independent of [isGenerating] (which gates the composer for new turns).
+  final String? replayingEventId;
+
   const PlayState({
     this.instance,
     this.template,
@@ -32,6 +42,7 @@ class PlayState extends Equatable {
     this.isConnected = false,
     this.isLoading = true,
     this.error,
+    this.replayingEventId,
   });
 
   PlayState copyWith({
@@ -44,6 +55,7 @@ class PlayState extends Equatable {
     bool? isConnected,
     bool? isLoading,
     String? error,
+    Object? replayingEventId = _kUnset,
   }) {
     return PlayState(
       instance: instance ?? this.instance,
@@ -55,6 +67,9 @@ class PlayState extends Equatable {
       isConnected: isConnected ?? this.isConnected,
       isLoading: isLoading ?? this.isLoading,
       error: error,
+      replayingEventId: identical(replayingEventId, _kUnset)
+          ? this.replayingEventId
+          : replayingEventId as String?,
     );
   }
 
@@ -69,6 +84,7 @@ class PlayState extends Equatable {
     isConnected,
     isLoading,
     error,
+    replayingEventId,
   ];
 }
 
@@ -92,6 +108,18 @@ class PlayCubit extends Cubit<PlayState> {
   String? _replayEventId;
   String _replayBuffer = '';
   String? _replayOriginalResponse;
+
+  /// Safety net: if no replay frames arrive within this window we reset the
+  /// loader so the bubble can never spin forever (dropped frame, stale lock,
+  /// dead worker, …). Re-armed on every delta as a liveness signal.
+  Timer? _replayWatchdog;
+  static const _replayTimeout = Duration(seconds: 45);
+
+  /// A locally-chosen replay variant awaiting commit. The selection only
+  /// becomes the canonical turn ("the truth") when the player takes their next
+  /// action (sends a message / continues), at which point it is flushed.
+  String? _pendingVariantEventId;
+  int? _pendingVariantIndex;
 
   PlayCubit({required this.instanceId, WsManager? ws})
     : _ws = ws ?? WsManager(),
@@ -213,11 +241,12 @@ class PlayCubit extends Cubit<PlayState> {
     });
 
     // Replay streams an alternative for an existing turn — grow that event's
-    // narrator panel in place as tokens arrive.
+    // narrator panel in place as tokens arrive (same feel as a fresh turn).
     _replayDeltaSub = _ws.onReplayDelta.listen((msg) {
       if (msg['instanceId']?.toString() != instanceId) return;
       final eventId = msg['eventId']?.toString();
       if (eventId == null || eventId != _replayEventId) return;
+      _armReplayWatchdog(); // tokens are flowing — keep the timeout fresh
       _replayBuffer += msg['delta']?.toString() ?? '';
 
       final events = [...state.events];
@@ -250,9 +279,7 @@ class PlayCubit extends Cubit<PlayState> {
         );
         LocalDb.insertEvent(events[idx]);
       }
-      _replayEventId = null;
-      _replayBuffer = '';
-      _replayOriginalResponse = null;
+      _endReplay();
       emit(state.copyWith(events: events, isGenerating: false));
     });
 
@@ -265,26 +292,18 @@ class PlayCubit extends Cubit<PlayState> {
     });
 
     _errorSub = _ws.onError.listen((msg) {
-      if (msg['code'] == 'GENERATION_IN_PROGRESS') return;
-
-      // If a streaming replay failed mid-flight, restore the original response.
+      // A replay in flight takes precedence: ANY error frame (including
+      // GENERATION_IN_PROGRESS) must tear the replay down so the loader can
+      // never get stranded. Restore the turn's original prose.
       if (_replayEventId != null) {
-        final events = [...state.events];
-        final idx = events.indexWhere((e) => e.id == _replayEventId);
-        if (idx >= 0 && _replayOriginalResponse != null) {
-          events[idx] =
-              events[idx].copyWith(aiResponse: _replayOriginalResponse);
-        }
-        _replayEventId = null;
-        _replayBuffer = '';
-        _replayOriginalResponse = null;
-        emit(state.copyWith(
-          events: events,
-          isGenerating: false,
-          error: msg['message'] ?? 'Could not replay this response.',
-        ));
+        _restoreReplayedEvent(
+          msg['message']?.toString() ?? 'Could not replay this response.',
+        );
         return;
       }
+
+      // Outside replay, a stale in-progress notice is benign — ignore it.
+      if (msg['code'] == 'GENERATION_IN_PROGRESS') return;
 
       _streamBuffer = '';
       // Drop the in-progress optimistic turn so the player can retry cleanly.
@@ -329,8 +348,16 @@ class PlayCubit extends Cubit<PlayState> {
     } catch (_) {}
   }
 
-  void sendMessage(String message) {
-    if (state.isGenerating || message.trim().isEmpty) return;
+  Future<void> sendMessage(String message) async {
+    if (state.isGenerating ||
+        state.replayingEventId != null ||
+        message.trim().isEmpty) {
+      return;
+    }
+
+    // Lock in any variant the player browsed to before this turn is generated,
+    // so the world weaves forward from the prose they actually chose.
+    await _flushPendingVariant();
 
     _streamBuffer = '';
     final optimisticEvent = GameEvent.optimistic(
@@ -350,8 +377,10 @@ class PlayCubit extends Cubit<PlayState> {
   }
 
   /// Let the world advance the story autonomously — no player message.
-  void continueStory() {
-    if (state.isGenerating) return;
+  Future<void> continueStory() async {
+    if (state.isGenerating || state.replayingEventId != null) return;
+
+    await _flushPendingVariant();
 
     _streamBuffer = '';
     final optimisticEvent =
@@ -470,6 +499,27 @@ class PlayCubit extends Cubit<PlayState> {
     }
   }
 
+  /// Reset the entire playthrough to its opening line. Server wipes all events,
+  /// memories, scene summaries, characters (+ Pinecone vectors) and restores
+  /// default state; we clear local cache and reload the fresh opening turn.
+  Future<void> resetChat() async {
+    if (state.isGenerating || state.replayingEventId != null) return;
+    _pendingVariantEventId = null;
+    _pendingVariantIndex = null;
+    emit(state.copyWith(events: const [], isLoading: true, error: null));
+    try {
+      await HomeRepository.resetInstance(instanceId);
+      await LocalDb.clearInstanceCache(instanceId);
+      _ws.loadInstance(instanceId); // pull the re-seeded opening line + state
+    } catch (_) {
+      emit(state.copyWith(
+        isLoading: false,
+        error: 'Could not reset the chat. Please try again.',
+      ));
+      _ws.loadInstance(instanceId); // resync to server truth on failure
+    }
+  }
+
   /// Rewind the story to [sequence]: removes that turn and everything after it.
   /// Optimistically trims the UI, asks the server to roll back state/memories,
   /// then reloads the authoritative state.
@@ -525,33 +575,126 @@ class PlayCubit extends Cubit<PlayState> {
   }
 
   /// Stream a fresh alternative for [event] in place, the same way a normal
-  /// turn streams. The narration rewrites itself token-by-token.
+  /// turn streams. The bubble drops into a "weaving" state and the narration
+  /// rewrites itself token-by-token.
   void replayAiResponse(GameEvent event) {
-    if (state.isGenerating || event.id.isEmpty || event.isOptimistic) return;
+    if (state.isGenerating ||
+        state.replayingEventId != null ||
+        event.id.isEmpty ||
+        event.isOptimistic) {
+      return;
+    }
 
     _replayEventId = event.id;
     _replayBuffer = '';
     _replayOriginalResponse = event.aiResponse;
-    emit(state.copyWith(isGenerating: true, error: null));
+
+    // Clear the displayed prose so the bubble shows the weaving indicator until
+    // the first token lands, then streams in — exactly like a fresh turn.
+    final events = [...state.events];
+    final idx = events.indexWhere((e) => e.id == event.id);
+    if (idx >= 0) events[idx] = events[idx].copyWith(aiResponse: '');
+
+    emit(state.copyWith(
+      events: events,
+      replayingEventId: event.id,
+      isGenerating: true,
+      error: null,
+    ));
+    _armReplayWatchdog();
     _ws.sendReplay(instanceId, event.id);
   }
 
-  Future<void> selectReplayVariant(GameEvent event, int index) async {
-    if (state.isGenerating || event.id.isEmpty || event.isOptimistic) return;
+  /// (Re)start the liveness timer for an in-flight replay.
+  void _armReplayWatchdog() {
+    _replayWatchdog?.cancel();
+    _replayWatchdog = Timer(_replayTimeout, () {
+      if (_replayEventId == null) return;
+      _restoreReplayedEvent('The replay timed out. Please try again.');
+    });
+  }
+
+  /// Clear all in-flight replay bookkeeping (success path).
+  void _endReplay() {
+    _replayWatchdog?.cancel();
+    _replayWatchdog = null;
+    _replayEventId = null;
+    _replayBuffer = '';
+    _replayOriginalResponse = null;
+    if (state.replayingEventId != null) {
+      emit(state.copyWith(replayingEventId: null));
+    }
+  }
+
+  /// Failure path: put the turn's original prose back, surface a message, and
+  /// release the loader.
+  void _restoreReplayedEvent(String message) {
+    final id = _replayEventId;
+    final original = _replayOriginalResponse;
+    final events = [...state.events];
+    if (id != null && original != null) {
+      final idx = events.indexWhere((e) => e.id == id);
+      if (idx >= 0) events[idx] = events[idx].copyWith(aiResponse: original);
+    }
+    _replayWatchdog?.cancel();
+    _replayWatchdog = null;
+    _replayEventId = null;
+    _replayBuffer = '';
+    _replayOriginalResponse = null;
+    emit(state.copyWith(
+      events: events,
+      isGenerating: false,
+      replayingEventId: null,
+      error: message,
+    ));
+  }
+
+  /// Browse to a replay variant. This is LOCAL ONLY — it previews the variant
+  /// and remembers it as pending; the choice is committed as canonical when the
+  /// player next acts (see [_flushPendingVariant]).
+  void selectReplayVariant(GameEvent event, int index) {
+    if (state.isGenerating || state.replayingEventId != null) return;
+    if (index < 0 || index >= event.replayVariants.length) return;
+
+    _pendingVariantEventId = event.id;
+    _pendingVariantIndex = index;
+
+    final next = [...state.events];
+    final idx = next.indexWhere((e) => e.id == event.id);
+    if (idx >= 0) {
+      next[idx] = next[idx].copyWith(
+        aiResponse: event.replayVariants[index].narrative,
+        selectedReplayIndex: index,
+      );
+    }
+    emit(state.copyWith(events: next, error: null));
+  }
+
+  /// Commit a pending variant selection to the backend so the chosen prose
+  /// becomes the canonical turn the next generation reads as history. Awaited
+  /// before dispatching the next turn so there is no read-after-write race.
+  Future<void> _flushPendingVariant() async {
+    final id = _pendingVariantEventId;
+    final index = _pendingVariantIndex;
+    _pendingVariantEventId = null;
+    _pendingVariantIndex = null;
+    if (id == null || index == null) return;
     try {
-      final updated = await ChronicleRepository.selectReplayVariant(event.id, index);
+      final updated = await ChronicleRepository.selectReplayVariant(id, index);
       final next = [...state.events];
-      final idx = next.indexWhere((e) => e.id == event.id);
+      final idx = next.indexWhere((e) => e.id == id);
       if (idx >= 0) next[idx] = updated;
       await LocalDb.insertEvent(updated);
-      emit(state.copyWith(events: next, error: null));
+      emit(state.copyWith(events: next));
     } catch (_) {
-      emit(state.copyWith(error: 'Could not switch replay variant.'));
+      // Non-fatal: the locally-previewed variant still shows; selection simply
+      // wasn't persisted. Surfacing an error here would block the next turn.
     }
   }
 
   @override
   Future<void> close() async {
+    _replayWatchdog?.cancel();
     await _generationSub.cancel();
     await _deltaSub.cancel();
     await _memorySub.cancel();

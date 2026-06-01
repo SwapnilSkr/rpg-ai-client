@@ -10,27 +10,49 @@ class NarrativeBubble extends StatelessWidget {
   final VoidCallback? onReplay;
   final ValueChanged<int>? onSelectReplayVariant;
 
+  /// This turn is currently being re-woven (a replay variant is streaming in).
+  final bool isReplaying;
+
   const NarrativeBubble({
     super.key,
     required this.event,
     this.onLongPress,
     this.onReplay,
     this.onSelectReplayVariant,
+    this.isReplaying = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final ai = event.aiResponse ?? '';
+    final hasProse = ai.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (event.playerInput != null && event.playerInput!.isNotEmpty)
           _PlayerBubble(text: event.playerInput!),
 
-        if (event.aiResponse != null && event.aiResponse!.isNotEmpty)
+        // While re-weaving, show the weaving indicator until the first token,
+        // then stream the variant into a plain narrator panel (no replay/arrow
+        // actions until it settles) — the same feel as a fresh turn.
+        if (isReplaying)
+          hasProse
+              ? _NarratorPanel(
+                  text: ai,
+                  sceneTag: event.sceneTag,
+                  isEdited: false,
+                  replayVariants: const [],
+                  selectedReplayIndex: 0,
+                  onReplay: null,
+                  onSelectReplayVariant: null,
+                )
+              : const _GeneratingIndicator(label: 'Re-weaving this turn…')
+        else if (hasProse)
           GestureDetector(
             onLongPress: onLongPress,
             child: _NarratorPanel(
-              text: event.aiResponse!,
+              text: ai,
               sceneTag: event.sceneTag,
               isEdited: event.isUserEdited,
               replayVariants: event.replayVariants,
@@ -38,9 +60,8 @@ class NarrativeBubble extends StatelessWidget {
               onReplay: onReplay,
               onSelectReplayVariant: onSelectReplayVariant,
             ),
-          ),
-
-        if (event.isOptimistic && event.aiResponse == null)
+          )
+        else if (event.isOptimistic)
           const _GeneratingIndicator(),
       ],
     );
@@ -213,27 +234,49 @@ class _NarratorPanel extends StatelessWidget {
                     TextSpan(children: _narrativeSpans(text)),
                   ),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      if (sceneTag != null)
-                        _SceneTagBadge(tag: sceneTag!, accent: accent),
-                      if (replayVariants.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        _ReplayArrows(
-                          count: replayVariants.length,
-                          selectedIndex: selectedReplayIndex.clamp(
-                            0,
-                            replayVariants.length - 1,
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compact = constraints.maxWidth < 300;
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (sceneTag != null)
+                                  _SceneTagBadge(
+                                      tag: sceneTag!, accent: accent),
+                                if (replayVariants.length > 1)
+                                  _ReplayArrows(
+                                    count: replayVariants.length,
+                                    selectedIndex: selectedReplayIndex.clamp(
+                                      0,
+                                      replayVariants.length - 1,
+                                    ),
+                                    onSelect: onSelectReplayVariant,
+                                  ),
+                              ],
+                            ),
                           ),
-                          onSelect: onSelectReplayVariant,
-                        ),
-                      ],
-                      const Spacer(),
-                      if (onReplay != null)
-                        _ReplayButton(onTap: onReplay!),
-                      if (onReplay != null) const SizedBox(width: 6),
-                      _CopyButton(text: text),
-                    ],
+                          const SizedBox(width: 8),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (onReplay != null)
+                                _ReplayButton(
+                                  onTap: onReplay!,
+                                  compact: compact,
+                                ),
+                              if (onReplay != null) const SizedBox(width: 6),
+                              _CopyButton(text: text, compact: compact),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -266,7 +309,8 @@ class _NarratorPanel extends StatelessWidget {
 
 class _ReplayButton extends StatelessWidget {
   final VoidCallback onTap;
-  const _ReplayButton({required this.onTap});
+  final bool compact;
+  const _ReplayButton({required this.onTap, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -280,15 +324,17 @@ class _ReplayButton extends StatelessWidget {
           children: [
             Icon(Icons.refresh_rounded,
                 size: 13, color: EverloreTheme.cyanBright.withValues(alpha: 0.85)),
-            const SizedBox(width: 4),
-            Text(
-              'Replay',
-              style: EverloreTheme.ui(
-                size: 11,
-                color: EverloreTheme.cyanBright.withValues(alpha: 0.85),
-                spacing: 0.3,
+            if (!compact) ...[
+              const SizedBox(width: 4),
+              Text(
+                'Replay',
+                style: EverloreTheme.ui(
+                  size: 11,
+                  color: EverloreTheme.cyanBright.withValues(alpha: 0.85),
+                  spacing: 0.3,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -385,6 +431,8 @@ class _SceneTagBadge extends StatelessWidget {
       ),
       child: Text(
         tag.toUpperCase(),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: EverloreTheme.ui(
           size: 9,
           weight: FontWeight.w700,
@@ -398,7 +446,8 @@ class _SceneTagBadge extends StatelessWidget {
 
 class _CopyButton extends StatelessWidget {
   final String text;
-  const _CopyButton({required this.text});
+  final bool compact;
+  const _CopyButton({required this.text, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -425,15 +474,17 @@ class _CopyButton extends StatelessWidget {
           children: [
             Icon(Icons.copy_rounded,
                 size: 13, color: EverloreTheme.ash.withValues(alpha: 0.7)),
-            const SizedBox(width: 4),
-            Text(
-              'Copy',
-              style: EverloreTheme.ui(
-                size: 11,
-                color: EverloreTheme.ash.withValues(alpha: 0.7),
-                spacing: 0.3,
+            if (!compact) ...[
+              const SizedBox(width: 4),
+              Text(
+                'Copy',
+                style: EverloreTheme.ui(
+                  size: 11,
+                  color: EverloreTheme.ash.withValues(alpha: 0.7),
+                  spacing: 0.3,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -517,7 +568,8 @@ List<InlineSpan> _narrativeSpans(
 }
 
 class _GeneratingIndicator extends StatefulWidget {
-  const _GeneratingIndicator();
+  final String label;
+  const _GeneratingIndicator({this.label = 'The world is weaving your tale…'});
 
   @override
   State<_GeneratingIndicator> createState() => _GeneratingIndicatorState();
@@ -566,7 +618,7 @@ class _GeneratingIndicatorState extends State<_GeneratingIndicator>
             ),
             const SizedBox(width: 12),
             Text(
-              'The world is weaving your tale…',
+              widget.label,
               style: EverloreTheme.ui(
                 size: 14,
                 color: EverloreTheme.ash.withValues(alpha: 0.5 + 0.3 * _pulse.value),

@@ -197,6 +197,14 @@ class WsManager {
       case 'error':
         _errorController.add(msg);
         break;
+      // Server-side message-schema rejection. Surface it as an error so the UI
+      // recovers (resets any in-flight loader) instead of waiting/timing out.
+      case 'validation':
+        _errorController.add({
+          ...msg,
+          'message': 'The server rejected this request. Please update the app.',
+        });
+        break;
       case 'instance_loaded':
         _instanceLoadedController.add(msg);
         break;

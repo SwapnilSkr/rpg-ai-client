@@ -89,14 +89,60 @@ class _PlayViewState extends State<_PlayView> {
       builder: (sheetCtx) => _SettingsSheet(
         initialPov: instance?.narrationPov ?? 'third',
         initialTone: instance?.tone ?? '',
-        onPov: (pov) => cubit.updateSettings(narrationPov: pov),
-        onTone: (tone) => cubit.updateSettings(tone: tone),
+        onApply: (pov, tone) {
+          cubit.updateSettings(narrationPov: pov, tone: tone);
+          Navigator.pop(sheetCtx);
+          _showSettingsSnack(context, pov: pov, tone: tone);
+        },
+        onReset: () {
+          Navigator.pop(sheetCtx);
+          _confirmResetChat(context, cubit);
+        },
         onDelete: () {
           Navigator.pop(sheetCtx);
           _confirmDeleteChat(context, cubit.instanceId);
         },
       ),
     );
+  }
+
+  /// Friendly confirmation that staged scene settings were saved and when they
+  /// take effect (POV/tone only shape future turns, never past narration).
+  void _showSettingsSnack(BuildContext context,
+      {required String pov, required String tone}) {
+    final povLabel = pov == 'first' ? 'First person' : 'Third person';
+    final toneLabel = tone.isEmpty
+        ? 'Default tone'
+        : '${tone[0].toUpperCase()}${tone.substring(1)} tone';
+    _showSceneSnack(
+        context, '$povLabel · $toneLabel — applies from your next message.');
+  }
+
+  /// Shared floating confirmation for scene-setting changes.
+  void _showSceneSnack(BuildContext context, String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: EverloreTheme.void3,
+          duration: const Duration(seconds: 3),
+          content: Row(
+            children: [
+              const Icon(Icons.auto_awesome,
+                  color: EverloreTheme.gold, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: EverloreTheme.ui(
+                      size: 13, color: EverloreTheme.parchment),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
   }
 
   void _showThoughtsSheet(BuildContext context) {
@@ -117,10 +163,25 @@ class _PlayViewState extends State<_PlayView> {
             onFocus: (id) {
               cubit.updateSettings(focusCharacterId: id);
               Navigator.pop(sheetCtx);
+              String? name;
+              for (final c in state.characters) {
+                if (c.id == id) {
+                  name = c.canonicalName;
+                  break;
+                }
+              }
+              _showSceneSnack(
+                context,
+                name != null
+                    ? 'Now focusing on $name — applies from your next message.'
+                    : 'Focus updated — applies from your next message.',
+              );
             },
             onClearFocus: () {
               cubit.updateSettings(clearFocusCharacter: true);
               Navigator.pop(sheetCtx);
+              _showSceneSnack(
+                context, 'Focus cleared — applies from your next message.');
             },
             onEdit: (c) => _showCharacterEdit(ctx, cubit, c),
           ),
@@ -144,6 +205,50 @@ class _PlayViewState extends State<_PlayView> {
           cubit.editCharacter(character.id, updates);
           Navigator.pop(editCtx);
         },
+      ),
+    );
+  }
+
+  void _confirmResetChat(BuildContext context, PlayCubit cubit) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: EverloreTheme.void2,
+        title: Text('Reset this chat?',
+            style: EverloreTheme.serifDisplay(
+                size: 18, color: EverloreTheme.parchment)),
+        content: Text(
+          'The entire story, its memories, and everything that happened will be '
+          'wiped, and the chat will start over from the opening line. The world '
+          'and character themselves are kept. This cannot be undone.',
+          style: EverloreTheme.ui(
+              size: 14, color: EverloreTheme.ash, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text('Cancel',
+                style: EverloreTheme.ui(color: EverloreTheme.ash)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              final messenger = ScaffoldMessenger.of(context);
+              cubit.resetChat();
+              messenger.showSnackBar(
+                SnackBar(
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor: EverloreTheme.void3,
+                  content: Text('Chat reset — starting over from the beginning.',
+                      style: EverloreTheme.ui(
+                          size: 13, color: EverloreTheme.parchment)),
+                ),
+              );
+            },
+            child: Text('Reset',
+                style: EverloreTheme.ui(color: EverloreTheme.gold)),
+          ),
+        ],
       ),
     );
   }
@@ -176,7 +281,7 @@ class _PlayViewState extends State<_PlayView> {
               try {
                 await HomeRepository.deleteInstance(instanceId);
                 await LocalDb.clearInstanceCache(instanceId);
-                router.go('/home');
+                router.go('/'); // home route is '/', not '/home'
               } catch (_) {
                 messenger.showSnackBar(
                   SnackBar(
@@ -198,7 +303,7 @@ class _PlayViewState extends State<_PlayView> {
     );
   }
 
-  void _showTurnMenu(BuildContext context, GameEvent event) {
+  void _showTurnMenu(BuildContext context, GameEvent event, bool canReplay) {
     final cubit = context.read<PlayCubit>();
     showModalBottomSheet(
       context: context,
@@ -220,7 +325,7 @@ class _PlayViewState extends State<_PlayView> {
               ),
             ),
             const SizedBox(height: 8),
-            if ((event.aiResponse ?? '').trim().isNotEmpty)
+            if (canReplay)
               ListTile(
                 leading: const Icon(Icons.refresh_rounded,
                     color: EverloreTheme.cyanBright),
@@ -236,7 +341,7 @@ class _PlayViewState extends State<_PlayView> {
                   cubit.replayAiResponse(event);
                 },
               ),
-            if ((event.aiResponse ?? '').trim().isNotEmpty)
+            if (canReplay)
               const Divider(color: EverloreTheme.white10, height: 1),
             if ((event.aiResponse ?? '').trim().isNotEmpty)
               ListTile(
@@ -467,14 +572,32 @@ class _PlayViewState extends State<_PlayView> {
                                 itemCount: state.events.length,
                                 itemBuilder: (context, index) {
                                   final event = state.events[index];
+                                  // Replay is only valid for the LATEST turn that
+                                  // has player input (server rejects earlier turns
+                                  // and the opening greeting). Gate the UI to match
+                                  // so the action never surfaces where it errors.
+                                  final isLatest =
+                                      index == state.events.length - 1;
+                                  final isReplaying =
+                                      state.replayingEventId == event.id;
+                                  // Replay only on the latest player-input turn,
+                                  // and never while another replay is streaming.
+                                  final canReplay = !event.isOptimistic &&
+                                      isLatest &&
+                                      state.replayingEventId == null &&
+                                      !state.isGenerating &&
+                                      (event.playerInput?.trim().isNotEmpty ??
+                                          false);
                                   return NarrativeBubble(
                                     event: event,
+                                    isReplaying: isReplaying,
                                     onLongPress: (!event.isOptimistic &&
-                                            event.sequence > 0)
-                                        ? () => _showTurnMenu(context, event)
+                                            event.sequence > 0 &&
+                                            state.replayingEventId == null)
+                                        ? () => _showTurnMenu(
+                                            context, event, canReplay)
                                         : null,
-                                    onReplay: (!event.isOptimistic &&
-                                            event.sequence > 0)
+                                    onReplay: canReplay
                                         ? () => context
                                             .read<PlayCubit>()
                                             .replayAiResponse(event)
@@ -835,18 +958,22 @@ class _EmptyNarrative extends StatelessWidget {
 }
 
 /// In-chat scene settings: narration POV, tone, and delete.
+///
+/// Changes are STAGED locally and only committed when the player taps "Apply".
+/// The button stays disabled until something actually differs from the saved
+/// values, so the player gets a clear, deliberate save action plus feedback.
 class _SettingsSheet extends StatefulWidget {
   final String initialPov;
   final String initialTone;
-  final ValueChanged<String> onPov;
-  final ValueChanged<String> onTone;
+  final void Function(String pov, String tone) onApply;
+  final VoidCallback onReset;
   final VoidCallback onDelete;
 
   const _SettingsSheet({
     required this.initialPov,
     required this.initialTone,
-    required this.onPov,
-    required this.onTone,
+    required this.onApply,
+    required this.onReset,
     required this.onDelete,
   });
 
@@ -857,6 +984,9 @@ class _SettingsSheet extends StatefulWidget {
 class _SettingsSheetState extends State<_SettingsSheet> {
   late String _pov;
   late String _tone;
+
+  bool get _dirty =>
+      _pov != widget.initialPov || _tone != widget.initialTone;
 
   static const _tonePresets = [
     ('', 'Default'),
@@ -913,19 +1043,13 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 _SegOption(
                   label: 'Third person',
                   selected: _pov == 'third',
-                  onTap: () {
-                    setState(() => _pov = 'third');
-                    widget.onPov('third');
-                  },
+                  onTap: () => setState(() => _pov = 'third'),
                 ),
                 const SizedBox(width: 8),
                 _SegOption(
                   label: 'First person',
                   selected: _pov == 'first',
-                  onTap: () {
-                    setState(() => _pov = 'first');
-                    widget.onPov('first');
-                  },
+                  onTap: () => setState(() => _pov = 'first'),
                 ),
               ],
             ),
@@ -945,10 +1069,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               children: _tonePresets.map((p) {
                 final selected = _tone == p.$1;
                 return GestureDetector(
-                  onTap: () {
-                    setState(() => _tone = p.$1);
-                    widget.onTone(p.$1);
-                  },
+                  onTap: () => setState(() => _tone = p.$1),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 8),
@@ -987,9 +1108,60 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               ),
             ],
             const SizedBox(height: 22),
+
+            // Deliberate save: disabled until a setting actually changes, so the
+            // player always knows the apply took effect (snackbar confirms when).
+            SizedBox(
+              width: double.infinity,
+              child: GestureDetector(
+                onTap: _dirty ? () => widget.onApply(_pov, _tone) : null,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: _dirty
+                        ? EverloreTheme.gold.withValues(alpha: 0.16)
+                        : EverloreTheme.void3,
+                    border: Border.all(
+                      color: _dirty
+                          ? EverloreTheme.gold.withValues(alpha: 0.6)
+                          : EverloreTheme.goldDim.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      _dirty ? 'Apply changes' : 'No changes',
+                      style: EverloreTheme.ui(
+                        size: 14,
+                        weight: FontWeight.w600,
+                        color: _dirty
+                            ? EverloreTheme.gold
+                            : EverloreTheme.ash.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
             const Divider(color: EverloreTheme.white10, height: 1),
             const SizedBox(height: 6),
 
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.restart_alt_rounded,
+                  color: EverloreTheme.gold),
+              title: Text('Reset this chat',
+                  style: EverloreTheme.ui(
+                      size: 15, color: EverloreTheme.parchment)),
+              subtitle: Text(
+                'Start over from the opening line. Keeps the world & character.',
+                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+              ),
+              onTap: widget.onReset,
+            ),
+            const Divider(color: EverloreTheme.white10, height: 1),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.delete_outline,

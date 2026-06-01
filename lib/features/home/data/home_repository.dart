@@ -28,4 +28,11 @@ class HomeRepository {
   static Future<void> deleteInstance(String instanceId) async {
     await ApiClient.delete('/instances/$instanceId');
   }
+
+  /// Reset a playthrough to its opening line: server wipes all events, memories
+  /// (incl. Pinecone vectors), scene summaries and emergent characters, restores
+  /// default world state, and re-seeds the protagonist + opening greeting.
+  static Future<void> resetInstance(String instanceId) async {
+    await ApiClient.post('/instances/$instanceId/reset');
+  }
 }
