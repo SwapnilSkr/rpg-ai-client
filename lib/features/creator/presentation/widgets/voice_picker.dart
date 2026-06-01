@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/narrative_styles.dart';
@@ -52,7 +53,9 @@ class VoicePicker extends StatelessWidget {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: kNarrativeStyles.map((s) {
+          children: [
+            _surpriseChip(),
+            ...kNarrativeStyles.map((s) {
             final isSel = s.key == selected;
             return GestureDetector(
               onTap: () => onSelect(s.key),
@@ -80,7 +83,8 @@ class VoicePicker extends StatelessWidget {
                 ),
               ),
             );
-          }).toList(),
+            }),
+          ],
         ),
         if (current.blurb.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -140,6 +144,46 @@ class VoicePicker extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+
+  /// "Surprise me" chip: picks a random preset (excluding Default and whatever
+  /// is already selected) and applies it via [onSelect].
+  Widget _surpriseChip() {
+    return GestureDetector(
+      onTap: () {
+        final pool = kNarrativeStyles
+            .where((s) => s.key.isNotEmpty && s.key != selected)
+            .toList();
+        if (pool.isEmpty) return;
+        onSelect(pool[Random().nextInt(pool.length)].key);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: EverloreTheme.violet.withValues(alpha: 0.14),
+          border: Border.all(
+            color: EverloreTheme.violetBright.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.casino_outlined,
+                size: 15, color: EverloreTheme.violetBright),
+            const SizedBox(width: 6),
+            Text(
+              'Surprise me',
+              style: EverloreTheme.ui(
+                size: 13,
+                color: EverloreTheme.violetBright,
+                weight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
