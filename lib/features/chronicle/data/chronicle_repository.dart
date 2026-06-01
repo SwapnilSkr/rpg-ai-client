@@ -114,13 +114,15 @@ class ChronicleRepository {
   static Future<void> updateSettings(
     String instanceId, {
     String? narrationPov,
-    String? tone,
+    String? mode,
+    String? messageLength,
     String? focusCharacterId,
     bool clearFocusCharacter = false,
   }) async {
     await ApiClient.patch('/instances/$instanceId/settings', body: {
       if (narrationPov != null) 'narration_pov': narrationPov,
-      if (tone != null) 'tone': tone,
+      if (mode != null) 'mode': mode,
+      if (messageLength != null) 'message_length': messageLength,
       if (focusCharacterId != null) 'focus_character_id': focusCharacterId,
       if (clearFocusCharacter) 'focus_character_id': null,
     });

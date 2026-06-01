@@ -460,37 +460,33 @@ class PlayCubit extends Cubit<PlayState> {
   /// next turn uses the new values.
   Future<void> updateSettings({
     String? narrationPov,
-    String? tone,
+    String? mode,
+    String? messageLength,
     String? focusCharacterId,
     bool clearFocusCharacter = false,
   }) async {
     final inst = state.instance;
     if (inst != null) {
-      final nextInst = (clearFocusCharacter)
-          ? inst.copyWith(
-              narrationPov: narrationPov,
-              tone: tone,
-              focusCharacterId: null,
-            )
-          : (focusCharacterId != null)
-              ? inst.copyWith(
-                  narrationPov: narrationPov,
-                  tone: tone,
-                  focusCharacterId: focusCharacterId,
-                )
-              : inst.copyWith(
-                  narrationPov: narrationPov,
-                  tone: tone,
-                );
-      emit(state.copyWith(
-        instance: nextInst,
-      ));
+      // Apply non-focus fields first, then touch focus ONLY when explicitly
+      // clearing or setting it (copyWith's _unset sentinel keeps it otherwise).
+      var nextInst = inst.copyWith(
+        narrationPov: narrationPov,
+        mode: mode,
+        messageLength: messageLength,
+      );
+      if (clearFocusCharacter) {
+        nextInst = nextInst.copyWith(focusCharacterId: null);
+      } else if (focusCharacterId != null) {
+        nextInst = nextInst.copyWith(focusCharacterId: focusCharacterId);
+      }
+      emit(state.copyWith(instance: nextInst));
     }
     try {
       await ChronicleRepository.updateSettings(
         instanceId,
         narrationPov: narrationPov,
-        tone: tone,
+        mode: mode,
+        messageLength: messageLength,
         focusCharacterId: focusCharacterId,
         clearFocusCharacter: clearFocusCharacter,
       );

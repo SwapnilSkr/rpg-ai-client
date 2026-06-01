@@ -8,7 +8,8 @@ class WorldInstance {
   final Map<String, dynamic> activeFlags;
   final SceneInfo currentScene;
   final String narrationPov; // 'first' | 'third'
-  final String tone; // '' = default
+  final String mode; // chat mode key; 'free_play' = default
+  final String messageLength; // 'short' | 'medium' | 'long'
   final String? focusCharacterId;
   final InstanceMeta meta;
   final DateTime? createdAt;
@@ -24,7 +25,8 @@ class WorldInstance {
     this.activeFlags = const {},
     this.currentScene = const SceneInfo(),
     this.narrationPov = 'third',
-    this.tone = '',
+    this.mode = 'free_play',
+    this.messageLength = 'medium',
     this.focusCharacterId,
     this.meta = const InstanceMeta(),
     this.createdAt,
@@ -33,7 +35,8 @@ class WorldInstance {
 
   WorldInstance copyWith({
     String? narrationPov,
-    String? tone,
+    String? mode,
+    String? messageLength,
     Object? focusCharacterId = _unset,
   }) {
     return WorldInstance(
@@ -45,7 +48,8 @@ class WorldInstance {
       activeFlags: activeFlags,
       currentScene: currentScene,
       narrationPov: narrationPov ?? this.narrationPov,
-      tone: tone ?? this.tone,
+      mode: mode ?? this.mode,
+      messageLength: messageLength ?? this.messageLength,
       focusCharacterId:
           identical(focusCharacterId, _unset) ? this.focusCharacterId : focusCharacterId as String?,
       meta: meta,
@@ -73,7 +77,8 @@ class WorldInstance {
           ? SceneInfo.fromJson(json['current_scene'])
           : const SceneInfo(),
       narrationPov: json['narration_pov'] ?? 'third',
-      tone: json['tone'] ?? '',
+      mode: json['mode'] ?? 'free_play',
+      messageLength: json['message_length'] ?? 'medium',
       focusCharacterId: json['focus_character_id']?.toString(),
       meta: json['meta'] != null
           ? InstanceMeta.fromJson(json['meta'])
@@ -109,7 +114,8 @@ class WorldInstance {
       activeFlags: newFlags,
       currentScene: currentScene,
       narrationPov: narrationPov,
-      tone: tone,
+      mode: mode,
+      messageLength: messageLength,
       focusCharacterId: focusCharacterId,
       meta: meta,
       createdAt: createdAt,

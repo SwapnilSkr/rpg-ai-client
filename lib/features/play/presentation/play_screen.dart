@@ -8,6 +8,7 @@ import 'widgets/world_state_bar.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/character_profile.dart';
+import '../../../shared/chat_modes.dart';
 import '../../../core/storage/local_db.dart';
 import '../../home/data/home_repository.dart';
 
@@ -88,11 +89,16 @@ class _PlayViewState extends State<_PlayView> {
       ),
       builder: (sheetCtx) => _SettingsSheet(
         initialPov: instance?.narrationPov ?? 'third',
-        initialTone: instance?.tone ?? '',
-        onApply: (pov, tone) {
-          cubit.updateSettings(narrationPov: pov, tone: tone);
+        initialMode: instance?.mode ?? kDefaultChatMode,
+        initialLength: instance?.messageLength ?? 'medium',
+        onApply: (pov, mode, length) {
+          cubit.updateSettings(
+            narrationPov: pov,
+            mode: mode,
+            messageLength: length,
+          );
           Navigator.pop(sheetCtx);
-          _showSettingsSnack(context, pov: pov, tone: tone);
+          _showSettingsSnack(context, pov: pov, mode: mode, length: length);
         },
         onReset: () {
           Navigator.pop(sheetCtx);
@@ -109,13 +115,12 @@ class _PlayViewState extends State<_PlayView> {
   /// Friendly confirmation that staged scene settings were saved and when they
   /// take effect (POV/tone only shape future turns, never past narration).
   void _showSettingsSnack(BuildContext context,
-      {required String pov, required String tone}) {
+      {required String pov, required String mode, required String length}) {
     final povLabel = pov == 'first' ? 'First person' : 'Third person';
-    final toneLabel = tone.isEmpty
-        ? 'Default tone'
-        : '${tone[0].toUpperCase()}${tone.substring(1)} tone';
-    _showSceneSnack(
-        context, '$povLabel · $toneLabel — applies from your next message.');
+    final modeLabel = chatModeLabel(mode);
+    final lenLabel = length[0].toUpperCase() + length.substring(1);
+    _showSceneSnack(context,
+        '$povLabel · $modeLabel · $lenLabel — applies from your next message.');
   }
 
   /// Shared floating confirmation for scene-setting changes.
@@ -160,6 +165,10 @@ class _PlayViewState extends State<_PlayView> {
           builder: (ctx, state) => _ThoughtsSheet(
             characters: state.characters,
             focusedCharacterId: state.instance?.focusCharacterId,
+            // In sentient/character worlds the protagonist is the creator's
+            // locked main character — not player-editable. (GM worlds: the
+            // protagonist is the player's own character, so it stays editable.)
+            isSentientWorld: state.template?.isSentient ?? false,
             onFocus: (id) {
               cubit.updateSettings(focusCharacterId: id);
               Navigator.pop(sheetCtx);
@@ -964,14 +973,16 @@ class _EmptyNarrative extends StatelessWidget {
 /// values, so the player gets a clear, deliberate save action plus feedback.
 class _SettingsSheet extends StatefulWidget {
   final String initialPov;
-  final String initialTone;
-  final void Function(String pov, String tone) onApply;
+  final String initialMode;
+  final String initialLength;
+  final void Function(String pov, String mode, String length) onApply;
   final VoidCallback onReset;
   final VoidCallback onDelete;
 
   const _SettingsSheet({
     required this.initialPov,
-    required this.initialTone,
+    required this.initialMode,
+    required this.initialLength,
     required this.onApply,
     required this.onReset,
     required this.onDelete,
@@ -983,26 +994,20 @@ class _SettingsSheet extends StatefulWidget {
 
 class _SettingsSheetState extends State<_SettingsSheet> {
   late String _pov;
-  late String _tone;
+  late String _mode;
+  late String _length;
 
   bool get _dirty =>
-      _pov != widget.initialPov || _tone != widget.initialTone;
-
-  static const _tonePresets = [
-    ('', 'Default'),
-    ('casual', 'Casual'),
-    ('romantic', 'Romantic'),
-    ('tense', 'Tense'),
-    ('playful', 'Playful'),
-    ('mysterious', 'Mysterious'),
-    ('erotic', 'Erotic'),
-  ];
+      _pov != widget.initialPov ||
+      _mode != widget.initialMode ||
+      _length != widget.initialLength;
 
   @override
   void initState() {
     super.initState();
     _pov = widget.initialPov;
-    _tone = widget.initialTone;
+    _mode = widget.initialMode;
+    _length = widget.initialLength;
   }
 
   @override
@@ -1055,8 +1060,9 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             ),
             const SizedBox(height: 20),
 
-            // Tone
-            Text('TONE',
+            // Chat Mode — how the chat flows (pacing/intent). Orthogonal to the
+            // creator-locked narrative voice, which players cannot change here.
+            Text('MODE',
                 style: EverloreTheme.ui(
                     size: 11,
                     weight: FontWeight.w700,
@@ -1066,10 +1072,10 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: _tonePresets.map((p) {
-                final selected = _tone == p.$1;
+              children: kChatModes.map((m) {
+                final selected = _mode == m.key;
                 return GestureDetector(
-                  onTap: () => setState(() => _tone = p.$1),
+                  onTap: () => setState(() => _mode = m.key),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 8),
@@ -1085,7 +1091,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                       ),
                     ),
                     child: Text(
-                      p.$2,
+                      m.label,
                       style: EverloreTheme.ui(
                         size: 13,
                         color: selected
@@ -1099,14 +1105,39 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 );
               }).toList(),
             ),
-            if (_tone == 'erotic') ...[
-              const SizedBox(height: 8),
-              Text(
-                'Mature tone applies only in mature worlds with NSFW enabled in your preferences.',
+            const SizedBox(height: 8),
+            Text(
+              _mode == 'ardent'
+                  ? 'Ardent escalates intensity — explicit content only in mature worlds with NSFW enabled in your preferences.'
+                  : kChatModes
+                      .firstWhere((m) => m.key == _mode,
+                          orElse: () => kChatModes.first)
+                      .blurb,
+              style: EverloreTheme.ui(
+                  size: 11, color: EverloreTheme.ash, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+
+            // Message length — drives both the prompt directive and max tokens.
+            Text('REPLY LENGTH',
                 style: EverloreTheme.ui(
-                    size: 11, color: EverloreTheme.ash, height: 1.4),
-              ),
-            ],
+                    size: 11,
+                    weight: FontWeight.w700,
+                    spacing: 1.5,
+                    color: EverloreTheme.gold)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                for (final l in kMessageLengths) ...[
+                  _SegOption(
+                    label: l.$2,
+                    selected: _length == l.$1,
+                    onTap: () => setState(() => _length = l.$1),
+                  ),
+                  if (l != kMessageLengths.last) const SizedBox(width: 8),
+                ],
+              ],
+            ),
             const SizedBox(height: 22),
 
             // Deliberate save: disabled until a setting actually changes, so the
@@ -1114,7 +1145,8 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             SizedBox(
               width: double.infinity,
               child: GestureDetector(
-                onTap: _dirty ? () => widget.onApply(_pov, _tone) : null,
+                onTap:
+                    _dirty ? () => widget.onApply(_pov, _mode, _length) : null,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1232,6 +1264,7 @@ class _ThoughtsSheet extends StatelessWidget {
   final ValueChanged<String> onFocus;
   final VoidCallback onClearFocus;
   final ValueChanged<CharacterProfile> onEdit;
+  final bool isSentientWorld;
 
   const _ThoughtsSheet({
     required this.characters,
@@ -1239,6 +1272,7 @@ class _ThoughtsSheet extends StatelessWidget {
     required this.onFocus,
     required this.onClearFocus,
     required this.onEdit,
+    required this.isSentientWorld,
   });
 
   @override
@@ -1366,13 +1400,16 @@ class _ThoughtsSheet extends StatelessWidget {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            onPressed: () => onEdit(c),
-                            visualDensity: VisualDensity.compact,
-                            icon: const Icon(Icons.edit_outlined,
-                                size: 17, color: EverloreTheme.ash),
-                            tooltip: 'Edit',
-                          ),
+                          // The creator's locked protagonist (sentient/character
+                          // worlds) can't be edited; everything else can.
+                          if (!(c.isProtagonist && isSentientWorld))
+                            IconButton(
+                              onPressed: () => onEdit(c),
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.edit_outlined,
+                                  size: 17, color: EverloreTheme.ash),
+                              tooltip: 'Edit',
+                            ),
                           if (!c.isProtagonist)
                             TextButton(
                               onPressed: isFocused ? null : () => onFocus(c.id),
