@@ -110,7 +110,7 @@ class ChronicleRepository {
     });
   }
 
-  /// Update in-chat session settings (narration POV, tone) for an instance.
+  /// Update in-chat session settings (POV, chat mode, reply length) for an instance.
   static Future<void> updateSettings(
     String instanceId, {
     String? narrationPov,

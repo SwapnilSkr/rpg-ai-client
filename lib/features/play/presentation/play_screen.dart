@@ -113,7 +113,7 @@ class _PlayViewState extends State<_PlayView> {
   }
 
   /// Friendly confirmation that staged scene settings were saved and when they
-  /// take effect (POV/tone only shape future turns, never past narration).
+  /// take effect (settings only shape future turns, never past narration).
   void _showSettingsSnack(BuildContext context,
       {required String pov, required String mode, required String length}) {
     final povLabel = pov == 'first' ? 'First person' : 'Third person';
@@ -994,7 +994,7 @@ class _EmptyNarrative extends StatelessWidget {
   }
 }
 
-/// In-chat scene settings: narration POV, tone, and delete.
+/// In-chat scene settings: narration POV, chat mode, reply length, and delete.
 ///
 /// Changes are STAGED locally and only committed when the player taps "Apply".
 /// The button stays disabled until something actually differs from the saved

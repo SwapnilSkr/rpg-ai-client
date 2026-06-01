@@ -378,7 +378,7 @@ class _AuthScreenState extends State<AuthScreen>
                 subtitle: Text(
                   _isUpdatingPreferences
                       ? 'Updating...'
-                      : 'Required for erotic tone and NSFW-capable worlds.',
+                      : 'Required to play mature, NSFW-capable worlds.',
                   style: const TextStyle(
                     color: EverloreTheme.ash,
                     fontSize: 12,

@@ -455,7 +455,7 @@ class PlayCubit extends Cubit<PlayState> {
     }
   }
 
-  /// Update in-chat settings (narration POV, tone). Optimistically reflects the
+  /// Update in-chat settings (POV, chat mode, reply length). Optimistically reflects the
   /// change locally, then persists; the server busts its session cache so the
   /// next turn uses the new values.
   Future<void> updateSettings({
