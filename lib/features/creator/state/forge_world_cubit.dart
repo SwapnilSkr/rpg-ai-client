@@ -82,6 +82,9 @@ class ForgeWorldState extends Equatable {
   final String imageUrl; // generated avatar/background CDN url
   final bool isImageBusy;
   final String? imageError;
+  final bool isAutofilling; // one-shot AI draft in flight
+  final String? autofillError;
+  final int autofillStamp; // bumps on each successful autofill (UI sync signal)
   final String openingLine;
   final List<String> sceneTags;
   final List<StatEntry> stats;
@@ -106,6 +109,9 @@ class ForgeWorldState extends Equatable {
     this.imageUrl = '',
     this.isImageBusy = false,
     this.imageError,
+    this.isAutofilling = false,
+    this.autofillError,
+    this.autofillStamp = 0,
     this.openingLine = '',
     this.sceneTags = const [],
     this.stats = const [],
@@ -132,6 +138,10 @@ class ForgeWorldState extends Equatable {
     bool? isImageBusy,
     String? imageError,
     bool clearImageError = false,
+    bool? isAutofilling,
+    String? autofillError,
+    bool clearAutofillError = false,
+    int? autofillStamp,
     String? openingLine,
     List<String>? sceneTags,
     List<StatEntry>? stats,
@@ -156,6 +166,10 @@ class ForgeWorldState extends Equatable {
     imageUrl: imageUrl ?? this.imageUrl,
     isImageBusy: isImageBusy ?? this.isImageBusy,
     imageError: clearImageError ? null : (imageError ?? this.imageError),
+    isAutofilling: isAutofilling ?? this.isAutofilling,
+    autofillError:
+        clearAutofillError ? null : (autofillError ?? this.autofillError),
+    autofillStamp: autofillStamp ?? this.autofillStamp,
     openingLine: openingLine ?? this.openingLine,
     sceneTags: sceneTags ?? this.sceneTags,
     stats: stats ?? this.stats,
@@ -181,8 +195,10 @@ class ForgeWorldState extends Equatable {
         return step1Valid;
       case 2:
         return step2Valid;
-      default:
+      case 3:
         return step3Valid;
+      default:
+        return true; // step 4 (Portrait) is optional
     }
   }
 
@@ -201,6 +217,9 @@ class ForgeWorldState extends Equatable {
     imageUrl,
     isImageBusy,
     imageError,
+    isAutofilling,
+    autofillError,
+    autofillStamp,
     openingLine,
     sceneTags,
     stats,
@@ -241,6 +260,64 @@ List<FlagEntry> _flagsFromTemplate(Map<String, dynamic> raw) {
       description: m['description'] as String? ?? '',
     );
   }).toList();
+}
+
+/// Parse the autofill draft's `scene_tags` array into a tag list.
+List<String>? _tagsFromDraft(dynamic raw) {
+  if (raw is! List) return null;
+  return raw
+      .map((e) => e.toString().trim().toLowerCase().replaceAll(' ', '_'))
+      .where((t) => t.isNotEmpty)
+      .toList();
+}
+
+/// Parse the autofill draft's `stats` array into StatEntry list.
+List<StatEntry>? _statsFromDraft(dynamic raw) {
+  if (raw is! List) return null;
+  final out = <StatEntry>[];
+  for (final e in raw) {
+    final m = Map<String, dynamic>.from(e as Map? ?? {});
+    final name = (m['name'] ?? '').toString().trim();
+    if (name.isEmpty) continue;
+    out.add(StatEntry(
+      name: name,
+      defaultValue: (m['default'] as num?) ?? 50,
+      min: (m['min'] as num?) ?? 0,
+      max: (m['max'] as num?) ?? 100,
+      description: (m['description'] ?? '').toString(),
+    ));
+  }
+  return out;
+}
+
+/// Parse the autofill draft's `flags` array into FlagEntry list.
+List<FlagEntry>? _flagsFromDraft(dynamic raw) {
+  if (raw is! List) return null;
+  final out = <FlagEntry>[];
+  for (final e in raw) {
+    final m = Map<String, dynamic>.from(e as Map? ?? {});
+    final name = (m['name'] ?? '').toString().trim();
+    if (name.isEmpty) continue;
+    final kind = switch ((m['type'] ?? 'boolean').toString()) {
+      'integer' => RealmFlagKind.integer,
+      'string' => RealmFlagKind.string,
+      _ => RealmFlagKind.boolean,
+    };
+    final def = m['default'];
+    final Object dv = def ??
+        switch (kind) {
+          RealmFlagKind.boolean => false,
+          RealmFlagKind.integer => 0,
+          RealmFlagKind.string => '',
+        };
+    out.add(FlagEntry(
+      name: name,
+      kind: kind,
+      defaultValue: dv,
+      description: (m['description'] ?? '').toString(),
+    ));
+  }
+  return out;
 }
 
 class ForgeWorldCubit extends Cubit<ForgeWorldState> {
@@ -288,7 +365,7 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   }
 
   void nextStep() {
-    if (state.step < 3 && state.canProceed) {
+    if (state.step < 4 && state.canProceed) {
       emit(state.copyWith(step: state.step + 1, clearError: true));
     }
   }
@@ -308,26 +385,65 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   void setNarrativeStyle(String v) => emit(state.copyWith(narrativeStyle: v));
   void setStyleNotes(String v) => emit(state.copyWith(styleNotes: v));
   void setImagePrompt(String v) => emit(state.copyWith(imagePrompt: v));
+  void clearAutofillError() => emit(state.copyWith(clearAutofillError: true));
 
-  /// Generate (or re-roll) the world image. Auto-suggests an editable visual
-  /// prompt from the world details if none exists yet.
+  /// One-shot AI draft: fills every creative field from an optional [brief],
+  /// respecting the chosen world type / maturity / locked voice. Everything it
+  /// produces is editable. The world TYPE and maturity toggles are preserved.
+  Future<void> autofillAll({String brief = ''}) async {
+    if (state.isAutofilling) return;
+    emit(state.copyWith(isAutofilling: true, clearAutofillError: true));
+    try {
+      final d = await CreatorRepository.autofill({
+        'target': 'world',
+        'brief': brief.trim(),
+        'is_sentient': state.isSentient,
+        'is_nsfw_capable': state.isNsfwCapable,
+        'narrative_style': state.narrativeStyle,
+      });
+      emit(state.copyWith(
+        title: (d['title'] ?? state.title).toString(),
+        description: (d['description'] ?? state.description).toString(),
+        seedPrompt: (d['seed_prompt'] ?? state.seedPrompt).toString(),
+        globalLore: (d['global_lore'] ?? state.globalLore).toString(),
+        narrativeStyle:
+            (d['narrative_style'] ?? state.narrativeStyle).toString(),
+        styleNotes: (d['style_notes'] ?? state.styleNotes).toString(),
+        openingLine: (d['opening_line'] ?? state.openingLine).toString(),
+        sceneTags: _tagsFromDraft(d['scene_tags']) ?? state.sceneTags,
+        stats: _statsFromDraft(d['stats']) ?? state.stats,
+        flags: _flagsFromDraft(d['flags']) ?? state.flags,
+        imagePrompt: (d['image_prompt'] ?? state.imagePrompt).toString(),
+        isAutofilling: false,
+        autofillStamp: state.autofillStamp + 1,
+      ));
+    } catch (e) {
+      emit(state.copyWith(isAutofilling: false, autofillError: _autofillErr(e)));
+    }
+  }
+
+  String _autofillErr(Object e) {
+    if (e is ApiException) {
+      if (e.statusCode == 403) return 'AI drafting needs Premium or Creator.';
+      if (e.statusCode == 429) {
+        return 'Too many AI drafts — try again shortly.';
+      }
+      return e.message;
+    }
+    return 'Could not draft the world. Please try again.';
+  }
+
+  /// Render (or re-roll) the world image from the current visual prompt. The
+  /// prompt comes from "Generate with AI" or is typed by the creator; the UI
+  /// disables this until one exists.
   Future<void> generateImage() async {
     if (state.isImageBusy) return;
+    final prompt = state.imagePrompt.trim();
+    if (prompt.isEmpty) return;
     emit(state.copyWith(isImageBusy: true, clearImageError: true));
     try {
-      var prompt = state.imagePrompt.trim();
-      if (prompt.isEmpty) {
-        prompt = await CreatorRepository.suggestImagePrompt({
-          'title': state.title.trim().isEmpty ? 'World' : state.title.trim(),
-          'description': state.description.trim(),
-          'seed_prompt': state.seedPrompt.trim(),
-          'global_lore': state.globalLore.trim(),
-          'narrative_style': state.narrativeStyle,
-          'is_sentient': state.isSentient,
-        });
-      }
       final url = await CreatorRepository.generateImage(prompt);
-      emit(state.copyWith(imagePrompt: prompt, imageUrl: url, isImageBusy: false));
+      emit(state.copyWith(imageUrl: url, isImageBusy: false));
     } catch (e) {
       emit(state.copyWith(isImageBusy: false, imageError: _imageErr(e)));
     }

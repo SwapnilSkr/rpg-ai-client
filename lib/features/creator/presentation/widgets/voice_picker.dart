@@ -45,7 +45,7 @@ class VoicePicker extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'How it should read — diction, energy, and rhythm. Players can change it later.',
+          'How it should read — diction, energy, and rhythm. This is locked to your world; players can\'t change it.',
           style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash, height: 1.4),
         ),
         const SizedBox(height: 10),

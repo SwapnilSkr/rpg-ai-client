@@ -16,6 +16,9 @@ class CreateCharacterState extends Equatable {
   final String imageUrl; // generated avatar/background CDN url
   final bool isImageBusy; // suggesting or generating
   final String? imageError;
+  final bool isAutofilling; // one-shot AI draft in flight
+  final String? autofillError;
+  final int autofillStamp; // bumps on each successful autofill (UI sync signal)
   final bool isNsfwCapable;
   final bool isSubmitting;
   final String? error;
@@ -35,6 +38,9 @@ class CreateCharacterState extends Equatable {
     this.imageUrl = '',
     this.isImageBusy = false,
     this.imageError,
+    this.isAutofilling = false,
+    this.autofillError,
+    this.autofillStamp = 0,
     this.isNsfwCapable = false,
     this.isSubmitting = false,
     this.error,
@@ -54,6 +60,10 @@ class CreateCharacterState extends Equatable {
     bool? isImageBusy,
     String? imageError,
     bool clearImageError = false,
+    bool? isAutofilling,
+    String? autofillError,
+    bool clearAutofillError = false,
+    int? autofillStamp,
     bool? isNsfwCapable,
     bool? isSubmitting,
     String? error,
@@ -71,6 +81,10 @@ class CreateCharacterState extends Equatable {
         imageUrl: imageUrl ?? this.imageUrl,
         isImageBusy: isImageBusy ?? this.isImageBusy,
         imageError: clearImageError ? null : (imageError ?? this.imageError),
+        isAutofilling: isAutofilling ?? this.isAutofilling,
+        autofillError:
+            clearAutofillError ? null : (autofillError ?? this.autofillError),
+        autofillStamp: autofillStamp ?? this.autofillStamp,
         isNsfwCapable: isNsfwCapable ?? this.isNsfwCapable,
         isSubmitting: isSubmitting ?? this.isSubmitting,
         error: clearError ? null : (error ?? this.error),
@@ -95,6 +109,9 @@ class CreateCharacterState extends Equatable {
         imageUrl,
         isImageBusy,
         imageError,
+        isAutofilling,
+        autofillError,
+        autofillStamp,
         isNsfwCapable,
         isSubmitting,
         error,
@@ -115,26 +132,60 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
   void setImagePrompt(String v) => emit(state.copyWith(imagePrompt: v));
   void setNsfw(bool v) => emit(state.copyWith(isNsfwCapable: v));
   void clearError() => emit(state.copyWith(clearError: true));
+  void clearAutofillError() => emit(state.copyWith(clearAutofillError: true));
 
-  /// Generate (or re-roll) the avatar. If no prompt has been authored yet, an
-  /// editable visual prompt is auto-suggested from the character details first.
+  /// One-shot AI draft: fills every field from an optional [brief], respecting
+  /// the maturity toggle and any locked voice. Everything stays editable.
+  Future<void> autofillAll({String brief = ''}) async {
+    if (state.isAutofilling) return;
+    emit(state.copyWith(isAutofilling: true, clearAutofillError: true));
+    try {
+      final d = await CreatorRepository.autofill({
+        'target': 'character',
+        'brief': brief.trim(),
+        'is_sentient': true,
+        'is_nsfw_capable': state.isNsfwCapable,
+        'narrative_style': state.narrativeStyle,
+      });
+      emit(state.copyWith(
+        name: (d['name'] ?? state.name).toString(),
+        tagline: (d['tagline'] ?? state.tagline).toString(),
+        persona: (d['persona'] ?? state.persona).toString(),
+        greeting: (d['greeting'] ?? state.greeting).toString(),
+        backstory: (d['backstory'] ?? state.backstory).toString(),
+        narrativeStyle:
+            (d['narrative_style'] ?? state.narrativeStyle).toString(),
+        styleNotes: (d['style_notes'] ?? state.styleNotes).toString(),
+        imagePrompt: (d['image_prompt'] ?? state.imagePrompt).toString(),
+        isAutofilling: false,
+        autofillStamp: state.autofillStamp + 1,
+      ));
+    } catch (e) {
+      emit(state.copyWith(isAutofilling: false, autofillError: _autofillErr(e)));
+    }
+  }
+
+  String _autofillErr(Object e) {
+    if (e is ApiException) {
+      if (e.statusCode == 403) return 'AI drafting needs Premium or Creator.';
+      if (e.statusCode == 429) return 'Too many AI drafts — try again shortly.';
+      return e.message;
+    }
+    return 'Could not draft the character. Please try again.';
+  }
+
+
+  /// Render (or re-roll) the avatar from the current visual prompt. The prompt
+  /// comes from "Generate with AI" or is typed by the creator; the UI disables
+  /// this until one exists.
   Future<void> generateImage() async {
     if (state.isImageBusy) return;
+    final prompt = state.imagePrompt.trim();
+    if (prompt.isEmpty) return;
     emit(state.copyWith(isImageBusy: true, clearImageError: true));
     try {
-      var prompt = state.imagePrompt.trim();
-      if (prompt.isEmpty) {
-        prompt = await CreatorRepository.suggestImagePrompt({
-          'title': state.name.trim().isEmpty ? 'Character' : state.name.trim(),
-          'description': state.tagline.trim(),
-          'seed_prompt': state.persona.trim(),
-          'global_lore': state.backstory.trim(),
-          'narrative_style': state.narrativeStyle,
-          'is_sentient': true,
-        });
-      }
       final url = await CreatorRepository.generateImage(prompt);
-      emit(state.copyWith(imagePrompt: prompt, imageUrl: url, isImageBusy: false));
+      emit(state.copyWith(imageUrl: url, isImageBusy: false));
     } catch (e) {
       emit(state.copyWith(isImageBusy: false, imageError: _imageErr(e)));
     }

@@ -3,10 +3,12 @@ import '../../../../app/theme/nexus_theme.dart';
 
 /// Reusable avatar/background generator used in world + character creation.
 ///
-/// Flow: tap Generate → backend auto-suggests a visual prompt (if none yet) and
-/// renders an image → the prompt becomes editable → Regenerate re-rolls until
-/// the creator is happy. One portrait image serves as both listing avatar and
-/// in-chat background. Empty [imageUrl] = nothing generated yet.
+/// Prompt-FIRST flow: the editable visual prompt is always shown. It is filled
+/// either by "Generate with AI" (which drafts it alongside everything else) or
+/// by the creator typing their own — then "Generate image" renders from that
+/// prompt. Regenerate re-rolls until they're happy. One portrait image serves as
+/// both the listing avatar and the in-chat background. Empty [imageUrl] = none
+/// yet; empty [prompt] = nothing to render until it's filled.
 class ImageForge extends StatelessWidget {
   final String imageUrl;
   final String prompt;
@@ -14,6 +16,10 @@ class ImageForge extends StatelessWidget {
   final String? error;
   final ValueChanged<String> onPromptChanged;
   final VoidCallback onGenerate;
+
+  /// A [Key] tied to the prompt's provenance — bump it (e.g. on autofill) to
+  /// force the editable field to re-seed its [initialValue] from [prompt].
+  final Key? promptFieldKey;
 
   const ImageForge({
     super.key,
@@ -23,11 +29,13 @@ class ImageForge extends StatelessWidget {
     required this.error,
     required this.onPromptChanged,
     required this.onGenerate,
+    this.promptFieldKey,
   });
 
   @override
   Widget build(BuildContext context) {
     final hasImage = imageUrl.isNotEmpty;
+    final hasPrompt = prompt.trim().isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -39,7 +47,8 @@ class ImageForge extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           'A generated image — shown on the card and as the chat background. '
-          'Style follows the voice you chose.',
+          'Filled by “Generate with AI”, or write your own below. Style follows '
+          'the voice you chose.',
           style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash, height: 1.4),
         ),
         const SizedBox(height: 12),
@@ -73,45 +82,48 @@ class ImageForge extends StatelessWidget {
         ),
         const SizedBox(height: 12),
 
-        // Editable prompt (only once we have one to edit)
-        if (prompt.isNotEmpty) ...[
-          TextFormField(
-            initialValue: prompt,
-            onChanged: onPromptChanged,
-            maxLines: 4,
-            minLines: 2,
-            maxLength: 1000,
-            enabled: !busy,
-            textCapitalization: TextCapitalization.sentences,
-            style: EverloreTheme.ui(
-                size: 13, color: EverloreTheme.parchment, height: 1.5),
-            decoration: InputDecoration(
-              labelText: 'Visual prompt (editable)',
-              labelStyle: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-              counterText: '',
-              filled: true,
-              fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide:
-                    const BorderSide(color: EverloreTheme.gold, width: 1.2),
-              ),
+        // Editable prompt — always shown (prompt-first). Re-seeds when the
+        // promptFieldKey changes (suggest / autofill).
+        TextFormField(
+          key: promptFieldKey,
+          initialValue: prompt,
+          onChanged: onPromptChanged,
+          maxLines: 4,
+          minLines: 2,
+          maxLength: 1000,
+          enabled: !busy,
+          textCapitalization: TextCapitalization.sentences,
+          style: EverloreTheme.ui(
+              size: 13, color: EverloreTheme.parchment, height: 1.5),
+          decoration: InputDecoration(
+            labelText: 'Visual prompt',
+            labelStyle: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+            hintText:
+                'Describe the look, or use “Generate with AI” to draft it.',
+            hintStyle: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+            counterText: '',
+            filled: true,
+            fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide:
+                  const BorderSide(color: EverloreTheme.gold, width: 1.2),
             ),
           ),
-          const SizedBox(height: 8),
-        ],
+        ),
+        const SizedBox(height: 10),
 
         if (error != null) ...[
           Text(error!,
@@ -119,16 +131,20 @@ class ImageForge extends StatelessWidget {
           const SizedBox(height: 8),
         ],
 
-        // Generate / Regenerate
-        OutlinedButton.icon(
-          onPressed: busy ? null : onGenerate,
-          icon: Icon(hasImage ? Icons.refresh_rounded : Icons.auto_awesome,
-              size: 18),
-          label: Text(hasImage ? 'Regenerate' : 'Generate image'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: EverloreTheme.gold,
-            side: BorderSide(color: EverloreTheme.gold.withValues(alpha: 0.5)),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        // Render the image from the current prompt (disabled until there's one).
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: (busy || !hasPrompt) ? null : onGenerate,
+            icon: Icon(hasImage ? Icons.refresh_rounded : Icons.auto_awesome,
+                size: 18),
+            label: Text(hasImage ? 'Regenerate' : 'Generate image'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: EverloreTheme.gold,
+              disabledForegroundColor: EverloreTheme.ash,
+              side: BorderSide(color: EverloreTheme.gold.withValues(alpha: 0.5)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
           ),
         ),
       ],

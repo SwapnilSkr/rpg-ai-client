@@ -7,6 +7,7 @@ import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/models/world_template.dart';
 import 'widgets/voice_picker.dart';
 import 'widgets/image_forge.dart';
+import 'widgets/autofill_card.dart';
 
 // ─────────────────────────────────────────────
 // Entry point
@@ -36,6 +37,9 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
   late final TextEditingController _loreCtrl;
   late final TextEditingController _tagInputCtrl;
 
+  // AI autofill
+  int _lastAutofillStamp = 0;
+
   @override
   void initState() {
     super.initState();
@@ -61,12 +65,25 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
     super.dispose();
   }
 
+  // Push AI-drafted text back into the step controllers so the form shows it.
+  void _syncFromState(ForgeWorldState s) {
+    _titleCtrl.text = s.title;
+    _descCtrl.text = s.description;
+    _seedCtrl.text = s.seedPrompt;
+    _openingCtrl.text = s.openingLine;
+    _loreCtrl.text = s.globalLore;
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider.value(
       value: _cubit,
       child: BlocConsumer<ForgeWorldCubit, ForgeWorldState>(
         listener: (context, state) {
+          if (state.autofillStamp != _lastAutofillStamp) {
+            _lastAutofillStamp = state.autofillStamp;
+            _syncFromState(state);
+          }
           if (state.result != null) {
             context.go('/my-worlds');
           }
@@ -147,6 +164,9 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
         );
       case 3:
         return _Step3Stats(key: const ValueKey(3), cubit: _cubit, state: state);
+      case 4:
+        return _Step4Portrait(
+            key: const ValueKey(4), cubit: _cubit, state: state);
       default:
         return const SizedBox.shrink();
     }
@@ -162,7 +182,9 @@ const _stepNames = [
   "ORACLE'S VOICE",
   'ANCIENT LORE',
   'VITAL FORCES',
+  'PORTRAIT',
 ];
+final _stepCount = _stepNames.length;
 
 class _ForgeHeader extends StatelessWidget {
   final int step;
@@ -203,7 +225,7 @@ class _ForgeHeader extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            '${step + 1} / 4',
+            '${step + 1} / $_stepCount',
             style: const TextStyle(color: EverloreTheme.ash, fontSize: 13),
           ),
         ],
@@ -238,14 +260,14 @@ class _StepProgress extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Row(
-            children: List.generate(4, (i) {
+            children: List.generate(_stepCount, (i) {
               final filled = i <= step;
               final active = i == step;
               return Expanded(
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   height: active ? 3 : 2,
-                  margin: EdgeInsets.only(right: i < 3 ? 4 : 0),
+                  margin: EdgeInsets.only(right: i < _stepCount - 1 ? 4 : 0),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(2),
                     color: filled
@@ -291,7 +313,7 @@ class _ForgeNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLast = step == 3;
+    final isLast = step == _stepCount - 1;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -749,6 +771,17 @@ class _Step0Essence extends StatelessWidget {
             text:
                 'Define what this world is. Its name and description are the first things adventurers will see.',
           ),
+          const SizedBox(height: 16),
+          AutofillLauncher(
+            target: 'world',
+            busy: state.isAutofilling,
+            error: state.autofillError,
+            isSentient: state.isSentient,
+            isNsfwCapable: state.isNsfwCapable,
+            onSetSentient: cubit.setIsSentient,
+            onSetNsfw: cubit.setIsNsfwCapable,
+            onGenerate: (brief) => cubit.autofillAll(brief: brief),
+          ),
           const SizedBox(height: 24),
           const _FormLabel(
             label: 'World Name',
@@ -840,6 +873,46 @@ class _Step0Essence extends StatelessWidget {
             value: state.isNsfwCapable,
             activeColor: EverloreTheme.crimson,
             onChanged: cubit.setIsNsfwCapable,
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Step 4 — Portrait
+// ─────────────────────────────────────────────
+
+class _Step4Portrait extends StatelessWidget {
+  final ForgeWorldCubit cubit;
+  final ForgeWorldState state;
+
+  const _Step4Portrait({super.key, required this.cubit, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _StepIntro(
+            icon: Icons.image_outlined,
+            text:
+                'An optional portrait for your world — shown on its card and as the '
+                'chat background. Drafted by “Generate with AI”, or write your own.',
+          ),
+          const SizedBox(height: 24),
+          ImageForge(
+            imageUrl: state.imageUrl,
+            prompt: state.imagePrompt,
+            busy: state.isImageBusy,
+            error: state.imageError,
+            onPromptChanged: cubit.setImagePrompt,
+            onGenerate: cubit.generateImage,
+            promptFieldKey: ValueKey('wimg_${state.autofillStamp}'),
           ),
           const SizedBox(height: 24),
         ],
@@ -955,15 +1028,6 @@ class _Step1Voice extends StatelessWidget {
             onSelect: cubit.setNarrativeStyle,
             notes: state.styleNotes,
             onNotesChanged: cubit.setStyleNotes,
-          ),
-          const SizedBox(height: 24),
-          ImageForge(
-            imageUrl: state.imageUrl,
-            prompt: state.imagePrompt,
-            busy: state.isImageBusy,
-            error: state.imageError,
-            onPromptChanged: cubit.setImagePrompt,
-            onGenerate: cubit.generateImage,
           ),
           const SizedBox(height: 24),
           const _FormLabel(

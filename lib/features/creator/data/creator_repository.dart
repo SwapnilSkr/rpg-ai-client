@@ -40,11 +40,12 @@ class CreatorRepository {
     await ApiClient.delete('/templates/$id');
   }
 
-  /// Auto-suggest an editable visual prompt for the avatar/background.
-  static Future<String> suggestImagePrompt(Map<String, dynamic> body) async {
-    final response = await ApiClient.post('/templates/image/suggest', body: body);
+  /// One-shot AI autofill — drafts an entire world/character from an optional
+  /// brief. Returns the raw draft map for the caller to apply + edit.
+  static Future<Map<String, dynamic>> autofill(Map<String, dynamic> body) async {
+    final response = await ApiClient.post('/templates/autofill', body: body);
     final map = Map<String, dynamic>.from(response as Map);
-    return (map['prompt'] ?? '').toString();
+    return Map<String, dynamic>.from(map['draft'] as Map? ?? {});
   }
 
   /// Generate a preview image from a prompt → returns its CDN URL. Re-callable
