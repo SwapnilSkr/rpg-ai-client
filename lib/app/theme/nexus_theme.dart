@@ -1,34 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Everlore Design System — Dark Fantasy RPG (Premium)
+/// Everlore Design System — Premium (neumorphism + skeuomorphism)
+///
+/// Color model: a genre-neutral **shell** (warm-obsidian ground + champagne-
+/// brass chrome + the forged/neumorphic *form*) carries the brand, while the
+/// **content** layer (play / world / voice) tints to the active world's genre
+/// via [sceneAccent] (a world-driven accent). The material language is hue-agnostic,
+/// so the premium feel stays constant while the color breathes with the story.
 ///
 /// Typography:
 ///  • Cinzel      — engraved, ceremonial display & titles (the fantasy stamp)
-///  • Inter       — crisp, modern UI text, labels, buttons
+///  • General Sans — neutral premium UI grotesk (labels, buttons, body)
 ///  • EB Garamond — serif narrative prose (reads like an illuminated tome)
 class EverloreTheme {
+  // The bundled UI grotesk (see pubspec fonts:). Use [ui] to build styles.
+  static const String uiFamily = 'GeneralSans';
+
   // ──────────────── Palette ────────────────
-  static const Color void0 = Color(0xFF06060D); // deepest bg
-  static const Color void1 = Color(0xFF0B0B17); // scaffold bg
-  static const Color void2 = Color(0xFF13132A); // card bg
-  static const Color void3 = Color(0xFF1A1A38); // card bg raised
-  static const Color void4 = Color(0xFF252548); // input bg / hover
+  // Ground — warm obsidian (forged-iron charcoal with a faint amber undertone).
+  static const Color void0 = Color(0xFF0A0807); // deepest bg
+  static const Color void1 = Color(0xFF0F0C0A); // scaffold bg
+  static const Color void2 = Color(0xFF16120E); // card bg
+  static const Color void3 = Color(0xFF1E1813); // card bg raised
+  static const Color void4 = Color(0xFF2A2219); // input bg / hover
 
-  static const Color gold = Color(0xFFD4A843); // arcane gold — primary
-  static const Color goldDim = Color(0xFF8A6820); // dim gold for borders
-  static const Color goldGlow = Color(0xFFF0C86A); // bright gold for glow
+  // Champagne-brass — the brand metal (forged-metal ramp for real bevels).
+  static const Color goldDeep = Color(0xFF6E5A2E); // engraved/recessed shadow
+  static const Color goldDim = Color(0xFF9A8350); // dim brass for borders
+  static const Color gold = Color(0xFFD8B878); // champagne-brass — primary
+  static const Color goldGlow = Color(0xFFECD49A); // bright brass for glow
+  static const Color goldHot = Color(0xFFFBEFCB); // specular hotspot
 
-  static const Color violet = Color(0xFF7C3AED); // mystic violet
-  static const Color violetDim = Color(0xFF4C1D95);
-  static const Color violetBright = Color(0xFFA855F7);
+  // Aether — the single cool "energy" spark (live moments only). The legacy
+  // violet/cyan accent tokens redirect here so old usages read aether, not
+  // purple; per-screen content accents come from [sceneAccent].
+  static const Color aether = Color(0xFF3FC9D6); // aqua-teal spark
+  static const Color aetherDim = Color(0xFF1E8A95);
+  static const Color aetherBright = Color(0xFF5FDDE8);
 
-  static const Color cyan = Color(0xFF0891B2); // ethereal cyan (AI text)
-  static const Color cyanBright = Color(0xFF22D3EE);
+  // Legacy accent aliases (kept so existing references compile; retuned to the
+  // new system). Migrate call sites to aether/dynamicAccent during reskin.
+  static const Color violet = aether;
+  static const Color violetDim = aetherDim;
+  static const Color violetBright = aetherBright;
+  static const Color cyan = aetherDim;
+  static const Color cyanBright = aether;
   static const Color rose = Color(0xFFEC4899); // intimate scenes
 
   static const Color parchment = Color(0xFFE8DCC8); // primary text
-  static const Color ash = Color(0xFF9CA3AF); // secondary text
+  static const Color ash = Color(0xFF9C948A); // secondary text (warm-neutral)
   static const Color ember = Color(0xFFD97706); // warning / mid
   static const Color verdant = Color(0xFF059669); // success / high health
   static const Color crimson = Color(0xFFDC2626); // danger / low health
@@ -53,11 +74,11 @@ class EverloreTheme {
         letterSpacing: 0.8,
       );
 
-  static TextStyle get sectionHeader => GoogleFonts.inter(
+  static TextStyle get sectionHeader => ui(
         color: gold,
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 2.5,
+        size: 11,
+        weight: FontWeight.w700,
+        spacing: 2.5,
       );
 
   static TextStyle get cardTitle => GoogleFonts.cinzel(
@@ -67,22 +88,22 @@ class EverloreTheme {
         letterSpacing: 0.4,
       );
 
-  static TextStyle get body => GoogleFonts.inter(
+  static TextStyle get body => ui(
         color: parchment,
-        fontSize: 15,
+        size: 15,
         height: 1.6,
       );
 
-  static TextStyle get bodyDim => GoogleFonts.inter(
+  static TextStyle get bodyDim => ui(
         color: ash,
-        fontSize: 13,
+        size: 13,
         height: 1.5,
       );
 
-  static TextStyle get caption => GoogleFonts.inter(
+  static TextStyle get caption => ui(
         color: ash,
-        fontSize: 11,
-        letterSpacing: 0.5,
+        size: 11,
+        spacing: 0.5,
       );
 
   /// Serif narrative prose used for AI story text.
@@ -93,7 +114,7 @@ class EverloreTheme {
         letterSpacing: 0.15,
       );
 
-  /// Inter helper for arbitrary UI text (keeps font usage centralized).
+  /// General Sans helper for arbitrary UI text (keeps font usage centralized).
   static TextStyle ui({
     double size = 14,
     Color color = parchment,
@@ -102,7 +123,8 @@ class EverloreTheme {
     double? height,
     FontStyle? fontStyle,
   }) =>
-      GoogleFonts.inter(
+      TextStyle(
+        fontFamily: uiFamily,
         color: color,
         fontSize: size,
         fontWeight: weight,
@@ -153,7 +175,7 @@ class EverloreTheme {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF16163A), Color(0xFF0E0E24)],
+          colors: [Color(0xFF1C160F), Color(0xFF100C09)],
         ),
       );
 
@@ -163,7 +185,7 @@ class EverloreTheme {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1E1A40), Color(0xFF120F2A)],
+          colors: [Color(0xFF231B12), Color(0xFF130E0A)],
         ),
         boxShadow: [
           BoxShadow(color: gold.withValues(alpha: 0.12), blurRadius: 24, spreadRadius: 0),
@@ -194,7 +216,7 @@ class EverloreTheme {
       pageTransitionsTheme: _pageTransitions,
       scaffoldBackgroundColor: void1,
       primaryColor: gold,
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme).copyWith(
+      textTheme: ThemeData.dark().textTheme.apply(fontFamily: uiFamily).copyWith(
         displayLarge: displayTitle,
         titleLarge: cardTitle,
         bodyLarge: body,
@@ -226,8 +248,8 @@ class EverloreTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: gold,
-          foregroundColor: void1,
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, letterSpacing: 0.8, fontSize: 14),
+          foregroundColor: void0,
+          textStyle: ui(weight: FontWeight.w700, spacing: 0.8, size: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
         ),
@@ -236,7 +258,7 @@ class EverloreTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: gold,
           side: const BorderSide(color: goldDim, width: 1),
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, letterSpacing: 0.5, fontSize: 14),
+          textStyle: ui(weight: FontWeight.w600, spacing: 0.5, size: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
         ),
@@ -256,8 +278,8 @@ class EverloreTheme {
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: gold, width: 1.5),
         ),
-        hintStyle: GoogleFonts.inter(color: const Color(0xFF5A5A80), fontSize: 14),
-        labelStyle: GoogleFonts.inter(color: ash),
+        hintStyle: ui(color: const Color(0xFF6B5E4D), size: 14),
+        labelStyle: ui(color: ash),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       dividerColor: white10,
@@ -272,11 +294,11 @@ class EverloreTheme {
         activeTrackColor: gold,
         thumbColor: gold,
         inactiveTrackColor: void4,
-        overlayColor: Color(0x22D4A843),
+        overlayColor: Color(0x22D8B878),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: void4,
-        labelStyle: GoogleFonts.inter(color: ash, fontSize: 11),
+        labelStyle: ui(color: ash, size: 11),
         side: BorderSide(color: goldDim.withValues(alpha: 0.3)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
