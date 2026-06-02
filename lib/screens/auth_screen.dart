@@ -1,11 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../core/auth/auth_service.dart';
 import '../core/auth/google_auth_service.dart';
 import '../core/network/api_client.dart';
 import '../shared/models/user.dart';
 import '../app/theme/nexus_theme.dart';
+import '../shared/widgets/keyboard_aware_scroll.dart';
+import '../shared/widgets/realm_backdrop.dart';
+import '../shared/widgets/neu.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, this.title});
@@ -15,13 +22,12 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen>
-    with SingleTickerProviderStateMixin {
+class _AuthScreenState extends State<AuthScreen> {
   final _googleAuthService = GoogleAuthService();
   final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
 
-  late TabController _tabController;
+  DialCode _dialCode = kDefaultDialCode; // United States +1
 
   User? _currentUser;
   bool _googleReady = false;
@@ -34,13 +40,11 @@ class _AuthScreenState extends State<AuthScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _bootstrap();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _phoneController.dispose();
     _otpController.dispose();
     super.dispose();
@@ -109,7 +113,8 @@ class _AuthScreenState extends State<AuthScreen>
       _clearMessages();
     });
     try {
-      final phone = _normalizePhone(_phoneController.text);
+      final phone =
+          _normalizePhone('${_dialCode.code}${_phoneController.text}');
       await AuthService.sendOtp(phone);
       if (!mounted) return;
       setState(() {
@@ -133,7 +138,7 @@ class _AuthScreenState extends State<AuthScreen>
     });
     try {
       final user = await AuthService.verifyOtp(
-        phone: _normalizePhone(_phoneController.text),
+        phone: _normalizePhone('${_dialCode.code}${_phoneController.text}'),
         code: _otpController.text.trim(),
       );
       if (!mounted) return;
@@ -147,6 +152,15 @@ class _AuthScreenState extends State<AuthScreen>
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  // Return from the OTP step to phone entry to edit the number.
+  void _handleEditPhone() {
+    setState(() {
+      _codeSent = false;
+      _otpController.clear();
+      _clearMessages();
+    });
   }
 
   Future<void> _handleSignOut() async {
@@ -213,56 +227,39 @@ class _AuthScreenState extends State<AuthScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Shrink the scroll viewport with keyboard [viewInsets] (see [Padding]
+      // on the scroll area) — avoids Android resize/viewport mismatches.
+      resizeToAvoidBottomInset: false,
       backgroundColor: EverloreTheme.void0,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // Ambient glow
-            Positioned(
-              top: -60,
-              right: -60,
-              child: Container(
-                width: 240,
-                height: 240,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      EverloreTheme.violet.withValues(alpha: 0.1),
-                      Colors.transparent,
-                    ],
+      body: RealmBackdrop(
+        // Profile view doesn't need the gallery band — keep it focused.
+        showPortraits: _currentUser == null,
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Back button
+              Align(
+                alignment: Alignment.topLeft,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new,
+                        color: EverloreTheme.ash, size: 20),
+                    onPressed: () =>
+                        context.canPop() ? context.pop() : context.go('/'),
                   ),
                 ),
               ),
-            ),
-
-            Column(
-              children: [
-                // Back button
-                Align(
-                  alignment: Alignment.topLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new,
-                          color: EverloreTheme.ash, size: 20),
-                      onPressed: () =>
-                          context.canPop() ? context.pop() : context.go('/'),
-                    ),
-                  ),
+              Expanded(
+                child: KeyboardAwareScroll(
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  child: _currentUser != null
+                      ? _buildProfile(_currentUser!)
+                      : _buildSignIn(),
                 ),
-
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 28),
-                    child: _currentUser != null
-                        ? _buildProfile(_currentUser!)
-                        : _buildSignIn(),
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -287,6 +284,17 @@ class _AuthScreenState extends State<AuthScreen>
             ),
             border: Border.all(
                 color: EverloreTheme.goldDim.withValues(alpha: 0.4), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 18,
+                offset: const Offset(6, 8),
+              ),
+              BoxShadow(
+                color: EverloreTheme.violet.withValues(alpha: 0.3),
+                blurRadius: 22,
+              ),
+            ],
           ),
           child: Center(
             child: Text(
@@ -391,28 +399,13 @@ class _AuthScreenState extends State<AuthScreen>
 
         const SizedBox(height: 24),
 
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: _isLoading ? null : _handleSignOut,
-            icon: _isLoading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 1.5, color: EverloreTheme.crimson),
-                  )
-                : const Icon(Icons.logout, size: 18),
-            label: Text(_isLoading ? 'Signing out...' : 'Sign Out'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: EverloreTheme.crimson,
-              side: BorderSide(
-                  color: EverloreTheme.crimson.withValues(alpha: 0.4)),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
+        NeuButton(
+          label: _isLoading ? 'Signing out…' : 'Sign Out',
+          icon: Icons.logout,
+          primary: false,
+          accent: EverloreTheme.crimson,
+          loading: _isLoading,
+          onTap: _isLoading ? null : _handleSignOut,
         ),
         const SizedBox(height: 32),
       ],
@@ -450,134 +443,105 @@ class _AuthScreenState extends State<AuthScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
 
         // Header
-        const Text(
-          'Welcome, Traveller',
+        const Center(child: ForgeMark(size: 76)),
+        const SizedBox(height: 20),
+        Text(
+          'Cross the Threshold',
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: GoogleFonts.cinzel(
             color: EverloreTheme.gold,
             fontSize: 26,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.0,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
           ),
         ),
-        const SizedBox(height: 8),
-        const Text(
-          'Sign in to enter your realms and continue your story.',
+        const SizedBox(height: 10),
+        Text(
+          'Sign in to step back into your realms and continue your story.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+          style: GoogleFonts.ebGaramond(
+            color: EverloreTheme.ash,
+            fontSize: 16,
+            height: 1.5,
+          ),
         ),
 
-        const SizedBox(height: 36),
+        const SizedBox(height: 32),
 
-        // Tab selector
-        Container(
-          height: 44,
-          decoration: BoxDecoration(
-            color: EverloreTheme.void2,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
-          ),
-          child: TabBar(
-            controller: _tabController,
-            indicator: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              color: EverloreTheme.void4,
-              border: Border.all(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.5)),
+        _PhoneTab(
+          phoneController: _phoneController,
+          otpController: _otpController,
+          isLoading: _isLoading,
+          codeSent: _codeSent,
+          dialCode: _dialCode,
+          onDialCodeChanged: (c) => setState(() => _dialCode = c),
+          onSendCode: _handleSendCode,
+          onVerifyCode: _handleVerifyCode,
+          onEditPhone: _handleEditPhone,
+        ),
+
+        const SizedBox(height: 28),
+        Row(
+          children: [
+            Expanded(
+              child: Divider(
+                color: EverloreTheme.ash.withValues(alpha: 0.35),
+                height: 1,
+              ),
             ),
-            indicatorSize: TabBarIndicatorSize.tab,
-            dividerColor: Colors.transparent,
-            labelColor: EverloreTheme.gold,
-            unselectedLabelColor: EverloreTheme.ash,
-            labelStyle: const TextStyle(
-                fontWeight: FontWeight.w600, letterSpacing: 0.3, fontSize: 13),
-            tabs: const [
-              Tab(text: 'Google'),
-              Tab(text: 'Phone'),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 24),
-
-        SizedBox(
-          height: 260,
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _GoogleTab(
-                isLoading: _isLoading,
-                googleReady: _googleReady,
-                onPressed: _handleGoogleSignIn,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Text(
+                'or',
+                style: TextStyle(
+                  fontFamily: EverloreTheme.uiFamily,
+                  color: EverloreTheme.ash,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-              _PhoneTab(
-                phoneController: _phoneController,
-                otpController: _otpController,
-                isLoading: _isLoading,
-                codeSent: _codeSent,
-                onSendCode: _handleSendCode,
-                onVerifyCode: _handleVerifyCode,
+            ),
+            Expanded(
+              child: Divider(
+                color: EverloreTheme.ash.withValues(alpha: 0.35),
+                height: 1,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+        const SizedBox(height: 28),
+        NeuButton(
+          label: _isLoading ? 'Signing in…' : 'Continue with Google',
+          icon: Icons.g_mobiledata,
+          primary: false,
+          loading: _isLoading,
+          onTap: (_isLoading || !_googleReady) ? null : _handleGoogleSignIn,
+        ),
+        if (!_googleReady)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              'Google sign-in is not configured for this build.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: EverloreTheme.uiFamily,
+                color: EverloreTheme.ash.withValues(alpha: 0.6),
+                fontSize: 11,
+              ),
+            ),
+          ),
 
         // Messages
         if (_errorMessage != null) ...[
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: EverloreTheme.crimson.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: EverloreTheme.crimson.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.error_outline,
-                    color: EverloreTheme.crimson, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                        color: EverloreTheme.crimson, fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          EngravedBanner(message: _errorMessage!, error: true),
         ],
         if (_successMessage != null) ...[
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: EverloreTheme.verdant.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: EverloreTheme.verdant.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.check_circle_outline,
-                    color: EverloreTheme.verdant, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _successMessage!,
-                    style: const TextStyle(
-                        color: EverloreTheme.verdant, fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          EngravedBanner(message: _successMessage!),
         ],
 
         const SizedBox(height: 32),
@@ -586,171 +550,226 @@ class _AuthScreenState extends State<AuthScreen>
   }
 }
 
-class _GoogleTab extends StatelessWidget {
-  const _GoogleTab({
-    required this.isLoading,
-    required this.googleReady,
-    required this.onPressed,
-  });
-
-  final bool isLoading;
-  final bool googleReady;
-  final Future<void> Function() onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Google sign in card
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: EverloreTheme.cardDecoration,
-          child: Column(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: EverloreTheme.void4,
-                  border: Border.all(
-                      color: EverloreTheme.white20, width: 1),
-                ),
-                child: const Icon(Icons.g_mobiledata,
-                    color: Colors.white70, size: 30),
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'Sign in with Google',
-                style: TextStyle(
-                  color: EverloreTheme.parchment,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Fast and secure — no password needed',
-                style: TextStyle(color: EverloreTheme.ash, fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        SizedBox(
-          height: 52,
-          child: ElevatedButton.icon(
-            onPressed: isLoading || !googleReady ? null : onPressed,
-            icon: isLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: EverloreTheme.void1),
-                  )
-                : const Icon(Icons.g_mobiledata, size: 22),
-            label: Text(isLoading ? 'Signing in...' : 'Continue with Google'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: EverloreTheme.gold,
-              foregroundColor: EverloreTheme.void0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ),
-        if (!googleReady)
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Text(
-              'Google sign-in is not configured for this build.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: EverloreTheme.ash.withValues(alpha: 0.6),
-                  fontSize: 11),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _PhoneTab extends StatelessWidget {
+class _PhoneTab extends StatefulWidget {
   const _PhoneTab({
     required this.phoneController,
     required this.otpController,
     required this.isLoading,
     required this.codeSent,
+    required this.dialCode,
+    required this.onDialCodeChanged,
     required this.onSendCode,
     required this.onVerifyCode,
+    required this.onEditPhone,
   });
 
   final TextEditingController phoneController;
   final TextEditingController otpController;
   final bool isLoading;
   final bool codeSent;
+  final DialCode dialCode;
+  final ValueChanged<DialCode> onDialCodeChanged;
   final Future<void> Function() onSendCode;
   final Future<void> Function() onVerifyCode;
+  final VoidCallback onEditPhone;
+
+  @override
+  State<_PhoneTab> createState() => _PhoneTabState();
+}
+
+class _PhoneTabState extends State<_PhoneTab> {
+  static const int _resendSeconds = 30;
+  Timer? _timer;
+  int _cooldown = 0;
+  final FocusNode _phoneFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.codeSent) _startCooldown();
+  }
+
+  @override
+  void didUpdateWidget(_PhoneTab old) {
+    super.didUpdateWidget(old);
+    if (widget.codeSent && !old.codeSent) _startCooldown();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _phoneFocus.dispose();
+    super.dispose();
+  }
+
+  void _startCooldown() {
+    _timer?.cancel();
+    setState(() => _cooldown = _resendSeconds);
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      setState(() {
+        _cooldown--;
+        if (_cooldown <= 0) t.cancel();
+      });
+    });
+  }
+
+  Future<void> _resend() async {
+    _startCooldown(); // optimistic — blocks spamming even if the call 429s
+    await widget.onSendCode();
+  }
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 260),
+      transitionBuilder: (child, anim) => FadeTransition(
+        opacity: anim,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.06, 0),
+            end: Offset.zero,
+          ).animate(anim),
+          child: child,
+        ),
+      ),
+      child: widget.codeSent ? _buildOtpStep() : _buildPhoneStep(),
+    );
+  }
+
+  Widget _buildPhoneStep() {
     return Column(
+      key: const ValueKey('phone-step'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: phoneController,
-          keyboardType: TextInputType.phone,
-          style: const TextStyle(color: EverloreTheme.parchment),
-          decoration: const InputDecoration(
-            hintText: '+1 555 000 0000',
-            prefixIcon: Icon(Icons.phone_outlined,
-                color: EverloreTheme.ash, size: 18),
-            labelText: 'Phone number',
+        KeyboardAwareInputGroup(
+          focusNode: _phoneFocus,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              NeuField(
+                controller: widget.phoneController,
+                focusNode: _phoneFocus,
+                scrollPadding: const EdgeInsets.symmetric(horizontal: 24),
+                hintText: '555 000 0000',
+                keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]')),
+                ],
+                prefix: DialCodeButton(
+                  value: widget.dialCode,
+                  onChanged: widget.onDialCodeChanged,
+                ),
+              ),
+              const SizedBox(height: 14),
+              NeuButton(
+                label: widget.isLoading ? 'Sending the code…' : 'Send the Code',
+                loading: widget.isLoading,
+                onTap: widget.isLoading ? null : widget.onSendCode,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOtpStep() {
+    final fullNumber =
+        '${widget.dialCode.code} ${widget.phoneController.text.trim()}';
+    return Column(
+      key: const ValueKey('otp-step'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Speak the code we sent.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.ebGaramond(
+              color: EverloreTheme.ash, fontSize: 15),
+        ),
+        const SizedBox(height: 6),
+        // The number, with a Change affordance back to phone entry.
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                fullNumber,
+                style: TextStyle(
+                  fontFamily: EverloreTheme.uiFamily,
+                  color: EverloreTheme.parchment,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: widget.isLoading ? null : widget.onEditPhone,
+              behavior: HitTestBehavior.opaque,
+              child: Text(
+                'Change',
+                style: TextStyle(
+                  fontFamily: EverloreTheme.uiFamily,
+                  color: EverloreTheme.gold,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        KeyboardAwareInputGroup(
+          active: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              OtpField(
+                controller: widget.otpController,
+                length: 6,
+                autofocus: true,
+                scrollPadding: const EdgeInsets.symmetric(horizontal: 24),
+                onCompleted: () {
+                  if (!widget.isLoading) widget.onVerifyCode();
+                },
+              ),
+              const SizedBox(height: 18),
+              NeuButton(
+                label: widget.isLoading ? 'Verifying…' : 'Enter the Realm',
+                accent: EverloreTheme.aether,
+                loading: widget.isLoading,
+                onTap: widget.isLoading ? null : widget.onVerifyCode,
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 14),
-        SizedBox(
-          height: 50,
-          child: ElevatedButton(
-            onPressed: isLoading ? null : onSendCode,
-            child: Text(isLoading && !codeSent
-                ? 'Sending code...'
-                : 'Send Verification Code'),
-          ),
+        // Resend, with a cooldown countdown.
+        Center(
+          child: _cooldown > 0
+              ? Text(
+                  'Resend code in 0:${_cooldown.toString().padLeft(2, '0')}',
+                  style: TextStyle(
+                    fontFamily: EverloreTheme.uiFamily,
+                    color: EverloreTheme.ash,
+                    fontSize: 13,
+                  ),
+                )
+              : GestureDetector(
+                  onTap: widget.isLoading ? null : _resend,
+                  behavior: HitTestBehavior.opaque,
+                  child: Text(
+                    'Resend code',
+                    style: TextStyle(
+                      fontFamily: EverloreTheme.uiFamily,
+                      color: EverloreTheme.gold,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
         ),
-        if (codeSent) ...[
-          const SizedBox(height: 20),
-          TextField(
-            controller: otpController,
-            keyboardType: TextInputType.number,
-            style: const TextStyle(
-              color: EverloreTheme.parchment,
-              fontSize: 22,
-              letterSpacing: 8,
-            ),
-            textAlign: TextAlign.center,
-            maxLength: 6,
-            decoration: const InputDecoration(
-              hintText: '— — — — — —',
-              hintStyle: TextStyle(letterSpacing: 4, fontSize: 16),
-              counterText: '',
-              labelText: 'Verification code',
-            ),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 50,
-            child: ElevatedButton(
-              onPressed: isLoading ? null : onVerifyCode,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: EverloreTheme.violet,
-                foregroundColor: Colors.white,
-              ),
-              child: Text(isLoading ? 'Verifying...' : 'Enter the Realm'),
-            ),
-          ),
-        ],
       ],
     );
   }
