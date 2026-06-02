@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'app_routes.dart';
 import 'app/theme/nexus_theme.dart';
+import 'shared/widgets/dismiss_keyboard.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +22,8 @@ class EverloreApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: NexusTheme.dark,
       routerConfig: router,
+      builder: (context, child) =>
+          DismissKeyboard(child: child ?? const SizedBox.shrink()),
     );
   }
 }
