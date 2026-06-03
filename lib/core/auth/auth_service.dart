@@ -114,6 +114,12 @@ class AuthService {
     }
   }
 
+  /// Permanently deletes the signed-in account and all associated server data.
+  static Future<void> deleteAccount() async {
+    await ApiClient.delete('/auth/account');
+    await logout();
+  }
+
   static Future<void> logout() async {
     await _wsManager.disconnect(clearToken: true);
     await SecureStore.clearAll();

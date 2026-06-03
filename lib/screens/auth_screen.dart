@@ -10,6 +10,7 @@ import '../core/auth/google_auth_service.dart';
 import '../core/network/api_client.dart';
 import '../shared/models/user.dart';
 import '../app/theme/nexus_theme.dart';
+import '../core/onboarding/interests_store.dart';
 import '../shared/widgets/keyboard_aware_scroll.dart';
 import '../shared/widgets/realm_backdrop.dart';
 import '../shared/widgets/neu.dart';
@@ -33,6 +34,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _googleReady = false;
   bool _isLoading = false;
   bool _isUpdatingPreferences = false;
+  bool _isDeletingAccount = false;
   bool _codeSent = false;
   String? _errorMessage;
   String? _successMessage;
@@ -71,6 +73,16 @@ class _AuthScreenState extends State<AuthScreen> {
     _successMessage = null;
   }
 
+  /// After a successful sign-in, send first-time players through the interests
+  /// onboarding (once per device); everyone else lands on Discover (NOT their
+  /// realms — that's reachable from Discover's top icons). Applies to creators
+  /// too.
+  Future<void> _routeAfterAuth() async {
+    final onboarded = await InterestsStore.isOnboarded();
+    if (!mounted) return;
+    context.go(onboarded ? '/discover' : '/onboarding');
+  }
+
   String _normalizePhone(String input) {
     final trimmed = input.trim();
     if (trimmed.startsWith('+')) {
@@ -96,7 +108,7 @@ class _AuthScreenState extends State<AuthScreen> {
       final user = await AuthService.loginWithGoogle(idToken);
       if (!mounted) return;
       setState(() => _currentUser = user);
-      context.go('/');
+      await _routeAfterAuth();
     } on ApiException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e) {
@@ -143,7 +155,7 @@ class _AuthScreenState extends State<AuthScreen> {
       );
       if (!mounted) return;
       setState(() => _currentUser = user);
-      context.go('/');
+      await _routeAfterAuth();
     } on ApiException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e) {
@@ -164,19 +176,109 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _handleSignOut() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _currentUser = null;
+      _codeSent = false;
+      _phoneController.clear();
+      _otpController.clear();
+    });
     try {
-      try { await _googleAuthService.signOut(); } catch (_) {}
+      try {
+        await _googleAuthService.signOut();
+      } catch (_) {}
       await AuthService.logout();
+    } catch (_) {
+      // UI already shows signed-out state; session clear is best-effort.
+    }
+  }
+
+  void _confirmDeleteAccount() {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: EverloreTheme.void2,
+        title: Text(
+          'Delete your account?',
+          style: EverloreTheme.serifDisplay(
+            size: 18,
+            color: EverloreTheme.parchment,
+          ),
+        ),
+        content: Text(
+          'This permanently deletes your profile, all your realms and chats, '
+          'and any worlds you created. This cannot be undone.',
+          style: EverloreTheme.ui(
+            size: 14,
+            color: EverloreTheme.ash,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(
+              'Cancel',
+              style: EverloreTheme.ui(color: EverloreTheme.ash),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              _handleDeleteAccount();
+            },
+            child: Text(
+              'Delete',
+              style: EverloreTheme.ui(color: EverloreTheme.crimson),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleDeleteAccount() async {
+    setState(() => _isDeletingAccount = true);
+    try {
+      await AuthService.deleteAccount();
+      try {
+        await _googleAuthService.signOut();
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _currentUser = null;
         _codeSent = false;
         _phoneController.clear();
         _otpController.clear();
+        _isDeletingAccount = false;
       });
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      context.go('/auth');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Your account was deleted.',
+            style: EverloreTheme.ui(size: 13, color: EverloreTheme.parchment),
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.message;
+        _isDeletingAccount = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete account: ${e.message}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceFirst('Exception: ', '');
+      setState(() {
+        _errorMessage = message;
+        _isDeletingAccount = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete account: $message')),
+      );
     }
   }
 
@@ -400,12 +502,19 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 24),
 
         NeuButton(
-          label: _isLoading ? 'Signing out…' : 'Sign Out',
+          label: 'Sign Out',
           icon: Icons.logout,
           primary: false,
           accent: EverloreTheme.crimson,
-          loading: _isLoading,
-          onTap: _isLoading ? null : _handleSignOut,
+          onTap: _handleSignOut,
+        ),
+        const SizedBox(height: 16),
+        NeuButton(
+          label: 'Delete Account',
+          icon: Icons.delete_forever_outlined,
+          primary: false,
+          accent: EverloreTheme.crimson,
+          onTap: _isDeletingAccount ? null : _confirmDeleteAccount,
         ),
         const SizedBox(height: 32),
       ],
