@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../../app/theme/nexus_theme.dart';
+import '../../../../../shared/app_icons.dart';
 import '../../../../../shared/models/world_template.dart';
 
 class MyWorldCard extends StatelessWidget {
@@ -181,13 +182,9 @@ class MyWorldCard extends StatelessWidget {
                                         ),
                                       ),
                                     ),
-                                    child: const Text(
-                                      '18+',
-                                      style: TextStyle(
-                                        color: EverloreTheme.crimson,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                                    child: const EvIcon(
+                                      AppIcons.nsfw,
+                                      size: 18,
                                     ),
                                   ),
                               ],
@@ -311,7 +308,7 @@ class MyWorldCard extends StatelessWidget {
                         if (onDelete != null) ...[
                           const SizedBox(width: 16),
                           _ActionButton(
-                            icon: Icons.delete_outline,
+                            assetIcon: AppIcons.destroy,
                             label: 'Delete',
                             color: EverloreTheme.crimson,
                             onTap: () => _confirmDelete(context),
@@ -329,7 +326,7 @@ class MyWorldCard extends StatelessWidget {
                                   ),
                                 )
                               : _ActionButton(
-                                  icon: Icons.public,
+                                  assetIcon: AppIcons.publish,
                                   label: 'Release to Realm',
                                   color: EverloreTheme.gold,
                                   onTap: onPublish!,
@@ -354,7 +351,7 @@ class MyWorldCard extends StatelessWidget {
                         const Spacer(),
                         if (onDelete != null)
                           _ActionButton(
-                            icon: Icons.delete_outline,
+                            assetIcon: AppIcons.destroy,
                             label: 'Delete',
                             color: EverloreTheme.crimson,
                             onTap: () => _confirmDelete(context),
@@ -484,13 +481,15 @@ class _InfoChip extends StatelessWidget {
 }
 
 class _ActionButton extends StatelessWidget {
-  final IconData icon;
+  final IconData? icon;
+  final String? assetIcon;
   final String label;
   final Color color;
   final VoidCallback onTap;
 
   const _ActionButton({
-    required this.icon,
+    this.icon,
+    this.assetIcon,
     required this.label,
     required this.color,
     required this.onTap,
@@ -503,7 +502,10 @@ class _ActionButton extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: color),
+          if (assetIcon != null)
+            EvIcon(assetIcon!, size: 16)
+          else
+            Icon(icon!, size: 14, color: color),
           const SizedBox(width: 5),
           Text(
             label,

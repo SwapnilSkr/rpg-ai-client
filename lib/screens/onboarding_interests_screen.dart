@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../app/theme/nexus_theme.dart';
 import '../core/auth/auth_service.dart';
 import '../core/onboarding/interests_store.dart';
+import '../shared/app_icons.dart';
 import '../shared/narrative_styles.dart';
 import '../shared/widgets/realm_backdrop.dart';
 import '../shared/widgets/neu.dart';
@@ -40,28 +41,28 @@ class _OnboardingInterestsScreenState extends State<OnboardingInterestsScreen> {
     for (var i = 0; i < styles.length; i += 2) {
       final a = styles[i];
       final b = (i + 1 < styles.length) ? styles[i + 1] : null;
-      rows.add(Padding(
-        padding: EdgeInsets.only(bottom: i + 2 < styles.length ? gap : 0),
-        child: Row(
-          children: [
-            Expanded(child: _chipFor(a)),
-            const SizedBox(width: gap),
-            Expanded(
-              child: b == null ? const SizedBox() : _chipFor(b),
-            ),
-          ],
+      rows.add(
+        Padding(
+          padding: EdgeInsets.only(bottom: i + 2 < styles.length ? gap : 0),
+          child: Row(
+            children: [
+              Expanded(child: _chipFor(a)),
+              const SizedBox(width: gap),
+              Expanded(child: b == null ? const SizedBox() : _chipFor(b)),
+            ],
+          ),
         ),
-      ));
+      );
     }
     return Column(children: rows);
   }
 
   Widget _chipFor(NarrativeStyle style) => _InterestChip(
-        style: style,
-        familyKey: style.familyKey ?? '',
-        selected: _selected.contains(style.key),
-        onTap: () => _toggle(style.key),
-      );
+    style: style,
+    familyKey: style.familyKey ?? '',
+    selected: _selected.contains(style.key),
+    onTap: () => _toggle(style.key),
+  );
 
   Future<void> _finish({required bool skipped}) async {
     if (!skipped) {
@@ -139,7 +140,10 @@ class _OnboardingInterestsScreenState extends State<OnboardingInterestsScreen> {
                       ),
                       const SizedBox(height: 28),
                       for (final family in kStyleFamilies) ...[
-                        _FamilyHeader(label: family.label),
+                        _FamilyHeader(
+                          label: family.label,
+                          familyKey: family.key,
+                        ),
                         const SizedBox(height: 12),
                         _chipGrid(stylesInFamily(family.key), family.key),
                         const SizedBox(height: 24),
@@ -152,9 +156,7 @@ class _OnboardingInterestsScreenState extends State<OnboardingInterestsScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
                 child: NeuButton(
-                  label: enough
-                      ? 'Enter Everlore'
-                      : 'Choose $remaining more',
+                  label: enough ? 'Enter Everlore' : 'Choose $remaining more',
                   icon: enough ? Icons.auto_awesome : null,
                   onTap: enough ? () => _finish(skipped: false) : null,
                 ),
@@ -169,19 +171,26 @@ class _OnboardingInterestsScreenState extends State<OnboardingInterestsScreen> {
 
 class _FamilyHeader extends StatelessWidget {
   final String label;
-  const _FamilyHeader({required this.label});
+  final String familyKey;
+  const _FamilyHeader({required this.label, required this.familyKey});
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label.toUpperCase(),
-      style: TextStyle(
-        fontFamily: EverloreTheme.uiFamily,
-        color: EverloreTheme.goldDim,
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.6,
-      ),
+    return Row(
+      children: [
+        EvIcon(AppIcons.family(familyKey), size: 20),
+        const SizedBox(width: 8),
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontFamily: EverloreTheme.uiFamily,
+            color: EverloreTheme.goldDim,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.6,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -277,14 +286,6 @@ class _Thumb extends StatelessWidget {
 
   static const double _size = 34;
 
-  static const Map<String, IconData> _familyIcon = {
-    'modern_everyday': Icons.chat_bubble_outline,
-    'epic_adventure': Icons.shield_outlined,
-    'atmospheric_dark': Icons.dark_mode_outlined,
-    'romance_charged': Icons.favorite_border,
-    'cozy_playful': Icons.local_cafe_outlined,
-  };
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -318,11 +319,7 @@ class _Thumb extends StatelessWidget {
         ),
       ),
       alignment: Alignment.center,
-      child: Icon(
-        _familyIcon[familyKey] ?? Icons.auto_awesome,
-        size: 16,
-        color: EverloreTheme.gold.withValues(alpha: 0.8),
-      ),
+      child: EvIcon(AppIcons.family(familyKey), size: 20),
     );
   }
 }

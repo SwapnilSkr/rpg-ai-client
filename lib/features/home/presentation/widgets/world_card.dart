@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../../shared/models/world_instance.dart';
 import '../../../../../app/theme/nexus_theme.dart';
+import '../../../../../shared/app_icons.dart';
 
 // Warm-obsidian bases for realm cards — pick by hash of instanceId. Subtle
 // variation only; the brand stays the forged shell, the accent is the tint.
@@ -199,14 +200,14 @@ class WorldCard extends StatelessWidget {
                     Row(
                       children: [
                         _Stat(
-                          icon: Icons.chat_bubble_outline,
+                          icon: AppIcons.event,
                           label: '${instance.meta.totalEvents}',
                           tooltip: 'Events',
                           color: accentColor,
                         ),
                         const SizedBox(width: 16),
                         _Stat(
-                          icon: Icons.bookmark_outline,
+                          icon: AppIcons.echo,
                           label: '${instance.meta.totalMemories}',
                           tooltip: 'Echoes',
                           color: accentColor,
@@ -254,7 +255,7 @@ class WorldCard extends StatelessWidget {
               const SizedBox(height: 20),
               if (onArchive != null)
                 _OptionTile(
-                  icon: Icons.archive_outlined,
+                  icon: AppIcons.seal,
                   label: 'Seal Realm (Archive)',
                   subtitle:
                       'Preserve your story but hide it from active realms',
@@ -265,7 +266,7 @@ class WorldCard extends StatelessWidget {
                 ),
               if (onDelete != null)
                 _OptionTile(
-                  icon: Icons.delete_forever_outlined,
+                  icon: AppIcons.destroy,
                   label: 'Destroy Realm (Delete)',
                   subtitle: 'Permanently erase this realm and all its echoes',
                   isDestructive: true,
@@ -329,7 +330,7 @@ class WorldCard extends StatelessWidget {
 }
 
 class _OptionTile extends StatelessWidget {
-  final IconData icon;
+  final String icon;
   final String label;
   final String subtitle;
   final bool isDestructive;
@@ -358,7 +359,10 @@ class _OptionTile extends StatelessWidget {
               ? EverloreTheme.crimson.withValues(alpha: 0.1)
               : EverloreTheme.void3,
         ),
-        child: Icon(icon, color: color, size: 20),
+        child: Opacity(
+          opacity: isDestructive ? 0.82 : 1,
+          child: EvIcon(icon, size: 22),
+        ),
       ),
       title: Text(label, style: TextStyle(color: color, fontSize: 15)),
       subtitle: Text(
@@ -371,7 +375,7 @@ class _OptionTile extends StatelessWidget {
 }
 
 class _Stat extends StatelessWidget {
-  final IconData icon;
+  final String icon;
   final String label;
   final String tooltip;
   final Color color;
@@ -388,7 +392,7 @@ class _Stat extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: color.withValues(alpha: 0.6)),
+        Opacity(opacity: 0.82, child: EvIcon(icon, size: 14)),
         const SizedBox(width: 4),
         Text(
           label,
@@ -414,14 +418,21 @@ class _SceneTag extends StatelessWidget {
         color: color.withValues(alpha: 0.1),
         border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
-      child: Text(
-        tag,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          EvIcon(AppIcons.scene(tag), size: 14),
+          const SizedBox(width: 4),
+          Text(
+            tag,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../core/auth/auth_service.dart';
 import '../core/onboarding/interests_store.dart';
 import '../app/theme/nexus_theme.dart';
+import '../shared/app_icons.dart';
 
 /// Everlore splash — Phase 2 of the premium redesign.
 ///
@@ -51,9 +52,11 @@ const List<_OrbChar> _outerRing = [
 // Orbit geometry — shared by the disc layout and the 3D ring painter so the
 // rings act as the visible "tracks" the character discs ride on.
 const Offset _kOrbitCenter = Offset(180, 180);
-const double _kRingTilt = 0.42; // ry/rx — perspective tilt of the orbit plane
 const double _kOuterRx = 150;
-const double _kInnerRx = 96;
+const double _kOuterTilt = 0.50; // ry/rx — deep track, clear of inner beads
+const double _kInnerRx = 82;
+const double _kInnerTilt =
+    0.30; // flatter inner track avoids cross-ring overlap
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
@@ -168,7 +171,8 @@ class _SplashScreenState extends State<SplashScreen>
                       opacity: _taglineFade.value,
                       child: Text(
                         'A LIVING WORLD AWAITS',
-                        style: TextStyle(fontFamily: EverloreTheme.uiFamily, 
+                        style: TextStyle(
+                          fontFamily: EverloreTheme.uiFamily,
                           color: EverloreTheme.ash,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -210,7 +214,7 @@ class _OrbitTheatre extends StatelessWidget {
       ring: _outerRing,
       center: _kOrbitCenter,
       rx: _kOuterRx,
-      ry: _kOuterRx * _kRingTilt,
+      ry: _kOuterRx * _kOuterTilt,
       baseAngle: orbit * 2 * math.pi,
       baseSize: 50,
       reveal: ringsReveal,
@@ -221,9 +225,9 @@ class _OrbitTheatre extends StatelessWidget {
       ring: _innerRing,
       center: _kOrbitCenter,
       rx: _kInnerRx,
-      ry: _kInnerRx * _kRingTilt,
+      ry: _kInnerRx * _kInnerTilt,
       baseAngle: -orbit * 2 * math.pi * 1.35 + 0.6,
-      baseSize: 54,
+      baseSize: 48,
       reveal: ringsReveal,
       out: discs,
     );
@@ -294,13 +298,15 @@ class _OrbitTheatre extends StatelessWidget {
       final ey = depth * ry * r;
       final scale = (0.62 + (depth + 1) / 2 * 0.46); // back small, front big
       final opacity = (0.42 + (depth + 1) / 2 * 0.58) * r;
-      out.add(_PlacedDisc(
-        ch: ring[i],
-        pos: center + Offset(ex, ey),
-        size: baseSize * scale,
-        opacity: opacity.clamp(0.0, 1.0),
-        depth: depth,
-      ));
+      out.add(
+        _PlacedDisc(
+          ch: ring[i],
+          pos: center + Offset(ex, ey),
+          size: baseSize * scale,
+          opacity: opacity.clamp(0.0, 1.0),
+          depth: depth,
+        ),
+      );
     }
   }
 }
@@ -331,7 +337,10 @@ class _PlacedDisc {
       top: pos.dy - size / 2,
       width: size,
       height: size,
-      child: Opacity(opacity: opacity, child: _AvatarDisc(ch: ch, size: size)),
+      child: Opacity(
+        opacity: opacity,
+        child: _AvatarDisc(ch: ch, size: size),
+      ),
     );
   }
 }
@@ -443,123 +452,35 @@ class _ForgedSigil extends StatelessWidget {
           ),
         ],
       ),
-      child: CustomPaint(painter: _SigilPainter(sweep)),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          EvIcon(AppIcons.forgeSigil, size: _size * 0.72),
+          IgnorePointer(
+            child: Opacity(
+              opacity: 0.22,
+              child: Transform.translate(
+                offset: Offset((sweep * 2 - 1) * _size * 0.5, 0),
+                child: Container(
+                  width: _size * 0.14,
+                  height: _size * 0.82,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        EverloreTheme.goldGlow.withValues(alpha: 0.55),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
-}
-
-/// Draws the gold ring (forged metal), the engraved rune, and the moving
-/// specular highlight — all inside the neumorphic disc.
-class _SigilPainter extends CustomPainter {
-  final double sweep;
-  _SigilPainter(this.sweep);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final r = size.width / 2;
-
-    // Engraved inner well (skeuomorphic recess).
-    final wellRadius = r * 0.62;
-    canvas.drawCircle(
-      c,
-      wellRadius,
-      Paint()
-        ..shader = const RadialGradient(
-          center: Alignment(0.2, 0.3),
-          colors: [EverloreTheme.void0, EverloreTheme.void2],
-        ).createShader(Rect.fromCircle(center: c, radius: wellRadius)),
-    );
-
-    // Forged gold rim (uneven sweep gradient = light catching metal).
-    final rimRect = Rect.fromCircle(center: c, radius: r * 0.78);
-    canvas.drawCircle(
-      c,
-      r * 0.78,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 6
-        ..shader = const SweepGradient(
-          colors: [
-            EverloreTheme.goldDim,
-            EverloreTheme.goldGlow,
-            EverloreTheme.gold,
-            EverloreTheme.goldDim,
-            EverloreTheme.goldGlow,
-            EverloreTheme.goldDim,
-          ],
-          stops: [0.0, 0.2, 0.45, 0.7, 0.88, 1.0],
-        ).createShader(rimRect),
-    );
-    canvas.drawCircle(
-      c,
-      r * 0.78 - 4,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4
-        ..color = Colors.black.withValues(alpha: 0.5),
-    );
-
-    // Engraved arcane rune.
-    final glyph = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.6
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = EverloreTheme.goldGlow.withValues(alpha: 0.92);
-    final glyphShadow = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.6
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = Colors.black.withValues(alpha: 0.55);
-
-    final g = r * 0.32;
-    final path = Path()
-      ..moveTo(c.dx, c.dy - g)
-      ..lineTo(c.dx, c.dy + g)
-      ..moveTo(c.dx, c.dy - g)
-      ..lineTo(c.dx - g * 0.62, c.dy - g * 0.18)
-      ..moveTo(c.dx, c.dy - g)
-      ..lineTo(c.dx + g * 0.62, c.dy - g * 0.18)
-      ..moveTo(c.dx, c.dy + g)
-      ..lineTo(c.dx - g * 0.62, c.dy + g * 0.18)
-      ..moveTo(c.dx, c.dy + g)
-      ..lineTo(c.dx + g * 0.62, c.dy + g * 0.18);
-    canvas.save();
-    canvas.translate(0.7, 1.1);
-    canvas.drawPath(path, glyphShadow);
-    canvas.restore();
-    canvas.drawPath(path, glyph);
-    canvas.drawCircle(c, 3.0, Paint()..color = EverloreTheme.goldGlow);
-
-    // Specular sweep across the metal.
-    final clip = Path()..addOval(Rect.fromCircle(center: c, radius: r * 0.82));
-    canvas.save();
-    canvas.clipPath(clip);
-    final sweepX = (sweep * 2.4 - 0.7) * size.width;
-    final bandWidth = size.width * 0.30;
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.transparent,
-            Colors.white.withValues(alpha: 0.0),
-            Colors.white.withValues(alpha: 0.15),
-            Colors.white.withValues(alpha: 0.0),
-            Colors.transparent,
-          ],
-          stops: const [0.0, 0.4, 0.5, 0.6, 1.0],
-        ).createShader(Rect.fromLTWH(sweepX, 0, bandWidth, size.height)),
-    );
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_SigilPainter old) => old.sweep != sweep;
 }
 
 /// The two orbital-plane rings the discs ride on, rendered as 3D forged-metal
@@ -582,14 +503,26 @@ class _OrbitRingsPainter extends CustomPainter {
     if (reveal <= 0.01) return;
     final c = size.center(Offset.zero);
     final r = Curves.easeOutCubic.transform(reveal.clamp(0.0, 1.0));
-    _ring(canvas, c, _kOuterRx * r, _kOuterRx * _kRingTilt * r, glint, r);
+    _ring(canvas, c, _kOuterRx * r, _kOuterRx * _kOuterTilt * r, glint, r);
     // Inner ring's glint is phase-offset so the two shines don't move in lockstep.
-    _ring(canvas, c, _kInnerRx * r, _kInnerRx * _kRingTilt * r,
-        (glint + 0.5) % 1.0, r);
+    _ring(
+      canvas,
+      c,
+      _kInnerRx * r,
+      _kInnerRx * _kInnerTilt * r,
+      (glint + 0.5) % 1.0,
+      r,
+    );
   }
 
-  void _ring(Canvas canvas, Offset c, double rx, double ry, double glintPhase,
-      double a) {
+  void _ring(
+    Canvas canvas,
+    Offset c,
+    double rx,
+    double ry,
+    double glintPhase,
+    double a,
+  ) {
     if (rx < 1) return;
     final start = front ? 0.0 : math.pi; // bottom half (sin>0) vs top half
     const sweep = math.pi;
@@ -721,8 +654,9 @@ class _AmbientPainter extends CustomPainter {
       final dx =
           e.x * size.width + math.sin((prog + e.phase) * math.pi * 2) * 10;
       final dy = y * size.height;
-      final color =
-          e.gold ? EverloreTheme.goldGlow : EverloreTheme.violetBright;
+      final color = e.gold
+          ? EverloreTheme.goldGlow
+          : EverloreTheme.violetBright;
       canvas.drawCircle(
         Offset(dx, dy),
         e.size,
@@ -794,11 +728,11 @@ class _EngravedWordmark extends StatelessWidget {
                     child: Text(
                       _letters[i],
                       style: base.copyWith(
-                          color: Colors.black.withValues(alpha: 0.6)),
+                        color: Colors.black.withValues(alpha: 0.6),
+                      ),
                     ),
                   ),
-                  Text(_letters[i],
-                      style: base.copyWith(color: Colors.white)),
+                  Text(_letters[i], style: base.copyWith(color: Colors.white)),
                 ],
               ),
             ),

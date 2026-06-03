@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../shared/app_icons.dart';
 import '../../../shared/models/world_template.dart';
+import '../../../shared/narrative_styles.dart';
 import '../../../core/onboarding/interests_store.dart';
 import '../data/template_repository.dart';
 import '../data/interest_ranking.dart';
@@ -74,12 +76,19 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/characters/new'),
         backgroundColor: EverloreTheme.violet,
-        icon: const Icon(Icons.person_add_alt_1, color: EverloreTheme.parchment, size: 18),
-        label: Text('Character',
-            style: EverloreTheme.ui(
-                size: 13,
-                color: EverloreTheme.parchment,
-                weight: FontWeight.w700)),
+        icon: const Icon(
+          Icons.person_add_alt_1,
+          color: EverloreTheme.parchment,
+          size: 18,
+        ),
+        label: Text(
+          'Character',
+          style: EverloreTheme.ui(
+            size: 13,
+            color: EverloreTheme.parchment,
+            weight: FontWeight.w700,
+          ),
+        ),
       ),
       body: CustomScrollView(
         slivers: [
@@ -127,11 +136,14 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
                 : EverloreTheme.white10,
           ),
         ),
-        child: Text(label,
-            style: EverloreTheme.ui(
-                size: 12.5,
-                color: active ? accent : EverloreTheme.ash,
-                weight: active ? FontWeight.w700 : FontWeight.w500)),
+        child: Text(
+          label,
+          style: EverloreTheme.ui(
+            size: 12.5,
+            color: active ? accent : EverloreTheme.ash,
+            weight: active ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
       ),
     );
   }
@@ -143,10 +155,12 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
       elevation: 0,
       scrolledUnderElevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new,
-            color: EverloreTheme.ash, size: 18),
-        onPressed: () =>
-            context.canPop() ? context.pop() : context.go('/'),
+        icon: const Icon(
+          Icons.arrow_back_ios_new,
+          color: EverloreTheme.ash,
+          size: 18,
+        ),
+        onPressed: () => context.canPop() ? context.pop() : context.go('/'),
       ),
       title: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -161,10 +175,7 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
           ),
           Text(
             'Choose your next adventure',
-            style: TextStyle(
-              color: EverloreTheme.ash,
-              fontSize: 11,
-            ),
+            style: TextStyle(color: EverloreTheme.ash, fontSize: 11),
           ),
         ],
       ),
@@ -180,21 +191,33 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
             color: EverloreTheme.void2,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-                color: EverloreTheme.goldDim.withValues(alpha: 0.25)),
+              color: EverloreTheme.goldDim.withValues(alpha: 0.25),
+            ),
           ),
           child: TextField(
             controller: _searchController,
-            style: const TextStyle(color: EverloreTheme.parchment, fontSize: 14),
+            style: const TextStyle(
+              color: EverloreTheme.parchment,
+              fontSize: 14,
+            ),
             decoration: InputDecoration(
               hintText: 'Search for a world...',
               hintStyle: const TextStyle(
-                  color: EverloreTheme.ash, fontStyle: FontStyle.italic),
-              prefixIcon: const Icon(Icons.search,
-                  color: EverloreTheme.goldDim, size: 20),
+                color: EverloreTheme.ash,
+                fontStyle: FontStyle.italic,
+              ),
+              prefixIcon: const Icon(
+                Icons.search,
+                color: EverloreTheme.goldDim,
+                size: 20,
+              ),
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear,
-                          color: EverloreTheme.ash, size: 18),
+                      icon: const Icon(
+                        Icons.clear,
+                        color: EverloreTheme.ash,
+                        size: 18,
+                      ),
                       onPressed: () {
                         _searchController.clear();
                         _loadTemplates();
@@ -224,15 +247,18 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
                 width: 28,
                 height: 28,
                 child: CircularProgressIndicator(
-                    strokeWidth: 1.5, color: EverloreTheme.gold),
+                  strokeWidth: 1.5,
+                  color: EverloreTheme.gold,
+                ),
               ),
               SizedBox(height: 14),
               Text(
                 'Discovering worlds...',
                 style: TextStyle(
-                    color: EverloreTheme.ash,
-                    fontSize: 13,
-                    fontStyle: FontStyle.italic),
+                  color: EverloreTheme.ash,
+                  fontSize: 13,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ],
           ),
@@ -248,22 +274,25 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.wifi_off,
-                    color: EverloreTheme.ash, size: 40),
+                const EvIcon(AppIcons.errorRune, size: 110),
                 const SizedBox(height: 16),
                 const Text(
                   'Could not reach the realm',
                   style: TextStyle(
-                      color: EverloreTheme.parchment,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600),
+                    color: EverloreTheme.parchment,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   _error!,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                      color: EverloreTheme.ash, fontSize: 12, height: 1.5),
+                    color: EverloreTheme.ash,
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
@@ -285,15 +314,18 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(isChar ? Icons.person_off_outlined : Icons.explore_off,
-                  color: EverloreTheme.goldDim, size: 48),
+              EvIcon(
+                isChar ? AppIcons.navProfile : AppIcons.emptyRealms,
+                size: 110,
+              ),
               const SizedBox(height: 16),
               Text(
                 isChar ? 'No characters yet' : 'No worlds found',
                 style: const TextStyle(
-                    color: EverloreTheme.parchment,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600),
+                  color: EverloreTheme.parchment,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -315,22 +347,19 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 90),
       sliver: SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            if (index == 0) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(label, style: EverloreTheme.sectionHeader),
-              );
-            }
-            final t = visible[index - 1];
-            return _WorldCard(
-              template: t,
-              onTap: () => context.push('/templates/${t.id}'),
+        delegate: SliverChildBuilderDelegate((context, index) {
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(label, style: EverloreTheme.sectionHeader),
             );
-          },
-          childCount: visible.length + 1,
-        ),
+          }
+          final t = visible[index - 1];
+          return _WorldCard(
+            template: t,
+            onTap: () => context.push('/templates/${t.id}'),
+          );
+        }, childCount: visible.length + 1),
       ),
     );
   }
@@ -356,9 +385,7 @@ class _WorldCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: EverloreTheme.void2,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: accentColor.withValues(alpha: 0.15),
-            ),
+            border: Border.all(color: accentColor.withValues(alpha: 0.15)),
           ),
           child: Material(
             color: Colors.transparent,
@@ -382,7 +409,8 @@ class _WorldCard extends StatelessWidget {
                             shape: BoxShape.circle,
                             color: accentColor.withValues(alpha: 0.1),
                             border: Border.all(
-                                color: accentColor.withValues(alpha: 0.3)),
+                              color: accentColor.withValues(alpha: 0.3),
+                            ),
                             image: template.imageUrl.isNotEmpty
                                 ? DecorationImage(
                                     image: NetworkImage(template.imageUrl),
@@ -396,8 +424,8 @@ class _WorldCard extends StatelessWidget {
                                   template.isCharacter
                                       ? Icons.person
                                       : template.isSentient
-                                          ? Icons.psychology_alt
-                                          : Icons.auto_stories,
+                                      ? Icons.psychology_alt
+                                      : Icons.auto_stories,
                                   color: accentColor,
                                   size: 18,
                                 ),
@@ -415,17 +443,37 @@ class _WorldCard extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              Text(
-                                template.isCharacter
-                                    ? 'Character'
-                                    : template.isSentient
-                                        ? 'Sentient World'
-                                        : 'Game Master World',
-                                style: TextStyle(
-                                  color: accentColor.withValues(alpha: 0.8),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                              Row(
+                                children: [
+                                  EvIcon(
+                                    AppIcons.familyForStyle(
+                                      template.narrativeStyle,
+                                    ),
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Flexible(
+                                    child: Text(
+                                      template.narrativeStyle.isNotEmpty
+                                          ? narrativeStyleLabel(
+                                              template.narrativeStyle,
+                                            )
+                                          : template.isCharacter
+                                          ? 'Character'
+                                          : template.isSentient
+                                          ? 'Sentient World'
+                                          : 'Game Master World',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: accentColor.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -433,25 +481,28 @@ class _WorldCard extends StatelessWidget {
                         if (template.isNsfwCapable)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 3),
+                              horizontal: 6,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(6),
-                              color: EverloreTheme.crimson
-                                  .withValues(alpha: 0.1),
+                              color: EverloreTheme.crimson.withValues(
+                                alpha: 0.1,
+                              ),
                               border: Border.all(
-                                  color: EverloreTheme.crimson
-                                      .withValues(alpha: 0.3)),
+                                color: EverloreTheme.crimson.withValues(
+                                  alpha: 0.3,
+                                ),
+                              ),
                             ),
-                            child: const Text(
-                              '18+',
-                              style: TextStyle(
-                                  color: EverloreTheme.crimson, fontSize: 9),
-                            ),
+                            child: const EvIcon(AppIcons.nsfw, size: 18),
                           ),
                         const SizedBox(width: 8),
-                        Icon(Icons.chevron_right,
-                            color: EverloreTheme.ash.withValues(alpha: 0.5),
-                            size: 18),
+                        Icon(
+                          Icons.chevron_right,
+                          color: EverloreTheme.ash.withValues(alpha: 0.5),
+                          size: 18,
+                        ),
                       ],
                     ),
 
@@ -477,17 +528,27 @@ class _WorldCard extends StatelessWidget {
                         children: template.sceneTags.take(5).map((tag) {
                           return Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(20),
                               color: EverloreTheme.void4,
-                              border: Border.all(
-                                  color: EverloreTheme.white10),
+                              border: Border.all(color: EverloreTheme.white10),
                             ),
-                            child: Text(
-                              tag,
-                              style: const TextStyle(
-                                  color: EverloreTheme.ash, fontSize: 10),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                EvIcon(AppIcons.scene(tag), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  tag,
+                                  style: const TextStyle(
+                                    color: EverloreTheme.ash,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
                             ),
                           );
                         }).toList(),

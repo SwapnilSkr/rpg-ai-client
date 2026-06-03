@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/nexus_theme.dart';
+import '../app_icons.dart';
 
 /// Persistent shell scaffold: hosts the four nav branches (Explore · Realms ·
 /// Worlds · You) and the single, always-on [EverloreNavBar]. The branches keep
@@ -19,7 +20,8 @@ class ScaffoldWithNavBar extends StatelessWidget {
       body: shell,
       bottomNavigationBar: EverloreNavBar(
         currentIndex: shell.currentIndex,
-        onSelect: (i) => shell.goBranch(i, initialLocation: i == shell.currentIndex),
+        onSelect: (i) =>
+            shell.goBranch(i, initialLocation: i == shell.currentIndex),
         onCreate: () => showCreateChooser(context),
       ),
     );
@@ -28,7 +30,7 @@ class ScaffoldWithNavBar extends StatelessWidget {
 
 /// One nav slot (a branch tab). `null` in the layout list = the center Create.
 class _Slot {
-  final IconData icon;
+  final String icon;
   final String label;
   final int branch;
   const _Slot(this.icon, this.label, this.branch);
@@ -50,11 +52,11 @@ class EverloreNavBar extends StatelessWidget {
 
   // Visual order; the null gap is the center Create action.
   static const List<_Slot?> _slots = [
-    _Slot(Icons.explore_outlined, 'Explore', 0),
-    _Slot(Icons.auto_stories_outlined, 'Realms', 1),
+    _Slot(AppIcons.navExplore, 'Explore', 0),
+    _Slot(AppIcons.navRealms, 'Realms', 1),
     null,
-    _Slot(Icons.dashboard_outlined, 'Worlds', 2),
-    _Slot(Icons.person_outline, 'You', 3),
+    _Slot(AppIcons.navWorlds, 'Worlds', 2),
+    _Slot(AppIcons.navProfile, 'You', 3),
   ];
 
   @override
@@ -117,7 +119,11 @@ class _NavTab extends StatelessWidget {
   final _Slot slot;
   final bool active;
   final VoidCallback onTap;
-  const _NavTab({required this.slot, required this.active, required this.onTap});
+  const _NavTab({
+    required this.slot,
+    required this.active,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +150,10 @@ class _NavTab extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(slot.icon, color: color, size: 21),
+            Opacity(
+              opacity: active ? 1 : 0.62,
+              child: EvIcon(slot.icon, size: 22),
+            ),
             const SizedBox(height: 2),
             Text(
               slot.label,
@@ -179,10 +188,16 @@ class _CreateAction extends StatelessWidget {
           shape: BoxShape.circle,
           gradient: const RadialGradient(
             center: Alignment(-0.3, -0.4),
-            colors: [EverloreTheme.goldGlow, EverloreTheme.gold, EverloreTheme.goldDeep],
+            colors: [
+              EverloreTheme.goldGlow,
+              EverloreTheme.gold,
+              EverloreTheme.goldDeep,
+            ],
             stops: [0.0, 0.55, 1.0],
           ),
-          border: Border.all(color: EverloreTheme.goldHot.withValues(alpha: 0.5)),
+          border: Border.all(
+            color: EverloreTheme.goldHot.withValues(alpha: 0.5),
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.5),
@@ -196,7 +211,7 @@ class _CreateAction extends StatelessWidget {
             ),
           ],
         ),
-        child: const Icon(Icons.add, color: EverloreTheme.void0, size: 26),
+        child: const Center(child: EvIcon(AppIcons.navCreate, size: 28)),
       ),
     );
   }
@@ -231,7 +246,7 @@ void showCreateChooser(BuildContext context) {
               ),
               const SizedBox(height: 18),
               _CreateChoice(
-                icon: Icons.auto_stories,
+                icon: AppIcons.navRealms,
                 title: 'Forge a World',
                 subtitle: 'A living realm others can step into and play.',
                 onTap: () {
@@ -241,7 +256,7 @@ void showCreateChooser(BuildContext context) {
               ),
               const SizedBox(height: 12),
               _CreateChoice(
-                icon: Icons.person_add_alt_1,
+                icon: AppIcons.navProfile,
                 title: 'Create a Character',
                 subtitle: 'A sentient companion to talk and adventure with.',
                 onTap: () {
@@ -258,7 +273,7 @@ void showCreateChooser(BuildContext context) {
 }
 
 class _CreateChoice extends StatelessWidget {
-  final IconData icon;
+  final String icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -283,7 +298,9 @@ class _CreateChoice extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: [EverloreTheme.void3, EverloreTheme.void2],
           ),
-          border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.25)),
+          border: Border.all(
+            color: EverloreTheme.goldDim.withValues(alpha: 0.25),
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.35),
@@ -306,9 +323,11 @@ class _CreateChoice extends StatelessWidget {
                     EverloreTheme.void2,
                   ],
                 ),
-                border: Border.all(color: EverloreTheme.gold.withValues(alpha: 0.4)),
+                border: Border.all(
+                  color: EverloreTheme.gold.withValues(alpha: 0.4),
+                ),
               ),
-              child: Icon(icon, color: EverloreTheme.gold, size: 20),
+              child: EvIcon(icon, size: 24),
             ),
             const SizedBox(width: 14),
             Expanded(

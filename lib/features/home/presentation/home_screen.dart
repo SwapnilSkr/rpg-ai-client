@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../state/home_cubit.dart';
 import 'widgets/world_card.dart';
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../shared/app_icons.dart';
 import '../../../../shared/widgets/neu.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -37,6 +38,8 @@ class _HomeView extends StatelessWidget {
                   state.error!.contains('Unauthorized') &&
                   state.instances.isEmpty)
                 const SliverFillRemaining(child: _UnauthView())
+              else if (state.error != null && state.instances.isEmpty)
+                SliverFillRemaining(child: _ErrorView(message: state.error!))
               else if (state.instances.isEmpty)
                 const SliverFillRemaining(child: _EmptyView())
               else
@@ -105,36 +108,36 @@ class _HomeView extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 110), // clear the floating nav
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
-        if (index == 0) {
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-            child: Row(
-              children: [
-                Text(
-                  '${state.instances.length} ACTIVE',
-                  style: EverloreTheme.sectionHeader,
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => context.read<HomeCubit>().loadInstances(),
-                  child: const Text(
-                    'Refresh',
-                    style: TextStyle(color: EverloreTheme.gold, fontSize: 12),
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Row(
+                children: [
+                  Text(
+                    '${state.instances.length} ACTIVE',
+                    style: EverloreTheme.sectionHeader,
                   ),
-                ),
-              ],
-            ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => context.read<HomeCubit>().loadInstances(),
+                    child: const Text(
+                      'Refresh',
+                      style: TextStyle(color: EverloreTheme.gold, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+          if (index > state.instances.length) return null;
+          final instance = state.instances[index - 1];
+          return WorldCard(
+            instance: instance,
+            onTap: () => context.push('/play/${instance.id}'),
+            onArchive: () => _confirmArchive(context, instance.id),
+            onDelete: () => _confirmDelete(context, instance.id),
           );
-        }
-        if (index > state.instances.length) return null;
-        final instance = state.instances[index - 1];
-        return WorldCard(
-          instance: instance,
-          onTap: () => context.push('/play/${instance.id}'),
-          onArchive: () => _confirmArchive(context, instance.id),
-          onDelete: () => _confirmDelete(context, instance.id),
-        );
-      }, childCount: state.instances.length + 1),
+        }, childCount: state.instances.length + 1),
       ),
     );
   }
@@ -275,11 +278,7 @@ class _UnauthView extends StatelessWidget {
                   color: EverloreTheme.goldDim.withValues(alpha: 0.3),
                 ),
               ),
-              child: const Icon(
-                Icons.lock_outline,
-                color: EverloreTheme.goldDim,
-                size: 36,
-              ),
+              child: const EvIcon(AppIcons.lockedGate, size: 68),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -348,11 +347,7 @@ class _EmptyView extends StatelessWidget {
                   color: EverloreTheme.goldDim.withValues(alpha: 0.3),
                 ),
               ),
-              child: const Icon(
-                Icons.explore,
-                color: EverloreTheme.gold,
-                size: 40,
-              ),
+              child: const EvIcon(AppIcons.emptyRealms, size: 86),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -378,6 +373,51 @@ class _EmptyView extends StatelessWidget {
               label: 'Explore Worlds',
               icon: Icons.explore,
               onTap: () => context.go('/discover'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  final String message;
+  const _ErrorView({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const EvIcon(AppIcons.errorRune, size: 110),
+            const SizedBox(height: 20),
+            const Text(
+              'Could not summon realms',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: EverloreTheme.parchment,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: EverloreTheme.ash,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 28),
+            NeuButton(
+              label: 'Try Again',
+              onTap: () => context.read<HomeCubit>().loadInstances(),
             ),
           ],
         ),

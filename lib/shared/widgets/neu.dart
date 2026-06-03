@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../app/theme/nexus_theme.dart';
+import '../app_icons.dart';
 
 /// Neumorphic / skeuomorphic UI primitives for the "Crossing the Threshold"
 /// auth pass. All reuse EverloreTheme tokens — no new colours.
@@ -92,7 +93,8 @@ class _NeuButtonState extends State<NeuButton> {
               ],
               Text(
                 widget.label,
-                style: TextStyle(fontFamily: EverloreTheme.uiFamily, 
+                style: TextStyle(
+                  fontFamily: EverloreTheme.uiFamily,
                   color: fg,
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -134,8 +136,9 @@ class _NeuButtonState extends State<NeuButton> {
             border: widget.primary
                 ? null
                 : Border.all(
-                    color: (widget.accent ?? EverloreTheme.goldDim)
-                        .withValues(alpha: enabled ? 0.45 : 0.2),
+                    color: (widget.accent ?? EverloreTheme.goldDim).withValues(
+                      alpha: enabled ? 0.45 : 0.2,
+                    ),
                   ),
             boxShadow: widget.primary && enabled && !_pressed
                 ? [
@@ -234,11 +237,11 @@ class _NeuFieldState extends State<NeuField> {
             _PrefixDivider(focused: _node.hasFocus),
             const SizedBox(width: 12),
           ] else if (widget.prefixIcon != null) ...[
-            Icon(widget.prefixIcon,
-                size: 18,
-                color: _node.hasFocus
-                    ? EverloreTheme.gold
-                    : EverloreTheme.ash),
+            Icon(
+              widget.prefixIcon,
+              size: 18,
+              color: _node.hasFocus ? EverloreTheme.gold : EverloreTheme.ash,
+            ),
             const SizedBox(width: 12),
             // Hairline divider so the icon reads as a deliberate adornment,
             // not a second box nested in the well.
@@ -253,8 +256,11 @@ class _NeuFieldState extends State<NeuField> {
               scrollPadding: widget.scrollPadding,
               inputFormatters: widget.inputFormatters,
               onChanged: widget.onChanged,
-              style: TextStyle(fontFamily: EverloreTheme.uiFamily, 
-                  color: EverloreTheme.parchment, fontSize: 15),
+              style: TextStyle(
+                fontFamily: EverloreTheme.uiFamily,
+                color: EverloreTheme.parchment,
+                fontSize: 15,
+              ),
               decoration: InputDecoration(
                 isCollapsed: true,
                 // Defeat the global inputDecorationTheme's filled void4 box —
@@ -265,9 +271,11 @@ class _NeuFieldState extends State<NeuField> {
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
                 hintText: widget.hintText,
-                hintStyle: TextStyle(fontFamily: EverloreTheme.uiFamily, 
-                    color: EverloreTheme.ash.withValues(alpha: 0.6),
-                    fontSize: 14),
+                hintStyle: TextStyle(
+                  fontFamily: EverloreTheme.uiFamily,
+                  color: EverloreTheme.ash.withValues(alpha: 0.6),
+                  fontSize: 14,
+                ),
               ),
             ),
           ),
@@ -287,8 +295,9 @@ class _PrefixDivider extends StatelessWidget {
     return Container(
       width: 1,
       height: 22,
-      color: (focused ? EverloreTheme.gold : EverloreTheme.goldDim)
-          .withValues(alpha: 0.28),
+      color: (focused ? EverloreTheme.gold : EverloreTheme.goldDim).withValues(
+        alpha: 0.28,
+      ),
     );
   }
 }
@@ -483,15 +492,20 @@ const List<DialCode> kDialCodes = [
 ];
 
 /// The app's default dial code (United States). Used as the initial selection.
-final DialCode kDefaultDialCode =
-    kDialCodes.firstWhere((c) => c.name == 'United States');
+final DialCode kDefaultDialCode = kDialCodes.firstWhere(
+  (c) => c.name == 'United States',
+);
 
 /// Tappable dial-code chip for a [NeuField] prefix. Shows the flag + code and
 /// opens [showDialCodePicker] on tap.
 class DialCodeButton extends StatelessWidget {
   final DialCode value;
   final ValueChanged<DialCode> onChanged;
-  const DialCodeButton({super.key, required this.value, required this.onChanged});
+  const DialCodeButton({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -516,8 +530,7 @@ class DialCodeButton extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 2),
-          const Icon(Icons.expand_more,
-              size: 18, color: EverloreTheme.ash),
+          const Icon(Icons.expand_more, size: 18, color: EverloreTheme.ash),
         ],
       ),
     );
@@ -561,9 +574,10 @@ class _DialCodeSheetState extends State<_DialCodeSheet> {
     final results = q.isEmpty
         ? kDialCodes
         : kDialCodes
-            .where((c) =>
-                c.name.toLowerCase().contains(q) || c.code.contains(q))
-            .toList();
+              .where(
+                (c) => c.name.toLowerCase().contains(q) || c.code.contains(q),
+              )
+              .toList();
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
     return Padding(
@@ -624,29 +638,26 @@ class _DialCodeSheetState extends State<_DialCodeSheet> {
                 itemCount: results.length,
                 itemBuilder: (context, i) {
                   final c = results[i];
-                  final isSel = widget.selected != null &&
+                  final isSel =
+                      widget.selected != null &&
                       c.code == widget.selected!.code &&
                       c.name == widget.selected!.name;
                   return ListTile(
-                    leading:
-                        Text(c.flag, style: const TextStyle(fontSize: 22)),
+                    leading: Text(c.flag, style: const TextStyle(fontSize: 22)),
                     title: Text(
                       c.name,
                       style: TextStyle(
                         fontFamily: EverloreTheme.uiFamily,
                         color: EverloreTheme.parchment,
                         fontSize: 15,
-                        fontWeight:
-                            isSel ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight: isSel ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
                     trailing: Text(
                       c.code,
                       style: TextStyle(
                         fontFamily: EverloreTheme.uiFamily,
-                        color: isSel
-                            ? EverloreTheme.gold
-                            : EverloreTheme.ash,
+                        color: isSel ? EverloreTheme.gold : EverloreTheme.ash,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
@@ -825,7 +836,8 @@ class NeuSegmented extends StatelessWidget {
                     colors: [EverloreTheme.void4, EverloreTheme.void3],
                   ),
                   border: Border.all(
-                      color: EverloreTheme.gold.withValues(alpha: 0.45)),
+                    color: EverloreTheme.gold.withValues(alpha: 0.45),
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.35),
@@ -847,7 +859,8 @@ class NeuSegmented extends StatelessWidget {
                   child: Center(
                     child: Text(
                       options[i],
-                      style: TextStyle(fontFamily: EverloreTheme.uiFamily, 
+                      style: TextStyle(
+                        fontFamily: EverloreTheme.uiFamily,
                         color: sel ? EverloreTheme.gold : EverloreTheme.ash,
                         fontSize: 13,
                         fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
@@ -881,22 +894,27 @@ class EngravedBanner extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            EverloreTheme.void0,
-            tint.withValues(alpha: 0.10),
-          ],
+          colors: [EverloreTheme.void0, tint.withValues(alpha: 0.10)],
         ),
         border: Border.all(color: tint.withValues(alpha: 0.4)),
       ),
       child: Row(
         children: [
-          Icon(error ? Icons.error_outline : Icons.check_circle_outline,
-              color: tint, size: 16),
+          Icon(
+            error ? Icons.error_outline : Icons.check_circle_outline,
+            color: tint,
+            size: 16,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
-              style: TextStyle(fontFamily: EverloreTheme.uiFamily, color: tint, fontSize: 13, height: 1.4),
+              style: TextStyle(
+                fontFamily: EverloreTheme.uiFamily,
+                color: tint,
+                fontSize: 13,
+                height: 1.4,
+              ),
             ),
           ),
         ],
@@ -941,71 +959,10 @@ class ForgeMark extends StatelessWidget {
           ),
         ],
       ),
-      child: CustomPaint(painter: _ForgeMarkPainter()),
+      child: Padding(
+        padding: EdgeInsets.all(size * 0.16),
+        child: EvIcon(AppIcons.forgeSigil, size: size * 0.68),
+      ),
     );
   }
-}
-
-class _ForgeMarkPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final r = size.width / 2;
-
-    // Forged gold rim.
-    final rimRect = Rect.fromCircle(center: c, radius: r * 0.78);
-    canvas.drawCircle(
-      c,
-      r * 0.78,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5
-        ..shader = const SweepGradient(
-          colors: [
-            EverloreTheme.goldDim,
-            EverloreTheme.goldGlow,
-            EverloreTheme.gold,
-            EverloreTheme.goldDim,
-            EverloreTheme.goldGlow,
-            EverloreTheme.goldDim,
-          ],
-          stops: [0.0, 0.2, 0.45, 0.7, 0.88, 1.0],
-        ).createShader(rimRect),
-    );
-
-    // Engraved rune.
-    final glyph = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = EverloreTheme.goldGlow.withValues(alpha: 0.92);
-    final glyphShadow = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = Colors.black.withValues(alpha: 0.55);
-    final g = r * 0.32;
-    final path = Path()
-      ..moveTo(c.dx, c.dy - g)
-      ..lineTo(c.dx, c.dy + g)
-      ..moveTo(c.dx, c.dy - g)
-      ..lineTo(c.dx - g * 0.62, c.dy - g * 0.18)
-      ..moveTo(c.dx, c.dy - g)
-      ..lineTo(c.dx + g * 0.62, c.dy - g * 0.18)
-      ..moveTo(c.dx, c.dy + g)
-      ..lineTo(c.dx - g * 0.62, c.dy + g * 0.18)
-      ..moveTo(c.dx, c.dy + g)
-      ..lineTo(c.dx + g * 0.62, c.dy + g * 0.18);
-    canvas.save();
-    canvas.translate(0.6, 1.0);
-    canvas.drawPath(path, glyphShadow);
-    canvas.restore();
-    canvas.drawPath(path, glyph);
-    canvas.drawCircle(c, 2.6, Paint()..color = EverloreTheme.goldGlow);
-  }
-
-  @override
-  bool shouldRepaint(_ForgeMarkPainter old) => false;
 }

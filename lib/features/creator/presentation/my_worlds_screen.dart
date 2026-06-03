@@ -5,6 +5,7 @@ import '../state/my_worlds_cubit.dart';
 import 'widgets/my_world_card.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
+import '../../../shared/app_icons.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/neu.dart';
 
@@ -301,7 +302,7 @@ class _MyWorldsView extends StatelessWidget {
         ),
         title: const Row(
           children: [
-            Icon(Icons.public, color: EverloreTheme.gold, size: 20),
+            EvIcon(AppIcons.publish, size: 22),
             SizedBox(width: 8),
             Text(
               'Release This World?',
@@ -362,11 +363,7 @@ class _UnauthGate extends StatelessWidget {
                   color: EverloreTheme.goldDim.withValues(alpha: 0.3),
                 ),
               ),
-              child: const Icon(
-                Icons.lock_outline,
-                color: EverloreTheme.goldDim,
-                size: 36,
-              ),
+              child: const EvIcon(AppIcons.lockedGate, size: 68),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -431,11 +428,7 @@ class _UpgradeGate extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.auto_fix_high,
-              color: EverloreTheme.gold,
-              size: 32,
-            ),
+            child: const EvIcon(AppIcons.lockedGate, size: 58),
           ),
           const SizedBox(height: 16),
           const Text(
@@ -601,11 +594,7 @@ class _EmptyForgeView extends StatelessWidget {
                   color: EverloreTheme.goldDim.withValues(alpha: 0.3),
                 ),
               ),
-              child: const Icon(
-                Icons.auto_fix_high,
-                color: EverloreTheme.gold,
-                size: 40,
-              ),
+              child: const EvIcon(AppIcons.emptyForge, size: 86),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -666,4 +655,3 @@ class _LoadingView extends StatelessWidget {
     );
   }
 }
-

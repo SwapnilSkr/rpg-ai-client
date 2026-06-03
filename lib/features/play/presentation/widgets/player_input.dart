@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../../app/theme/nexus_theme.dart';
+import '../../../../../shared/app_icons.dart';
 
 class PlayerInput extends StatefulWidget {
   final bool isGenerating;
@@ -92,8 +93,11 @@ class _PlayerInputState extends State<PlayerInput> {
                           width: focused ? 1.4 : 1,
                         ),
                         boxShadow: focused
-                            ? EverloreTheme.glow(EverloreTheme.gold,
-                                blur: 14, alpha: 0.12)
+                            ? EverloreTheme.glow(
+                                EverloreTheme.gold,
+                                blur: 14,
+                                alpha: 0.12,
+                              )
                             : null,
                       ),
                       child: TextField(
@@ -116,7 +120,9 @@ class _PlayerInputState extends State<PlayerInput> {
                           ),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                         ),
                         textInputAction: TextInputAction.newline,
                         onSubmitted: (_) => _submit(),
@@ -182,12 +188,9 @@ class _ContinueButton extends StatelessWidget {
                       : EverloreTheme.goldDim.withValues(alpha: 0.18),
                 ),
               ),
-              child: Icon(
-                Icons.fast_forward_rounded,
-                size: 20,
-                color: enabled
-                    ? EverloreTheme.violetBright
-                    : EverloreTheme.ash.withValues(alpha: 0.3),
+              child: Opacity(
+                opacity: enabled ? 1 : 0.35,
+                child: const EvIcon(AppIcons.continueStory, size: 22),
               ),
             ),
           ),

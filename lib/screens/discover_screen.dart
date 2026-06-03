@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app/theme/nexus_theme.dart';
 import '../core/onboarding/interests_store.dart';
+import '../shared/app_icons.dart';
 import '../shared/models/world_template.dart';
 import '../shared/narrative_styles.dart';
 import '../shared/widgets/neu.dart';
@@ -125,7 +126,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             end: Alignment.bottomRight,
             colors: [EverloreTheme.void3, EverloreTheme.void1],
           ),
-          border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.25)),
+          border: Border.all(
+            color: EverloreTheme.goldDim.withValues(alpha: 0.25),
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.4),
@@ -208,7 +211,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           width: 28,
           height: 28,
           child: CircularProgressIndicator(
-              strokeWidth: 1.5, color: EverloreTheme.gold),
+            strokeWidth: 1.5,
+            color: EverloreTheme.gold,
+          ),
         ),
       );
     }
@@ -219,17 +224,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.wifi_off, color: EverloreTheme.ash, size: 40),
+              const EvIcon(AppIcons.errorRune, size: 110),
               const SizedBox(height: 14),
               Text(
                 'Could not reach the realm',
                 style: EverloreTheme.ui(
-                    size: 15, color: EverloreTheme.parchment, weight: FontWeight.w600),
+                  size: 15,
+                  color: EverloreTheme.parchment,
+                  weight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 6),
-              Text(_error!,
-                  textAlign: TextAlign.center,
-                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash)),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+              ),
               const SizedBox(height: 18),
               NeuButton(label: 'Try Again', onTap: _load),
             ],
@@ -241,9 +251,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final visible = _visible;
     if (visible.isEmpty) {
       return Center(
-        child: Text(
-          _tab == 2 ? 'No characters yet.' : 'No worlds found.',
-          style: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const EvIcon(AppIcons.emptyRealms, size: 110),
+            const SizedBox(height: 14),
+            Text(
+              _tab == 2 ? 'No characters yet.' : 'No worlds found.',
+              style: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
+            ),
+          ],
         ),
       );
     }
@@ -261,7 +278,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       onRefresh: _load,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 110), // clear floating nav
+        padding: const EdgeInsets.fromLTRB(
+          16,
+          8,
+          16,
+          110,
+        ), // clear floating nav
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -302,10 +324,10 @@ class _DiscoverCard extends StatelessWidget {
     final genre = template.narrativeStyle.isNotEmpty
         ? narrativeStyleLabel(template.narrativeStyle)
         : (template.isCharacter
-            ? 'Character'
-            : template.isSentient
-                ? 'Sentient'
-                : 'World');
+              ? 'Character'
+              : template.isSentient
+              ? 'Sentient'
+              : 'World');
 
     return GestureDetector(
       onTap: onTap,
@@ -334,10 +356,7 @@ class _DiscoverCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AspectRatio(
-              aspectRatio: 4 / 5,
-              child: _cover(),
-            ),
+            AspectRatio(aspectRatio: 4 / 5, child: _cover()),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               child: Column(
@@ -369,7 +388,14 @@ class _DiscoverCard extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 10),
-                  _genreChip(genre),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _genreChip(genre),
+                      if (template.isNsfwCapable) _nsfwBadge(),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -387,15 +413,36 @@ class _DiscoverCard extends StatelessWidget {
         color: EverloreTheme.gold.withValues(alpha: 0.10),
         border: Border.all(color: EverloreTheme.gold.withValues(alpha: 0.25)),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontFamily: EverloreTheme.uiFamily,
-          color: EverloreTheme.goldGlow,
-          fontSize: 10.5,
-          fontWeight: FontWeight.w600,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          EvIcon(AppIcons.familyForStyle(template.narrativeStyle), size: 16),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: EverloreTheme.uiFamily,
+              color: EverloreTheme.goldGlow,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _nsfwBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: EverloreTheme.crimson.withValues(alpha: 0.10),
+        border: Border.all(
+          color: EverloreTheme.crimson.withValues(alpha: 0.25),
         ),
       ),
+      child: const EvIcon(AppIcons.nsfw, size: 18),
     );
   }
 
@@ -422,14 +469,9 @@ class _DiscoverCard extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: Icon(
-          template.isCharacter
-              ? Icons.person
-              : template.isSentient
-                  ? Icons.psychology_alt
-                  : Icons.auto_stories,
-          color: EverloreTheme.goldDim.withValues(alpha: 0.7),
-          size: 34,
+        child: EvIcon(
+          template.isCharacter ? AppIcons.navProfile : AppIcons.chronicle,
+          size: 40,
         ),
       ),
     );

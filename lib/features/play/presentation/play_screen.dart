@@ -6,6 +6,7 @@ import 'widgets/narrative_bubble.dart';
 import 'widgets/player_input.dart';
 import 'widgets/world_state_bar.dart';
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../shared/app_icons.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/character_profile.dart';
 import '../../../shared/chat_modes.dart';
@@ -114,13 +115,19 @@ class _PlayViewState extends State<_PlayView> {
 
   /// Friendly confirmation that staged scene settings were saved and when they
   /// take effect (settings only shape future turns, never past narration).
-  void _showSettingsSnack(BuildContext context,
-      {required String pov, required String mode, required String length}) {
+  void _showSettingsSnack(
+    BuildContext context, {
+    required String pov,
+    required String mode,
+    required String length,
+  }) {
     final povLabel = pov == 'first' ? 'First person' : 'Third person';
     final modeLabel = chatModeLabel(mode);
     final lenLabel = length[0].toUpperCase() + length.substring(1);
-    _showSceneSnack(context,
-        '$povLabel · $modeLabel · $lenLabel — applies from your next message.');
+    _showSceneSnack(
+      context,
+      '$povLabel · $modeLabel · $lenLabel — applies from your next message.',
+    );
   }
 
   /// Shared floating confirmation for scene-setting changes.
@@ -134,14 +141,19 @@ class _PlayViewState extends State<_PlayView> {
           duration: const Duration(seconds: 3),
           content: Row(
             children: [
-              const Icon(Icons.auto_awesome,
-                  color: EverloreTheme.gold, size: 18),
+              const Icon(
+                Icons.auto_awesome,
+                color: EverloreTheme.gold,
+                size: 18,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   message,
                   style: EverloreTheme.ui(
-                      size: 13, color: EverloreTheme.parchment),
+                    size: 13,
+                    color: EverloreTheme.parchment,
+                  ),
                 ),
               ),
             ],
@@ -190,7 +202,9 @@ class _PlayViewState extends State<_PlayView> {
               cubit.updateSettings(clearFocusCharacter: true);
               Navigator.pop(sheetCtx);
               _showSceneSnack(
-                context, 'Focus cleared — applies from your next message.');
+                context,
+                'Focus cleared — applies from your next message.',
+              );
             },
             onEdit: (c) => _showCharacterEdit(ctx, cubit, c),
           ),
@@ -200,7 +214,10 @@ class _PlayViewState extends State<_PlayView> {
   }
 
   void _showCharacterEdit(
-      BuildContext context, PlayCubit cubit, CharacterProfile character) {
+    BuildContext context,
+    PlayCubit cubit,
+    CharacterProfile character,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -223,21 +240,30 @@ class _PlayViewState extends State<_PlayView> {
       context: context,
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: EverloreTheme.void2,
-        title: Text('Reset this chat?',
-            style: EverloreTheme.serifDisplay(
-                size: 18, color: EverloreTheme.parchment)),
+        title: Text(
+          'Reset this chat?',
+          style: EverloreTheme.serifDisplay(
+            size: 18,
+            color: EverloreTheme.parchment,
+          ),
+        ),
         content: Text(
           'The entire story, its memories, and everything that happened will be '
           'wiped, and the chat will start over from the opening line. The world '
           'and character themselves are kept. This cannot be undone.',
           style: EverloreTheme.ui(
-              size: 14, color: EverloreTheme.ash, height: 1.5),
+            size: 14,
+            color: EverloreTheme.ash,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child: Text('Cancel',
-                style: EverloreTheme.ui(color: EverloreTheme.ash)),
+            child: Text(
+              'Cancel',
+              style: EverloreTheme.ui(color: EverloreTheme.ash),
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -248,14 +274,20 @@ class _PlayViewState extends State<_PlayView> {
                 SnackBar(
                   behavior: SnackBarBehavior.floating,
                   backgroundColor: EverloreTheme.void3,
-                  content: Text('Chat reset — starting over from the beginning.',
-                      style: EverloreTheme.ui(
-                          size: 13, color: EverloreTheme.parchment)),
+                  content: Text(
+                    'Chat reset — starting over from the beginning.',
+                    style: EverloreTheme.ui(
+                      size: 13,
+                      color: EverloreTheme.parchment,
+                    ),
+                  ),
                 ),
               );
             },
-            child: Text('Reset',
-                style: EverloreTheme.ui(color: EverloreTheme.gold)),
+            child: Text(
+              'Reset',
+              style: EverloreTheme.ui(color: EverloreTheme.gold),
+            ),
           ),
         ],
       ),
@@ -267,20 +299,29 @@ class _PlayViewState extends State<_PlayView> {
       context: context,
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: EverloreTheme.void2,
-        title: Text('Delete this chat?',
-            style: EverloreTheme.serifDisplay(
-                size: 18, color: EverloreTheme.parchment)),
+        title: Text(
+          'Delete this chat?',
+          style: EverloreTheme.serifDisplay(
+            size: 18,
+            color: EverloreTheme.parchment,
+          ),
+        ),
         content: Text(
           'This playthrough, its entire story, and all its memories will be '
           'permanently deleted. This cannot be undone.',
           style: EverloreTheme.ui(
-              size: 14, color: EverloreTheme.ash, height: 1.5),
+            size: 14,
+            color: EverloreTheme.ash,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child: Text('Cancel',
-                style: EverloreTheme.ui(color: EverloreTheme.ash)),
+            child: Text(
+              'Cancel',
+              style: EverloreTheme.ui(color: EverloreTheme.ash),
+            ),
           ),
           TextButton(
             onPressed: () async {
@@ -294,18 +335,26 @@ class _PlayViewState extends State<_PlayView> {
               } catch (_) {
                 messenger.showSnackBar(
                   SnackBar(
-                    content: Text('Could not delete the chat. Try again.',
-                        style: EverloreTheme.ui(
-                            size: 13, color: EverloreTheme.parchment)),
+                    content: Text(
+                      'Could not delete the chat. Try again.',
+                      style: EverloreTheme.ui(
+                        size: 13,
+                        color: EverloreTheme.parchment,
+                      ),
+                    ),
                     backgroundColor: EverloreTheme.void3,
                     behavior: SnackBarBehavior.floating,
                   ),
                 );
               }
             },
-            child: Text('Delete',
-                style: EverloreTheme.ui(
-                    color: EverloreTheme.crimson, weight: FontWeight.w700)),
+            child: Text(
+              'Delete',
+              style: EverloreTheme.ui(
+                color: EverloreTheme.crimson,
+                weight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -336,11 +385,17 @@ class _PlayViewState extends State<_PlayView> {
             const SizedBox(height: 8),
             if (canReplay)
               ListTile(
-                leading: const Icon(Icons.refresh_rounded,
-                    color: EverloreTheme.cyanBright),
-                title: Text('Replay response',
-                    style: EverloreTheme.ui(
-                        size: 15, color: EverloreTheme.parchment)),
+                leading: const Icon(
+                  Icons.refresh_rounded,
+                  color: EverloreTheme.cyanBright,
+                ),
+                title: Text(
+                  'Replay response',
+                  style: EverloreTheme.ui(
+                    size: 15,
+                    color: EverloreTheme.parchment,
+                  ),
+                ),
                 subtitle: Text(
                   'Generate an improved alternative for this turn.',
                   style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
@@ -354,11 +409,17 @@ class _PlayViewState extends State<_PlayView> {
               const Divider(color: EverloreTheme.white10, height: 1),
             if ((event.aiResponse ?? '').trim().isNotEmpty)
               ListTile(
-                leading: const Icon(Icons.edit_outlined,
-                    color: EverloreTheme.violetBright),
-                title: Text('Edit response',
-                    style: EverloreTheme.ui(
-                        size: 15, color: EverloreTheme.parchment)),
+                leading: const Icon(
+                  Icons.edit_outlined,
+                  color: EverloreTheme.violetBright,
+                ),
+                title: Text(
+                  'Edit response',
+                  style: EverloreTheme.ui(
+                    size: 15,
+                    color: EverloreTheme.parchment,
+                  ),
+                ),
                 subtitle: Text(
                   'Rewrite this AI turn and re-curate its memories.',
                   style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
@@ -371,11 +432,17 @@ class _PlayViewState extends State<_PlayView> {
             if ((event.aiResponse ?? '').trim().isNotEmpty)
               const Divider(color: EverloreTheme.white10, height: 1),
             ListTile(
-              leading: const Icon(Icons.history_toggle_off,
-                  color: EverloreTheme.crimson),
-              title: Text('Rewind to here',
-                  style: EverloreTheme.ui(
-                      size: 15, color: EverloreTheme.parchment)),
+              leading: const Icon(
+                Icons.history_toggle_off,
+                color: EverloreTheme.crimson,
+              ),
+              title: Text(
+                'Rewind to here',
+                style: EverloreTheme.ui(
+                  size: 15,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
               subtitle: Text(
                 'Removes this turn and everything after it.',
                 style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
@@ -402,9 +469,13 @@ class _PlayViewState extends State<_PlayView> {
       context: context,
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: EverloreTheme.void2,
-        title: Text('Edit AI response',
-            style: EverloreTheme.serifDisplay(
-                size: 18, color: EverloreTheme.parchment)),
+        title: Text(
+          'Edit AI response',
+          style: EverloreTheme.serifDisplay(
+            size: 18,
+            color: EverloreTheme.parchment,
+          ),
+        ),
         content: SizedBox(
           width: 560,
           child: TextField(
@@ -424,18 +495,21 @@ class _PlayViewState extends State<_PlayView> {
               fillColor: EverloreTheme.void3,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+                borderSide: BorderSide(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+                ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+                borderSide: BorderSide(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+                ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    BorderSide(color: EverloreTheme.violet.withValues(alpha: 0.5)),
+                borderSide: BorderSide(
+                  color: EverloreTheme.violet.withValues(alpha: 0.5),
+                ),
               ),
             ),
           ),
@@ -443,8 +517,10 @@ class _PlayViewState extends State<_PlayView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child:
-                Text('Cancel', style: EverloreTheme.ui(color: EverloreTheme.ash)),
+            child: Text(
+              'Cancel',
+              style: EverloreTheme.ui(color: EverloreTheme.ash),
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -452,10 +528,13 @@ class _PlayViewState extends State<_PlayView> {
               Navigator.pop(dialogCtx);
               cubit.editAiResponse(event, edited);
             },
-            child: Text('Save edit',
-                style: EverloreTheme.ui(
-                    color: EverloreTheme.violetBright,
-                    weight: FontWeight.w700)),
+            child: Text(
+              'Save edit',
+              style: EverloreTheme.ui(
+                color: EverloreTheme.violetBright,
+                weight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -467,29 +546,42 @@ class _PlayViewState extends State<_PlayView> {
       context: context,
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: EverloreTheme.void2,
-        title: Text('Rewind the tale?',
-            style: EverloreTheme.serifDisplay(
-                size: 18, color: EverloreTheme.parchment)),
+        title: Text(
+          'Rewind the tale?',
+          style: EverloreTheme.serifDisplay(
+            size: 18,
+            color: EverloreTheme.parchment,
+          ),
+        ),
         content: Text(
           'This turn and everything after it will be permanently removed, and the '
           'world will roll back to this point. This cannot be undone.',
           style: EverloreTheme.ui(
-              size: 14, color: EverloreTheme.ash, height: 1.5),
+            size: 14,
+            color: EverloreTheme.ash,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child: Text('Cancel',
-                style: EverloreTheme.ui(color: EverloreTheme.ash)),
+            child: Text(
+              'Cancel',
+              style: EverloreTheme.ui(color: EverloreTheme.ash),
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(dialogCtx);
               cubit.rewind(sequence);
             },
-            child: Text('Rewind',
-                style: EverloreTheme.ui(
-                    color: EverloreTheme.crimson, weight: FontWeight.w700)),
+            child: Text(
+              'Rewind',
+              style: EverloreTheme.ui(
+                color: EverloreTheme.crimson,
+                weight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -527,8 +619,9 @@ class _PlayViewState extends State<_PlayView> {
       builder: (context, state) {
         final title = state.template?.title ?? '';
         final bgUrl = state.template?.imageUrl ?? '';
-        final latestTag =
-            state.events.isNotEmpty ? state.events.last.sceneTag : null;
+        final latestTag = state.events.isNotEmpty
+            ? state.events.last.sceneTag
+            : null;
         final accent = EverloreTheme.sceneAccent(latestTag);
 
         return Scaffold(
@@ -593,67 +686,67 @@ class _PlayViewState extends State<_PlayView> {
                   if (state.error != null)
                     _ErrorBar(
                       message: state.error!,
-                      onDismiss: () =>
-                          context.read<PlayCubit>().clearError(),
+                      onDismiss: () => context.read<PlayCubit>().clearError(),
                     ),
 
                   Expanded(
                     child: state.isLoading && state.events.isEmpty
                         ? const _LoadingNarrative()
                         : state.events.isEmpty
-                            ? const _EmptyNarrative()
-                            : ListView.builder(
-                                controller: _scrollController,
-                                padding:
-                                    const EdgeInsets.fromLTRB(2, 16, 2, 20),
-                                itemCount: state.events.length,
-                                itemBuilder: (context, index) {
-                                  final event = state.events[index];
-                                  // Replay is only valid for the LATEST turn that
-                                  // has player input (server rejects earlier turns
-                                  // and the opening greeting). Gate the UI to match
-                                  // so the action never surfaces where it errors.
-                                  final isLatest =
-                                      index == state.events.length - 1;
-                                  final isReplaying =
-                                      state.replayingEventId == event.id;
-                                  // Replay only on the latest player-input turn,
-                                  // and never while another replay is streaming.
-                                  final canReplay = !event.isOptimistic &&
-                                      isLatest &&
-                                      state.replayingEventId == null &&
-                                      !state.isGenerating &&
-                                      (event.playerInput?.trim().isNotEmpty ??
-                                          false);
-                                  return NarrativeBubble(
-                                    event: event,
-                                    isReplaying: isReplaying,
-                                    onLongPress: (!event.isOptimistic &&
-                                            event.sequence > 0 &&
-                                            state.replayingEventId == null)
-                                        ? () => _showTurnMenu(
-                                            context, event, canReplay)
-                                        : null,
-                                    onReplay: canReplay
-                                        ? () => context
-                                            .read<PlayCubit>()
-                                            .replayAiResponse(event)
-                                        : null,
-                                    onSelectReplayVariant: (index) => context
-                                        .read<PlayCubit>()
-                                        .selectReplayVariant(event, index),
-                                  );
-                                },
-                              ),
+                        ? const _EmptyNarrative()
+                        : ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.fromLTRB(2, 16, 2, 20),
+                            itemCount: state.events.length,
+                            itemBuilder: (context, index) {
+                              final event = state.events[index];
+                              // Replay is only valid for the LATEST turn that
+                              // has player input (server rejects earlier turns
+                              // and the opening greeting). Gate the UI to match
+                              // so the action never surfaces where it errors.
+                              final isLatest = index == state.events.length - 1;
+                              final isReplaying =
+                                  state.replayingEventId == event.id;
+                              // Replay only on the latest player-input turn,
+                              // and never while another replay is streaming.
+                              final canReplay =
+                                  !event.isOptimistic &&
+                                  isLatest &&
+                                  state.replayingEventId == null &&
+                                  !state.isGenerating &&
+                                  (event.playerInput?.trim().isNotEmpty ??
+                                      false);
+                              return NarrativeBubble(
+                                event: event,
+                                isReplaying: isReplaying,
+                                onLongPress:
+                                    (!event.isOptimistic &&
+                                        event.sequence > 0 &&
+                                        state.replayingEventId == null)
+                                    ? () => _showTurnMenu(
+                                        context,
+                                        event,
+                                        canReplay,
+                                      )
+                                    : null,
+                                onReplay: canReplay
+                                    ? () => context
+                                          .read<PlayCubit>()
+                                          .replayAiResponse(event)
+                                    : null,
+                                onSelectReplayVariant: (index) => context
+                                    .read<PlayCubit>()
+                                    .selectReplayVariant(event, index),
+                              );
+                            },
+                          ),
                   ),
 
                   PlayerInput(
                     isGenerating: state.isGenerating,
                     isConnected: state.isConnected,
-                    onSend: (msg) =>
-                        context.read<PlayCubit>().sendMessage(msg),
-                    onContinue: () =>
-                        context.read<PlayCubit>().continueStory(),
+                    onSend: (msg) => context.read<PlayCubit>().sendMessage(msg),
+                    onContinue: () => context.read<PlayCubit>().continueStory(),
                   ),
                 ],
               ),
@@ -681,7 +774,9 @@ class _AtmosphereBackground extends StatelessWidget {
           end: Alignment.bottomCenter,
           colors: [
             Color.alphaBlend(
-                accent.withValues(alpha: 0.16), EverloreTheme.void0),
+              accent.withValues(alpha: 0.16),
+              EverloreTheme.void0,
+            ),
             EverloreTheme.void1,
             EverloreTheme.void0,
           ],
@@ -703,10 +798,7 @@ class _AtmosphereBackground extends StatelessWidget {
                 gradient: RadialGradient(
                   center: Alignment.topCenter,
                   radius: 0.95,
-                  colors: [
-                    accent.withValues(alpha: 0.20),
-                    Colors.transparent,
-                  ],
+                  colors: [accent.withValues(alpha: 0.20), Colors.transparent],
                 ),
               ),
             ),
@@ -795,19 +887,14 @@ class _PlayHeader extends StatelessWidget {
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 600),
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isConnected
-                                ? EverloreTheme.verdant
-                                : EverloreTheme.crimson,
-                            boxShadow: isConnected
-                                ? EverloreTheme.glow(EverloreTheme.verdant,
-                                    blur: 6, alpha: 0.6)
-                                : null,
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          child: EvIcon(
+                            isConnected
+                                ? AppIcons.realmActive
+                                : AppIcons.reconnecting,
+                            key: ValueKey(isConnected),
+                            size: 18,
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -828,7 +915,7 @@ class _PlayHeader extends StatelessWidget {
               ),
               if (hasInstance) ...[
                 _RuneButton(
-                  icon: Icons.history_edu,
+                  assetIcon: AppIcons.chronicle,
                   onTap: onChronicle,
                   accent: EverloreTheme.gold,
                   tooltip: 'Lore Tome',
@@ -858,14 +945,16 @@ class _PlayHeader extends StatelessWidget {
 
 /// Small glowing icon button used in the header chrome.
 class _RuneButton extends StatelessWidget {
-  final IconData icon;
+  final IconData? icon;
+  final String? assetIcon;
   final VoidCallback onTap;
   final Color accent;
   final String? tooltip;
   final bool subtle;
 
   const _RuneButton({
-    required this.icon,
+    this.icon,
+    this.assetIcon,
     required this.onTap,
     required this.accent,
     this.tooltip,
@@ -886,16 +975,16 @@ class _RuneButton extends StatelessWidget {
               ? Colors.transparent
               : EverloreTheme.void2.withValues(alpha: 0.6),
           border: Border.all(
-            color: subtle
-                ? Colors.transparent
-                : accent.withValues(alpha: 0.25),
+            color: subtle ? Colors.transparent : accent.withValues(alpha: 0.25),
           ),
         ),
-        child: Icon(
-          icon,
-          color: subtle ? EverloreTheme.ash : accent,
-          size: subtle ? 18 : 19,
-        ),
+        child: assetIcon != null
+            ? EvIcon(assetIcon!, size: subtle ? 18 : 22)
+            : Icon(
+                icon!,
+                color: subtle ? EverloreTheme.ash : accent,
+                size: subtle ? 18 : 19,
+              ),
       ),
     );
     if (tooltip != null) return Tooltip(message: tooltip!, child: btn);
@@ -952,7 +1041,8 @@ class _EmptyNarrative extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.35)),
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.35),
+                ),
                 gradient: RadialGradient(
                   colors: [
                     EverloreTheme.gold.withValues(alpha: 0.10),
@@ -1058,18 +1148,17 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               ),
             ),
             const SizedBox(height: 16),
-            Text('Scene Settings',
-                style: EverloreTheme.serifDisplay(
-                    size: 18, color: EverloreTheme.parchment)),
+            Text(
+              'Scene Settings',
+              style: EverloreTheme.serifDisplay(
+                size: 18,
+                color: EverloreTheme.parchment,
+              ),
+            ),
             const SizedBox(height: 18),
 
             // Narration POV
-            Text('NARRATION',
-                style: EverloreTheme.ui(
-                    size: 11,
-                    weight: FontWeight.w700,
-                    spacing: 1.5,
-                    color: EverloreTheme.gold)),
+            const _SettingsLabel(icon: AppIcons.pov, label: 'NARRATION'),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -1090,12 +1179,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
 
             // Chat Mode — how the chat flows (pacing/intent). Orthogonal to the
             // creator-locked narrative voice, which players cannot change here.
-            Text('MODE',
-                style: EverloreTheme.ui(
-                    size: 11,
-                    weight: FontWeight.w700,
-                    spacing: 1.5,
-                    color: EverloreTheme.gold)),
+            const _SettingsLabel(icon: AppIcons.voice, label: 'MODE'),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -1106,7 +1190,9 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   onTap: () => setState(() => _mode = m.key),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(20),
                       color: selected
@@ -1125,8 +1211,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                         color: selected
                             ? EverloreTheme.gold
                             : EverloreTheme.ash,
-                        weight:
-                            selected ? FontWeight.w600 : FontWeight.w400,
+                        weight: selected ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
                   ),
@@ -1138,21 +1223,21 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               _mode == 'ardent'
                   ? 'Ardent escalates intensity — explicit content only in mature worlds with NSFW enabled in your preferences.'
                   : kChatModes
-                      .firstWhere((m) => m.key == _mode,
-                          orElse: () => kChatModes.first)
-                      .blurb,
+                        .firstWhere(
+                          (m) => m.key == _mode,
+                          orElse: () => kChatModes.first,
+                        )
+                        .blurb,
               style: EverloreTheme.ui(
-                  size: 11, color: EverloreTheme.ash, height: 1.4),
+                size: 11,
+                color: EverloreTheme.ash,
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: 20),
 
             // Message length — drives both the prompt directive and max tokens.
-            Text('REPLY LENGTH',
-                style: EverloreTheme.ui(
-                    size: 11,
-                    weight: FontWeight.w700,
-                    spacing: 1.5,
-                    color: EverloreTheme.gold)),
+            const _SettingsLabel(icon: AppIcons.length, label: 'REPLY LENGTH'),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -1173,8 +1258,9 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             SizedBox(
               width: double.infinity,
               child: GestureDetector(
-                onTap:
-                    _dirty ? () => widget.onApply(_pov, _mode, _length) : null,
+                onTap: _dirty
+                    ? () => widget.onApply(_pov, _mode, _length)
+                    : null,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1210,11 +1296,17 @@ class _SettingsSheetState extends State<_SettingsSheet> {
 
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.restart_alt_rounded,
-                  color: EverloreTheme.gold),
-              title: Text('Reset this chat',
-                  style: EverloreTheme.ui(
-                      size: 15, color: EverloreTheme.parchment)),
+              leading: const Icon(
+                Icons.restart_alt_rounded,
+                color: EverloreTheme.gold,
+              ),
+              title: Text(
+                'Reset this chat',
+                style: EverloreTheme.ui(
+                  size: 15,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
               subtitle: Text(
                 'Start over from the opening line. Keeps the world & character.',
                 style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
@@ -1224,11 +1316,14 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             const Divider(color: EverloreTheme.white10, height: 1),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.delete_outline,
-                  color: EverloreTheme.crimson),
-              title: Text('Delete this chat',
-                  style: EverloreTheme.ui(
-                      size: 15, color: EverloreTheme.crimson)),
+              leading: const Icon(
+                Icons.delete_outline,
+                color: EverloreTheme.crimson,
+              ),
+              title: Text(
+                'Delete this chat',
+                style: EverloreTheme.ui(size: 15, color: EverloreTheme.crimson),
+              ),
               onTap: widget.onDelete,
             ),
           ],
@@ -1273,15 +1368,39 @@ class _SegOption extends StatelessWidget {
               label,
               style: EverloreTheme.ui(
                 size: 13,
-                color: selected
-                    ? EverloreTheme.parchment
-                    : EverloreTheme.ash,
+                color: selected ? EverloreTheme.parchment : EverloreTheme.ash,
                 weight: selected ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SettingsLabel extends StatelessWidget {
+  final String icon;
+  final String label;
+
+  const _SettingsLabel({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        EvIcon(icon, size: 18),
+        const SizedBox(width: 7),
+        Text(
+          label,
+          style: EverloreTheme.ui(
+            size: 11,
+            weight: FontWeight.w700,
+            spacing: 1.5,
+            color: EverloreTheme.gold,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1323,23 +1442,36 @@ class _ThoughtsSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Text('Character Thoughts',
-                style: EverloreTheme.serifDisplay(
-                    size: 18, color: EverloreTheme.parchment)),
+            Text(
+              'Character Thoughts',
+              style: EverloreTheme.serifDisplay(
+                size: 18,
+                color: EverloreTheme.parchment,
+              ),
+            ),
             const SizedBox(height: 6),
             Text(
               'Private attitudes and inner thoughts inferred from the story. '
               'These are not spoken dialogue.',
               style: EverloreTheme.ui(
-                  size: 12, color: EverloreTheme.ash, height: 1.4),
+                size: 12,
+                color: EverloreTheme.ash,
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: 12),
             if (focusedCharacterId != null)
               TextButton.icon(
                 onPressed: onClearFocus,
-                icon: const Icon(Icons.clear, size: 16, color: EverloreTheme.ash),
-                label: Text('Clear focus',
-                    style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash)),
+                icon: const Icon(
+                  Icons.clear,
+                  size: 16,
+                  color: EverloreTheme.ash,
+                ),
+                label: Text(
+                  'Clear focus',
+                  style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+                ),
               ),
             if (characters.isEmpty)
               Padding(
@@ -1347,7 +1479,10 @@ class _ThoughtsSheet extends StatelessWidget {
                 child: Text(
                   'No side-character profiles yet. Keep playing and the codex will build itself.',
                   style: EverloreTheme.ui(
-                      size: 13, color: EverloreTheme.ash, height: 1.5),
+                    size: 13,
+                    color: EverloreTheme.ash,
+                    height: 1.5,
+                  ),
                 ),
               )
             else
@@ -1379,13 +1514,18 @@ class _ThoughtsSheet extends StatelessWidget {
                             const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 7, vertical: 2),
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: EverloreTheme.gold.withValues(alpha: 0.12),
+                                color: EverloreTheme.gold.withValues(
+                                  alpha: 0.12,
+                                ),
                                 borderRadius: BorderRadius.circular(5),
                                 border: Border.all(
-                                  color:
-                                      EverloreTheme.goldDim.withValues(alpha: 0.4),
+                                  color: EverloreTheme.goldDim.withValues(
+                                    alpha: 0.4,
+                                  ),
                                 ),
                               ),
                               child: Text(
@@ -1410,7 +1550,9 @@ class _ThoughtsSheet extends StatelessWidget {
                               Text(
                                 'Disposition: ${c.dispositionToPlayer}',
                                 style: EverloreTheme.ui(
-                                    size: 12, color: EverloreTheme.goldDim),
+                                  size: 12,
+                                  color: EverloreTheme.goldDim,
+                                ),
                               ),
                             if (c.hiddenThought.trim().isNotEmpty)
                               Text(
@@ -1434,8 +1576,11 @@ class _ThoughtsSheet extends StatelessWidget {
                             IconButton(
                               onPressed: () => onEdit(c),
                               visualDensity: VisualDensity.compact,
-                              icon: const Icon(Icons.edit_outlined,
-                                  size: 17, color: EverloreTheme.ash),
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                size: 17,
+                                color: EverloreTheme.ash,
+                              ),
                               tooltip: 'Edit',
                             ),
                           if (!c.isProtagonist)
@@ -1479,24 +1624,32 @@ class _ErrorBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: EverloreTheme.crimson.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
-        border:
-            Border.all(color: EverloreTheme.crimson.withValues(alpha: 0.3)),
+        border: Border.all(color: EverloreTheme.crimson.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline,
-              color: EverloreTheme.crimson, size: 16),
+          const Icon(
+            Icons.error_outline,
+            color: EverloreTheme.crimson,
+            size: 16,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
               style: EverloreTheme.ui(
-                  size: 13, color: EverloreTheme.crimson, height: 1.4),
+                size: 13,
+                color: EverloreTheme.crimson,
+                height: 1.4,
+              ),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close,
-                color: EverloreTheme.crimson, size: 16),
+            icon: const Icon(
+              Icons.close,
+              color: EverloreTheme.crimson,
+              size: 16,
+            ),
             onPressed: onDismiss,
             constraints: const BoxConstraints(),
             padding: const EdgeInsets.all(4),
@@ -1513,7 +1666,10 @@ class _ProtagonistOnboardingSheet extends StatefulWidget {
   final void Function(String name, String? identity) onBegin;
   final VoidCallback onSkip;
 
-  const _ProtagonistOnboardingSheet({required this.onBegin, required this.onSkip});
+  const _ProtagonistOnboardingSheet({
+    required this.onBegin,
+    required this.onSkip,
+  });
 
   @override
   State<_ProtagonistOnboardingSheet> createState() =>
@@ -1557,15 +1713,22 @@ class _ProtagonistOnboardingSheetState
             ),
           ),
           const SizedBox(height: 16),
-          Text('Who are you in this world?',
-              style: EverloreTheme.serifDisplay(
-                  size: 18, color: EverloreTheme.parchment)),
+          Text(
+            'Who are you in this world?',
+            style: EverloreTheme.serifDisplay(
+              size: 18,
+              color: EverloreTheme.parchment,
+            ),
+          ),
           const SizedBox(height: 6),
           Text(
             'Name your character — the world will remember you and the story '
             'will revolve around your journey.',
             style: EverloreTheme.ui(
-                size: 12.5, color: EverloreTheme.ash, height: 1.45),
+              size: 12.5,
+              color: EverloreTheme.ash,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: 18),
           TextField(
@@ -1590,39 +1753,46 @@ class _ProtagonistOnboardingSheetState
             children: [
               TextButton(
                 onPressed: widget.onSkip,
-                child: Text('Skip',
-                    style: EverloreTheme.ui(size: 14, color: EverloreTheme.ash)),
+                child: Text(
+                  'Skip',
+                  style: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
+                ),
               ),
               const Spacer(),
               GestureDetector(
                 onTap: ready
                     ? () => widget.onBegin(
-                          _nameCtrl.text.trim(),
-                          _identityCtrl.text.trim().isEmpty
-                              ? null
-                              : _identityCtrl.text.trim(),
-                        )
+                        _nameCtrl.text.trim(),
+                        _identityCtrl.text.trim().isEmpty
+                            ? null
+                            : _identityCtrl.text.trim(),
+                      )
                     : null,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     gradient: ready
-                        ? const LinearGradient(colors: [
-                            EverloreTheme.goldGlow,
-                            EverloreTheme.gold
-                          ])
+                        ? const LinearGradient(
+                            colors: [
+                              EverloreTheme.goldGlow,
+                              EverloreTheme.gold,
+                            ],
+                          )
                         : null,
                     color: ready ? null : EverloreTheme.void3,
                   ),
-                  child: Text('Begin',
-                      style: EverloreTheme.ui(
-                          size: 14,
-                          color: ready
-                              ? EverloreTheme.void1
-                              : EverloreTheme.ash,
-                          weight: FontWeight.w700)),
+                  child: Text(
+                    'Begin',
+                    style: EverloreTheme.ui(
+                      size: 14,
+                      color: ready ? EverloreTheme.void1 : EverloreTheme.ash,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -1633,27 +1803,28 @@ class _ProtagonistOnboardingSheetState
   }
 
   InputDecoration _dec(String hint) => InputDecoration(
-        hintText: hint,
-        hintStyle: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
-        filled: true,
-        fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide:
-              BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide:
-              BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: EverloreTheme.gold, width: 1.2),
-        ),
-      );
+    hintText: hint,
+    hintStyle: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+    filled: true,
+    fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(
+        color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+      ),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(
+        color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+      ),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: EverloreTheme.gold, width: 1.2),
+    ),
+  );
 }
 
 /// Player edit of a character/protagonist card. Facts & current-state are edited
@@ -1696,18 +1867,22 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
   @override
   void dispose() {
     for (final ctrl in [
-      _name, _role, _appearance, _persona, _facts, _state, _disposition, _thought
+      _name,
+      _role,
+      _appearance,
+      _persona,
+      _facts,
+      _state,
+      _disposition,
+      _thought,
     ]) {
       ctrl.dispose();
     }
     super.dispose();
   }
 
-  List<String> _lines(String raw) => raw
-      .split('\n')
-      .map((l) => l.trim())
-      .where((l) => l.isNotEmpty)
-      .toList();
+  List<String> _lines(String raw) =>
+      raw.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
 
   void _save() {
     final updates = <String, dynamic>{
@@ -1752,9 +1927,13 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  Text(isProtagonist ? 'Edit Protagonist' : 'Edit Character',
-                      style: EverloreTheme.serifDisplay(
-                          size: 18, color: EverloreTheme.parchment)),
+                  Text(
+                    isProtagonist ? 'Edit Protagonist' : 'Edit Character',
+                    style: EverloreTheme.serifDisplay(
+                      size: 18,
+                      color: EverloreTheme.parchment,
+                    ),
+                  ),
                   if (isProtagonist) ...[
                     const SizedBox(width: 8),
                     const Icon(Icons.star, size: 14, color: EverloreTheme.gold),
@@ -1766,7 +1945,10 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
                 'Your edits are canon — the story honors them next turn. '
                 'Removing a fact also clears stale memories about it.',
                 style: EverloreTheme.ui(
-                    size: 12, color: EverloreTheme.ash, height: 1.4),
+                  size: 12,
+                  color: EverloreTheme.ash,
+                  height: 1.4,
+                ),
               ),
               const SizedBox(height: 14),
               _field('Name', _name),
@@ -1784,26 +1966,36 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: Text('Cancel',
-                        style:
-                            EverloreTheme.ui(size: 14, color: EverloreTheme.ash)),
+                    child: Text(
+                      'Cancel',
+                      style: EverloreTheme.ui(
+                        size: 14,
+                        color: EverloreTheme.ash,
+                      ),
+                    ),
                   ),
                   const Spacer(),
                   GestureDetector(
                     onTap: _name.text.trim().length >= 2 ? _save : null,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         gradient: const LinearGradient(
-                            colors: [EverloreTheme.goldGlow, EverloreTheme.gold]),
+                          colors: [EverloreTheme.goldGlow, EverloreTheme.gold],
+                        ),
                       ),
-                      child: Text('Save',
-                          style: EverloreTheme.ui(
-                              size: 14,
-                              color: EverloreTheme.void1,
-                              weight: FontWeight.w700)),
+                      child: Text(
+                        'Save',
+                        style: EverloreTheme.ui(
+                          size: 14,
+                          color: EverloreTheme.void1,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -1821,11 +2013,14 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: EverloreTheme.ui(
-                  size: 12,
-                  color: EverloreTheme.parchment,
-                  weight: FontWeight.w600)),
+          Text(
+            label,
+            style: EverloreTheme.ui(
+              size: 12,
+              color: EverloreTheme.parchment,
+              weight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: ctrl,
@@ -1834,25 +2029,35 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
             onChanged: (_) => setState(() {}),
             textCapitalization: TextCapitalization.sentences,
             style: EverloreTheme.ui(
-                size: 14, color: EverloreTheme.parchment, height: 1.4),
+              size: 14,
+              color: EverloreTheme.parchment,
+              height: 1.4,
+            ),
             decoration: InputDecoration(
               filled: true,
               fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+                ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+                ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: EverloreTheme.gold, width: 1.2),
+                borderSide: const BorderSide(
+                  color: EverloreTheme.gold,
+                  width: 1.2,
+                ),
               ),
             ),
           ),
