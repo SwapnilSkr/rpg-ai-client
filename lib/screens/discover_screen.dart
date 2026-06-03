@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app/theme/nexus_theme.dart';
-import '../core/onboarding/interests_store.dart';
+import '../core/auth/auth_service.dart';
 import '../shared/app_icons.dart';
 import '../shared/models/world_template.dart';
 import '../shared/narrative_styles.dart';
+import '../shared/widgets/everlore_session_loader.dart';
+import '../shared/widgets/mature_content_chip.dart';
 import '../shared/widgets/neu.dart';
 import '../features/templates/data/template_repository.dart';
 import '../features/templates/data/interest_ranking.dart';
@@ -31,7 +33,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   void initState() {
     super.initState();
+    AuthService.sessionEpoch.addListener(_onSessionChanged);
     _load();
+  }
+
+  @override
+  void dispose() {
+    AuthService.sessionEpoch.removeListener(_onSessionChanged);
+    super.dispose();
+  }
+
+  void _onSessionChanged() {
+    if (mounted) _load();
   }
 
   Future<void> _load() async {
@@ -41,10 +54,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     });
     try {
       final result = await TemplateRepository.listPublished();
-      final interests = await InterestsStore.getInterests();
-      final ranked = rankByInterests(
+      final ranked = await orderTemplatesForFeed(
         List<WorldTemplate>.from(result['templates']),
-        interests,
       );
       if (!mounted) return;
       setState(() {
@@ -207,14 +218,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(
-            strokeWidth: 1.5,
-            color: EverloreTheme.gold,
-          ),
-        ),
+        child: EverloreSessionLoader(message: 'Discovering realms'),
       );
     }
     if (_error != null) {
@@ -393,7 +397,8 @@ class _DiscoverCard extends StatelessWidget {
                     runSpacing: 6,
                     children: [
                       _genreChip(genre),
-                      if (template.isNsfwCapable) _nsfwBadge(),
+                      if (template.isNsfwCapable)
+                        const MatureContentChip(),
                     ],
                   ),
                 ],
@@ -429,20 +434,6 @@ class _DiscoverCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _nsfwBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: EverloreTheme.crimson.withValues(alpha: 0.10),
-        border: Border.all(
-          color: EverloreTheme.crimson.withValues(alpha: 0.25),
-        ),
-      ),
-      child: const EvIcon(AppIcons.nsfw, size: 18),
     );
   }
 

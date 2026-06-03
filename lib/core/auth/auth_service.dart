@@ -1,16 +1,26 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import '../network/api_client.dart';
 import '../network/ws_manager.dart';
+import '../onboarding/interests_store.dart';
 import '../storage/secure_storage.dart';
 import '../../shared/models/user.dart';
 
 class AuthService {
   static final WsManager _wsManager = WsManager();
 
+  /// Bumped on sign-in and sign-out so shell tabs (e.g. Discover) refetch feeds.
+  static final ValueNotifier<int> sessionEpoch = ValueNotifier(0);
+
+  static void _bumpSessionEpoch() => sessionEpoch.value++;
+
   static Future<void> _persistSession(Map<String, dynamic> response) async {
     await SecureStore.saveToken(response['token']);
     await SecureStore.saveUserData(jsonEncode(response['user']));
     await _wsManager.connect(response['token']);
+    final user = User.fromJson(response['user']);
+    await InterestsStore.syncFromUser(user);
+    _bumpSessionEpoch();
   }
 
   static Future<User> register({
@@ -97,6 +107,7 @@ class AuthService {
     final response = await ApiClient.get('/auth/me');
     final user = User.fromJson(response);
     await SecureStore.saveUserData(jsonEncode(user.toJson()));
+    await InterestsStore.syncFromUser(user);
     return user;
   }
 
@@ -123,6 +134,7 @@ class AuthService {
   static Future<void> logout() async {
     await _wsManager.disconnect(clearToken: true);
     await SecureStore.clearAll();
+    _bumpSessionEpoch();
   }
 
   static Future<bool> isLoggedIn() async {

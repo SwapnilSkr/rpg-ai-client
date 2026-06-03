@@ -113,9 +113,9 @@ class _SplashScreenState extends State<SplashScreen>
     final user = await AuthService.getCachedUser();
     if (!mounted) return;
     if (user != null) {
-      // Same destination as post-auth: Discover, or interests onboarding if
-      // this device hasn't finished it yet.
-      final onboarded = await InterestsStore.isOnboarded();
+      // Discover unless this account still needs interests onboarding.
+      final onboarded =
+          await InterestsStore.hasCompletedOnboarding(user: user);
       if (!mounted) return;
       context.go(onboarded ? '/discover' : '/onboarding');
     } else {

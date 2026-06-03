@@ -3,10 +3,11 @@ import 'package:go_router/go_router.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/world_template.dart';
 import '../../../shared/narrative_styles.dart';
-import '../../../core/onboarding/interests_store.dart';
 import '../data/template_repository.dart';
 import '../data/interest_ranking.dart';
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../shared/widgets/everlore_session_loader.dart';
+import '../../../../shared/widgets/mature_content_chip.dart';
 
 class BrowseTemplatesScreen extends StatefulWidget {
   const BrowseTemplatesScreen({super.key});
@@ -51,11 +52,8 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
     });
     try {
       final result = await TemplateRepository.listPublished(search: search);
-      // Boost worlds matching the player's interests (read-only reorder).
-      final interests = await InterestsStore.getInterests();
-      final ranked = rankByInterests(
+      final ranked = await orderTemplatesForFeed(
         List<WorldTemplate>.from(result['templates']),
-        interests,
       );
       setState(() {
         _templates = ranked;
@@ -240,28 +238,7 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
     if (_isLoading) {
       return const SliverFillRemaining(
         child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.5,
-                  color: EverloreTheme.gold,
-                ),
-              ),
-              SizedBox(height: 14),
-              Text(
-                'Discovering worlds...',
-                style: TextStyle(
-                  color: EverloreTheme.ash,
-                  fontSize: 13,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
-          ),
+          child: EverloreSessionLoader(message: 'Discovering worlds'),
         ),
       );
     }
@@ -479,23 +456,8 @@ class _WorldCard extends StatelessWidget {
                           ),
                         ),
                         if (template.isNsfwCapable)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(6),
-                              color: EverloreTheme.crimson.withValues(
-                                alpha: 0.1,
-                              ),
-                              border: Border.all(
-                                color: EverloreTheme.crimson.withValues(
-                                  alpha: 0.3,
-                                ),
-                              ),
-                            ),
-                            child: const EvIcon(AppIcons.nsfw, size: 18),
+                          const MatureContentChip(
+                            density: MatureChipDensity.compact,
                           ),
                         const SizedBox(width: 8),
                         Icon(

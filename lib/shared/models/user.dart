@@ -4,6 +4,8 @@ class UserPreferences {
   final String theme;
   final String narrationLength;
   final bool autoMemoryCuration;
+  /// Genre taste from onboarding (`narrative_style` keys); persisted on server.
+  final List<String> interests;
 
   const UserPreferences({
     this.nsfwEnabled = false,
@@ -11,15 +13,21 @@ class UserPreferences {
     this.theme = 'dark',
     this.narrationLength = 'detailed',
     this.autoMemoryCuration = true,
+    this.interests = const [],
   });
 
   factory UserPreferences.fromJson(Map<String, dynamic> json) {
+    final raw = json['interests'];
+    final interests = raw is List
+        ? raw.whereType<String>().toList()
+        : const <String>[];
     return UserPreferences(
       nsfwEnabled: json['nsfw_enabled'] ?? false,
       preferredModel: json['preferred_model'] ?? 'gpt-4o',
       theme: json['theme'] ?? 'dark',
       narrationLength: json['narration_length'] ?? 'detailed',
       autoMemoryCuration: json['auto_memory_curation'] ?? true,
+      interests: interests,
     );
   }
 
@@ -29,6 +37,7 @@ class UserPreferences {
     'theme': theme,
     'narration_length': narrationLength,
     'auto_memory_curation': autoMemoryCuration,
+    if (interests.isNotEmpty) 'interests': interests,
   };
 }
 

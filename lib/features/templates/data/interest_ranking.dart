@@ -1,5 +1,7 @@
+import '../../../core/storage/secure_storage.dart';
 import '../../../shared/models/world_template.dart';
 import '../../../shared/narrative_styles.dart';
+import '../../../core/onboarding/interests_store.dart';
 
 /// Re-orders discovery results by the player's interest taste — a **boost,
 /// never a filter**: every world stays in the list, matches just float to the
@@ -9,7 +11,11 @@ import '../../../shared/narrative_styles.dart';
 ///
 /// Phase 1 (client-side) signal is interest-match only; popularity/recency
 /// weighting lives in the Phase 2 backend aggregation where that data exists.
-/// See memory: interests_discovery.md.
+///
+/// When the user is signed in, [orderTemplatesForFeed] returns the API list as-is:
+/// `GET /templates` already boosts by `preferences.interests` (same family map).
+/// Client re-ranking on top of that was redundant and diverged after logout when
+/// local interests were cleared but the server still had picks.
 List<WorldTemplate> rankByInterests(
   List<WorldTemplate> templates,
   List<String> interests,
@@ -37,4 +43,13 @@ List<WorldTemplate> rankByInterests(
     return byScore != 0 ? byScore : a.$1.compareTo(b.$1);
   });
   return [for (final e in indexed) e.$2];
+}
+
+/// Feed ordering for Discover / browse: trust the server when authenticated.
+Future<List<WorldTemplate>> orderTemplatesForFeed(
+  List<WorldTemplate> templates,
+) async {
+  if (await SecureStore.getToken() != null) return templates;
+  final interests = await InterestsStore.getInterests();
+  return rankByInterests(templates, interests);
 }
