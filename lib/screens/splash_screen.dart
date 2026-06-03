@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/auth/auth_service.dart';
+import '../core/onboarding/interests_store.dart';
 import '../app/theme/nexus_theme.dart';
 
 /// Everlore splash — Phase 2 of the premium redesign.
@@ -20,8 +21,7 @@ import '../app/theme/nexus_theme.dart';
 /// `gen:splash-avatars` script). Missing portraits fall back to neumorphic
 /// gold-rimmed placeholder discs, so the splash always looks intentional.
 ///
-/// Pure Flutter (CustomPaint + controllers). No new packages. Auth-routing
-/// logic is unchanged from the original splash.
+/// Pure Flutter (CustomPaint + controllers). No new packages.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -110,7 +110,11 @@ class _SplashScreenState extends State<SplashScreen>
     final user = await AuthService.getCachedUser();
     if (!mounted) return;
     if (user != null) {
-      context.go('/');
+      // Same destination as post-auth: Discover, or interests onboarding if
+      // this device hasn't finished it yet.
+      final onboarded = await InterestsStore.isOnboarded();
+      if (!mounted) return;
+      context.go(onboarded ? '/discover' : '/onboarding');
     } else {
       context.go('/welcome');
     }

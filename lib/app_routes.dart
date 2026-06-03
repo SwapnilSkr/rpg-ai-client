@@ -2,6 +2,8 @@ import 'package:go_router/go_router.dart';
 import 'package:everlore/screens/splash_screen.dart';
 import 'package:everlore/screens/welcome_screen.dart';
 import 'package:everlore/screens/auth_screen.dart';
+import 'package:everlore/screens/onboarding_interests_screen.dart';
+import 'package:everlore/screens/discover_screen.dart';
 import 'package:everlore/features/home/presentation/home_screen.dart';
 import 'package:everlore/features/play/presentation/play_screen.dart';
 import 'package:everlore/features/chronicle/presentation/chronicle_screen.dart';
@@ -34,6 +36,16 @@ final router = GoRouter(
       path: '/auth',
       name: 'auth',
       builder: (context, state) => const AuthScreen(),
+    ),
+    GoRoute(
+      path: '/onboarding',
+      name: 'onboarding',
+      builder: (context, state) => const OnboardingInterestsScreen(),
+    ),
+    GoRoute(
+      path: '/discover',
+      name: 'discover',
+      builder: (context, state) => const DiscoverScreen(),
     ),
     GoRoute(
       path: '/play/:instanceId',
