@@ -4,6 +4,7 @@ import '../../../shared/models/world_template.dart';
 import '../data/template_repository.dart';
 import '../../home/data/home_repository.dart';
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../shared/widgets/mature_content_chip.dart';
 
 class TemplateDetailScreen extends StatefulWidget {
   final String templateId;
@@ -238,24 +239,8 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                                       ),
                                       if (t.isNsfwCapable) ...[
                                         const SizedBox(width: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                            color: EverloreTheme.crimson
-                                                .withValues(alpha: 0.1),
-                                            border: Border.all(
-                                                color: EverloreTheme.crimson
-                                                    .withValues(alpha: 0.3)),
-                                          ),
-                                          child: const Text(
-                                            '18+',
-                                            style: TextStyle(
-                                                color: EverloreTheme.crimson,
-                                                fontSize: 9),
-                                          ),
+                                        const MatureContentChip(
+                                          density: MatureChipDensity.compact,
                                         ),
                                       ],
                                     ],

@@ -7,6 +7,7 @@ import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/user.dart';
+import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/neu.dart';
 
 class MyWorldsScreen extends StatelessWidget {
@@ -34,14 +35,7 @@ class _MyWorldsView extends StatelessWidget {
           return const Scaffold(
             backgroundColor: EverloreTheme.void1,
             body: Center(
-              child: SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.5,
-                  color: EverloreTheme.gold,
-                ),
-              ),
+              child: EverloreSessionLoader(message: 'Opening your forge'),
             ),
           );
         }
@@ -634,24 +628,7 @@ class _LoadingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(
-              strokeWidth: 1.5,
-              color: EverloreTheme.gold,
-            ),
-          ),
-          SizedBox(height: 14),
-          Text(
-            'Consulting the archives...',
-            style: TextStyle(color: EverloreTheme.ash, fontSize: 14),
-          ),
-        ],
-      ),
+      child: EverloreSessionLoader(message: 'Consulting the archives'),
     );
   }
 }

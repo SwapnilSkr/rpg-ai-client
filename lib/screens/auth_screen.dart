@@ -11,6 +11,7 @@ import '../core/network/api_client.dart';
 import '../shared/models/user.dart';
 import '../app/theme/nexus_theme.dart';
 import '../core/onboarding/interests_store.dart';
+import '../shared/widgets/everlore_session_loader.dart';
 import '../shared/widgets/keyboard_aware_scroll.dart';
 import '../shared/widgets/realm_backdrop.dart';
 import '../shared/widgets/neu.dart';
@@ -31,6 +32,7 @@ class _AuthScreenState extends State<AuthScreen> {
   DialCode _dialCode = kDefaultDialCode; // United States +1
 
   User? _currentUser;
+  bool _sessionReady = false;
   bool _googleReady = false;
   bool _isLoading = false;
   bool _isUpdatingPreferences = false;
@@ -39,33 +41,70 @@ class _AuthScreenState extends State<AuthScreen> {
   String? _errorMessage;
   String? _successMessage;
 
+  VoidCallback? _sessionListener;
+
   @override
   void initState() {
     super.initState();
+    _sessionListener = () {
+      if (mounted) _bootstrap();
+    };
+    AuthService.sessionEpoch.addListener(_sessionListener!);
     _bootstrap();
   }
 
   @override
   void dispose() {
+    AuthService.sessionEpoch.removeListener(_sessionListener!);
     _phoneController.dispose();
     _otpController.dispose();
     super.dispose();
   }
 
-  Future<void> _bootstrap() async {
-    final cachedUser = await AuthService.getCachedUser();
+  bool _isProfileTab(BuildContext context) {
+    return GoRouterState.of(context).matchedLocation == '/profile';
+  }
+
+  Future<void> _initGoogleSignIn() async {
     try {
       await dotenv.load();
       final clientId = dotenv.env['GOOGLE_WEB_CLIENT_ID']?.trim();
       if (clientId != null && clientId.isNotEmpty) {
         await _googleAuthService.init(serverClientId: clientId);
-        _googleReady = true;
+        if (mounted) setState(() => _googleReady = true);
+        return;
       }
-    } catch (_) {
-      _googleReady = false;
-    }
+    } catch (_) {}
+    if (mounted) setState(() => _googleReady = false);
+  }
+
+  Future<void> _bootstrap() async {
     if (!mounted) return;
-    setState(() => _currentUser = cachedUser);
+
+    final cachedUser = await AuthService.getCachedUser();
+    if (!mounted) return;
+
+    if (cachedUser != null) {
+      setState(() {
+        _currentUser = cachedUser;
+        _sessionReady = true;
+      });
+      unawaited(_initGoogleSignIn());
+      return;
+    }
+
+    // Avoid a loader flash when sign-out already cleared local state.
+    final needsLoader = _currentUser != null || !_sessionReady;
+    if (needsLoader) {
+      setState(() => _sessionReady = false);
+    }
+
+    await _initGoogleSignIn();
+    if (!mounted) return;
+    setState(() {
+      _currentUser = null;
+      _sessionReady = true;
+    });
   }
 
   void _clearMessages() {
@@ -73,12 +112,11 @@ class _AuthScreenState extends State<AuthScreen> {
     _successMessage = null;
   }
 
-  /// After a successful sign-in, send first-time players through the interests
-  /// onboarding (once per device); everyone else lands on Discover (NOT their
-  /// realms — that's reachable from Discover's top icons). Applies to creators
-  /// too.
+  /// After sign-in: interests onboarding for new accounts; Discover otherwise.
   Future<void> _routeAfterAuth() async {
-    final onboarded = await InterestsStore.isOnboarded();
+    final user = await AuthService.getCachedUser();
+    final onboarded =
+        await InterestsStore.hasCompletedOnboarding(user: user);
     if (!mounted) return;
     context.go(onboarded ? '/discover' : '/onboarding');
   }
@@ -178,6 +216,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _handleSignOut() async {
     setState(() {
       _currentUser = null;
+      _sessionReady = true;
       _codeSent = false;
       _phoneController.clear();
       _otpController.clear();
@@ -335,13 +374,13 @@ class _AuthScreenState extends State<AuthScreen> {
       backgroundColor: EverloreTheme.void0,
       body: RealmBackdrop(
         // Profile view doesn't need the gallery band — keep it focused.
-        showPortraits: _currentUser == null,
+        showPortraits: _sessionReady && _currentUser == null,
         child: SafeArea(
           child: Column(
             children: [
               // Back button — only in the sign-in flow. The profile is a nav
               // tab (no back) or pushed (OS/gesture back handles it).
-              if (_currentUser == null)
+              if (_sessionReady && _currentUser == null && !_isProfileTab(context))
                 Align(
                   alignment: Alignment.topLeft,
                   child: Padding(
@@ -356,23 +395,31 @@ class _AuthScreenState extends State<AuthScreen> {
                 )
               else
                 const SizedBox(height: 12),
-              Expanded(
-                // Profile is a fixed, non-scrolling layout; only the sign-in
-                // form needs the keyboard-aware scroll.
-                child: _currentUser != null
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 28),
-                        child: _buildProfile(_currentUser!),
-                      )
-                    : KeyboardAwareScroll(
-                        padding: const EdgeInsets.symmetric(horizontal: 28),
-                        child: _buildSignIn(),
-                      ),
-              ),
+              Expanded(child: _buildSessionBody(context)),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSessionBody(BuildContext context) {
+    if (!_sessionReady) {
+      return EverloreSessionLoader(
+        message: _isProfileTab(context)
+            ? 'Opening your profile'
+            : 'One moment',
+      );
+    }
+    if (_currentUser != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: _buildProfile(_currentUser!),
+      );
+    }
+    return KeyboardAwareScroll(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: _buildSignIn(),
     );
   }
 

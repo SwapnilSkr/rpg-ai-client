@@ -5,9 +5,9 @@ import 'narrative_styles.dart';
 class AppIcons {
   static const navExplore = 'assets/icons/nav_explore.png';
   static const navRealms = 'assets/icons/nav_realms.png';
-  static const navCreate = 'assets/icons/nav_create.png';
   static const navWorlds = 'assets/icons/nav_worlds.png';
   static const navProfile = 'assets/icons/nav_profile.png';
+  static const createCharacter = 'assets/icons/create_character.png';
 
   static const forgeSigil = 'assets/icons/forge_sigil.png';
   static const appIcon = 'assets/icons/app_icon.png';

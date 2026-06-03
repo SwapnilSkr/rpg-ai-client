@@ -211,7 +211,7 @@ class _CreateAction extends StatelessWidget {
             ),
           ],
         ),
-        child: const Center(child: EvIcon(AppIcons.navCreate, size: 28)),
+        child: const Icon(Icons.add, color: EverloreTheme.void0, size: 30),
       ),
     );
   }
@@ -256,7 +256,7 @@ void showCreateChooser(BuildContext context) {
               ),
               const SizedBox(height: 12),
               _CreateChoice(
-                icon: AppIcons.navProfile,
+                icon: AppIcons.createCharacter,
                 title: 'Create a Character',
                 subtitle: 'A sentient companion to talk and adventure with.',
                 onTap: () {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
 import '../../../../../shared/models/world_template.dart';
+import '../../../../../shared/widgets/mature_content_chip.dart';
 
 class MyWorldCard extends StatelessWidget {
   final WorldTemplate template;
@@ -166,26 +167,8 @@ class MyWorldCard extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 6),
                                 if (template.isNsfwCapable)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: EverloreTheme.crimson.withValues(
-                                        alpha: 0.1,
-                                      ),
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                        color: EverloreTheme.crimson.withValues(
-                                          alpha: 0.3,
-                                        ),
-                                      ),
-                                    ),
-                                    child: const EvIcon(
-                                      AppIcons.nsfw,
-                                      size: 18,
-                                    ),
+                                  const MatureContentChip(
+                                    density: MatureChipDensity.compact,
                                   ),
                               ],
                             ),

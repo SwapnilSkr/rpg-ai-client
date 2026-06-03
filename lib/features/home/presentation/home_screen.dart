@@ -6,6 +6,7 @@ import '../state/home_cubit.dart';
 import 'widgets/world_card.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/app_icons.dart';
+import '../../../../shared/widgets/everlore_session_loader.dart';
 import '../../../../shared/widgets/neu.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -235,24 +236,7 @@ class _LoadingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(
-              strokeWidth: 1.5,
-              color: EverloreTheme.gold,
-            ),
-          ),
-          SizedBox(height: 16),
-          Text(
-            'Summoning your realms...',
-            style: TextStyle(color: EverloreTheme.ash, fontSize: 14),
-          ),
-        ],
-      ),
+      child: EverloreSessionLoader(message: 'Summoning your realms'),
     );
   }
 }
