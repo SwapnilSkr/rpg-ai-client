@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/models/world_template.dart';
+import '../../../core/onboarding/interests_store.dart';
 import '../data/template_repository.dart';
+import '../data/interest_ranking.dart';
 import '../../../../app/theme/nexus_theme.dart';
 
 class BrowseTemplatesScreen extends StatefulWidget {
@@ -47,8 +49,14 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
     });
     try {
       final result = await TemplateRepository.listPublished(search: search);
+      // Boost worlds matching the player's interests (read-only reorder).
+      final interests = await InterestsStore.getInterests();
+      final ranked = rankByInterests(
+        List<WorldTemplate>.from(result['templates']),
+        interests,
+      );
       setState(() {
-        _templates = result['templates'];
+        _templates = ranked;
         _isLoading = false;
       });
     } catch (e) {
