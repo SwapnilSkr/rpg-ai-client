@@ -357,12 +357,17 @@ class _AuthScreenState extends State<AuthScreen> {
               else
                 const SizedBox(height: 12),
               Expanded(
-                child: KeyboardAwareScroll(
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
-                  child: _currentUser != null
-                      ? _buildProfile(_currentUser!)
-                      : _buildSignIn(),
-                ),
+                // Profile is a fixed, non-scrolling layout; only the sign-in
+                // form needs the keyboard-aware scroll.
+                child: _currentUser != null
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 28),
+                        child: _buildProfile(_currentUser!),
+                      )
+                    : KeyboardAwareScroll(
+                        padding: const EdgeInsets.symmetric(horizontal: 28),
+                        child: _buildSignIn(),
+                      ),
               ),
             ],
           ),
@@ -461,18 +466,13 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
 
-        const SizedBox(height: 40),
+        const SizedBox(height: 28),
 
         Container(
           decoration: EverloreTheme.cardDecoration,
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              _profileRow(Icons.explore, 'Browse Worlds',
-                  () => context.push('/templates')),
-              const Divider(color: EverloreTheme.white10, height: 24),
-              _profileRow(Icons.auto_stories, 'Your Realms', () => context.go('/')),
-              const Divider(color: EverloreTheme.white10, height: 24),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: user.preferences.nsfwEnabled,
@@ -503,7 +503,9 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
 
-        const SizedBox(height: 24),
+        // Absorbs slack so the page fills without scrolling and the buttons sit
+        // just above the floating nav.
+        const Spacer(),
 
         NeuButton(
           label: 'Sign Out',
@@ -520,27 +522,8 @@ class _AuthScreenState extends State<AuthScreen> {
           accent: EverloreTheme.crimson,
           onTap: _isDeletingAccount ? null : _confirmDeleteAccount,
         ),
-        const SizedBox(height: 110), // clear the floating nav on the profile tab
+        const SizedBox(height: 96), // clear the floating nav on the profile tab
       ],
-    );
-  }
-
-  Widget _profileRow(IconData icon, String label, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            Icon(icon, color: EverloreTheme.gold, size: 20),
-            const SizedBox(width: 14),
-            Text(label, style: const TextStyle(color: EverloreTheme.parchment)),
-            const Spacer(),
-            const Icon(Icons.chevron_right, color: EverloreTheme.ash, size: 18),
-          ],
-        ),
-      ),
     );
   }
 
