@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import '../../../../../shared/models/world_instance.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 
-// Gradient palettes for realm cards — pick by hash of instanceId
+// Warm-obsidian bases for realm cards — pick by hash of instanceId. Subtle
+// variation only; the brand stays the forged shell, the accent is the tint.
 const List<List<Color>> _realmGradients = [
-  [Color(0xFF1A0A2E), Color(0xFF0D1A3E)], // Arcane Violet → Deep Navy
-  [Color(0xFF1A1500), Color(0xFF0E1A10)], // Dark Amber → Forest Dark
-  [Color(0xFF0A1A1A), Color(0xFF0A0E2A)], // Teal Void → Midnight
-  [Color(0xFF1A0D0D), Color(0xFF1A0A22)], // Crimson Dark → Violet
-  [Color(0xFF0A120A), Color(0xFF121A0A)], // Verdant Dark → Moss
+  [Color(0xFF231A12), Color(0xFF0D0A07)],
+  [Color(0xFF1F1A13), Color(0xFF0C0908)],
+  [Color(0xFF1B1814), Color(0xFF0A0908)],
+  [Color(0xFF211710), Color(0xFF100B08)],
+  [Color(0xFF181510), Color(0xFF0A0907)],
 ];
 
 const List<Color> _accentColors = [
@@ -73,11 +74,17 @@ class WorldCard extends StatelessWidget {
               color: accentColor.withValues(alpha: 0.25),
               width: 1,
             ),
+            // Forged 3D: deep bottom-right shadow + faint accent light top-left.
             boxShadow: [
               BoxShadow(
-                color: accentColor.withValues(alpha: 0.06),
-                blurRadius: 24,
-                offset: const Offset(0, 4),
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 16,
+                offset: const Offset(3, 5),
+              ),
+              BoxShadow(
+                color: accentColor.withValues(alpha: 0.10),
+                blurRadius: 18,
+                offset: const Offset(-2, -3),
               ),
             ],
           ),

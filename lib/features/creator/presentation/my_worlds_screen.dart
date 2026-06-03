@@ -6,6 +6,7 @@ import 'widgets/my_world_card.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../shared/models/user.dart';
+import '../../../shared/widgets/neu.dart';
 
 class MyWorldsScreen extends StatelessWidget {
   const MyWorldsScreen({super.key});
@@ -164,20 +165,11 @@ class _MyWorldsView extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+                const SliverPadding(padding: EdgeInsets.only(bottom: 120)),
               ],
             ],
           );
         },
-      ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          _CharacterFAB(onTap: () => context.push('/characters/new')),
-          const SizedBox(height: 12),
-          _ForgeFAB(onTap: () => context.push('/my-worlds/forge')),
-        ],
       ),
     );
   }
@@ -225,14 +217,8 @@ class _MyWorldsView extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      _BackButton(onTap: () => context.pop()),
+                      const ForgeMark(size: 28),
                       const SizedBox(width: 10),
-                      const Icon(
-                        Icons.auto_fix_high,
-                        color: EverloreTheme.gold,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 6),
                       const Text(
                         'MY WORLDS',
                         style: TextStyle(
@@ -288,10 +274,8 @@ class _MyWorldsView extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Row(
         children: [
-          _BackButton(onTap: () => context.pop()),
+          const ForgeMark(size: 28),
           const SizedBox(width: 10),
-          const Icon(Icons.auto_fix_high, color: EverloreTheme.gold, size: 18),
-          const SizedBox(width: 6),
           const Text(
             'MY WORLDS',
             style: TextStyle(
@@ -359,23 +343,6 @@ class _MyWorldsView extends StatelessWidget {
 
 enum _GateType { unauth, upgrade }
 
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: const Icon(
-        Icons.arrow_back_ios_new,
-        size: 18,
-        color: EverloreTheme.ash,
-      ),
-    );
-  }
-}
-
 class _UnauthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -421,12 +388,10 @@ class _UnauthGate extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => context.push('/auth'),
-                child: const Text('Sign In'),
-              ),
+            NeuButton(
+              label: 'Sign In',
+              icon: Icons.login,
+              onTap: () => context.push('/auth'),
             ),
           ],
         ),
@@ -645,7 +610,7 @@ class _EmptyForgeView extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    EverloreTheme.violet.withValues(alpha: 0.18),
+                    EverloreTheme.gold.withValues(alpha: 0.18),
                     EverloreTheme.void2,
                   ],
                 ),
@@ -679,13 +644,10 @@ class _EmptyForgeView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: onForge,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('FORGE YOUR FIRST WORLD'),
-              ),
+            NeuButton(
+              label: 'Forge Your First World',
+              icon: Icons.add,
+              onTap: onForge,
             ),
           ],
         ),
@@ -722,91 +684,3 @@ class _LoadingView extends StatelessWidget {
   }
 }
 
-class _CharacterFAB extends StatelessWidget {
-  final VoidCallback onTap;
-  const _CharacterFAB({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 46,
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(23),
-          color: EverloreTheme.violet,
-          border: Border.all(color: EverloreTheme.violetBright.withValues(alpha: 0.5)),
-          boxShadow: [
-            BoxShadow(
-              color: EverloreTheme.violet.withValues(alpha: 0.35),
-              blurRadius: 16,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.person_add_alt_1,
-                color: EverloreTheme.parchment, size: 18),
-            const SizedBox(width: 8),
-            Text('NEW CHARACTER',
-                style: EverloreTheme.ui(
-                    size: 11,
-                    color: EverloreTheme.parchment,
-                    weight: FontWeight.w800,
-                    spacing: 1.2)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ForgeFAB extends StatelessWidget {
-  final VoidCallback onTap;
-  const _ForgeFAB({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(26),
-          gradient: const LinearGradient(
-            colors: [EverloreTheme.goldGlow, EverloreTheme.gold],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: EverloreTheme.gold.withValues(alpha: 0.4),
-              blurRadius: 18,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.add, color: EverloreTheme.void1, size: 20),
-            SizedBox(width: 8),
-            Text(
-              'FORGE WORLD',
-              style: TextStyle(
-                color: EverloreTheme.void1,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

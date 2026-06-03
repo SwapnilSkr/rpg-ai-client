@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../state/home_cubit.dart';
 import 'widgets/world_card.dart';
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../shared/widgets/neu.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -65,49 +67,16 @@ class _HomeView extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      // Logo mark
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: EverloreTheme.goldDim.withValues(alpha: 0.5),
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.auto_stories,
-                          color: EverloreTheme.gold,
-                          size: 16,
-                        ),
-                      ),
+                      const ForgeMark(size: 30),
                       const SizedBox(width: 10),
-                      const Text(
+                      Text(
                         'EVERLORE',
-                        style: TextStyle(
+                        style: GoogleFonts.cinzel(
                           color: EverloreTheme.gold,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 4,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.5,
                         ),
-                      ),
-                      const Spacer(),
-                      _HeaderButton(
-                        icon: Icons.explore_outlined,
-                        tooltip: 'Explore Worlds',
-                        onTap: () => context.push('/templates'),
-                      ),
-                      const SizedBox(width: 4),
-                      _HeaderButton(
-                        icon: Icons.auto_fix_high,
-                        tooltip: 'My Worlds',
-                        onTap: () => context.push('/my-worlds'),
-                      ),
-                      const SizedBox(width: 4),
-                      _HeaderButton(
-                        icon: Icons.person_outline,
-                        tooltip: 'Profile',
-                        onTap: () => context.push('/auth'),
                       ),
                     ],
                   ),
@@ -131,9 +100,11 @@ class _HomeView extends StatelessWidget {
     );
   }
 
-  SliverList _buildInstanceList(BuildContext context, HomeState state) {
-    return SliverList(
-      delegate: SliverChildBuilderDelegate((context, index) {
+  Widget _buildInstanceList(BuildContext context, HomeState state) {
+    return SliverPadding(
+      padding: const EdgeInsets.only(bottom: 110), // clear the floating nav
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
         if (index == 0) {
           return Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
@@ -164,6 +135,7 @@ class _HomeView extends StatelessWidget {
           onDelete: () => _confirmDelete(context, instance.id),
         );
       }, childCount: state.instances.length + 1),
+      ),
     );
   }
 
@@ -254,41 +226,6 @@ class _HomeView extends StatelessWidget {
   }
 }
 
-class _HeaderButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  const _HeaderButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: EverloreTheme.void2,
-            border: Border.all(
-              color: EverloreTheme.goldDim.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Icon(icon, color: EverloreTheme.ash, size: 18),
-        ),
-      ),
-    );
-  }
-}
-
 class _LoadingView extends StatelessWidget {
   const _LoadingView();
 
@@ -365,16 +302,14 @@ class _UnauthView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => context.push('/auth'),
-                child: const Text('Sign In'),
-              ),
+            NeuButton(
+              label: 'Sign In',
+              icon: Icons.login,
+              onTap: () => context.push('/auth'),
             ),
             const SizedBox(height: 12),
             TextButton(
-              onPressed: () => context.push('/templates'),
+              onPressed: () => context.go('/discover'),
               child: const Text(
                 'Browse Worlds First',
                 style: TextStyle(color: EverloreTheme.ash),
@@ -439,13 +374,10 @@ class _EmptyView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => context.push('/templates'),
-                icon: const Icon(Icons.explore, size: 18),
-                label: const Text('Explore Worlds'),
-              ),
+            NeuButton(
+              label: 'Explore Worlds',
+              icon: Icons.explore,
+              onTap: () => context.go('/discover'),
             ),
           ],
         ),

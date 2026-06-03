@@ -5,7 +5,6 @@ import '../app/theme/nexus_theme.dart';
 import '../core/onboarding/interests_store.dart';
 import '../shared/models/world_template.dart';
 import '../shared/narrative_styles.dart';
-import '../shared/widgets/everlore_nav_bar.dart';
 import '../shared/widgets/neu.dart';
 import '../features/templates/data/template_repository.dart';
 import '../features/templates/data/interest_ranking.dart';
@@ -75,7 +74,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: EverloreTheme.void0,
-      bottomNavigationBar: const EverloreNavBar(activeRoute: '/discover'),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -263,7 +261,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       onRefresh: _load,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 110), // clear floating nav
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

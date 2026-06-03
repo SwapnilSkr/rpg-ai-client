@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:everlore/screens/splash_screen.dart';
 import 'package:everlore/screens/welcome_screen.dart';
@@ -13,10 +14,15 @@ import 'package:everlore/features/creator/presentation/my_worlds_screen.dart';
 import 'package:everlore/features/creator/presentation/forge_world_route.dart';
 import 'package:everlore/features/creator/presentation/create_character_screen.dart';
 import 'package:everlore/shared/models/world_template.dart';
+import 'package:everlore/shared/widgets/everlore_nav_bar.dart';
+
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final router = GoRouter(
+  navigatorKey: _rootNavigatorKey,
   initialLocation: '/splash',
   routes: [
+    // ── Full-screen, no nav bar (pre-app / gate→threshold) ──
     GoRoute(
       path: '/splash',
       name: 'splash',
@@ -28,11 +34,6 @@ final router = GoRouter(
       builder: (context, state) => const WelcomeScreen(),
     ),
     GoRoute(
-      path: '/',
-      name: 'home',
-      builder: (context, state) => const HomeScreen(),
-    ),
-    GoRoute(
       path: '/auth',
       name: 'auth',
       builder: (context, state) => const AuthScreen(),
@@ -42,10 +43,20 @@ final router = GoRouter(
       name: 'onboarding',
       builder: (context, state) => const OnboardingInterestsScreen(),
     ),
+
+    // ── Detail / secondary screens — pushed OVER the shell on the root
+    // navigator, so they cover the nav bar and back/OS-back return correctly. ──
     GoRoute(
-      path: '/discover',
-      name: 'discover',
-      builder: (context, state) => const DiscoverScreen(),
+      path: '/templates',
+      name: 'templates',
+      builder: (context, state) => const BrowseTemplatesScreen(),
+    ),
+    GoRoute(
+      path: '/templates/:templateId',
+      name: 'template_detail',
+      builder: (context, state) => TemplateDetailScreen(
+        templateId: state.pathParameters['templateId']!,
+      ),
     ),
     GoRoute(
       path: '/play/:instanceId',
@@ -60,23 +71,6 @@ final router = GoRouter(
       builder: (context, state) => ChronicleScreen(
         instanceId: state.pathParameters['instanceId']!,
       ),
-    ),
-    GoRoute(
-      path: '/templates',
-      name: 'templates',
-      builder: (context, state) => const BrowseTemplatesScreen(),
-    ),
-    GoRoute(
-      path: '/templates/:templateId',
-      name: 'template_detail',
-      builder: (context, state) => TemplateDetailScreen(
-        templateId: state.pathParameters['templateId']!,
-      ),
-    ),
-    GoRoute(
-      path: '/my-worlds',
-      name: 'my_worlds',
-      builder: (context, state) => const MyWorldsScreen(),
     ),
     GoRoute(
       path: '/characters/new',
@@ -95,6 +89,51 @@ final router = GoRouter(
         templateId: state.pathParameters['templateId'],
         existing: state.extra as WorldTemplate?,
       ),
+    ),
+
+    // ── The persistent shell: four branches, each with its own stack + state,
+    // wrapped by the always-on EverloreNavBar. ──
+    StatefulShellRoute.indexedStack(
+      builder: (context, state, navigationShell) =>
+          ScaffoldWithNavBar(shell: navigationShell),
+      branches: [
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/discover',
+              name: 'discover',
+              builder: (context, state) => const DiscoverScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/',
+              name: 'home',
+              builder: (context, state) => const HomeScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/my-worlds',
+              name: 'my_worlds',
+              builder: (context, state) => const MyWorldsScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/profile',
+              name: 'profile',
+              builder: (context, state) => const AuthScreen(),
+            ),
+          ],
+        ),
+      ],
     ),
   ],
 );

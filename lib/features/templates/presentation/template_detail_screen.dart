@@ -39,7 +39,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
     setState(() => _isCreating = true);
     try {
       final instance = await HomeRepository.createInstance(widget.templateId);
-      if (mounted) context.go('/play/${instance.id}');
+      if (mounted) context.push('/play/${instance.id}');
     } catch (e) {
       if (mounted) {
         final msg = e.toString().replaceFirst('Exception: ', '');
