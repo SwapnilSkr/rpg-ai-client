@@ -339,19 +339,23 @@ class _AuthScreenState extends State<AuthScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // Back button
-              Align(
-                alignment: Alignment.topLeft,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new,
-                        color: EverloreTheme.ash, size: 20),
-                    onPressed: () =>
-                        context.canPop() ? context.pop() : context.go('/'),
+              // Back button — only in the sign-in flow. The profile is a nav
+              // tab (no back) or pushed (OS/gesture back handles it).
+              if (_currentUser == null)
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new,
+                          color: EverloreTheme.ash, size: 20),
+                      onPressed: () =>
+                          context.canPop() ? context.pop() : context.go('/'),
+                    ),
                   ),
-                ),
-              ),
+                )
+              else
+                const SizedBox(height: 12),
               Expanded(
                 child: KeyboardAwareScroll(
                   padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -516,7 +520,7 @@ class _AuthScreenState extends State<AuthScreen> {
           accent: EverloreTheme.crimson,
           onTap: _isDeletingAccount ? null : _confirmDeleteAccount,
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 110), // clear the floating nav on the profile tab
       ],
     );
   }

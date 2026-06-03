@@ -46,6 +46,20 @@ class MyWorldCard extends StatelessWidget {
                 ? EverloreTheme.ember.withValues(alpha: 0.3)
                 : EverloreTheme.verdant.withValues(alpha: 0.3),
           ),
+          // Forged 3D: deep bottom-right shadow + faint status-tinted top light.
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 14,
+              offset: const Offset(3, 5),
+            ),
+            BoxShadow(
+              color: (isDraft ? EverloreTheme.ember : EverloreTheme.verdant)
+                  .withValues(alpha: 0.08),
+              blurRadius: 14,
+              offset: const Offset(-2, -3),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,7 +297,7 @@ class MyWorldCard extends StatelessWidget {
                   ],
                   if (isDraft) ...[
                     const SizedBox(height: 12),
-                    const Divider(color: Color(0xFF252548), height: 1),
+                    const Divider(color: EverloreTheme.white10, height: 1),
                     const SizedBox(height: 10),
                     Row(
                       children: [
@@ -326,7 +340,7 @@ class MyWorldCard extends StatelessWidget {
                       onTap != null ||
                       onDelete != null) ...[
                     const SizedBox(height: 12),
-                    const Divider(color: Color(0xFF252548), height: 1),
+                    const Divider(color: EverloreTheme.white10, height: 1),
                     const SizedBox(height: 10),
                     Row(
                       children: [

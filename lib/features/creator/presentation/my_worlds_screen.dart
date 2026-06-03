@@ -403,13 +403,15 @@ class _UnauthGate extends StatelessWidget {
 class _UpgradeGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+    // Centered, non-scrolling — fits the viewport without a vertical scroll.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 90,
-            height: 90,
+            width: 68,
+            height: 68,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(
@@ -424,46 +426,53 @@ class _UpgradeGate extends StatelessWidget {
               boxShadow: [
                 BoxShadow(
                   color: EverloreTheme.gold.withValues(alpha: 0.1),
-                  blurRadius: 24,
-                  spreadRadius: 4,
+                  blurRadius: 20,
+                  spreadRadius: 3,
                 ),
               ],
             ),
             child: const Icon(
               Icons.auto_fix_high,
               color: EverloreTheme.gold,
-              size: 40,
+              size: 32,
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           const Text(
             'ASCEND TO FORGE',
             style: TextStyle(
               color: EverloreTheme.gold,
-              fontSize: 20,
+              fontSize: 19,
               fontWeight: FontWeight.w800,
               letterSpacing: 2,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           const Text(
-            'World creation is granted to Premium and Creator tier wielders. Upgrade your pact to unlock the arcane forge and breathe life into your own realms.',
+            'World creation is granted to Premium and Creator wielders. Upgrade your pact to unlock the arcane forge.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: EverloreTheme.ash,
-              fontSize: 14,
-              height: 1.6,
+              fontSize: 13.5,
+              height: 1.5,
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               color: EverloreTheme.void2,
               border: Border.all(
                 color: EverloreTheme.goldDim.withValues(alpha: 0.2),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 12,
+                  offset: const Offset(2, 4),
+                ),
+              ],
             ),
             child: Column(
               children: const [
@@ -483,11 +492,6 @@ class _UpgradeGate extends StatelessWidget {
                   subtitle: 'Health, mana, honour — your rules',
                 ),
                 _UpgradeFeature(
-                  icon: Icons.history_edu,
-                  title: 'Control Narrative Depth',
-                  subtitle: 'Set memory depth and lore recall',
-                ),
-                _UpgradeFeature(
                   icon: Icons.auto_stories,
                   title: 'Forge Scene Threads',
                   subtitle: 'Shape combat, dialogue, exploration',
@@ -496,31 +500,10 @@ class _UpgradeGate extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: EverloreTheme.goldDim.withValues(alpha: 0.35),
-              ),
-              color: EverloreTheme.goldDim.withValues(alpha: 0.05),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  color: EverloreTheme.goldDim,
-                  size: 15,
-                ),
-                SizedBox(width: 8),
-                Text(
-                  'Upgrade available through your profile',
-                  style: TextStyle(color: EverloreTheme.goldDim, fontSize: 13),
-                ),
-              ],
-            ),
+          const SizedBox(height: 14),
+          const Text(
+            'Upgrade available through your profile',
+            style: TextStyle(color: EverloreTheme.goldDim, fontSize: 12.5),
           ),
         ],
       ),
@@ -583,7 +566,7 @@ class _UpgradeFeature extends StatelessWidget {
         ),
         if (!isLast) ...[
           const SizedBox(height: 8),
-          const Divider(color: Color(0xFF1E1E3C), height: 1, thickness: 1),
+          const Divider(color: EverloreTheme.white10, height: 1, thickness: 1),
           const SizedBox(height: 8),
         ],
       ],
