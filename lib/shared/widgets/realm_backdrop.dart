@@ -16,15 +16,22 @@ class RealmBackdrop extends StatefulWidget {
   State<RealmBackdrop> createState() => _RealmBackdropState();
 }
 
-// The portraits drifting in the band (a subset of the splash orbit set).
-const List<String> _bandKeys = [
-  'tsundere', 'cyberpunk', 'kdrama', 'epic_fantasy', 'noir', 'shonen',
-  'dark_romance', 'cozy_comfort', 'yandere', 'litrpg', 'dark_academia', 'horror',
+// Two counter-drifting bands. Top band = one set, bottom band = the other, each
+// flowing the opposite direction. Keys map to assets/splash/<key>.webp; missing
+// art falls back to a faint rimmed disc, so genres without a portrait yet still
+// read as intentional silhouettes.
+const List<String> _bandKeysTop = [
+  'tsundere', 'kdrama', 'epic_fantasy', 'noir', 'dark_romance', 'cozy_comfort',
+  'litrpg', 'modern_casual', 'romcom', 'slice_of_life', 'anime',
+];
+const List<String> _bandKeysBottom = [
+  'cyberpunk', 'shonen', 'yandere', 'dark_academia', 'horror', 'grimdark',
+  'flirty', 'regency', 'whimsical', 'chaotic_comedy',
 ];
 
 const double _discSize = 46;
 const double _discGap = 18;
-double get _bandSpan => _bandKeys.length * (_discSize + _discGap);
+const double _bandGapV = 22; // vertical gap between the two bands
 
 class _RealmBackdropState extends State<RealmBackdrop>
     with TickerProviderStateMixin {
@@ -53,6 +60,10 @@ class _RealmBackdropState extends State<RealmBackdrop>
 
   @override
   Widget build(BuildContext context) {
+    // The bands sit in the Stack OUTSIDE the child's SafeArea, so push them
+    // below the status bar / notch ourselves with the top inset.
+    final topInset = MediaQuery.paddingOf(context).top;
+    final topBandY = topInset + 12;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -62,60 +73,98 @@ class _RealmBackdropState extends State<RealmBackdrop>
           builder: (context, _) =>
               CustomPaint(painter: _AmbientPainter(_embers.value)),
         ),
-        // Drifting portrait band near the top, behind a soft fade.
-        if (widget.showPortraits)
+        // Two counter-drifting portrait bands near the top, behind a soft fade.
+        if (widget.showPortraits) ...[
+          _DriftBand(
+            drift: _drift,
+            keys: _bandKeysTop,
+            top: topBandY,
+            reverse: false,
+          ),
+          _DriftBand(
+            drift: _drift,
+            keys: _bandKeysBottom,
+            top: topBandY + _discSize + _bandGapV,
+            reverse: true,
+          ),
+          // Scrim to guarantee content legibility below the bands.
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            height: 132,
-            child: ClipRect(
-              child: Opacity(
-                opacity: 0.16,
-                child: AnimatedBuilder(
-                  animation: _drift,
-                  builder: (context, _) => Transform.translate(
-                    offset: Offset(-_drift.value * _bandSpan, 36),
-                    child: const _PortraitBand(),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        // Scrim to guarantee content legibility over the band.
-        if (widget.showPortraits)
-          const Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 200,
-            child: DecoratedBox(
+            height: topBandY + (_discSize * 2) + _bandGapV + 64,
+            child: const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [Color(0x000A0807), EverloreTheme.void0],
-                  stops: [0.35, 1.0],
+                  stops: [0.45, 1.0],
                 ),
               ),
             ),
           ),
+        ],
         widget.child,
       ],
     );
   }
 }
 
+/// One horizontally-drifting band of portrait discs. [reverse] flips the drift
+/// direction so two stacked bands flow opposite ways. Positioned at [top].
+class _DriftBand extends StatelessWidget {
+  final AnimationController drift;
+  final List<String> keys;
+  final double top;
+  final bool reverse;
+  const _DriftBand({
+    required this.drift,
+    required this.keys,
+    required this.top,
+    required this.reverse,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final span = keys.length * (_discSize + _discGap);
+    return Positioned(
+      top: top,
+      left: 0,
+      right: 0,
+      height: _discSize,
+      child: ClipRect(
+        child: Opacity(
+          opacity: 0.16,
+          child: AnimatedBuilder(
+            animation: drift,
+            builder: (context, _) {
+              // forward: 0 → -span (drifts left). reverse: -span → 0 (drifts right).
+              final dx =
+                  reverse ? (drift.value - 1) * span : -drift.value * span;
+              return Transform.translate(
+                offset: Offset(dx, 0),
+                child: _PortraitBand(keys: keys),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Two seamless copies of the portrait row so the drift wraps without a seam.
 class _PortraitBand extends StatelessWidget {
-  const _PortraitBand();
+  final List<String> keys;
+  const _PortraitBand({required this.keys});
 
   @override
   Widget build(BuildContext context) {
     final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final key in _bandKeys)
+        for (final key in keys)
           Padding(
             padding: const EdgeInsets.only(right: _discGap),
             child: _BandDisc(assetKey: key),
