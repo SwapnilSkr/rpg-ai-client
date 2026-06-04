@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -134,97 +136,20 @@ class _HomeView extends StatelessWidget {
           final instance = state.instances[index - 1];
           return WorldCard(
             instance: instance,
-            onTap: () => context.push('/play/${instance.id}'),
-            onArchive: () => _confirmArchive(context, instance.id),
-            onDelete: () => _confirmDelete(context, instance.id),
+            onTap: () async {
+              await context.push('/play/${instance.id}');
+              if (context.mounted) {
+                unawaited(
+                  context.read<HomeCubit>().loadInstances(silent: true),
+                );
+              }
+            },
+            onArchive: () =>
+                context.read<HomeCubit>().archiveInstance(instance.id),
+            onDelete: () =>
+                context.read<HomeCubit>().deleteInstance(instance.id),
           );
         }, childCount: state.instances.length + 1),
-      ),
-    );
-  }
-
-  void _confirmArchive(BuildContext context, String instanceId) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: EverloreTheme.void2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
-        ),
-        title: const Text(
-          'Seal This Realm?',
-          style: TextStyle(color: EverloreTheme.parchment, fontSize: 18),
-        ),
-        content: const Text(
-          'This realm will be sealed away. Your story will be preserved.',
-          style: TextStyle(color: EverloreTheme.ash, fontSize: 14, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Keep Open',
-              style: TextStyle(color: EverloreTheme.ash),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.read<HomeCubit>().archiveInstance(instanceId);
-            },
-            child: const Text(
-              'Seal Realm',
-              style: TextStyle(color: EverloreTheme.crimson),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmDelete(BuildContext context, String instanceId) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: EverloreTheme.void2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: EverloreTheme.crimson.withValues(alpha: 0.3)),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber, color: EverloreTheme.crimson, size: 24),
-            SizedBox(width: 10),
-            Text(
-              'Destroy This Realm?',
-              style: TextStyle(color: EverloreTheme.parchment, fontSize: 18),
-            ),
-          ],
-        ),
-        content: const Text(
-          'This will permanently delete your realm and all its history, memories, and echoes. This action cannot be undone.',
-          style: TextStyle(color: EverloreTheme.ash, fontSize: 14, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Keep Realm',
-              style: TextStyle(color: EverloreTheme.ash),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.read<HomeCubit>().deleteInstance(instanceId);
-            },
-            child: const Text(
-              'Destroy Forever',
-              style: TextStyle(color: EverloreTheme.crimson),
-            ),
-          ),
-        ],
       ),
     );
   }

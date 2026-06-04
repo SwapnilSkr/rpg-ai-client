@@ -254,6 +254,7 @@ class PlayCubit extends Cubit<PlayState> {
         aiResponse: eventData['narrative'] ?? _streamBuffer,
         sceneTag: eventData['scene_tag'],
         emotionalTone: eventData['emotional_tone'],
+        modelUsed: eventData['model_used']?.toString() ?? '',
         createdAt: DateTime.now(),
       );
 
@@ -313,12 +314,16 @@ class PlayCubit extends Cubit<PlayState> {
           const <ReplayVariant>[];
       final selected = (msg['selected_index'] as num?)?.toInt() ?? 0;
       final narrative = msg['narrative']?.toString() ?? _replayBuffer;
+      final selectedVariant = selected >= 0 && selected < variants.length
+          ? variants[selected]
+          : null;
 
       final events = [...state.events];
       final idx = events.indexWhere((e) => e.id == eventId);
       if (idx >= 0) {
         events[idx] = events[idx].copyWith(
           aiResponse: narrative,
+          modelUsed: selectedVariant?.modelUsed,
           replayVariants: variants,
           selectedReplayIndex: selected,
         );
@@ -746,6 +751,7 @@ class PlayCubit extends Cubit<PlayState> {
     if (idx >= 0) {
       next[idx] = next[idx].copyWith(
         aiResponse: event.replayVariants[index].narrative,
+        modelUsed: event.replayVariants[index].modelUsed,
         selectedReplayIndex: index,
       );
     }

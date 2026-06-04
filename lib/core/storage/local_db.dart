@@ -16,7 +16,7 @@ class LocalDb {
     final path = '$dbPath/everlore_cache.db';
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE events (
@@ -27,6 +27,7 @@ class LocalDb {
           player_input TEXT,
           ai_response TEXT,
           scene_tag TEXT,
+          model_used TEXT,
           state_mutations TEXT,
           flag_mutations TEXT,
           created_at TEXT NOT NULL,
@@ -58,6 +59,11 @@ class LocalDb {
         await db.execute(
           'CREATE INDEX idx_memories_instance ON memories(instance_id)',
         );
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE events ADD COLUMN model_used TEXT');
+        }
       },
     );
   }

@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../../shared/models/event.dart';
 import '../../../../../app/theme/nexus_theme.dart';
+import '../../../../../shared/app_icons.dart';
 
 class NarrativeBubble extends StatelessWidget {
   final GameEvent event;
   final VoidCallback? onLongPress;
   final VoidCallback? onReplay;
+  final VoidCallback? onContinue;
   final ValueChanged<int>? onSelectReplayVariant;
 
   /// This turn is currently being re-woven (a replay variant is streaming in).
@@ -18,6 +20,7 @@ class NarrativeBubble extends StatelessWidget {
     required this.event,
     this.onLongPress,
     this.onReplay,
+    this.onContinue,
     this.onSelectReplayVariant,
     this.isReplaying = false,
   });
@@ -41,11 +44,12 @@ class NarrativeBubble extends StatelessWidget {
               ? _NarratorPanel(
                   text: ai,
                   sceneTag: event.sceneTag,
-                  isEdited: false,
-                  replayVariants: const [],
-                  selectedReplayIndex: 0,
+                  isEdited: event.isUserEdited,
+                  replayVariants: event.replayVariants,
+                  selectedReplayIndex: event.selectedReplayIndex,
+                  onContinue: onContinue,
                   onReplay: null,
-                  onSelectReplayVariant: null,
+                  onSelectReplayVariant: onSelectReplayVariant,
                 )
               : const _GeneratingIndicator(label: 'Re-weaving this turn…')
         else if (hasProse)
@@ -57,6 +61,7 @@ class NarrativeBubble extends StatelessWidget {
               isEdited: event.isUserEdited,
               replayVariants: event.replayVariants,
               selectedReplayIndex: event.selectedReplayIndex,
+              onContinue: onContinue,
               onReplay: onReplay,
               onSelectReplayVariant: onSelectReplayVariant,
             ),
@@ -97,7 +102,11 @@ class _PlayerBubble extends StatelessWidget {
           border: Border.all(
             color: EverloreTheme.violetBright.withValues(alpha: 0.3),
           ),
-          boxShadow: EverloreTheme.glow(EverloreTheme.violet, blur: 16, alpha: 0.22),
+          boxShadow: EverloreTheme.glow(
+            EverloreTheme.violet,
+            blur: 16,
+            alpha: 0.22,
+          ),
         ),
         child: Text.rich(
           TextSpan(
@@ -105,7 +114,10 @@ class _PlayerBubble extends StatelessWidget {
               text,
               // The player's voice uses the UI font; their *actions* italic, speech upright.
               dialogueStyle: EverloreTheme.ui(
-                  size: 15, color: EverloreTheme.parchment, height: 1.45),
+                size: 15,
+                color: EverloreTheme.parchment,
+                height: 1.45,
+              ),
               narrationStyle: EverloreTheme.ui(
                 size: 15,
                 color: EverloreTheme.parchment.withValues(alpha: 0.9),
@@ -123,7 +135,7 @@ class _PlayerBubble extends StatelessWidget {
 /// Player bubble renderer: text wrapped in *...* (or **...**) is treated as
 /// action/narration and styled in italics; text outside markers is spoken text.
 /// This makes mixed inputs like `*I step closer* Tell me the truth` visually
-/// separable without requiring quotes.
+/// separable without extra punctuation.
 List<InlineSpan> _playerInputSpans(
   String text, {
   required TextStyle dialogueStyle,
@@ -167,6 +179,7 @@ class _NarratorPanel extends StatelessWidget {
   final bool isEdited;
   final List<ReplayVariant> replayVariants;
   final int selectedReplayIndex;
+  final VoidCallback? onContinue;
   final VoidCallback? onReplay;
   final ValueChanged<int>? onSelectReplayVariant;
 
@@ -176,6 +189,7 @@ class _NarratorPanel extends StatelessWidget {
     this.isEdited = false,
     this.replayVariants = const [],
     this.selectedReplayIndex = 0,
+    this.onContinue,
     this.onReplay,
     this.onSelectReplayVariant,
   });
@@ -189,7 +203,9 @@ class _NarratorPanel extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         color: const Color(0xFF13132A).withValues(alpha: 0.72),
-        border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.16)),
+        border: Border.all(
+          color: EverloreTheme.goldDim.withValues(alpha: 0.16),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.25),
@@ -209,8 +225,11 @@ class _NarratorPanel extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.auto_stories,
-                          size: 11, color: accent.withValues(alpha: 0.7)),
+                      Icon(
+                        Icons.auto_stories,
+                        size: 11,
+                        color: accent.withValues(alpha: 0.7),
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         'NARRATOR',
@@ -223,9 +242,11 @@ class _NarratorPanel extends StatelessWidget {
                       ),
                       if (isEdited) ...[
                         const SizedBox(width: 6),
-                        Icon(Icons.edit,
-                            size: 9,
-                            color: EverloreTheme.ash.withValues(alpha: 0.4)),
+                        Icon(
+                          Icons.edit,
+                          size: 9,
+                          color: EverloreTheme.ash.withValues(alpha: 0.4),
+                        ),
                       ],
                     ],
                   ),
@@ -246,9 +267,18 @@ class _NarratorPanel extends StatelessWidget {
                               runSpacing: 6,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
+                                if (onContinue != null)
+                                  _ContinueTurnButton(onTap: onContinue!),
+                                if (onReplay != null)
+                                  _ReplayButton(
+                                    onTap: onReplay!,
+                                    compact: compact,
+                                  ),
                                 if (sceneTag != null)
                                   _SceneTagBadge(
-                                      tag: sceneTag!, accent: accent),
+                                    tag: sceneTag!,
+                                    accent: accent,
+                                  ),
                                 if (replayVariants.length > 1)
                                   _ReplayArrows(
                                     count: replayVariants.length,
@@ -265,12 +295,6 @@ class _NarratorPanel extends StatelessWidget {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (onReplay != null)
-                                _ReplayButton(
-                                  onTap: onReplay!,
-                                  compact: compact,
-                                ),
-                              if (onReplay != null) const SizedBox(width: 6),
                               _CopyButton(text: text, compact: compact),
                             ],
                           ),
@@ -307,6 +331,33 @@ class _NarratorPanel extends StatelessWidget {
   }
 }
 
+class _ContinueTurnButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ContinueTurnButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Let the story continue on its own',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: EverloreTheme.void3.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: EverloreTheme.violet.withValues(alpha: 0.35),
+            ),
+          ),
+          child: const EvIcon(AppIcons.continueStory, size: 15),
+        ),
+      ),
+    );
+  }
+}
+
 class _ReplayButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool compact;
@@ -322,8 +373,11 @@ class _ReplayButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.refresh_rounded,
-                size: 13, color: EverloreTheme.cyanBright.withValues(alpha: 0.85)),
+            Icon(
+              Icons.refresh_rounded,
+              size: 13,
+              color: EverloreTheme.cyanBright.withValues(alpha: 0.85),
+            ),
             if (!compact) ...[
               const SizedBox(width: 4),
               Text(
@@ -472,8 +526,11 @@ class _CopyButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.copy_rounded,
-                size: 13, color: EverloreTheme.ash.withValues(alpha: 0.7)),
+            Icon(
+              Icons.copy_rounded,
+              size: 13,
+              color: EverloreTheme.ash.withValues(alpha: 0.7),
+            ),
             if (!compact) ...[
               const SizedBox(width: 4),
               Text(
@@ -492,35 +549,37 @@ class _CopyButton extends StatelessWidget {
   }
 }
 
-/// Renders narrative prose by deriving style from QUOTE boundaries rather than
-/// trusting the model's markdown: text inside double quotes is spoken dialogue
-/// (bright, upright); everything else is narration (italic, muted) — including
-/// dialogue tags like *she said*. This is deterministic and model-independent,
-/// and streaming-stable (a trailing unclosed quote reads as in-progress speech).
-/// `**bold**` is preserved; stray single `*`/`_` emphasis markers are stripped.
+/// Renders narrative prose with asterisks as the narration boundary: text outside
+/// `*...*` / `**...**` is spoken dialogue (bright, upright), while marked text is
+/// narration/action/attribution (italic, muted). This is deterministic and
+/// streaming-stable: a trailing unclosed marker reads as in-progress narration.
 List<InlineSpan> _narrativeSpans(
   String text, {
   TextStyle? dialogueStyle,
   TextStyle? narrationStyle,
 }) {
   final base = EverloreTheme.aiText;
-  final narration = narrationStyle ??
-      base.copyWith(fontStyle: FontStyle.italic, color: const Color(0xFFAEA690));
+  final narration =
+      narrationStyle ??
+      base.copyWith(
+        fontStyle: FontStyle.italic,
+        fontWeight: FontWeight.w400,
+        color: const Color(0xFFA8A093),
+      );
   final dialogue =
-      dialogueStyle ?? base.copyWith(fontStyle: FontStyle.normal, color: EverloreTheme.parchment);
+      dialogueStyle ??
+      base.copyWith(
+        fontStyle: FontStyle.normal,
+        fontWeight: FontWeight.w600,
+        color: EverloreTheme.parchment,
+      );
 
   final spans = <InlineSpan>[];
   final buf = StringBuffer();
-  var inQuote = false;
-  var bold = false;
+  var inNarration = false;
 
   TextStyle styleNow() {
-    var s = inQuote ? dialogue : narration;
-    if (bold) {
-      s = s.copyWith(
-          fontWeight: FontWeight.w700, color: EverloreTheme.goldGlow);
-    }
-    return s;
+    return inNarration ? narration : dialogue;
   }
 
   void flush() {
@@ -529,31 +588,13 @@ List<InlineSpan> _narrativeSpans(
     buf.clear();
   }
 
-  bool isDoubleQuote(String c) => c == '"' || c == '“' || c == '”';
-
   for (var i = 0; i < text.length; i++) {
     final c = text[i];
 
-    // Bold toggle on `**`
-    if (c == '*' && i + 1 < text.length && text[i + 1] == '*') {
+    if (c == '*') {
       flush();
-      bold = !bold;
-      i++;
-      continue;
-    }
-    // Strip single emphasis markers — narration italics come from quote logic
-    if (c == '*' || c == '_') continue;
-
-    if (isDoubleQuote(c)) {
-      if (!inQuote) {
-        flush();
-        inQuote = true;
-        buf.write(c);
-      } else {
-        buf.write(c);
-        flush();
-        inQuote = false;
-      }
+      inNarration = !inNarration;
+      if (i + 1 < text.length && text[i + 1] == '*') i++;
       continue;
     }
 
@@ -562,7 +603,7 @@ List<InlineSpan> _narrativeSpans(
   flush();
 
   if (spans.isEmpty) {
-    spans.add(TextSpan(text: text, style: narration));
+    spans.add(TextSpan(text: text, style: dialogue));
   }
   return spans;
 }
@@ -604,7 +645,9 @@ class _GeneratingIndicatorState extends State<_GeneratingIndicator>
       decoration: BoxDecoration(
         color: const Color(0xFF13132A).withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.16)),
+        border: Border.all(
+          color: EverloreTheme.goldDim.withValues(alpha: 0.16),
+        ),
       ),
       child: AnimatedBuilder(
         animation: _pulse,
@@ -614,14 +657,18 @@ class _GeneratingIndicatorState extends State<_GeneratingIndicator>
             Icon(
               Icons.auto_stories,
               size: 14,
-              color: EverloreTheme.gold.withValues(alpha: 0.4 + 0.4 * _pulse.value),
+              color: EverloreTheme.gold.withValues(
+                alpha: 0.4 + 0.4 * _pulse.value,
+              ),
             ),
             const SizedBox(width: 12),
             Text(
               widget.label,
               style: EverloreTheme.ui(
                 size: 14,
-                color: EverloreTheme.ash.withValues(alpha: 0.5 + 0.3 * _pulse.value),
+                color: EverloreTheme.ash.withValues(
+                  alpha: 0.5 + 0.3 * _pulse.value,
+                ),
                 spacing: 0.2,
                 fontStyle: FontStyle.italic,
               ).copyWith(fontFamily: GoogleFonts.ebGaramond().fontFamily),

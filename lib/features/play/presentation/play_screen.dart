@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../state/play_cubit.dart';
@@ -38,6 +39,10 @@ class _PlayViewState extends State<_PlayView> {
   final _scrollController = ScrollController();
   bool _statsExpanded = false;
   bool _onboardingShown = false;
+  int? _lastSeenEventCount;
+  bool? _lastSeenLoading;
+  Object? _lastSeenTemplate;
+  String? _lastSeenAiResponse;
 
   @override
   void dispose() {
@@ -410,6 +415,46 @@ class _PlayViewState extends State<_PlayView> {
             if ((event.aiResponse ?? '').trim().isNotEmpty)
               ListTile(
                 leading: const Icon(
+                  Icons.copy_rounded,
+                  color: EverloreTheme.ash,
+                ),
+                title: Text(
+                  'Copy response',
+                  style: EverloreTheme.ui(
+                    size: 15,
+                    color: EverloreTheme.parchment,
+                  ),
+                ),
+                subtitle: Text(
+                  'Copy this AI turn to the clipboard.',
+                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  Clipboard.setData(
+                    ClipboardData(text: event.aiResponse?.trim() ?? ''),
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Copied to clipboard',
+                        style: EverloreTheme.ui(
+                          size: 13,
+                          color: EverloreTheme.parchment,
+                        ),
+                      ),
+                      duration: const Duration(seconds: 1),
+                      backgroundColor: EverloreTheme.void3,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
+            if ((event.aiResponse ?? '').trim().isNotEmpty)
+              const Divider(color: EverloreTheme.white10, height: 1),
+            if ((event.aiResponse ?? '').trim().isNotEmpty)
+              ListTile(
+                leading: const Icon(
                   Icons.edit_outlined,
                   color: EverloreTheme.violetBright,
                 ),
@@ -588,14 +633,20 @@ class _PlayViewState extends State<_PlayView> {
     );
   }
 
-  void _scrollToBottom() {
-    // Runs both for new turns and for each streamed token. Follow the bottom
-    // only if the player is already near it, so streaming never yanks them away
-    // from text they've scrolled up to read.
+  void _scrollToBottom({bool force = false, bool animated = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
       final pos = _scrollController.position;
-      if (pos.maxScrollExtent - pos.pixels < 320) {
+      final isNearBottom = pos.maxScrollExtent - pos.pixels < 420;
+      if (!force && !isNearBottom) return;
+
+      if (animated) {
+        _scrollController.animateTo(
+          pos.maxScrollExtent,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
         _scrollController.jumpTo(pos.maxScrollExtent);
       }
     });
@@ -604,16 +655,38 @@ class _PlayViewState extends State<_PlayView> {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<PlayCubit, PlayState>(
-      listenWhen: (prev, curr) =>
-          prev.events.length != curr.events.length ||
-          prev.isLoading != curr.isLoading ||
-          prev.template != curr.template ||
-          prev.characters.length != curr.characters.length ||
-          (curr.events.isNotEmpty &&
-              (prev.events.isNotEmpty ? prev.events.last.aiResponse : null) !=
-                  curr.events.last.aiResponse),
-      listener: (ctx, __) {
-        _scrollToBottom();
+      listenWhen: (prev, curr) {
+        final lastResponseChanged =
+            curr.events.isNotEmpty &&
+            (prev.events.isNotEmpty ? prev.events.last.aiResponse : null) !=
+                curr.events.last.aiResponse;
+        return prev.events.length != curr.events.length ||
+            prev.isLoading != curr.isLoading ||
+            prev.template != curr.template ||
+            prev.characters.length != curr.characters.length ||
+            lastResponseChanged;
+      },
+      listener: (ctx, state) {
+        // This listener receives the new state from BlocConsumer, but the cubit
+        // already holds it too. Track the previous values locally so entering a
+        // realm or sending a message always reveals the latest beat.
+        final structuralChange =
+            _lastSeenEventCount != state.events.length ||
+            _lastSeenLoading != state.isLoading ||
+            _lastSeenTemplate != state.template;
+        final responseChanged =
+            _lastSeenAiResponse !=
+            (state.events.isNotEmpty ? state.events.last.aiResponse : null);
+        _scrollToBottom(
+          force: structuralChange || responseChanged,
+          animated: structuralChange,
+        );
+        _lastSeenEventCount = state.events.length;
+        _lastSeenLoading = state.isLoading;
+        _lastSeenTemplate = state.template;
+        _lastSeenAiResponse = state.events.isNotEmpty
+            ? state.events.last.aiResponse
+            : null;
         _maybeShowOnboarding(ctx);
       },
       builder: (context, state) {
@@ -714,23 +787,36 @@ class _PlayViewState extends State<_PlayView> {
                                   ? index - 1
                                   : index;
                               final event = state.events[eventIndex];
-                              // Replay is only valid for the LATEST turn that
-                              // has player input (server rejects earlier turns
-                              // and the opening greeting). Gate the UI to match
-                              // so the action never surfaces where it errors.
+                              // Replay is valid for the latest generated AI
+                              // turn, including Continue turns. The seed
+                              // greeting is not generated, so keep it excluded.
                               final isLatest =
                                   eventIndex == state.events.length - 1;
                               final isReplaying =
                                   state.replayingEventId == event.id;
-                              // Replay only on the latest player-input turn,
-                              // and never while another replay is streaming.
+                              final hasAiResponse = (event.aiResponse ?? '')
+                                  .trim()
+                                  .isNotEmpty;
+                              final isSeedGreeting =
+                                  event.modelUsed == 'seed' ||
+                                  (event.modelUsed.isEmpty &&
+                                      event.sequence == 1 &&
+                                      (event.playerInput?.trim().isEmpty ??
+                                          true));
                               final canReplay =
                                   !event.isOptimistic &&
                                   isLatest &&
                                   state.replayingEventId == null &&
                                   !state.isGenerating &&
-                                  (event.playerInput?.trim().isNotEmpty ??
-                                      false);
+                                  hasAiResponse &&
+                                  !isSeedGreeting;
+                              final canContinue =
+                                  !event.isOptimistic &&
+                                  isLatest &&
+                                  state.replayingEventId == null &&
+                                  !state.isGenerating &&
+                                  state.isConnected &&
+                                  ((event.aiResponse ?? '').trim().isNotEmpty);
                               return NarrativeBubble(
                                 event: event,
                                 isReplaying: isReplaying,
@@ -749,6 +835,11 @@ class _PlayViewState extends State<_PlayView> {
                                           .read<PlayCubit>()
                                           .replayAiResponse(event)
                                     : null,
+                                onContinue: canContinue
+                                    ? () => context
+                                          .read<PlayCubit>()
+                                          .continueStory()
+                                    : null,
                                 onSelectReplayVariant: (index) => context
                                     .read<PlayCubit>()
                                     .selectReplayVariant(event, index),
@@ -761,7 +852,6 @@ class _PlayViewState extends State<_PlayView> {
                     isGenerating: state.isGenerating,
                     isConnected: state.isConnected,
                     onSend: (msg) => context.read<PlayCubit>().sendMessage(msg),
-                    onContinue: () => context.read<PlayCubit>().continueStory(),
                   ),
                 ],
               ),

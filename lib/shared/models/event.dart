@@ -9,6 +9,7 @@ class GameEvent {
   final Map<String, dynamic>? stateMutations;
   final Map<String, dynamic>? flagMutations;
   final String? emotionalTone;
+  final String modelUsed;
   final DateTime createdAt;
   final bool isOptimistic;
   final bool isUserEdited;
@@ -26,6 +27,7 @@ class GameEvent {
     this.stateMutations,
     this.flagMutations,
     this.emotionalTone,
+    this.modelUsed = '',
     required this.createdAt,
     this.isOptimistic = false,
     this.isUserEdited = false,
@@ -37,6 +39,7 @@ class GameEvent {
     String? playerInput,
     String? aiResponse,
     String? sceneTag,
+    String? modelUsed,
     bool? isOptimistic,
     bool? isUserEdited,
     List<ReplayVariant>? replayVariants,
@@ -53,6 +56,7 @@ class GameEvent {
       stateMutations: stateMutations,
       flagMutations: flagMutations,
       emotionalTone: emotionalTone,
+      modelUsed: modelUsed ?? this.modelUsed,
       createdAt: createdAt,
       isOptimistic: isOptimistic ?? this.isOptimistic,
       isUserEdited: isUserEdited ?? this.isUserEdited,
@@ -63,8 +67,12 @@ class GameEvent {
 
   factory GameEvent.fromJson(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>?;
-    final replay = (data?['replay_variants'] as List?)
-            ?.map((v) => ReplayVariant.fromJson(Map<String, dynamic>.from(v as Map)))
+    final replay =
+        (data?['replay_variants'] as List?)
+            ?.map(
+              (v) =>
+                  ReplayVariant.fromJson(Map<String, dynamic>.from(v as Map)),
+            )
             .toList() ??
         const <ReplayVariant>[];
     final selected = (data?['selected_replay_index'] as num?)?.toInt() ?? 0;
@@ -74,11 +82,13 @@ class GameEvent {
       sequence: json['sequence'] ?? 0,
       type: json['type'] ?? 'narration',
       playerInput: data?['player_input'] ?? json['player_input'],
-      aiResponse: data?['ai_response'] ?? json['ai_response'] ?? json['narrative'],
+      aiResponse:
+          data?['ai_response'] ?? json['ai_response'] ?? json['narrative'],
       sceneTag: json['scene_tag'] ?? data?['scene_tag'],
       stateMutations: data?['state_mutations'],
       flagMutations: data?['flag_mutations'],
       emotionalTone: json['emotional_tone'],
+      modelUsed: (data?['model_used'] ?? json['model_used'] ?? '').toString(),
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at']) ?? DateTime.now()
           : DateTime.now(),
@@ -112,22 +122,25 @@ class GameEvent {
       playerInput: row['player_input'] as String?,
       aiResponse: row['ai_response'] as String?,
       sceneTag: row['scene_tag'] as String?,
-      createdAt: DateTime.tryParse(row['created_at'] as String) ?? DateTime.now(),
+      modelUsed: (row['model_used'] as String?) ?? '',
+      createdAt:
+          DateTime.tryParse(row['created_at'] as String) ?? DateTime.now(),
       isOptimistic: (row['is_optimistic'] as int?) == 1,
     );
   }
 
   Map<String, dynamic> toSqlite() => {
-        'id': id,
-        'instance_id': instanceId,
-        'sequence': sequence,
-        'type': type,
-        'player_input': playerInput,
-        'ai_response': aiResponse,
-        'scene_tag': sceneTag,
-        'created_at': createdAt.toIso8601String(),
-        'is_optimistic': isOptimistic ? 1 : 0,
-      };
+    'id': id,
+    'instance_id': instanceId,
+    'sequence': sequence,
+    'type': type,
+    'player_input': playerInput,
+    'ai_response': aiResponse,
+    'scene_tag': sceneTag,
+    'model_used': modelUsed,
+    'created_at': createdAt.toIso8601String(),
+    'is_optimistic': isOptimistic ? 1 : 0,
+  };
 }
 
 class ReplayVariant {

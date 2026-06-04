@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../../../../app/theme/nexus_theme.dart';
-import '../../../../../shared/app_icons.dart';
 
 class PlayerInput extends StatefulWidget {
   final bool isGenerating;
   final bool isConnected;
   final ValueChanged<String> onSend;
-  final VoidCallback onContinue;
 
   const PlayerInput({
     super.key,
     required this.isGenerating,
     required this.isConnected,
     required this.onSend,
-    required this.onContinue,
   });
 
   @override
@@ -50,6 +47,28 @@ class _PlayerInputState extends State<PlayerInput> {
     _focusNode.requestFocus();
   }
 
+  void _insertNarrationMarkers() {
+    if (widget.isGenerating) return;
+
+    final value = _controller.value;
+    final text = value.text;
+    final selection = value.selection;
+    final start = selection.isValid ? selection.start : text.length;
+    final end = selection.isValid ? selection.end : text.length;
+    final lo = start < end ? start : end;
+    final hi = start < end ? end : start;
+    final selected = text.substring(lo, hi);
+    final markerText = selected.isEmpty ? '**' : '*$selected*';
+    final next = text.replaceRange(lo, hi, markerText);
+    final cursor = selected.isEmpty ? lo + 1 : hi + 2;
+
+    _controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: cursor),
+    );
+    _focusNode.requestFocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     final canSend = _hasText && !widget.isGenerating && widget.isConnected;
@@ -74,12 +93,6 @@ class _PlayerInputState extends State<PlayerInput> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  // Continue: let the world advance on its own (no typing).
-                  _ContinueButton(
-                    enabled: !widget.isGenerating && widget.isConnected,
-                    onTap: widget.onContinue,
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
@@ -100,32 +113,55 @@ class _PlayerInputState extends State<PlayerInput> {
                               )
                             : null,
                       ),
-                      child: TextField(
-                        controller: _controller,
-                        focusNode: _focusNode,
-                        enabled: !widget.isGenerating,
-                        maxLines: 5,
-                        minLines: 1,
-                        style: EverloreTheme.ui(
-                          size: 15,
-                          color: EverloreTheme.parchment,
-                          height: 1.4,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: _hintText(),
-                          hintStyle: EverloreTheme.ui(
-                            size: 14,
-                            color: EverloreTheme.ash.withValues(alpha: 0.45),
-                            fontStyle: FontStyle.italic,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          _NarrationMarkerButton(
+                            enabled: !widget.isGenerating && widget.isConnected,
+                            onTap: _insertNarrationMarkers,
                           ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
+                          Container(
+                            width: 1,
+                            height: 24,
+                            margin: const EdgeInsets.only(bottom: 10),
+                            color: EverloreTheme.goldDim.withValues(
+                              alpha: 0.16,
+                            ),
                           ),
-                        ),
-                        textInputAction: TextInputAction.newline,
-                        onSubmitted: (_) => _submit(),
+                          Expanded(
+                            child: TextField(
+                              controller: _controller,
+                              focusNode: _focusNode,
+                              readOnly: widget.isGenerating,
+                              maxLines: 5,
+                              minLines: 1,
+                              style: EverloreTheme.ui(
+                                size: 15,
+                                color: EverloreTheme.parchment,
+                                height: 1.4,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: _hintText(),
+                                hintStyle: EverloreTheme.ui(
+                                  size: 14,
+                                  color: EverloreTheme.ash.withValues(
+                                    alpha: 0.45,
+                                  ),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  12,
+                                  16,
+                                  12,
+                                ),
+                              ),
+                              textInputAction: TextInputAction.newline,
+                              onSubmitted: (_) => _submit(),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -160,37 +196,38 @@ class _PlayerInputState extends State<PlayerInput> {
   }
 }
 
-class _ContinueButton extends StatelessWidget {
+class _NarrationMarkerButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
 
-  const _ContinueButton({required this.enabled, required this.onTap});
+  const _NarrationMarkerButton({required this.enabled, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
-      message: 'Let the story continue on its own',
-      child: SizedBox(
-        width: 46,
-        height: 46,
+      message: 'Add narration/action markers',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 7, 4, 7),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
+            borderRadius: BorderRadius.circular(16),
             onTap: enabled ? onTap : null,
-            borderRadius: BorderRadius.circular(23),
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: EverloreTheme.void2.withValues(alpha: 0.85),
-                border: Border.all(
-                  color: enabled
-                      ? EverloreTheme.violet.withValues(alpha: 0.4)
-                      : EverloreTheme.goldDim.withValues(alpha: 0.18),
+            child: SizedBox(
+              width: 34,
+              height: 32,
+              child: Center(
+                child: Text(
+                  '*',
+                  style: EverloreTheme.ui(
+                    size: 18,
+                    weight: FontWeight.w800,
+                    color: enabled
+                        ? EverloreTheme.gold.withValues(alpha: 0.9)
+                        : EverloreTheme.ash.withValues(alpha: 0.4),
+                    spacing: 0.5,
+                  ),
                 ),
-              ),
-              child: Opacity(
-                opacity: enabled ? 1 : 0.35,
-                child: const EvIcon(AppIcons.continueStory, size: 22),
               ),
             ),
           ),
@@ -236,28 +273,30 @@ class _SendOrb extends StatelessWidget {
             ? EverloreTheme.glow(EverloreTheme.gold, blur: 14, alpha: 0.4)
             : null,
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(23),
-          child: Center(
-            child: isGenerating
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      color: EverloreTheme.gold,
+      child: ClipOval(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            customBorder: const CircleBorder(),
+            child: Center(
+              child: isGenerating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: EverloreTheme.gold,
+                      ),
+                    )
+                  : Icon(
+                      Icons.send_rounded,
+                      size: 19,
+                      color: canSend
+                          ? EverloreTheme.void0
+                          : EverloreTheme.ash.withValues(alpha: 0.3),
                     ),
-                  )
-                : Icon(
-                    Icons.send_rounded,
-                    size: 19,
-                    color: canSend
-                        ? EverloreTheme.void0
-                        : EverloreTheme.ash.withValues(alpha: 0.3),
-                  ),
+            ),
           ),
         ),
       ),
