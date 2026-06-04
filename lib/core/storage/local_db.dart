@@ -2,6 +2,8 @@ import 'package:sqflite/sqflite.dart';
 import '../../shared/models/event.dart';
 
 class LocalDb {
+  static const int eventCacheLimit = 200;
+
   static Database? _db;
 
   static Future<Database> get database async {
@@ -12,8 +14,11 @@ class LocalDb {
   static Future<Database> _initDb() async {
     final dbPath = await getDatabasesPath();
     final path = '$dbPath/everlore_cache.db';
-    return openDatabase(path, version: 1, onCreate: (db, version) async {
-      await db.execute('''
+    return openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
         CREATE TABLE events (
           id TEXT PRIMARY KEY,
           instance_id TEXT NOT NULL,
@@ -28,7 +33,7 @@ class LocalDb {
           is_optimistic INTEGER DEFAULT 0
         )
       ''');
-      await db.execute('''
+        await db.execute('''
         CREATE TABLE instances (
           id TEXT PRIMARY KEY,
           template_id TEXT NOT NULL,
@@ -38,7 +43,7 @@ class LocalDb {
           last_active_at TEXT
         )
       ''');
-      await db.execute('''
+        await db.execute('''
         CREATE TABLE memories (
           id TEXT PRIMARY KEY,
           instance_id TEXT NOT NULL,
@@ -47,13 +52,14 @@ class LocalDb {
           importance INTEGER
         )
       ''');
-      await db.execute(
-        'CREATE INDEX idx_events_instance ON events(instance_id, sequence)',
-      );
-      await db.execute(
-        'CREATE INDEX idx_memories_instance ON memories(instance_id)',
-      );
-    });
+        await db.execute(
+          'CREATE INDEX idx_events_instance ON events(instance_id, sequence)',
+        );
+        await db.execute(
+          'CREATE INDEX idx_memories_instance ON memories(instance_id)',
+        );
+      },
+    );
   }
 
   static Future<List<GameEvent>> getEvents(
@@ -78,6 +84,24 @@ class LocalDb {
       event.toSqlite(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    await _pruneEvents(db, event.instanceId);
+  }
+
+  static Future<void> _pruneEvents(Database db, String instanceId) async {
+    await db.rawDelete(
+      '''
+      DELETE FROM events
+      WHERE instance_id = ?
+        AND id NOT IN (
+          SELECT id
+          FROM events
+          WHERE instance_id = ?
+          ORDER BY sequence DESC
+          LIMIT ?
+        )
+      ''',
+      [instanceId, instanceId, eventCacheLimit],
+    );
   }
 
   static Future<void> clearOptimisticEvents(String instanceId) async {
@@ -91,7 +115,15 @@ class LocalDb {
 
   static Future<void> clearInstanceCache(String instanceId) async {
     final db = await database;
-    await db.delete('events', where: 'instance_id = ?', whereArgs: [instanceId]);
-    await db.delete('memories', where: 'instance_id = ?', whereArgs: [instanceId]);
+    await db.delete(
+      'events',
+      where: 'instance_id = ?',
+      whereArgs: [instanceId],
+    );
+    await db.delete(
+      'memories',
+      where: 'instance_id = ?',
+      whereArgs: [instanceId],
+    );
   }
 }

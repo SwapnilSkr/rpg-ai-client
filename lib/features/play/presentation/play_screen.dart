@@ -697,14 +697,29 @@ class _PlayViewState extends State<_PlayView> {
                         : ListView.builder(
                             controller: _scrollController,
                             padding: const EdgeInsets.fromLTRB(2, 16, 2, 20),
-                            itemCount: state.events.length,
+                            itemCount:
+                                state.events.length +
+                                (state.hasOlderEvents ? 1 : 0),
                             itemBuilder: (context, index) {
-                              final event = state.events[index];
+                              if (state.hasOlderEvents && index == 0) {
+                                return _OlderHistoryButton(
+                                  totalEvents: state.totalEvents,
+                                  onTap: () => context.push(
+                                    '/chronicle/${context.read<PlayCubit>().instanceId}',
+                                  ),
+                                );
+                              }
+
+                              final eventIndex = state.hasOlderEvents
+                                  ? index - 1
+                                  : index;
+                              final event = state.events[eventIndex];
                               // Replay is only valid for the LATEST turn that
                               // has player input (server rejects earlier turns
                               // and the opening greeting). Gate the UI to match
                               // so the action never surfaces where it errors.
-                              final isLatest = index == state.events.length - 1;
+                              final isLatest =
+                                  eventIndex == state.events.length - 1;
                               final isReplaying =
                                   state.replayingEventId == event.id;
                               // Replay only on the latest player-input turn,
@@ -936,6 +951,53 @@ class _PlayHeader extends StatelessWidget {
                 ),
               ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OlderHistoryButton extends StatelessWidget {
+  final int totalEvents;
+  final VoidCallback onTap;
+
+  const _OlderHistoryButton({required this.totalEvents, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+      child: Center(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: EverloreTheme.void2.withValues(alpha: 0.74),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: EverloreTheme.gold.withValues(alpha: 0.26),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const EvIcon(AppIcons.chronicle, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  totalEvents > 0
+                      ? 'View older history ($totalEvents turns)'
+                      : 'View older history',
+                  style: EverloreTheme.ui(
+                    size: 12,
+                    weight: FontWeight.w700,
+                    color: EverloreTheme.parchment,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

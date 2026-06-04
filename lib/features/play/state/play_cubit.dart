@@ -15,6 +15,8 @@ import '../../../shared/models/character_profile.dart';
 /// Sentinel so [PlayState.copyWith] can distinguish "leave unchanged" from
 /// "set to null" for nullable fields like [replayingEventId].
 const Object _kUnset = Object();
+const int _activeEventLimit = 100;
+const int _activeMemoryLimit = 50;
 
 class PlayState extends Equatable {
   final WorldInstance? instance;
@@ -26,6 +28,8 @@ class PlayState extends Equatable {
   final bool isConnected;
   final bool isLoading;
   final String? error;
+  final int totalEvents;
+  final bool hasOlderEvents;
 
   /// Id of the event whose AI turn is currently being re-woven (streaming a
   /// replay variant). Drives the in-bubble weaving/streaming treatment and is
@@ -42,6 +46,8 @@ class PlayState extends Equatable {
     this.isConnected = false,
     this.isLoading = true,
     this.error,
+    this.totalEvents = 0,
+    this.hasOlderEvents = false,
     this.replayingEventId,
   });
 
@@ -55,6 +61,8 @@ class PlayState extends Equatable {
     bool? isConnected,
     bool? isLoading,
     String? error,
+    int? totalEvents,
+    bool? hasOlderEvents,
     Object? replayingEventId = _kUnset,
   }) {
     return PlayState(
@@ -67,6 +75,8 @@ class PlayState extends Equatable {
       isConnected: isConnected ?? this.isConnected,
       isLoading: isLoading ?? this.isLoading,
       error: error,
+      totalEvents: totalEvents ?? this.totalEvents,
+      hasOlderEvents: hasOlderEvents ?? this.hasOlderEvents,
       replayingEventId: identical(replayingEventId, _kUnset)
           ? this.replayingEventId
           : replayingEventId as String?,
@@ -84,6 +94,8 @@ class PlayState extends Equatable {
     isConnected,
     isLoading,
     error,
+    totalEvents,
+    hasOlderEvents,
     replayingEventId,
   ];
 }
@@ -127,6 +139,16 @@ class PlayCubit extends Cubit<PlayState> {
     _init();
   }
 
+  List<GameEvent> _trimEvents(List<GameEvent> events) {
+    if (events.length <= _activeEventLimit) return events;
+    return events.sublist(events.length - _activeEventLimit);
+  }
+
+  List<Memory> _trimMemories(List<Memory> memories) {
+    if (memories.length <= _activeMemoryLimit) return memories;
+    return memories.sublist(memories.length - _activeMemoryLimit);
+  }
+
   void _init() {
     _loadCachedEvents();
     _connectAndLoad();
@@ -151,19 +173,28 @@ class PlayCubit extends Cubit<PlayState> {
           [];
       final characters =
           (data['characters'] as List?)
-              ?.map((e) => CharacterProfile.fromJson(
-                    Map<String, dynamic>.from(e as Map),
-                  ))
+              ?.map(
+                (e) => CharacterProfile.fromJson(
+                  Map<String, dynamic>.from(e as Map),
+                ),
+              )
               .toList() ??
           [];
+      final eventWindow = data['eventWindow'] as Map?;
+      final totalEvents =
+          (eventWindow?['total'] as num?)?.toInt() ?? instance.meta.totalEvents;
+      final hasOlderEvents =
+          eventWindow?['hasOlder'] == true || totalEvents > events.length;
 
       emit(
         state.copyWith(
           instance: instance,
           template: template,
-          events: events,
-          memories: memories,
+          events: _trimEvents(events),
+          memories: _trimMemories(memories),
           characters: characters,
+          totalEvents: totalEvents,
+          hasOlderEvents: hasOlderEvents,
           isLoading: false,
         ),
       );
@@ -173,18 +204,22 @@ class PlayCubit extends Cubit<PlayState> {
       if (msg['instanceId']?.toString() != instanceId) return;
       final incoming =
           (msg['characters'] as List?)
-              ?.map((e) => CharacterProfile.fromJson(
-                    Map<String, dynamic>.from(e as Map),
-                  ))
+              ?.map(
+                (e) => CharacterProfile.fromJson(
+                  Map<String, dynamic>.from(e as Map),
+                ),
+              )
               .toList() ??
           [];
       final focused = msg['focused_character_id']?.toString();
-      emit(state.copyWith(
-        characters: incoming,
-        instance: state.instance?.copyWith(
-          focusCharacterId: focused == 'null' ? null : focused,
+      emit(
+        state.copyWith(
+          characters: incoming,
+          instance: state.instance?.copyWith(
+            focusCharacterId: focused == 'null' ? null : focused,
+          ),
         ),
-      ));
+      );
     });
 
     // Tokens stream in here as the world weaves the tale — grow the in-progress
@@ -230,12 +265,19 @@ class PlayCubit extends Cubit<PlayState> {
 
       LocalDb.insertEvent(finalEvent);
       _streamBuffer = '';
+      final trimmedEvents = _trimEvents(events);
+      final nextTotalEvents = finalEvent.sequence > state.totalEvents
+          ? finalEvent.sequence
+          : state.totalEvents;
 
       emit(
         state.copyWith(
-          events: events,
+          events: trimmedEvents,
           isGenerating: false,
           instance: state.instance?.applyStateDiff(eventData['state_diff']),
+          totalEvents: nextTotalEvents,
+          hasOlderEvents:
+              state.hasOlderEvents || nextTotalEvents > trimmedEvents.length,
         ),
       );
     });
@@ -261,9 +303,12 @@ class PlayCubit extends Cubit<PlayState> {
       final eventId = msg['eventId']?.toString();
       if (eventId == null) return;
 
-      final variants = (msg['variants'] as List?)
-              ?.map((v) =>
-                  ReplayVariant.fromJson(Map<String, dynamic>.from(v as Map)))
+      final variants =
+          (msg['variants'] as List?)
+              ?.map(
+                (v) =>
+                    ReplayVariant.fromJson(Map<String, dynamic>.from(v as Map)),
+              )
               .toList() ??
           const <ReplayVariant>[];
       final selected = (msg['selected_index'] as num?)?.toInt() ?? 0;
@@ -288,7 +333,11 @@ class PlayCubit extends Cubit<PlayState> {
       final newMems =
           (msg['memories'] as List?)?.map((m) => Memory.fromJson(m)).toList() ??
           [];
-      emit(state.copyWith(memories: [...state.memories, ...newMems]));
+      emit(
+        state.copyWith(
+          memories: _trimMemories([...state.memories, ...newMems]),
+        ),
+      );
     });
 
     _errorSub = _ws.onError.listen((msg) {
@@ -307,8 +356,7 @@ class PlayCubit extends Cubit<PlayState> {
 
       _streamBuffer = '';
       // Drop the in-progress optimistic turn so the player can retry cleanly.
-      final events =
-          state.events.where((e) => !e.isOptimistic).toList();
+      final events = state.events.where((e) => !e.isOptimistic).toList();
       emit(
         state.copyWith(
           events: events,
@@ -343,7 +391,13 @@ class PlayCubit extends Cubit<PlayState> {
     try {
       final cached = await LocalDb.getEvents(instanceId, limit: 50);
       if (cached.isNotEmpty && state.events.isEmpty) {
-        emit(state.copyWith(events: cached));
+        emit(
+          state.copyWith(
+            events: cached,
+            totalEvents: cached.length,
+            hasOlderEvents: false,
+          ),
+        );
       }
     } catch (_) {}
   }
@@ -367,8 +421,10 @@ class PlayCubit extends Cubit<PlayState> {
 
     emit(
       state.copyWith(
-        events: [...state.events, optimisticEvent],
+        events: _trimEvents([...state.events, optimisticEvent]),
         isGenerating: true,
+        hasOlderEvents:
+            state.hasOlderEvents || state.events.length >= _activeEventLimit,
         error: null,
       ),
     );
@@ -383,13 +439,17 @@ class PlayCubit extends Cubit<PlayState> {
     await _flushPendingVariant();
 
     _streamBuffer = '';
-    final optimisticEvent =
-        GameEvent.optimistic(instanceId: instanceId, playerInput: '');
+    final optimisticEvent = GameEvent.optimistic(
+      instanceId: instanceId,
+      playerInput: '',
+    );
 
     emit(
       state.copyWith(
-        events: [...state.events, optimisticEvent],
+        events: _trimEvents([...state.events, optimisticEvent]),
         isGenerating: true,
+        hasOlderEvents:
+            state.hasOlderEvents || state.events.length >= _activeEventLimit,
         error: null,
       ),
     );
@@ -420,8 +480,10 @@ class PlayCubit extends Cubit<PlayState> {
     Map<String, dynamic> updates,
   ) async {
     try {
-      final updated =
-          await ChronicleRepository.editCharacter(characterId, updates);
+      final updated = await ChronicleRepository.editCharacter(
+        characterId,
+        updates,
+      );
       final list = state.characters
           .map((c) => c.id == characterId ? updated : c)
           .toList();
@@ -491,7 +553,9 @@ class PlayCubit extends Cubit<PlayState> {
         clearFocusCharacter: clearFocusCharacter,
       );
     } catch (_) {
-      emit(state.copyWith(error: 'Could not update settings. Please try again.'));
+      emit(
+        state.copyWith(error: 'Could not update settings. Please try again.'),
+      );
     }
   }
 
@@ -502,16 +566,26 @@ class PlayCubit extends Cubit<PlayState> {
     if (state.isGenerating || state.replayingEventId != null) return;
     _pendingVariantEventId = null;
     _pendingVariantIndex = null;
-    emit(state.copyWith(events: const [], isLoading: true, error: null));
+    emit(
+      state.copyWith(
+        events: const [],
+        totalEvents: 0,
+        hasOlderEvents: false,
+        isLoading: true,
+        error: null,
+      ),
+    );
     try {
       await HomeRepository.resetInstance(instanceId);
       await LocalDb.clearInstanceCache(instanceId);
       _ws.loadInstance(instanceId); // pull the re-seeded opening line + state
     } catch (_) {
-      emit(state.copyWith(
-        isLoading: false,
-        error: 'Could not reset the chat. Please try again.',
-      ));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: 'Could not reset the chat. Please try again.',
+        ),
+      );
       _ws.loadInstance(instanceId); // resync to server truth on failure
     }
   }
@@ -522,9 +596,15 @@ class PlayCubit extends Cubit<PlayState> {
   Future<void> rewind(int sequence) async {
     if (state.isGenerating) return;
 
-    final kept =
-        state.events.where((e) => e.sequence < sequence).toList();
-    emit(state.copyWith(events: kept, error: null));
+    final kept = state.events.where((e) => e.sequence < sequence).toList();
+    emit(
+      state.copyWith(
+        events: kept,
+        totalEvents: kept.length,
+        hasOlderEvents: false,
+        error: null,
+      ),
+    );
 
     try {
       await ChronicleRepository.rewind(instanceId, sequence);
@@ -563,10 +643,12 @@ class PlayCubit extends Cubit<PlayState> {
       if (revertIdx >= 0) {
         reverted[revertIdx] = before;
       }
-      emit(state.copyWith(
-        events: reverted,
-        error: 'Could not save edit. Please try again.',
-      ));
+      emit(
+        state.copyWith(
+          events: reverted,
+          error: 'Could not save edit. Please try again.',
+        ),
+      );
     }
   }
 
@@ -591,12 +673,14 @@ class PlayCubit extends Cubit<PlayState> {
     final idx = events.indexWhere((e) => e.id == event.id);
     if (idx >= 0) events[idx] = events[idx].copyWith(aiResponse: '');
 
-    emit(state.copyWith(
-      events: events,
-      replayingEventId: event.id,
-      isGenerating: true,
-      error: null,
-    ));
+    emit(
+      state.copyWith(
+        events: events,
+        replayingEventId: event.id,
+        isGenerating: true,
+        error: null,
+      ),
+    );
     _armReplayWatchdog();
     _ws.sendReplay(instanceId, event.id);
   }
@@ -637,12 +721,14 @@ class PlayCubit extends Cubit<PlayState> {
     _replayEventId = null;
     _replayBuffer = '';
     _replayOriginalResponse = null;
-    emit(state.copyWith(
-      events: events,
-      isGenerating: false,
-      replayingEventId: null,
-      error: message,
-    ));
+    emit(
+      state.copyWith(
+        events: events,
+        isGenerating: false,
+        replayingEventId: null,
+        error: message,
+      ),
+    );
   }
 
   /// Browse to a replay variant. This is LOCAL ONLY — it previews the variant
