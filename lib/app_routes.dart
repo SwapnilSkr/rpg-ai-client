@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:everlore/screens/splash_screen.dart';
 import 'package:everlore/screens/welcome_screen.dart';
 import 'package:everlore/screens/auth_screen.dart';
-import 'package:everlore/screens/onboarding_interests_screen.dart';
+import 'package:everlore/screens/onboarding_screen.dart';
 import 'package:everlore/screens/discover_screen.dart';
 import 'package:everlore/features/home/presentation/home_screen.dart';
 import 'package:everlore/features/home/presentation/realm_playthroughs_screen.dart';
@@ -42,7 +42,7 @@ final router = GoRouter(
     GoRoute(
       path: '/onboarding',
       name: 'onboarding',
-      builder: (context, state) => const OnboardingInterestsScreen(),
+      builder: (context, state) => const OnboardingScreen(),
     ),
 
     // ── Detail / secondary screens — pushed OVER the shell on the root

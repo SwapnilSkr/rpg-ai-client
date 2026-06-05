@@ -1,28 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app/theme/nexus_theme.dart';
 import '../core/auth/auth_service.dart';
 import '../core/onboarding/interests_store.dart';
 import '../shared/app_icons.dart';
 import '../shared/narrative_styles.dart';
-import '../shared/widgets/realm_backdrop.dart';
 import '../shared/widgets/neu.dart';
 
-/// Post-signup "attune the realm to you" beat — the 4th beat of the
-/// gate → threshold journey. Collects the player's genre taste (mapped to
-/// `narrative_style` keys) which feeds genre-aware discovery (see memory:
-/// interests_discovery.md). Skippable; ≥3 to continue. Choices persist locally
-/// (Phase 1); Phase 2 mirrors them to the server.
-class OnboardingInterestsScreen extends StatefulWidget {
-  const OnboardingInterestsScreen({super.key});
+/// Interests beat — third step of post-auth onboarding (genre chip grid).
+class OnboardingInterestsStep extends StatefulWidget {
+  final VoidCallback onComplete;
+  final VoidCallback onSkip;
+
+  const OnboardingInterestsStep({
+    super.key,
+    required this.onComplete,
+    required this.onSkip,
+  });
 
   @override
-  State<OnboardingInterestsScreen> createState() =>
-      _OnboardingInterestsScreenState();
+  State<OnboardingInterestsStep> createState() =>
+      _OnboardingInterestsStepState();
 }
 
-class _OnboardingInterestsScreenState extends State<OnboardingInterestsScreen> {
+class _OnboardingInterestsStepState extends State<OnboardingInterestsStep> {
   static const int _minPick = 3;
   final Set<String> _selected = {};
 
@@ -32,9 +33,6 @@ class _OnboardingInterestsScreenState extends State<OnboardingInterestsScreen> {
     });
   }
 
-  /// Two-column grid: chips fill equal half-widths so the section reads as a
-  /// tidy grid (no ragged vertical stacking). A lone trailing chip sits in the
-  /// left column.
   Widget _chipGrid(List<NarrativeStyle> styles, String familyKey) {
     const gap = 10.0;
     final rows = <Widget>[];
@@ -68,15 +66,13 @@ class _OnboardingInterestsScreenState extends State<OnboardingInterestsScreen> {
     if (!skipped) {
       final picks = _selected.toList();
       await InterestsStore.saveInterests(picks);
-      // Best-effort: mirror to the server so discovery can rank across the whole
-      // catalog (Phase 2). Never block leaving onboarding on this.
       try {
         await AuthService.updatePreferences({'interests': picks});
       } catch (_) {}
     }
     await InterestsStore.markOnboarded();
     if (!mounted) return;
-    context.go('/discover'); // land on Discover, not the realms list
+    widget.onComplete();
   }
 
   @override
@@ -84,87 +80,78 @@ class _OnboardingInterestsScreenState extends State<OnboardingInterestsScreen> {
     final enough = _selected.length >= _minPick;
     final remaining = _minPick - _selected.length;
 
-    return Scaffold(
-      backgroundColor: EverloreTheme.void0,
-      body: RealmBackdrop(
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Skip — quiet, top-right.
-              Align(
-                alignment: Alignment.topRight,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 4, 8, 0),
-                  child: TextButton(
-                    onPressed: () => _finish(skipped: true),
-                    child: Text(
-                      'Skip for now',
-                      style: TextStyle(
-                        fontFamily: EverloreTheme.uiFamily,
-                        color: EverloreTheme.ash,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
+    return Column(
+      children: [
+        Align(
+          alignment: Alignment.topRight,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0, 4, 8, 0),
+            child: TextButton(
+              onPressed: () => _finish(skipped: true),
+              child: Text(
+                'Skip for now',
+                style: TextStyle(
+                  fontFamily: EverloreTheme.uiFamily,
+                  color: EverloreTheme.ash,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Center(child: ForgeMark(size: 60)),
-                      const SizedBox(height: 18),
-                      Text(
-                        'Which worlds call to you?',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.cinzel(
-                          color: EverloreTheme.gold,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Choose three or more. We\'ll summon the realms that '
-                        'match your taste first.',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.ebGaramond(
-                          color: EverloreTheme.ash,
-                          fontSize: 16,
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      for (final family in kStyleFamilies) ...[
-                        _FamilyHeader(
-                          label: family.label,
-                          familyKey: family.key,
-                        ),
-                        const SizedBox(height: 12),
-                        _chipGrid(stylesInFamily(family.key), family.key),
-                        const SizedBox(height: 24),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              // Continue — gated on the minimum pick.
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
-                child: NeuButton(
-                  label: enough ? 'Enter Everlore' : 'Choose $remaining more',
-                  icon: enough ? Icons.auto_awesome : null,
-                  onTap: enough ? () => _finish(skipped: false) : null,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Center(child: ForgeMark(size: 60)),
+                const SizedBox(height: 18),
+                Text(
+                  'Which worlds call to you?',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.cinzel(
+                    color: EverloreTheme.gold,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Choose three or more. We\'ll summon the realms that '
+                  'match your taste first.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.ebGaramond(
+                    color: EverloreTheme.ash,
+                    fontSize: 16,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                for (final family in kStyleFamilies) ...[
+                  _FamilyHeader(
+                    label: family.label,
+                    familyKey: family.key,
+                  ),
+                  const SizedBox(height: 12),
+                  _chipGrid(stylesInFamily(family.key), family.key),
+                  const SizedBox(height: 24),
+                ],
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
+          child: NeuButton(
+            label: enough ? 'Enter Everlore' : 'Choose $remaining more',
+            icon: enough ? Icons.auto_awesome : null,
+            onTap: enough ? () => _finish(skipped: false) : null,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -195,8 +182,6 @@ class _FamilyHeader extends StatelessWidget {
   }
 }
 
-/// Oval chip: a thumbnail disc (genre art, or a family-icon fallback) + label.
-/// Selected = champagne-brass fill + gold rim (per DESIGN_PHILOSOPHY §2.3).
 class _InterestChip extends StatelessWidget {
   final NarrativeStyle style;
   final String familyKey;
@@ -277,8 +262,6 @@ class _InterestChip extends StatelessWidget {
   }
 }
 
-/// 34px circular thumbnail: genre art if it exists, else a neumorphic disc with
-/// the genre's family glyph (keeps chips premium for the ~9 genres without art).
 class _Thumb extends StatelessWidget {
   final String styleKey;
   final String familyKey;

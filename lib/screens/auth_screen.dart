@@ -15,6 +15,7 @@ import '../shared/widgets/everlore_session_loader.dart';
 import '../shared/widgets/keyboard_aware_scroll.dart';
 import '../shared/widgets/realm_backdrop.dart';
 import '../shared/widgets/neu.dart';
+import '../shared/widgets/player_avatar.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, this.title});
@@ -36,6 +37,10 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _googleReady = false;
   bool _isLoading = false;
   bool _isUpdatingPreferences = false;
+  bool _isSavingName = false;
+  bool _editingName = false;
+  final _nameEditCtrl = TextEditingController();
+  final _nameEditFocus = FocusNode();
   bool _isDeletingAccount = false;
   bool _codeSent = false;
   String? _errorMessage;
@@ -58,6 +63,8 @@ class _AuthScreenState extends State<AuthScreen> {
     AuthService.sessionEpoch.removeListener(_sessionListener!);
     _phoneController.dispose();
     _otpController.dispose();
+    _nameEditCtrl.dispose();
+    _nameEditFocus.dispose();
     super.dispose();
   }
 
@@ -412,8 +419,10 @@ class _AuthScreenState extends State<AuthScreen> {
       );
     }
     if (_currentUser != null) {
-      return Padding(
+      return KeyboardAwareScroll(
         padding: const EdgeInsets.symmetric(horizontal: 28),
+        keyboardOpenBottomSlack: 120,
+        closedBottomSlack: 0,
         child: _buildProfile(_currentUser!),
       );
     }
@@ -423,62 +432,125 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  String _displayName(User user) {
+    final name = user.preferences.playerName.trim();
+    return name.isNotEmpty ? name : 'Traveler';
+  }
+
+  void _beginNameEdit(User user) {
+    _nameEditCtrl.text = user.preferences.playerName;
+    setState(() => _editingName = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _nameEditFocus.requestFocus();
+    });
+  }
+
+  void _cancelNameEdit() {
+    setState(() => _editingName = false);
+    _nameEditCtrl.clear();
+  }
+
+  Future<void> _saveNameEdit() async {
+    final name = _nameEditCtrl.text.trim();
+    if (name.length < 2) return;
+    setState(() {
+      _isSavingName = true;
+      _errorMessage = null;
+    });
+    try {
+      final updated =
+          await AuthService.updatePreferences({'player_name': name});
+      if (!mounted) return;
+      setState(() {
+        _currentUser = updated;
+        _editingName = false;
+        _successMessage = 'Name updated.';
+      });
+    } on ApiException catch (e) {
+      setState(() => _errorMessage = e.message);
+    } catch (e) {
+      setState(() => _errorMessage =
+          e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isSavingName = false);
+    }
+  }
+
   Widget _buildProfile(User user) {
+    final displayName = _displayName(user);
+    final nameReady = _nameEditCtrl.text.trim().length >= 2;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const SizedBox(height: 24),
 
-        // Avatar circle
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [EverloreTheme.violet, EverloreTheme.violetDim],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border: Border.all(
-                color: EverloreTheme.goldDim.withValues(alpha: 0.4), width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
-                blurRadius: 18,
-                offset: const Offset(6, 8),
-              ),
-              BoxShadow(
-                color: EverloreTheme.violet.withValues(alpha: 0.3),
-                blurRadius: 22,
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              user.username.isNotEmpty
-                  ? user.username[0].toUpperCase()
-                  : '?',
-              style: const TextStyle(
-                color: EverloreTheme.gold,
-                fontSize: 32,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ),
+        PlayerAvatar(gender: user.preferences.gender, size: 88),
 
         const SizedBox(height: 16),
 
-        Text(
-          user.username,
-          style: const TextStyle(
-            color: EverloreTheme.parchment,
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.5,
+        if (_editingName) ...[
+          KeyboardAwareInputGroup(
+            focusNode: _nameEditFocus,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: NeuField(
+                controller: _nameEditCtrl,
+                focusNode: _nameEditFocus,
+                hintText: 'Your name',
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
           ),
-        ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: NeuButton(
+                  label: 'Cancel',
+                  primary: false,
+                  onTap: _isSavingName ? null : _cancelNameEdit,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: NeuButton(
+                  label: _isSavingName ? 'Saving…' : 'Save',
+                  loading: _isSavingName,
+                  onTap: nameReady && !_isSavingName ? _saveNameEdit : null,
+                ),
+              ),
+            ],
+          ),
+        ] else ...[
+          GestureDetector(
+            onTap: _isSavingName ? null : () => _beginNameEdit(user),
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    displayName,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: EverloreTheme.parchment,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.edit_outlined,
+                  size: 18,
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.85),
+                ),
+              ],
+            ),
+          ),
+        ],
 
         const SizedBox(height: 6),
 
@@ -550,9 +622,7 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
 
-        // Absorbs slack so the page fills without scrolling and the buttons sit
-        // just above the floating nav.
-        const Spacer(),
+        const SizedBox(height: 32),
 
         NeuButton(
           label: 'Sign Out',

@@ -1,9 +1,34 @@
+/// Player gender from onboarding; `null` when skipped (neutral avatar).
+enum PlayerGender { male, female, nonBinary }
+
+PlayerGender? playerGenderFromJson(String? raw) {
+  return switch (raw) {
+    'male' => PlayerGender.male,
+    'female' => PlayerGender.female,
+    'non_binary' => PlayerGender.nonBinary,
+    _ => null,
+  };
+}
+
+String? playerGenderToJson(PlayerGender? gender) {
+  return switch (gender) {
+    PlayerGender.male => 'male',
+    PlayerGender.female => 'female',
+    PlayerGender.nonBinary => 'non_binary',
+    null => null,
+  };
+}
+
 class UserPreferences {
   final bool nsfwEnabled;
   final String preferredModel;
   final String theme;
   final String narrationLength;
   final bool autoMemoryCuration;
+  /// Display name chosen during post-auth onboarding.
+  final String playerName;
+  /// Optional gender from onboarding; unset when skipped.
+  final PlayerGender? gender;
   /// Genre taste from onboarding (`narrative_style` keys); persisted on server.
   final List<String> interests;
 
@@ -13,6 +38,8 @@ class UserPreferences {
     this.theme = 'dark',
     this.narrationLength = 'detailed',
     this.autoMemoryCuration = true,
+    this.playerName = '',
+    this.gender,
     this.interests = const [],
   });
 
@@ -27,6 +54,8 @@ class UserPreferences {
       theme: json['theme'] ?? 'dark',
       narrationLength: json['narration_length'] ?? 'detailed',
       autoMemoryCuration: json['auto_memory_curation'] ?? true,
+      playerName: (json['player_name'] as String?)?.trim() ?? '',
+      gender: playerGenderFromJson(json['gender'] as String?),
       interests: interests,
     );
   }
@@ -37,6 +66,8 @@ class UserPreferences {
     'theme': theme,
     'narration_length': narrationLength,
     'auto_memory_curation': autoMemoryCuration,
+    if (playerName.isNotEmpty) 'player_name': playerName,
+    if (gender != null) 'gender': playerGenderToJson(gender),
     if (interests.isNotEmpty) 'interests': interests,
   };
 }
