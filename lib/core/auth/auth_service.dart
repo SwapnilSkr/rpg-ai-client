@@ -125,6 +125,21 @@ class AuthService {
     }
   }
 
+  /// Live profile from `/auth/me` (DB tier), with local cache kept in sync.
+  /// Falls back to [getCachedUser] if the network call fails.
+  static Future<User?> resolveSessionUser() async {
+    final fresh = await getCurrentUser();
+    if (fresh != null) {
+      await SecureStore.saveUserData(jsonEncode(fresh.toJson()));
+      await InterestsStore.syncFromUser(fresh);
+      return fresh;
+    }
+    return getCachedUser();
+  }
+
+  static bool canAccessForge(String tier) =>
+      tier == 'premium' || tier == 'creator';
+
   /// Permanently deletes the signed-in account and all associated server data.
   static Future<void> deleteAccount() async {
     await ApiClient.delete('/auth/account');

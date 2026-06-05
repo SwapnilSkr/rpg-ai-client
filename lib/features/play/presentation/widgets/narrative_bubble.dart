@@ -5,6 +5,8 @@ import '../../../../../shared/models/event.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
 
+const _kNarrationMutedAlpha = 0.6;
+
 class NarrativeBubble extends StatelessWidget {
   final GameEvent event;
   final VoidCallback? onLongPress;
@@ -77,54 +79,81 @@ class _PlayerBubble extends StatelessWidget {
   final String text;
   const _PlayerBubble({required this.text});
 
+  static const _radius = BorderRadius.only(
+    topLeft: Radius.circular(18),
+    topRight: Radius.circular(6),
+    bottomLeft: Radius.circular(18),
+    bottomRight: Radius.circular(12),
+  );
+
   @override
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.centerRight,
       child: Container(
         margin: const EdgeInsets.fromLTRB(60, 10, 16, 6),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              EverloreTheme.violet.withValues(alpha: 0.85),
-              EverloreTheme.violetDim.withValues(alpha: 0.85),
+              EverloreTheme.void4.withValues(alpha: 0.85),
+              EverloreTheme.void3.withValues(alpha: 1.10),
             ],
           ),
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(18),
-            topRight: Radius.circular(6),
-            bottomLeft: Radius.circular(18),
-            bottomRight: Radius.circular(18),
-          ),
+          borderRadius: _radius,
           border: Border.all(
-            color: EverloreTheme.violetBright.withValues(alpha: 0.3),
-          ),
-          boxShadow: EverloreTheme.glow(
-            EverloreTheme.violet,
-            blur: 16,
-            alpha: 0.22,
+            color: EverloreTheme.goldDim.withValues(alpha: 0.16),
           ),
         ),
-        child: Text.rich(
-          TextSpan(
-            children: _playerInputSpans(
-              text,
-              // The player's voice uses the UI font; their *actions* italic, speech upright.
-              dialogueStyle: EverloreTheme.ui(
-                size: 15,
-                color: EverloreTheme.parchment,
-                height: 1.45,
+        child: ClipRRect(
+          borderRadius: _radius,
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 17, 12),
+                child: Text.rich(
+                  TextSpan(
+                    children: _playerInputSpans(
+                      text,
+                      // The player's voice uses the UI font; their *actions* italic, speech upright.
+                      dialogueStyle: EverloreTheme.ui(
+                        size: 15,
+                        color: EverloreTheme.parchment,
+                        height: 1.45,
+                      ),
+                      narrationStyle: EverloreTheme.ui(
+                        size: 15,
+                        color: EverloreTheme.parchment.withValues(
+                          alpha: _kNarrationMutedAlpha,
+                        ),
+                        height: 1.45,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-              narrationStyle: EverloreTheme.ui(
-                size: 15,
-                color: EverloreTheme.parchment.withValues(alpha: 0.9),
-                height: 1.45,
-                fontStyle: FontStyle.italic,
+              // Champagne spine on the right — mirrors the narrator panel's left strip.
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: 3,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        EverloreTheme.gold.withValues(alpha: 0.7),
+                        EverloreTheme.gold.withValues(alpha: 0.15),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -225,21 +254,6 @@ class _NarratorPanel extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(
-                        Icons.auto_stories,
-                        size: 11,
-                        color: accent.withValues(alpha: 0.7),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'NARRATOR',
-                        style: EverloreTheme.ui(
-                          size: 9,
-                          weight: FontWeight.w700,
-                          spacing: 2.0,
-                          color: accent.withValues(alpha: 0.7),
-                        ),
-                      ),
                       if (isEdited) ...[
                         const SizedBox(width: 6),
                         Icon(
@@ -250,7 +264,6 @@ class _NarratorPanel extends StatelessWidget {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 10),
                   SelectableText.rich(
                     TextSpan(children: _narrativeSpans(text)),
                   ),
@@ -549,10 +562,12 @@ class _CopyButton extends StatelessWidget {
   }
 }
 
-/// Renders narrative prose with asterisks as the narration boundary: text outside
-/// `*...*` / `**...**` is spoken dialogue (bright, upright), while marked text is
-/// narration/action/attribution (italic, muted). This is deterministic and
-/// streaming-stable: a trailing unclosed marker reads as in-progress narration.
+/// Renders narrative prose with quote and asterisk boundaries:
+/// - `"spoken words"` are dialogue (bright, upright)
+/// - `*narration/actions/attributions*` are narration (italic, muted)
+/// - malformed unmarked text defaults to narration, not dialogue.
+/// This is a single streaming-stable pass: trailing unclosed quote/asterisk
+/// reads as the in-progress span type.
 List<InlineSpan> _narrativeSpans(
   String text, {
   TextStyle? dialogueStyle,
@@ -564,7 +579,7 @@ List<InlineSpan> _narrativeSpans(
       base.copyWith(
         fontStyle: FontStyle.italic,
         fontWeight: FontWeight.w400,
-        color: const Color(0xFFA8A093),
+        color: EverloreTheme.parchment.withValues(alpha: _kNarrationMutedAlpha),
       );
   final dialogue =
       dialogueStyle ??
@@ -577,9 +592,12 @@ List<InlineSpan> _narrativeSpans(
   final spans = <InlineSpan>[];
   final buf = StringBuffer();
   var inNarration = false;
+  var inQuote = false;
 
   TextStyle styleNow() {
-    return inNarration ? narration : dialogue;
+    if (inNarration) return narration;
+    if (inQuote) return dialogue;
+    return narration;
   }
 
   void flush() {
@@ -591,10 +609,23 @@ List<InlineSpan> _narrativeSpans(
   for (var i = 0; i < text.length; i++) {
     final c = text[i];
 
-    if (c == '*') {
+    if (c == '*' && !inQuote) {
       flush();
       inNarration = !inNarration;
       if (i + 1 < text.length && text[i + 1] == '*') i++;
+      continue;
+    }
+
+    if ((c == '"' || c == '“' || c == '”') && !inNarration) {
+      if (!inQuote) {
+        flush();
+        inQuote = true;
+        buf.write(c == '“' || c == '”' ? '"' : c);
+      } else {
+        buf.write(c == '“' || c == '”' ? '"' : c);
+        flush();
+        inQuote = false;
+      }
       continue;
     }
 
@@ -603,7 +634,7 @@ List<InlineSpan> _narrativeSpans(
   flush();
 
   if (spans.isEmpty) {
-    spans.add(TextSpan(text: text, style: dialogue));
+    spans.add(TextSpan(text: text, style: narration));
   }
   return spans;
 }

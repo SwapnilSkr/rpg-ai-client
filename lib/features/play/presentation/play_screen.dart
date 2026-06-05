@@ -44,6 +44,10 @@ class _PlayViewState extends State<_PlayView> {
   Object? _lastSeenTemplate;
   String? _lastSeenAiResponse;
 
+  /// Set when the player opens Chronicle / Thoughts / Settings from the realm
+  /// menu. Cleared if they dismiss the menu outright or finish an in-sheet action.
+  bool _pendingRealmMenuReturn = false;
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -83,6 +87,54 @@ class _PlayViewState extends State<_PlayView> {
     );
   }
 
+  void _showRealmMenu(BuildContext context) {
+    var navigatingFromMenu = false;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => _RealmMenuSheet(
+        onChronicle: () {
+          navigatingFromMenu = true;
+          _pendingRealmMenuReturn = true;
+          Navigator.pop(sheetCtx);
+          _openChronicleFromMenu(context);
+        },
+        onThoughts: () {
+          navigatingFromMenu = true;
+          _pendingRealmMenuReturn = true;
+          Navigator.pop(sheetCtx);
+          _showThoughtsSheet(context);
+        },
+        onSettings: () {
+          navigatingFromMenu = true;
+          _pendingRealmMenuReturn = true;
+          Navigator.pop(sheetCtx);
+          _showChatMenu(context);
+        },
+      ),
+    ).then((_) {
+      if (!navigatingFromMenu) _pendingRealmMenuReturn = false;
+    });
+  }
+
+  /// Re-open the realm menu after the route / sheet the player backed out of.
+  void _maybeRestoreRealmMenu(BuildContext context) {
+    if (!mounted || !_pendingRealmMenuReturn) return;
+    _pendingRealmMenuReturn = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future<void>.delayed(const Duration(milliseconds: 140));
+      if (!mounted) return;
+      _showRealmMenu(context);
+    });
+  }
+
+  Future<void> _openChronicleFromMenu(BuildContext context) async {
+    final instanceId = context.read<PlayCubit>().instanceId;
+    await context.push('/chronicle/$instanceId');
+    if (!mounted) return;
+    _maybeRestoreRealmMenu(context);
+  }
+
   void _showChatMenu(BuildContext context) {
     final cubit = context.read<PlayCubit>();
     final instance = cubit.state.instance;
@@ -98,6 +150,7 @@ class _PlayViewState extends State<_PlayView> {
         initialMode: instance?.mode ?? kDefaultChatMode,
         initialLength: instance?.messageLength ?? 'medium',
         onApply: (pov, mode, length) {
+          _pendingRealmMenuReturn = false;
           cubit.updateSettings(
             narrationPov: pov,
             mode: mode,
@@ -107,15 +160,19 @@ class _PlayViewState extends State<_PlayView> {
           _showSettingsSnack(context, pov: pov, mode: mode, length: length);
         },
         onReset: () {
+          _pendingRealmMenuReturn = false;
           Navigator.pop(sheetCtx);
           _confirmResetChat(context, cubit);
         },
         onDelete: () {
+          _pendingRealmMenuReturn = false;
           Navigator.pop(sheetCtx);
           _confirmDeleteChat(context, cubit.instanceId);
         },
       ),
-    );
+    ).then((_) {
+      if (mounted) _maybeRestoreRealmMenu(context);
+    });
   }
 
   /// Friendly confirmation that staged scene settings were saved and when they
@@ -187,6 +244,7 @@ class _PlayViewState extends State<_PlayView> {
             // protagonist is the player's own character, so it stays editable.)
             isSentientWorld: state.template?.isSentient ?? false,
             onFocus: (id) {
+              _pendingRealmMenuReturn = false;
               cubit.updateSettings(focusCharacterId: id);
               Navigator.pop(sheetCtx);
               String? name;
@@ -204,6 +262,7 @@ class _PlayViewState extends State<_PlayView> {
               );
             },
             onClearFocus: () {
+              _pendingRealmMenuReturn = false;
               cubit.updateSettings(clearFocusCharacter: true);
               Navigator.pop(sheetCtx);
               _showSceneSnack(
@@ -215,7 +274,9 @@ class _PlayViewState extends State<_PlayView> {
           ),
         ),
       ),
-    );
+    ).then((_) {
+      if (mounted) _maybeRestoreRealmMenu(context);
+    });
   }
 
   void _showCharacterEdit(
@@ -738,13 +799,10 @@ class _PlayViewState extends State<_PlayView> {
                     title: title,
                     accent: accent,
                     isConnected: state.isConnected,
-                    hasInstance: state.instance != null,
                     onBack: () => context.pop(),
-                    onChronicle: () => context.push(
-                      '/chronicle/${context.read<PlayCubit>().instanceId}',
-                    ),
-                    onMenu: () => _showChatMenu(context),
-                    onThoughts: () => _showThoughtsSheet(context),
+                    onOpenMenu: state.instance != null
+                        ? () => _showRealmMenu(context)
+                        : null,
                   ),
 
                   if (state.instance != null &&
@@ -931,21 +989,15 @@ class _PlayHeader extends StatelessWidget {
   final String title;
   final Color accent;
   final bool isConnected;
-  final bool hasInstance;
   final VoidCallback onBack;
-  final VoidCallback onChronicle;
-  final VoidCallback onMenu;
-  final VoidCallback onThoughts;
+  final VoidCallback? onOpenMenu;
 
   const _PlayHeader({
     required this.title,
     required this.accent,
     required this.isConnected,
-    required this.hasInstance,
     required this.onBack,
-    required this.onChronicle,
-    required this.onMenu,
-    required this.onThoughts,
+    this.onOpenMenu,
   });
 
   @override
@@ -1018,28 +1070,13 @@ class _PlayHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              if (hasInstance) ...[
+              if (onOpenMenu != null)
                 _RuneButton(
-                  assetIcon: AppIcons.chronicle,
-                  onTap: onChronicle,
+                  icon: Icons.menu_rounded,
+                  onTap: onOpenMenu!,
                   accent: EverloreTheme.gold,
-                  tooltip: 'Lore Tome',
+                  tooltip: 'Realm menu',
                 ),
-                const SizedBox(width: 4),
-                _RuneButton(
-                  icon: Icons.psychology_alt_outlined,
-                  onTap: onThoughts,
-                  accent: EverloreTheme.cyanBright,
-                  tooltip: 'Character Thoughts',
-                ),
-                const SizedBox(width: 4),
-                _RuneButton(
-                  icon: Icons.more_vert,
-                  onTap: onMenu,
-                  accent: EverloreTheme.ash,
-                  tooltip: 'More',
-                ),
-              ],
             ],
           ),
         ),
@@ -1095,18 +1132,197 @@ class _OlderHistoryButton extends StatelessWidget {
   }
 }
 
+/// Forged bottom sheet — Chronicle, Thoughts, and Scene Settings in one place.
+class _RealmMenuSheet extends StatelessWidget {
+  final VoidCallback onChronicle;
+  final VoidCallback onThoughts;
+  final VoidCallback onSettings;
+
+  const _RealmMenuSheet({
+    required this.onChronicle,
+    required this.onThoughts,
+    required this.onSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: EverloreTheme.void2,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(top: BorderSide(color: Color(0x33D8B878))),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Realm Menu',
+                style: EverloreTheme.serifDisplay(
+                  size: 17,
+                  color: EverloreTheme.parchment,
+                  weight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Chronicle, cast, and how this story flows.',
+                style: EverloreTheme.ui(
+                  size: 12,
+                  color: EverloreTheme.ash,
+                ),
+              ),
+              const SizedBox(height: 18),
+              _RealmMenuChoice(
+                icon: AppIcons.chronicle,
+                title: 'Chronicle',
+                subtitle: 'Read every turn in this story.',
+                onTap: onChronicle,
+              ),
+              const SizedBox(height: 12),
+              _RealmMenuChoice(
+                materialIcon: Icons.psychology_alt_outlined,
+                title: 'Thoughts',
+                subtitle: 'Who is here and who you are speaking to.',
+                onTap: onThoughts,
+              ),
+              const SizedBox(height: 12),
+              _RealmMenuChoice(
+                icon: AppIcons.voice,
+                title: 'Scene Settings',
+                subtitle: 'Voice, length, and narration style.',
+                onTap: onSettings,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RealmMenuChoice extends StatelessWidget {
+  final String? icon;
+  final IconData? materialIcon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _RealmMenuChoice({
+    this.icon,
+    this.materialIcon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  }) : assert(icon != null || materialIcon != null);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [EverloreTheme.void3, EverloreTheme.void2],
+          ),
+          border: Border.all(
+            color: EverloreTheme.goldDim.withValues(alpha: 0.25),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 8,
+              offset: const Offset(2, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  center: const Alignment(-0.3, -0.4),
+                  colors: [
+                    EverloreTheme.gold.withValues(alpha: 0.22),
+                    EverloreTheme.void2,
+                  ],
+                ),
+                border: Border.all(
+                  color: EverloreTheme.gold.withValues(alpha: 0.4),
+                ),
+              ),
+              child: icon != null
+                  ? EvIcon(icon!, size: 24)
+                  : Icon(
+                      materialIcon,
+                      color: EverloreTheme.gold,
+                      size: 22,
+                    ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: EverloreTheme.parchment,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontFamily: EverloreTheme.uiFamily,
+                      color: EverloreTheme.ash,
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: EverloreTheme.ash, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Small glowing icon button used in the header chrome.
 class _RuneButton extends StatelessWidget {
-  final IconData? icon;
-  final String? assetIcon;
+  final IconData icon;
   final VoidCallback onTap;
   final Color accent;
   final String? tooltip;
   final bool subtle;
 
   const _RuneButton({
-    this.icon,
-    this.assetIcon,
+    required this.icon,
     required this.onTap,
     required this.accent,
     this.tooltip,
@@ -1130,13 +1346,11 @@ class _RuneButton extends StatelessWidget {
             color: subtle ? Colors.transparent : accent.withValues(alpha: 0.25),
           ),
         ),
-        child: assetIcon != null
-            ? EvIcon(assetIcon!, size: subtle ? 18 : 22)
-            : Icon(
-                icon!,
-                color: subtle ? EverloreTheme.ash : accent,
-                size: subtle ? 18 : 19,
-              ),
+        child: Icon(
+          icon,
+          color: subtle ? EverloreTheme.ash : accent,
+          size: subtle ? 18 : 19,
+        ),
       ),
     );
     if (tooltip != null) return Tooltip(message: tooltip!, child: btn);

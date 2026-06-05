@@ -20,23 +20,45 @@ class PlayerInput extends StatefulWidget {
 class _PlayerInputState extends State<PlayerInput> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
+  final _focusedNotifier = ValueNotifier(false);
   bool _hasText = false;
 
   @override
   void initState() {
     super.initState();
-    _controller.addListener(() {
-      final has = _controller.text.trim().isNotEmpty;
-      if (has != _hasText) setState(() => _hasText = has);
-    });
-    _focusNode.addListener(() => setState(() {}));
+    _controller.addListener(_onTextChanged);
+    _focusNode.addListener(_onFocusChanged);
+    _focusedNotifier.value = _focusNode.hasFocus;
+  }
+
+  @override
+  void didUpdateWidget(PlayerInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isGenerating && widget.isGenerating) {
+      _focusNode.unfocus();
+    }
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_onTextChanged);
+    _focusNode.removeListener(_onFocusChanged);
     _controller.dispose();
     _focusNode.dispose();
+    _focusedNotifier.dispose();
     super.dispose();
+  }
+
+  void _onTextChanged() {
+    final has = _controller.text.trim().isNotEmpty;
+    if (has != _hasText) setState(() => _hasText = has);
+  }
+
+  void _onFocusChanged() {
+    final focused = _focusNode.hasFocus;
+    if (_focusedNotifier.value != focused) {
+      _focusedNotifier.value = focused;
+    }
   }
 
   void _submit() {
@@ -44,38 +66,48 @@ class _PlayerInputState extends State<PlayerInput> {
     if (text.isEmpty || widget.isGenerating) return;
     widget.onSend(text);
     _controller.clear();
-    _focusNode.requestFocus();
+    _focusNode.unfocus();
   }
 
   void _insertNarrationMarkers() {
-    if (widget.isGenerating) return;
+    if (widget.isGenerating || !widget.isConnected) return;
 
-    final value = _controller.value;
-    final text = value.text;
-    final selection = value.selection;
-    final start = selection.isValid ? selection.start : text.length;
-    final end = selection.isValid ? selection.end : text.length;
-    final lo = start < end ? start : end;
-    final hi = start < end ? end : start;
-    final selected = text.substring(lo, hi);
-    final markerText = selected.isEmpty ? '**' : '*$selected*';
-    final next = text.replaceRange(lo, hi, markerText);
-    final cursor = selected.isEmpty ? lo + 1 : hi + 2;
+    void insert() {
+      final value = _controller.value;
+      final text = value.text;
+      final selection = value.selection;
+      final start = selection.isValid ? selection.start : text.length;
+      final end = selection.isValid ? selection.end : text.length;
+      final lo = start < end ? start : end;
+      final hi = start < end ? end : start;
+      final selected = text.substring(lo, hi);
+      final markerText = selected.isEmpty ? '**' : '*$selected*';
+      final next = text.replaceRange(lo, hi, markerText);
+      final cursor = selected.isEmpty ? lo + 1 : lo + markerText.length;
 
-    _controller.value = TextEditingValue(
-      text: next,
-      selection: TextSelection.collapsed(offset: cursor),
-    );
-    _focusNode.requestFocus();
+      _controller.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: cursor),
+        composing: TextRange.empty,
+      );
+    }
+
+    if (!_focusNode.hasFocus) {
+      _focusNode.requestFocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) insert();
+      });
+      return;
+    }
+    insert();
   }
 
   @override
   Widget build(BuildContext context) {
     final canSend = _hasText && !widget.isGenerating && widget.isConnected;
-    final focused = _focusNode.hasFocus;
+    final enabled = !widget.isGenerating && widget.isConnected;
 
     return Container(
-      // Bottom scrim so the field floats over the immersive backdrop
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -94,74 +126,52 @@ class _PlayerInputState extends State<PlayerInput> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      decoration: BoxDecoration(
-                        color: EverloreTheme.void2.withValues(alpha: 0.85),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: focused
-                              ? EverloreTheme.gold.withValues(alpha: 0.55)
-                              : EverloreTheme.goldDim.withValues(alpha: 0.22),
-                          width: focused ? 1.4 : 1,
-                        ),
-                        boxShadow: focused
-                            ? EverloreTheme.glow(
-                                EverloreTheme.gold,
-                                blur: 14,
-                                alpha: 0.12,
-                              )
-                            : null,
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          _NarrationMarkerButton(
-                            enabled: !widget.isGenerating && widget.isConnected,
-                            onTap: _insertNarrationMarkers,
-                          ),
-                          Container(
-                            width: 1,
-                            height: 24,
-                            margin: const EdgeInsets.only(bottom: 10),
-                            color: EverloreTheme.goldDim.withValues(
-                              alpha: 0.16,
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: _focusedNotifier,
+                      builder: (context, focused, child) {
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          decoration: BoxDecoration(
+                            color: EverloreTheme.void2.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: focused
+                                  ? EverloreTheme.gold.withValues(alpha: 0.55)
+                                  : EverloreTheme.goldDim.withValues(alpha: 0.22),
+                              width: focused ? 1.4 : 1,
                             ),
+                            boxShadow: focused
+                                ? EverloreTheme.glow(
+                                    EverloreTheme.gold,
+                                    blur: 14,
+                                    alpha: 0.12,
+                                  )
+                                : null,
                           ),
-                          Expanded(
-                            child: TextField(
-                              controller: _controller,
-                              focusNode: _focusNode,
-                              readOnly: widget.isGenerating,
-                              maxLines: 5,
-                              minLines: 1,
-                              style: EverloreTheme.ui(
-                                size: 15,
-                                color: EverloreTheme.parchment,
-                                height: 1.4,
+                          padding: const EdgeInsets.only(left: 2),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              _NarrationMarkerButton(
+                                enabled: enabled,
+                                focused: focused,
+                                onTap: _insertNarrationMarkers,
                               ),
-                              decoration: InputDecoration(
-                                hintText: _hintText(),
-                                hintStyle: EverloreTheme.ui(
-                                  size: 14,
-                                  color: EverloreTheme.ash.withValues(
-                                    alpha: 0.45,
-                                  ),
-                                  fontStyle: FontStyle.italic,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: const EdgeInsets.fromLTRB(
-                                  12,
-                                  12,
-                                  16,
-                                  12,
-                                ),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 11),
+                                child: _InputPrefixDivider(focused: focused),
                               ),
-                              textInputAction: TextInputAction.newline,
-                              onSubmitted: (_) => _submit(),
-                            ),
+                              Expanded(child: child!),
+                            ],
                           ),
-                        ],
+                        );
+                      },
+                      child: _ComposerTextField(
+                        controller: _controller,
+                        focusNode: _focusNode,
+                        enabled: enabled,
+                        hintText: _hintText(),
+                        onSubmit: enabled ? _submit : null,
                       ),
                     ),
                   ),
@@ -196,39 +206,130 @@ class _PlayerInputState extends State<PlayerInput> {
   }
 }
 
+/// Stable text field — kept out of focus-driven rebuilds so taps place a cursor
+/// instead of wedging selection on the last grapheme (especially around *).
+class _ComposerTextField extends StatefulWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool enabled;
+  final String hintText;
+  final VoidCallback? onSubmit;
+
+  const _ComposerTextField({
+    required this.controller,
+    required this.focusNode,
+    required this.enabled,
+    required this.hintText,
+    this.onSubmit,
+  });
+
+  @override
+  State<_ComposerTextField> createState() => _ComposerTextFieldState();
+}
+
+class _ComposerTextFieldState extends State<_ComposerTextField> {
+  void _onTap() {
+    // Let the platform handle the tap first, then collapse accidental
+    // single-character selections (common when retapping near * markers).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.focusNode.hasFocus) return;
+      _collapseStuckSingleCharSelection();
+    });
+  }
+
+  void _collapseStuckSingleCharSelection() {
+    final sel = widget.controller.selection;
+    if (!sel.isValid || sel.isCollapsed) return;
+    if (sel.end - sel.start != 1) return;
+    widget.controller.selection = TextSelection.collapsed(offset: sel.end);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      focusNode: widget.focusNode,
+      enabled: widget.enabled,
+      maxLines: 5,
+      minLines: 1,
+      style: EverloreTheme.ui(
+        size: 15,
+        color: EverloreTheme.parchment,
+        height: 1.4,
+      ),
+      decoration: InputDecoration(
+        isCollapsed: true,
+        filled: false,
+        hintText: widget.hintText,
+        hintStyle: EverloreTheme.ui(
+          size: 14,
+          color: EverloreTheme.ash.withValues(alpha: 0.45),
+          fontStyle: FontStyle.italic,
+        ),
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
+        contentPadding: const EdgeInsets.fromLTRB(8, 12, 16, 12),
+      ),
+      textInputAction: TextInputAction.newline,
+      onTap: _onTap,
+      onSubmitted: widget.onSubmit != null ? (_) => widget.onSubmit!() : null,
+    );
+  }
+}
+
+/// Hairline between the narration prefix and the text capture area.
+class _InputPrefixDivider extends StatelessWidget {
+  final bool focused;
+
+  const _InputPrefixDivider({required this.focused});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 22,
+      color: (focused ? EverloreTheme.gold : EverloreTheme.goldDim).withValues(
+        alpha: 0.28,
+      ),
+    );
+  }
+}
+
 class _NarrationMarkerButton extends StatelessWidget {
   final bool enabled;
+  final bool focused;
   final VoidCallback onTap;
 
-  const _NarrationMarkerButton({required this.enabled, required this.onTap});
+  const _NarrationMarkerButton({
+    required this.enabled,
+    required this.focused,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
-      message: 'Add narration/action markers',
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 7, 4, 7),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: enabled ? onTap : null,
-            child: SizedBox(
-              width: 34,
-              height: 32,
-              child: Center(
-                child: Text(
-                  '*',
-                  style: EverloreTheme.ui(
-                    size: 18,
-                    weight: FontWeight.w800,
-                    color: enabled
-                        ? EverloreTheme.gold.withValues(alpha: 0.9)
-                        : EverloreTheme.ash.withValues(alpha: 0.4),
-                    spacing: 0.5,
-                  ),
-                ),
-              ),
+      message: 'Wrap selection in *action* markers',
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: const BorderRadius.horizontal(left: Radius.circular(18)),
+        splashColor: EverloreTheme.gold.withValues(alpha: 0.08),
+        highlightColor: EverloreTheme.gold.withValues(alpha: 0.04),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 6, 12),
+          child: Text(
+            '**',
+            style: EverloreTheme.ui(
+              size: 17,
+              weight: FontWeight.w800,
+              color: !enabled
+                  ? EverloreTheme.ash.withValues(alpha: 0.35)
+                  : focused
+                  ? EverloreTheme.gold
+                  : EverloreTheme.gold.withValues(alpha: 0.75),
+              spacing: 0.5,
             ),
           ),
         ),
@@ -245,7 +346,7 @@ class _SendOrb extends StatelessWidget {
   const _SendOrb({
     required this.isGenerating,
     required this.canSend,
-    required this.onTap,
+    this.onTap,
   });
 
   @override
@@ -269,9 +370,6 @@ class _SendOrb extends StatelessWidget {
               ? Colors.transparent
               : EverloreTheme.goldDim.withValues(alpha: 0.2),
         ),
-        boxShadow: canSend
-            ? EverloreTheme.glow(EverloreTheme.gold, blur: 14, alpha: 0.4)
-            : null,
       ),
       child: ClipOval(
         child: Material(
