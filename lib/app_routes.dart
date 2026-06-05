@@ -6,6 +6,7 @@ import 'package:everlore/screens/auth_screen.dart';
 import 'package:everlore/screens/onboarding_interests_screen.dart';
 import 'package:everlore/screens/discover_screen.dart';
 import 'package:everlore/features/home/presentation/home_screen.dart';
+import 'package:everlore/features/home/presentation/realm_playthroughs_screen.dart';
 import 'package:everlore/features/play/presentation/play_screen.dart';
 import 'package:everlore/features/chronicle/presentation/chronicle_screen.dart';
 import 'package:everlore/features/templates/presentation/browse_screen.dart';
@@ -55,6 +56,13 @@ final router = GoRouter(
       path: '/templates/:templateId',
       name: 'template_detail',
       builder: (context, state) => TemplateDetailScreen(
+        templateId: state.pathParameters['templateId']!,
+      ),
+    ),
+    GoRoute(
+      path: '/realms/:templateId',
+      name: 'realm_stories',
+      builder: (context, state) => RealmPlaythroughsScreen(
         templateId: state.pathParameters['templateId']!,
       ),
     ),

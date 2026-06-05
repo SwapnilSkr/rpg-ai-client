@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../../core/network/api_client.dart';
+import '../../../shared/models/realm_play_status.dart';
 import '../../../shared/models/world_instance.dart';
 
 enum RealmChangeKind { created, updated, removed }
@@ -27,6 +28,20 @@ class HomeRepository {
       StreamController<RealmChange>.broadcast();
 
   static Stream<RealmChange> get realmChanges => _realmChanges.stream;
+
+  /// Fast check before entering a world — has the player been here before?
+  static Future<RealmPlayStatus> getPlayStatus(String templateId) async {
+    final response = await ApiClient.get('/instances/play-status/$templateId');
+    return RealmPlayStatus.fromJson(Map<String, dynamic>.from(response));
+  }
+
+  /// All in-progress stories for one world, with a one-line preview each.
+  static Future<RealmTemplateStories> getStoriesByTemplate(
+    String templateId,
+  ) async {
+    final response = await ApiClient.get('/instances/by-template/$templateId');
+    return RealmTemplateStories.fromJson(Map<String, dynamic>.from(response));
+  }
 
   static Future<List<WorldInstance>> getInstances({
     bool includeArchived = false,

@@ -3,6 +3,31 @@ import 'package:flutter/material.dart';
 import '../../app/theme/nexus_theme.dart';
 import 'neu.dart';
 
+/// Full-screen forged loader while a quick session check runs.
+Future<T?> showEverloreSessionLoading<T>(
+  BuildContext context, {
+  required String message,
+  required Future<T> Function() task,
+}) async {
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: EverloreTheme.void0.withValues(alpha: 0.88),
+    useRootNavigator: true,
+    builder: (_) => PopScope(
+      canPop: false,
+      child: Center(child: EverloreSessionLoader(message: message)),
+    ),
+  );
+  try {
+    return await task();
+  } finally {
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+}
+
 /// Compact forged-orbit loader for short session resolves (profile tab, etc.).
 /// Matches the splash sigil language without the full character theatre.
 class EverloreSessionLoader extends StatefulWidget {

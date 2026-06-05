@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../domain/realm_group.dart';
 import '../state/home_cubit.dart';
-import 'widgets/world_card.dart';
+import 'widgets/realm_group_card.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/app_icons.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
@@ -46,7 +47,7 @@ class _HomeView extends StatelessWidget {
               else if (state.instances.isEmpty)
                 const SliverFillRemaining(child: _EmptyView())
               else
-                _buildInstanceList(context, state),
+                _buildRealmList(context, state),
             ],
           );
         },
@@ -106,7 +107,9 @@ class _HomeView extends StatelessWidget {
     );
   }
 
-  Widget _buildInstanceList(BuildContext context, HomeState state) {
+  Widget _buildRealmList(BuildContext context, HomeState state) {
+    final groups = groupInstancesByRealm(state.instances);
+
     return SliverPadding(
       padding: const EdgeInsets.only(bottom: 110), // clear the floating nav
       sliver: SliverList(
@@ -117,7 +120,7 @@ class _HomeView extends StatelessWidget {
               child: Row(
                 children: [
                   Text(
-                    '${state.instances.length} ACTIVE',
+                    '${groups.length} ${groups.length == 1 ? 'WORLD' : 'WORLDS'}',
                     style: EverloreTheme.sectionHeader,
                   ),
                   const Spacer(),
@@ -132,24 +135,30 @@ class _HomeView extends StatelessWidget {
               ),
             );
           }
-          if (index > state.instances.length) return null;
-          final instance = state.instances[index - 1];
-          return WorldCard(
-            instance: instance,
+          if (index > groups.length) return null;
+          final group = groups[index - 1];
+          return RealmGroupCard(
+            group: group,
             onTap: () async {
-              await context.push('/play/${instance.id}');
+              if (group.hasMultipleStories) {
+                await context.push('/realms/${group.templateId}');
+              } else {
+                await context.push('/play/${group.latest.id}');
+              }
               if (context.mounted) {
                 unawaited(
                   context.read<HomeCubit>().loadInstances(silent: true),
                 );
               }
             },
-            onArchive: () =>
-                context.read<HomeCubit>().archiveInstance(instance.id),
-            onDelete: () =>
-                context.read<HomeCubit>().deleteInstance(instance.id),
+            onArchive: group.hasMultipleStories
+                ? null
+                : () => context.read<HomeCubit>().archiveInstance(group.latest.id),
+            onDelete: group.hasMultipleStories
+                ? null
+                : () => context.read<HomeCubit>().deleteInstance(group.latest.id),
           );
-        }, childCount: state.instances.length + 1),
+        }, childCount: groups.length + 1),
       ),
     );
   }

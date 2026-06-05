@@ -28,7 +28,7 @@ class _MyWorldsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<User?>(
-      future: AuthService.getCachedUser(),
+      future: AuthService.resolveSessionUser(),
       builder: (context, snapshot) {
         final user = snapshot.data;
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -40,7 +40,9 @@ class _MyWorldsView extends StatelessWidget {
           );
         }
         if (user == null) return _buildGate(context, _GateType.unauth);
-        if (user.tier == 'free') return _buildGate(context, _GateType.upgrade);
+        if (!AuthService.canAccessForge(user.tier)) {
+          return _buildGate(context, _GateType.upgrade);
+        }
         return _buildCreatorView(context);
       },
     );

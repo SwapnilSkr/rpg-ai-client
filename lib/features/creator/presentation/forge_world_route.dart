@@ -21,7 +21,7 @@ class ForgeWorldRoute extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<User?>(
-      future: AuthService.getCachedUser(),
+      future: AuthService.resolveSessionUser(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -49,7 +49,7 @@ class ForgeWorldRoute extends StatelessWidget {
             onPressed: () => context.push('/auth'),
           );
         }
-        if (user.tier == 'free') {
+        if (!AuthService.canAccessForge(user.tier)) {
           return _gateScaffold(
             context,
             title: 'Ascend to forge',

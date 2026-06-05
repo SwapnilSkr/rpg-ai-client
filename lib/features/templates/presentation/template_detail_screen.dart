@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/models/world_template.dart';
 import '../data/template_repository.dart';
-import '../../home/data/home_repository.dart';
+import '../../home/presentation/realm_entry_flow.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/mature_content_chip.dart';
 
@@ -18,7 +18,6 @@ class TemplateDetailScreen extends StatefulWidget {
 class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
   WorldTemplate? _template;
   bool _isLoading = true;
-  bool _isCreating = false;
 
   @override
   void initState() {
@@ -35,28 +34,13 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
     }
   }
 
-  Future<void> _createInstance() async {
-    if (_isCreating) return;
-    setState(() => _isCreating = true);
-    try {
-      final instance = await HomeRepository.createInstance(widget.templateId);
-      if (mounted) context.push('/play/${instance.id}');
-    } catch (e) {
-      if (mounted) {
-        final msg = e.toString().replaceFirst('Exception: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            backgroundColor: EverloreTheme.crimson.withValues(alpha: 0.9),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isCreating = false);
-    }
+  Future<void> _enterWorld() async {
+    final title = _template?.title ?? 'this world';
+    await enterRealmFromTemplate(
+      context,
+      templateId: widget.templateId,
+      worldTitle: title,
+    );
   }
 
   @override
@@ -350,7 +334,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                 child: ElevatedButton(
-                  onPressed: _isCreating ? null : _createInstance,
+                  onPressed: _enterWorld,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: EverloreTheme.gold,
                     foregroundColor: EverloreTheme.void0,
@@ -359,30 +343,21 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                         borderRadius: BorderRadius.circular(14)),
                     elevation: 0,
                   ),
-                  child: _isCreating
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: EverloreTheme.void0,
-                          ),
-                        )
-                      : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.explore, size: 18),
-                            SizedBox(width: 10),
-                            Text(
-                              'ENTER THIS WORLD',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                          ],
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.explore, size: 18),
+                      SizedBox(width: 10),
+                      Text(
+                        'ENTER THIS WORLD',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.5,
                         ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
