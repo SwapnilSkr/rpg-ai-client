@@ -28,6 +28,8 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _generationCompleteController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _generationStreamEndController =
+      StreamController<Map<String, dynamic>>.broadcast();
   final _memoriesCuratedController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _errorController = StreamController<Map<String, dynamic>>.broadcast();
@@ -45,6 +47,8 @@ class WsManager {
       _generationDeltaController.stream;
   Stream<Map<String, dynamic>> get onGenerationComplete =>
       _generationCompleteController.stream;
+  Stream<Map<String, dynamic>> get onGenerationStreamEnd =>
+      _generationStreamEndController.stream;
   Stream<Map<String, dynamic>> get onMemoriesCurated =>
       _memoriesCuratedController.stream;
   Stream<Map<String, dynamic>> get onError => _errorController.stream;
@@ -83,8 +87,7 @@ class WsManager {
     _reconnectAttempts = 0;
     await _openChannel();
 
-    _connectivitySub ??=
-        Connectivity().onConnectivityChanged.listen((result) {
+    _connectivitySub ??= Connectivity().onConnectivityChanged.listen((result) {
       if (result.isEmpty || result.first == ConnectivityResult.none) return;
       if (_userInitiatedDisconnect || _token == null) return;
       if (_isConnected && _channel != null) return;
@@ -95,8 +98,9 @@ class WsManager {
 
   Uri _playWsUri(String token) {
     final base = AppConfig.wsBaseUrl.replaceAll(RegExp(r'/$'), '');
-    return Uri.parse('$base/ws/play')
-        .replace(queryParameters: {'token': token});
+    return Uri.parse(
+      '$base/ws/play',
+    ).replace(queryParameters: {'token': token});
   }
 
   Future<void> _closeChannelOnly({required bool notifyDisconnected}) async {
@@ -175,12 +179,9 @@ class WsManager {
           _reconnectAttempts = 0;
           _connectionStateController.add(true);
           _pingTimer?.cancel();
-          _pingTimer = Timer.periodic(
-            const Duration(seconds: 25),
-            (_) {
-              if (_isConnected) send({'action': 'ping'});
-            },
-          );
+          _pingTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+            if (_isConnected) send({'action': 'ping'});
+          });
           _flushOfflineQueue();
         }
         break;
@@ -189,6 +190,9 @@ class WsManager {
         break;
       case 'generation_complete':
         _generationCompleteController.add(msg);
+        break;
+      case 'generation_stream_end':
+        _generationStreamEndController.add(msg);
         break;
       case 'memories_curated':
         _memoriesCuratedController.add(msg);
@@ -314,6 +318,7 @@ class WsManager {
     _connectivitySub?.cancel();
     _generationDeltaController.close();
     _generationCompleteController.close();
+    _generationStreamEndController.close();
     _memoriesCuratedController.close();
     _errorController.close();
     _connectionStateController.close();

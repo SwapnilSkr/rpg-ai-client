@@ -105,6 +105,7 @@ class PlayCubit extends Cubit<PlayState> {
   final String instanceId;
   late StreamSubscription _generationSub;
   late StreamSubscription _deltaSub;
+  late StreamSubscription _streamEndSub;
   late StreamSubscription _memorySub;
   late StreamSubscription _errorSub;
   late StreamSubscription _connectionSub;
@@ -115,6 +116,9 @@ class PlayCubit extends Cubit<PlayState> {
 
   /// Accumulates streamed narrative tokens for the in-progress turn.
   String _streamBuffer = '';
+  String _streamTarget = '';
+  Timer? _streamRevealTimer;
+  Timer? _generationWatchdog;
 
   /// In-progress streaming replay of an existing turn.
   String? _replayEventId;
@@ -125,7 +129,12 @@ class PlayCubit extends Cubit<PlayState> {
   /// loader so the bubble can never spin forever (dropped frame, stale lock,
   /// dead worker, …). Re-armed on every delta as a liveness signal.
   Timer? _replayWatchdog;
+  Timer? _replayRevealTimer;
   static const _replayTimeout = Duration(seconds: 45);
+  static const _generationFirstTokenTimeout = Duration(seconds: 75);
+  static const _generationQuietTimeout = Duration(seconds: 45);
+  static const _generationFinalizationTimeout = Duration(seconds: 90);
+  static const _streamRevealInterval = Duration(milliseconds: 18);
 
   /// A locally-chosen replay variant awaiting commit. The selection only
   /// becomes the canonical turn ("the truth") when the player takes their next
@@ -222,23 +231,31 @@ class PlayCubit extends Cubit<PlayState> {
       );
     });
 
-    // Tokens stream in here as the world weaves the tale — grow the in-progress
-    // turn's narrator panel in place so the player reads it as it's written.
+    // Tokens stream in here as the world weaves the tale. We buffer raw chunks
+    // and reveal them on a short cadence so large network frames do not snap
+    // abruptly into the narrator panel.
     _deltaSub = _ws.onGenerationDelta.listen((msg) {
       if (msg['instanceId']?.toString() != instanceId) return;
-      _streamBuffer += msg['delta']?.toString() ?? '';
+      _armGenerationWatchdog(_generationQuietTimeout);
+      _queueGenerationText(msg['delta']?.toString() ?? '');
+    });
 
-      final events = [...state.events];
-      final idx = events.lastIndexWhere((e) => e.isOptimistic);
-      if (idx < 0) return;
-      events[idx] = events[idx].copyWith(aiResponse: _streamBuffer);
-      emit(state.copyWith(events: events));
+    _streamEndSub = _ws.onGenerationStreamEnd.listen((msg) {
+      if (msg['instanceId']?.toString() != instanceId) return;
+      final narrative = msg['narrative']?.toString();
+      if (narrative != null && narrative.length > _streamTarget.length) {
+        _streamTarget = narrative;
+      }
+      _armGenerationWatchdog(_generationFinalizationTimeout);
+      _startGenerationReveal();
     });
 
     _generationSub = _ws.onGenerationComplete.listen((msg) {
       if (msg['instanceId']?.toString() != instanceId) return;
 
       final eventData = msg['event'] as Map<String, dynamic>;
+      final narrative = eventData['narrative']?.toString() ?? _streamTarget;
+      _finishGenerationReveal(narrative);
       final events = [...state.events];
       final idx = events.lastIndexWhere((e) => e.isOptimistic);
       final playerInput = idx >= 0 ? events[idx].playerInput : null;
@@ -251,7 +268,7 @@ class PlayCubit extends Cubit<PlayState> {
         sequence: eventData['sequence'] ?? 0,
         type: 'narration',
         playerInput: playerInput,
-        aiResponse: eventData['narrative'] ?? _streamBuffer,
+        aiResponse: narrative,
         sceneTag: eventData['scene_tag'],
         emotionalTone: eventData['emotional_tone'],
         modelUsed: eventData['model_used']?.toString() ?? '',
@@ -265,7 +282,9 @@ class PlayCubit extends Cubit<PlayState> {
       }
 
       LocalDb.insertEvent(finalEvent);
+      _clearGenerationTimers();
       _streamBuffer = '';
+      _streamTarget = '';
       final trimmedEvents = _trimEvents(events);
       final nextTotalEvents = finalEvent.sequence > state.totalEvents
           ? finalEvent.sequence
@@ -290,13 +309,7 @@ class PlayCubit extends Cubit<PlayState> {
       final eventId = msg['eventId']?.toString();
       if (eventId == null || eventId != _replayEventId) return;
       _armReplayWatchdog(); // tokens are flowing — keep the timeout fresh
-      _replayBuffer += msg['delta']?.toString() ?? '';
-
-      final events = [...state.events];
-      final idx = events.indexWhere((e) => e.id == eventId);
-      if (idx < 0) return;
-      events[idx] = events[idx].copyWith(aiResponse: _replayBuffer);
-      emit(state.copyWith(events: events));
+      _queueReplayText(eventId, msg['delta']?.toString() ?? '');
     });
 
     _replayCompleteSub = _ws.onReplayComplete.listen((msg) {
@@ -314,6 +327,7 @@ class PlayCubit extends Cubit<PlayState> {
           const <ReplayVariant>[];
       final selected = (msg['selected_index'] as num?)?.toInt() ?? 0;
       final narrative = msg['narrative']?.toString() ?? _replayBuffer;
+      _finishReplayReveal(eventId, narrative);
       final selectedVariant = selected >= 0 && selected < variants.length
           ? variants[selected]
           : null;
@@ -356,10 +370,26 @@ class PlayCubit extends Cubit<PlayState> {
         return;
       }
 
-      // Outside replay, a stale in-progress notice is benign — ignore it.
-      if (msg['code'] == 'GENERATION_IN_PROGRESS') return;
+      if (msg['code'] == 'GENERATION_IN_PROGRESS') {
+        final events = [...state.events];
+        final idx = events.lastIndexWhere(
+          (e) => e.isOptimistic && ((e.aiResponse ?? '').trim().isEmpty),
+        );
+        if (idx >= 0) events.removeAt(idx);
+        _clearGenerationTimers();
+        emit(
+          state.copyWith(
+            events: events,
+            isGenerating: false,
+            error: 'The previous response is still syncing. Try again shortly.',
+          ),
+        );
+        return;
+      }
 
       _streamBuffer = '';
+      _streamTarget = '';
+      _clearGenerationTimers();
       // Drop the in-progress optimistic turn so the player can retry cleanly.
       final events = state.events.where((e) => !e.isOptimistic).toList();
       emit(
@@ -419,6 +449,8 @@ class PlayCubit extends Cubit<PlayState> {
     await _flushPendingVariant();
 
     _streamBuffer = '';
+    _streamTarget = '';
+    _clearGenerationTimers();
     final optimisticEvent = GameEvent.optimistic(
       instanceId: instanceId,
       playerInput: message,
@@ -434,6 +466,7 @@ class PlayCubit extends Cubit<PlayState> {
       ),
     );
 
+    _armGenerationWatchdog(_generationFirstTokenTimeout);
     _ws.sendChatMessage(instanceId, message);
   }
 
@@ -444,6 +477,8 @@ class PlayCubit extends Cubit<PlayState> {
     await _flushPendingVariant();
 
     _streamBuffer = '';
+    _streamTarget = '';
+    _clearGenerationTimers();
     final optimisticEvent = GameEvent.optimistic(
       instanceId: instanceId,
       playerInput: '',
@@ -459,6 +494,7 @@ class PlayCubit extends Cubit<PlayState> {
       ),
     );
 
+    _armGenerationWatchdog(_generationFirstTokenTimeout);
     _ws.sendContinue(instanceId);
   }
 
@@ -699,10 +735,139 @@ class PlayCubit extends Cubit<PlayState> {
     });
   }
 
+  void _armGenerationWatchdog(Duration timeout) {
+    _generationWatchdog?.cancel();
+    _generationWatchdog = Timer(timeout, () {
+      if (!state.isGenerating || state.replayingEventId != null) return;
+
+      _finishGenerationReveal(_streamTarget);
+      final events = [...state.events];
+      final idx = events.lastIndexWhere((e) => e.isOptimistic);
+      final hasVisibleText =
+          idx >= 0 && ((events[idx].aiResponse ?? '').trim().isNotEmpty);
+
+      if (hasVisibleText) {
+        emit(
+          state.copyWith(
+            events: events,
+            isGenerating: false,
+            error:
+                'The response is still being saved. Please wait a moment before sending again.',
+          ),
+        );
+        return;
+      }
+
+      _streamBuffer = '';
+      _streamTarget = '';
+      emit(
+        state.copyWith(
+          events: events.where((e) => !e.isOptimistic).toList(),
+          isGenerating: false,
+          error: 'The response timed out. Please try again.',
+        ),
+      );
+    });
+  }
+
+  void _clearGenerationTimers() {
+    _generationWatchdog?.cancel();
+    _generationWatchdog = null;
+    _streamRevealTimer?.cancel();
+    _streamRevealTimer = null;
+  }
+
+  void _queueGenerationText(String chunk) {
+    if (chunk.isEmpty) return;
+    _streamTarget += chunk;
+    _startGenerationReveal();
+  }
+
+  void _startGenerationReveal() {
+    if (_streamRevealTimer != null) return;
+    _streamRevealTimer = Timer.periodic(_streamRevealInterval, (_) {
+      if (_streamBuffer.length >= _streamTarget.length) {
+        _streamRevealTimer?.cancel();
+        _streamRevealTimer = null;
+        return;
+      }
+
+      final remaining = _streamTarget.length - _streamBuffer.length;
+      final step = remaining <= 18
+          ? remaining
+          : (remaining / 3).ceil().clamp(8, 36);
+      _streamBuffer = _streamTarget.substring(0, _streamBuffer.length + step);
+      _replaceOptimisticAiResponse(_streamBuffer);
+    });
+  }
+
+  void _finishGenerationReveal(String narrative) {
+    _streamRevealTimer?.cancel();
+    _streamRevealTimer = null;
+    if (narrative.isEmpty) return;
+    _streamTarget = narrative;
+    _streamBuffer = narrative;
+    _replaceOptimisticAiResponse(narrative);
+  }
+
+  void _replaceOptimisticAiResponse(String text) {
+    if (text.isEmpty || isClosed) return;
+    final events = [...state.events];
+    final idx = events.lastIndexWhere((e) => e.isOptimistic);
+    if (idx < 0) return;
+    events[idx] = events[idx].copyWith(aiResponse: text);
+    emit(state.copyWith(events: events));
+  }
+
+  void _queueReplayText(String eventId, String chunk) {
+    if (chunk.isEmpty) return;
+    _replayBuffer += chunk;
+    if (_replayRevealTimer != null) return;
+    _replayRevealTimer = Timer.periodic(_streamRevealInterval, (_) {
+      final events = [...state.events];
+      final idx = events.indexWhere((e) => e.id == eventId);
+      if (idx < 0) {
+        _replayRevealTimer?.cancel();
+        _replayRevealTimer = null;
+        return;
+      }
+
+      final current = events[idx].aiResponse ?? '';
+      if (current.length >= _replayBuffer.length) {
+        _replayRevealTimer?.cancel();
+        _replayRevealTimer = null;
+        return;
+      }
+
+      final remaining = _replayBuffer.length - current.length;
+      final step = remaining <= 18
+          ? remaining
+          : (remaining / 3).ceil().clamp(8, 36);
+      events[idx] = events[idx].copyWith(
+        aiResponse: _replayBuffer.substring(0, current.length + step),
+      );
+      emit(state.copyWith(events: events));
+    });
+  }
+
+  void _finishReplayReveal(String eventId, String narrative) {
+    _replayRevealTimer?.cancel();
+    _replayRevealTimer = null;
+    _replayBuffer = narrative;
+    final events = [...state.events];
+    final idx = events.indexWhere((e) => e.id == eventId);
+    if (idx >= 0) {
+      events[idx] = events[idx].copyWith(aiResponse: narrative);
+      emit(state.copyWith(events: events));
+    }
+  }
+
   /// Clear all in-flight replay bookkeeping (success path).
   void _endReplay() {
     _replayWatchdog?.cancel();
     _replayWatchdog = null;
+    _replayRevealTimer?.cancel();
+    _replayRevealTimer = null;
     _replayEventId = null;
     _replayBuffer = '';
     _replayOriginalResponse = null;
@@ -723,6 +888,8 @@ class PlayCubit extends Cubit<PlayState> {
     }
     _replayWatchdog?.cancel();
     _replayWatchdog = null;
+    _replayRevealTimer?.cancel();
+    _replayRevealTimer = null;
     _replayEventId = null;
     _replayBuffer = '';
     _replayOriginalResponse = null;
@@ -783,8 +950,11 @@ class PlayCubit extends Cubit<PlayState> {
   @override
   Future<void> close() async {
     _replayWatchdog?.cancel();
+    _clearGenerationTimers();
+    _replayRevealTimer?.cancel();
     await _generationSub.cancel();
     await _deltaSub.cancel();
+    await _streamEndSub.cancel();
     await _memorySub.cancel();
     await _errorSub.cancel();
     await _connectionSub.cancel();

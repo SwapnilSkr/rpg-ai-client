@@ -53,7 +53,7 @@ class NarrativeBubble extends StatelessWidget {
                   onReplay: null,
                   onSelectReplayVariant: onSelectReplayVariant,
                 )
-              : const _GeneratingIndicator(label: 'Re-weaving this turn…')
+              : const _GeneratingIndicator(label: 'Re-weaving this turn')
         else if (hasProse)
           GestureDetector(
             onLongPress: onLongPress,
@@ -641,7 +641,7 @@ List<InlineSpan> _narrativeSpans(
 
 class _GeneratingIndicator extends StatefulWidget {
   final String label;
-  const _GeneratingIndicator({this.label = 'The world is weaving your tale…'});
+  const _GeneratingIndicator({this.label = 'The world is weaving'});
 
   @override
   State<_GeneratingIndicator> createState() => _GeneratingIndicatorState();
@@ -657,8 +657,8 @@ class _GeneratingIndicatorState extends State<_GeneratingIndicator>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat(reverse: true);
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
     _pulse = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
   }
 
@@ -685,26 +685,44 @@ class _GeneratingIndicatorState extends State<_GeneratingIndicator>
         builder: (_, __) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.auto_stories,
-              size: 14,
-              color: EverloreTheme.gold.withValues(
-                alpha: 0.4 + 0.4 * _pulse.value,
-              ),
-            ),
-            const SizedBox(width: 12),
             Text(
               widget.label,
               style: EverloreTheme.ui(
                 size: 14,
-                color: EverloreTheme.ash.withValues(
-                  alpha: 0.5 + 0.3 * _pulse.value,
-                ),
+                color: EverloreTheme.ash.withValues(alpha: 0.78),
                 spacing: 0.2,
                 fontStyle: FontStyle.italic,
               ).copyWith(fontFamily: GoogleFonts.ebGaramond().fontFamily),
             ),
+            const SizedBox(width: 8),
+            for (var i = 0; i < 3; i++) ...[
+              _LoadingDot(progress: (_controller.value + i * 0.18) % 1),
+              if (i < 2) const SizedBox(width: 5),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingDot extends StatelessWidget {
+  final double progress;
+  const _LoadingDot({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    final lift = progress < 0.5 ? progress * 2 : (1 - progress) * 2;
+    return Transform.translate(
+      offset: Offset(0, -3 * lift),
+      child: Opacity(
+        opacity: 0.35 + 0.55 * lift,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: EverloreTheme.gold,
+            shape: BoxShape.circle,
+          ),
+          child: const SizedBox(width: 6, height: 6),
         ),
       ),
     );
