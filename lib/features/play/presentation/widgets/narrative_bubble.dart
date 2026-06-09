@@ -26,6 +26,11 @@ class NarrativeBubble extends StatelessWidget {
   final List<String> characterNames;
   final ValueChanged<String>? onCharacterTap;
 
+  /// Known world entities (places, things, factions) harvested from memory
+  /// atoms — occurrences become tappable links into a memory lens.
+  final List<String> loreEntities;
+  final ValueChanged<String>? onEntityTap;
+
   const NarrativeBubble({
     super.key,
     required this.event,
@@ -37,6 +42,8 @@ class NarrativeBubble extends StatelessWidget {
     this.isStreaming = false,
     this.characterNames = const [],
     this.onCharacterTap,
+    this.loreEntities = const [],
+    this.onEntityTap,
   });
 
   @override
@@ -91,6 +98,8 @@ class NarrativeBubble extends StatelessWidget {
               // every frame and would churn gesture recognizers.
               characterNames: isStreaming ? const [] : characterNames,
               onCharacterTap: isStreaming ? null : onCharacterTap,
+              loreEntities: isStreaming ? const [] : loreEntities,
+              onEntityTap: isStreaming ? null : onEntityTap,
             ),
           ),
         ] else if (event.isOptimistic)
@@ -319,6 +328,8 @@ class _NarratorPanel extends StatelessWidget {
   final bool isStreaming;
   final List<String> characterNames;
   final ValueChanged<String>? onCharacterTap;
+  final List<String> loreEntities;
+  final ValueChanged<String>? onEntityTap;
 
   const _NarratorPanel({
     required this.text,
@@ -332,6 +343,8 @@ class _NarratorPanel extends StatelessWidget {
     this.isStreaming = false,
     this.characterNames = const [],
     this.onCharacterTap,
+    this.loreEntities = const [],
+    this.onEntityTap,
   });
 
   @override
@@ -379,6 +392,8 @@ class _NarratorPanel extends StatelessWidget {
                     text: text,
                     characterNames: characterNames,
                     onCharacterTap: onCharacterTap,
+                    loreEntities: loreEntities,
+                    onEntityTap: onEntityTap,
                   ),
                   if (isStreaming) ...[
                     const SizedBox(height: 10),
@@ -692,11 +707,15 @@ class _ProseText extends StatefulWidget {
   final String text;
   final List<String> characterNames;
   final ValueChanged<String>? onCharacterTap;
+  final List<String> loreEntities;
+  final ValueChanged<String>? onEntityTap;
 
   const _ProseText({
     required this.text,
     this.characterNames = const [],
     this.onCharacterTap,
+    this.loreEntities = const [],
+    this.onEntityTap,
   });
 
   @override
@@ -719,11 +738,18 @@ class _ProseTextState extends State<_ProseText> {
     _recognizers.clear();
   }
 
-  /// Split [span]'s text on character-name occurrences, linking each match.
-  List<InlineSpan> _linkNames(TextSpan span, RegExp namePattern) {
+  /// Split [span]'s text on entity occurrences, linking each match to its
+  /// handler. [resolve] maps a matched term to its tap callback and link style
+  /// (characters route to bonds in gold; lore routes to the memory lens in a
+  /// subtler dotted treatment).
+  List<InlineSpan> _linkEntities(
+    TextSpan span,
+    RegExp pattern,
+    ({VoidCallback? onTap, TextStyle style}) Function(String matched) resolve,
+  ) {
     final text = span.text ?? '';
     if (text.isEmpty) return [span];
-    final matches = namePattern.allMatches(text).toList();
+    final matches = pattern.allMatches(text).toList();
     if (matches.isEmpty) return [span];
 
     final out = <InlineSpan>[];
@@ -733,19 +759,14 @@ class _ProseTextState extends State<_ProseText> {
         out.add(TextSpan(text: text.substring(cursor, m.start), style: span.style));
       }
       final name = m.group(0)!;
-      final recognizer = TapGestureRecognizer()
-        ..onTap = () => widget.onCharacterTap?.call(name);
+      final r = resolve(name);
+      final recognizer = TapGestureRecognizer()..onTap = r.onTap;
       _recognizers.add(recognizer);
       out.add(
         TextSpan(
           text: name,
           recognizer: recognizer,
-          style: (span.style ?? const TextStyle()).copyWith(
-            color: EverloreTheme.gold.withValues(alpha: 0.95),
-            decoration: TextDecoration.underline,
-            decorationColor: EverloreTheme.gold.withValues(alpha: 0.35),
-            decorationThickness: 1,
-          ),
+          style: (span.style ?? const TextStyle()).merge(r.style),
         ),
       );
       cursor = m.end;
@@ -763,15 +784,56 @@ class _ProseTextState extends State<_ProseText> {
 
     var spans = _narrativeSpans(widget.text);
 
-    final names = widget.characterNames
-        .where((n) => n.trim().length >= 3)
-        .map(RegExp.escape)
-        .toList();
-    if (names.isNotEmpty && widget.onCharacterTap != null) {
-      final pattern = RegExp('\\b(?:${names.join('|')})\\b');
+    // Characters take priority over lore when a term appears in both sets.
+    final charLower = <String>{
+      for (final n in widget.characterNames)
+        if (n.trim().length >= 3) n.toLowerCase(),
+    };
+    final loreLower = <String>{
+      for (final n in widget.loreEntities)
+        if (n.trim().length >= 4 && !charLower.contains(n.toLowerCase()))
+          n.toLowerCase(),
+    };
+
+    final linkChars = charLower.isNotEmpty && widget.onCharacterTap != null;
+    final linkLore = loreLower.isNotEmpty && widget.onEntityTap != null;
+
+    if (linkChars || linkLore) {
+      // One combined pattern, longest term first so "Ashen City" wins over
+      // "Ash". Matching is case-sensitive — these are proper nouns in prose.
+      final terms = <String>[
+        if (linkChars) ...widget.characterNames.where((n) => n.trim().length >= 3),
+        if (linkLore)
+          ...widget.loreEntities.where((n) =>
+              n.trim().length >= 4 && !charLower.contains(n.toLowerCase())),
+      ]..sort((a, b) => b.length.compareTo(a.length));
+      final escaped = terms.map(RegExp.escape).join('|');
+      final pattern = RegExp('\\b(?:$escaped)\\b');
+
+      final charStyle = TextStyle(
+        color: EverloreTheme.gold.withValues(alpha: 0.95),
+        decoration: TextDecoration.underline,
+        decorationColor: EverloreTheme.gold.withValues(alpha: 0.35),
+        decorationThickness: 1,
+      );
+      final loreStyle = TextStyle(
+        color: EverloreTheme.parchment.withValues(alpha: 0.92),
+        decoration: TextDecoration.underline,
+        decorationStyle: TextDecorationStyle.dotted,
+        decorationColor: EverloreTheme.goldDim.withValues(alpha: 0.5),
+        decorationThickness: 1,
+      );
+
+      ({VoidCallback? onTap, TextStyle style}) resolve(String matched) {
+        if (charLower.contains(matched.toLowerCase())) {
+          return (onTap: () => widget.onCharacterTap?.call(matched), style: charStyle);
+        }
+        return (onTap: () => widget.onEntityTap?.call(matched), style: loreStyle);
+      }
+
       spans = [
         for (final s in spans)
-          if (s is TextSpan) ..._linkNames(s, pattern) else s,
+          if (s is TextSpan) ..._linkEntities(s, pattern, resolve) else s,
       ];
     }
 

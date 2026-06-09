@@ -157,7 +157,14 @@ class _PlayViewState extends State<_PlayView> {
                 label: 'What $name remembers of you',
                 onTap: () {
                   Navigator.pop(sheetCtx);
-                  _showCharacterMemories(context, cubit, character);
+                  _showEntityMemories(
+                    context,
+                    cubit,
+                    name,
+                    title: 'What $name remembers',
+                    emptyText:
+                        'Nothing yet — your story together is still unwritten.',
+                  );
                 },
               ),
             ],
@@ -167,14 +174,38 @@ class _PlayViewState extends State<_PlayView> {
     );
   }
 
-  /// "What this character remembers about you" — memory atoms filtered by
-  /// subject, straight from the rich-atom layer.
-  void _showCharacterMemories(
+  /// Non-character world entities (places, things, factions) tagged on memory
+  /// atoms, deduped case-insensitively and bounded. These become the tappable
+  /// lore links in the prose; character names are handled separately.
+  List<String> _loreEntities(PlayState state) {
+    final charLower = {
+      for (final c in state.characters) c.canonicalName.toLowerCase(),
+    };
+    final seen = <String>{};
+    final out = <String>[];
+    for (final m in state.memories) {
+      for (final e in m.entities) {
+        final t = e.trim();
+        if (t.length < 4) continue;
+        final l = t.toLowerCase();
+        if (charLower.contains(l) || seen.contains(l)) continue;
+        seen.add(l);
+        out.add(t);
+        if (out.length >= 40) return out;
+      }
+    }
+    return out;
+  }
+
+  /// A memory lens for any entity (character, place, thing) — the rich-atom
+  /// memories that concern [name], titled by the caller.
+  void _showEntityMemories(
     BuildContext context,
     PlayCubit cubit,
-    CharacterProfile character,
-  ) {
-    final name = character.canonicalName;
+    String name, {
+    required String title,
+    required String emptyText,
+  }) {
     final relevant = cubit.state.memories
         .where((m) => m.concerns(name))
         .toList()
@@ -194,7 +225,7 @@ class _PlayViewState extends State<_PlayView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'What $name remembers',
+                title,
                 style: EverloreTheme.serifDisplay(
                   size: 18,
                   color: EverloreTheme.parchment,
@@ -203,7 +234,7 @@ class _PlayViewState extends State<_PlayView> {
               const SizedBox(height: 12),
               if (relevant.isEmpty)
                 Text(
-                  'Nothing yet — your story together is still unwritten.',
+                  emptyText,
                   style: EverloreTheme.ui(
                     size: 13,
                     color: EverloreTheme.ash,
@@ -1114,6 +1145,9 @@ class _PlayViewState extends State<_PlayView> {
                                 state.events.length +
                                 (state.hasOlderEvents ? 1 : 0) +
                                 (showChoices ? 1 : 0);
+                            // World entities (places/things) harvested from
+                            // memory atoms — computed once for all bubbles.
+                            final loreEntities = _loreEntities(state);
                             return ListView.builder(
                             controller: _scrollController,
                             padding: const EdgeInsets.fromLTRB(2, 16, 2, 20),
@@ -1197,6 +1231,15 @@ class _PlayViewState extends State<_PlayView> {
                                     }
                                   }
                                 },
+                                loreEntities: loreEntities,
+                                onEntityTap: (name) => _showEntityMemories(
+                                  context,
+                                  context.read<PlayCubit>(),
+                                  name,
+                                  title: name,
+                                  emptyText:
+                                      'The story has not marked $name yet.',
+                                ),
                                 onLongPress:
                                     (!event.isOptimistic &&
                                         event.sequence > 0 &&

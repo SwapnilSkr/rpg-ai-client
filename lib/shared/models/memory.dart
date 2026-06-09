@@ -10,8 +10,11 @@ class Memory {
   final int accessCount;
   final DateTime? createdAt;
 
-  /// Canonical entity names this memory is about (rich-atom upgrade).
+  /// Canonical entity names this memory is about — who acted/felt (rich-atom).
   final List<String> subjects;
+
+  /// Canonical entity names acted upon or affected — places, things, people.
+  final List<String> objects;
 
   /// True while this memory is an open promise/conflict awaiting payoff.
   final bool unresolvedThread;
@@ -28,14 +31,18 @@ class Memory {
     this.accessCount = 0,
     this.createdAt,
     this.subjects = const [],
+    this.objects = const [],
     this.unresolvedThread = false,
   });
 
-  /// Whether this memory concerns [name] (by subject tag or text mention).
+  /// Every canonical entity this memory tags (subjects + objects).
+  List<String> get entities => [...subjects, ...objects];
+
+  /// Whether this memory concerns [name] (by entity tag or text mention).
   bool concerns(String name) {
     final n = name.toLowerCase();
     if (n.isEmpty) return false;
-    return subjects.any((s) => s.toLowerCase() == n) ||
+    return entities.any((s) => s.toLowerCase() == n) ||
         text.toLowerCase().contains(n);
   }
 
@@ -55,6 +62,9 @@ class Memory {
           : null,
       subjects:
           (json['subjects'] as List?)?.map((e) => e.toString()).toList() ??
+          const [],
+      objects:
+          (json['objects'] as List?)?.map((e) => e.toString()).toList() ??
           const [],
       unresolvedThread: json['unresolved_thread'] == true,
     );
@@ -77,6 +87,7 @@ class Memory {
       accessCount: accessCount,
       createdAt: createdAt,
       subjects: subjects,
+      objects: objects,
       unresolvedThread: unresolvedThread,
     );
   }
