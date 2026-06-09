@@ -1,16 +1,30 @@
 import 'package:flutter/material.dart';
 import '../../../../../app/theme/nexus_theme.dart';
+import 'advance_time_button.dart';
 
 class PlayerInput extends StatefulWidget {
   final bool isGenerating;
   final bool isConnected;
   final ValueChanged<String> onSend;
 
+  /// Tap on the hourglass — quiet continue. Null hides the control.
+  final VoidCallback? onContinue;
+
+  /// Long-press time-skip ('hours' | 'day' | 'days' | 'season').
+  final ValueChanged<String>? onAdvance;
+
+  /// One-shot composer prefill (bond actions: "Approach Mira…"). The input
+  /// consumes the value (fills + focuses) and resets it to null.
+  final ValueNotifier<String?>? draft;
+
   const PlayerInput({
     super.key,
     required this.isGenerating,
     required this.isConnected,
     required this.onSend,
+    this.onContinue,
+    this.onAdvance,
+    this.draft,
   });
 
   @override
@@ -29,6 +43,7 @@ class _PlayerInputState extends State<PlayerInput> {
     _controller.addListener(_onTextChanged);
     _focusNode.addListener(_onFocusChanged);
     _focusedNotifier.value = _focusNode.hasFocus;
+    widget.draft?.addListener(_consumeDraft);
   }
 
   @override
@@ -37,16 +52,32 @@ class _PlayerInputState extends State<PlayerInput> {
     if (!oldWidget.isGenerating && widget.isGenerating) {
       _focusNode.unfocus();
     }
+    if (!identical(oldWidget.draft, widget.draft)) {
+      oldWidget.draft?.removeListener(_consumeDraft);
+      widget.draft?.addListener(_consumeDraft);
+    }
   }
 
   @override
   void dispose() {
+    widget.draft?.removeListener(_consumeDraft);
     _controller.removeListener(_onTextChanged);
     _focusNode.removeListener(_onFocusChanged);
     _controller.dispose();
     _focusNode.dispose();
     _focusedNotifier.dispose();
     super.dispose();
+  }
+
+  void _consumeDraft() {
+    final d = widget.draft?.value;
+    if (d == null || d.isEmpty) return;
+    widget.draft?.value = null;
+    _controller.value = TextEditingValue(
+      text: d,
+      selection: TextSelection.collapsed(offset: d.length),
+    );
+    _focusNode.requestFocus();
   }
 
   void _onTextChanged() {
@@ -175,6 +206,19 @@ class _PlayerInputState extends State<PlayerInput> {
                       ),
                     ),
                   ),
+                  // The hourglass appears when the composer is empty (the
+                  // "nothing to say — let the world move" affordance) and
+                  // yields its spot to the send orb once the player types.
+                  if (!_hasText &&
+                      widget.onContinue != null &&
+                      widget.onAdvance != null) ...[
+                    const SizedBox(width: 10),
+                    AdvanceTimeButton(
+                      enabled: enabled,
+                      onContinue: widget.onContinue!,
+                      onAdvance: widget.onAdvance!,
+                    ),
+                  ],
                   const SizedBox(width: 10),
                   _SendOrb(
                     isGenerating: widget.isGenerating,

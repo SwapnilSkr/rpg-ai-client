@@ -36,6 +36,16 @@ class PlayState extends Equatable {
   /// independent of [isGenerating] (which gates the composer for new turns).
   final String? replayingEventId;
 
+  /// Stat changes from the most recent completed turn — drives the floating
+  /// delta chips and bar pulses in the HUD. Cleared when the next turn starts.
+  final Map<String, num>? lastStatDeltas;
+
+  /// Milestone label crossed on the latest turn (brass-seal toast), one-shot.
+  final String? lastMilestone;
+
+  /// Bumped with every milestone so identical labels still retrigger the toast.
+  final int milestoneStamp;
+
   const PlayState({
     this.instance,
     this.template,
@@ -49,6 +59,9 @@ class PlayState extends Equatable {
     this.totalEvents = 0,
     this.hasOlderEvents = false,
     this.replayingEventId,
+    this.lastStatDeltas,
+    this.lastMilestone,
+    this.milestoneStamp = 0,
   });
 
   PlayState copyWith({
@@ -64,6 +77,9 @@ class PlayState extends Equatable {
     int? totalEvents,
     bool? hasOlderEvents,
     Object? replayingEventId = _kUnset,
+    Object? lastStatDeltas = _kUnset,
+    Object? lastMilestone = _kUnset,
+    int? milestoneStamp,
   }) {
     return PlayState(
       instance: instance ?? this.instance,
@@ -80,6 +96,13 @@ class PlayState extends Equatable {
       replayingEventId: identical(replayingEventId, _kUnset)
           ? this.replayingEventId
           : replayingEventId as String?,
+      lastStatDeltas: identical(lastStatDeltas, _kUnset)
+          ? this.lastStatDeltas
+          : lastStatDeltas as Map<String, num>?,
+      lastMilestone: identical(lastMilestone, _kUnset)
+          ? this.lastMilestone
+          : lastMilestone as String?,
+      milestoneStamp: milestoneStamp ?? this.milestoneStamp,
     );
   }
 
@@ -97,6 +120,9 @@ class PlayState extends Equatable {
     totalEvents,
     hasOlderEvents,
     replayingEventId,
+    lastStatDeltas,
+    lastMilestone,
+    milestoneStamp,
   ];
 }
 
@@ -113,6 +139,7 @@ class PlayCubit extends Cubit<PlayState> {
   late StreamSubscription _characterCodexSub;
   late StreamSubscription _replayDeltaSub;
   late StreamSubscription _replayCompleteSub;
+  late StreamSubscription _milestoneSub;
 
   /// Accumulates streamed narrative tokens for the in-progress turn.
   String _streamBuffer = '';
@@ -266,14 +293,36 @@ class PlayCubit extends Cubit<PlayState> {
         id: eventData['id'] ?? '',
         instanceId: instanceId,
         sequence: eventData['sequence'] ?? 0,
-        type: 'narration',
+        type: eventData['event_type']?.toString() ?? 'narration',
         playerInput: playerInput,
         aiResponse: narrative,
         sceneTag: eventData['scene_tag'],
         emotionalTone: eventData['emotional_tone'],
         modelUsed: eventData['model_used']?.toString() ?? '',
         createdAt: DateTime.now(),
+        choices: Choice.listFromAny(eventData['choices']),
+        milestone: eventData['milestone']?.toString(),
+        timeAdvanced: eventData['time_advanced']?.toString(),
+        fateThread: eventData['fate_thread']?.toString(),
       );
+
+      // Stat deltas vs the pre-turn state — drives HUD pulses + delta chips.
+      Map<String, num>? statDeltas;
+      final stateDiff = eventData['state_diff'];
+      if (stateDiff is Map &&
+          stateDiff['world_state'] is Map &&
+          state.instance != null) {
+        final old = state.instance!.worldState;
+        final next = Map<String, dynamic>.from(stateDiff['world_state'] as Map);
+        final deltas = <String, num>{};
+        next.forEach((key, value) {
+          final nv = value is num ? value : num.tryParse(value.toString());
+          if (nv == null) return;
+          final ov = old[key];
+          if (ov != null && nv != ov) deltas[key] = nv - ov;
+        });
+        if (deltas.isNotEmpty) statDeltas = deltas;
+      }
 
       if (idx >= 0) {
         events[idx] = finalEvent;
@@ -298,6 +347,20 @@ class PlayCubit extends Cubit<PlayState> {
           totalEvents: nextTotalEvents,
           hasOlderEvents:
               state.hasOlderEvents || nextTotalEvents > trimmedEvents.length,
+          lastStatDeltas: statDeltas,
+        ),
+      );
+    });
+
+    _milestoneSub = _ws.onMilestoneUnlocked.listen((msg) {
+      if (msg['instanceId']?.toString() != instanceId) return;
+      final raw = msg['milestone'];
+      final label = (raw is Map ? raw['label'] : raw)?.toString();
+      if (label == null || label.isEmpty) return;
+      emit(
+        state.copyWith(
+          lastMilestone: label,
+          milestoneStamp: DateTime.now().millisecondsSinceEpoch,
         ),
       );
     });
@@ -482,6 +545,7 @@ class PlayCubit extends Cubit<PlayState> {
         hasOlderEvents:
             state.hasOlderEvents || state.events.length >= _activeEventLimit,
         error: null,
+        lastStatDeltas: null,
       ),
     );
 
@@ -490,7 +554,9 @@ class PlayCubit extends Cubit<PlayState> {
   }
 
   /// Let the world advance the story autonomously — no player message.
-  Future<void> continueStory() async {
+  /// [advance] turns the quiet continue into a time skip (calendar tick):
+  /// 'hours' | 'day' | 'days' | 'season'.
+  Future<void> continueStory({String? advance}) async {
     if (state.isGenerating || state.replayingEventId != null) return;
 
     await _flushPendingVariant();
@@ -510,11 +576,19 @@ class PlayCubit extends Cubit<PlayState> {
         hasOlderEvents:
             state.hasOlderEvents || state.events.length >= _activeEventLimit,
         error: null,
+        lastStatDeltas: null,
       ),
     );
 
     _armGenerationWatchdog(_generationFirstTokenTimeout);
-    _ws.sendContinue(instanceId);
+    _ws.sendContinue(instanceId, advance: advance);
+  }
+
+  /// One-shot acknowledgement of the milestone toast.
+  void clearMilestone() {
+    if (state.lastMilestone != null) {
+      emit(state.copyWith(lastMilestone: null));
+    }
   }
 
   void clearError() {
@@ -992,6 +1066,7 @@ class PlayCubit extends Cubit<PlayState> {
     await _characterCodexSub.cancel();
     await _replayDeltaSub.cancel();
     await _replayCompleteSub.cancel();
+    await _milestoneSub.cancel();
     await _ws.disconnect();
     await super.close();
   }

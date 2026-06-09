@@ -42,6 +42,8 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _replayCompleteController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _milestoneUnlockedController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get onGenerationDelta =>
       _generationDeltaController.stream;
@@ -61,6 +63,8 @@ class WsManager {
       _replayDeltaController.stream;
   Stream<Map<String, dynamic>> get onReplayComplete =>
       _replayCompleteController.stream;
+  Stream<Map<String, dynamic>> get onMilestoneUnlocked =>
+      _milestoneUnlockedController.stream;
 
   bool get isConnected => _isConnected;
 
@@ -221,6 +225,9 @@ class WsManager {
       case 'replay_complete':
         _replayCompleteController.add(msg);
         break;
+      case 'milestone_unlocked':
+        _milestoneUnlockedController.add(msg);
+        break;
       case 'pong':
       case 'ack':
         break;
@@ -295,8 +302,14 @@ class WsManager {
   }
 
   /// Ask the world to advance the story on its own (no player input).
-  void sendContinue(String instanceId) {
-    send({'action': 'continue', 'instance_id': instanceId});
+  /// [advance] turns the quiet continue into a time skip — one of
+  /// 'hours' | 'day' | 'days' | 'season'.
+  void sendContinue(String instanceId, {String? advance}) {
+    send({
+      'action': 'continue',
+      'instance_id': instanceId,
+      if (advance != null) 'payload': {'advance': advance},
+    });
   }
 
   /// Request a streaming alternative response for an existing turn.
@@ -326,5 +339,6 @@ class WsManager {
     _characterCodexUpdatedController.close();
     _replayDeltaController.close();
     _replayCompleteController.close();
+    _milestoneUnlockedController.close();
   }
 }

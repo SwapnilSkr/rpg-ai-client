@@ -1,3 +1,51 @@
+/// A tap-to-play suggestion under the latest narrator turn.
+///
+/// [label] is the chip caption the player reads; [send] is the fully-formatted
+/// player input dispatched on tap — a narrated action (wrapped in *asterisks*)
+/// or a spoken line (bare). Tapping sends [send], never [label], so the action
+/// is performed rather than spoken verbatim.
+class Choice {
+  final String label;
+  final String kind; // 'act' | 'say'
+  final String send;
+
+  const Choice({required this.label, required this.kind, required this.send});
+
+  bool get isValid => label.isNotEmpty && send.isNotEmpty;
+
+  /// Tolerant parse: accepts the structured `{label, kind, send}` shape and the
+  /// legacy bare-string shape (treated as a narrated action) so older cached or
+  /// in-flight turns still render without crashing.
+  factory Choice.fromAny(dynamic raw) {
+    if (raw is String) {
+      final s = raw.replaceAll('*', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+      return Choice(label: s, kind: 'act', send: s.isEmpty ? '' : '*$s*');
+    }
+    if (raw is Map) {
+      final m = Map<String, dynamic>.from(raw);
+      final label =
+          (m['label'] ?? '').toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+      final kind = m['kind']?.toString() == 'say' ? 'say' : 'act';
+      var send = (m['send'] ?? '').toString().trim();
+      if (send.isEmpty) {
+        final bare =
+            label.replaceAll('*', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+        send = bare.isEmpty ? '' : (kind == 'say' ? bare : '*$bare*');
+      }
+      return Choice(label: label, kind: kind, send: send);
+    }
+    return const Choice(label: '', kind: 'act', send: '');
+  }
+
+  static List<Choice> listFromAny(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .map(Choice.fromAny)
+        .where((c) => c.isValid)
+        .toList(growable: false);
+  }
+}
+
 class GameEvent {
   final String id;
   final String instanceId;
@@ -16,6 +64,18 @@ class GameEvent {
   final List<ReplayVariant> replayVariants;
   final int selectedReplayIndex;
 
+  /// Suggested next moves for the player (tap-to-play chips).
+  final List<Choice> choices;
+
+  /// Story landmark crossed on this turn (brass-seal moment), if any.
+  final String? milestone;
+
+  /// In-story time that passed on a calendar-tick turn (e.g. "several days").
+  final String? timeAdvanced;
+
+  /// Open-thread text that seeded this turn's beat (fate came knocking).
+  final String? fateThread;
+
   const GameEvent({
     required this.id,
     required this.instanceId,
@@ -33,7 +93,14 @@ class GameEvent {
     this.isUserEdited = false,
     this.replayVariants = const [],
     this.selectedReplayIndex = 0,
+    this.choices = const [],
+    this.milestone,
+    this.timeAdvanced,
+    this.fateThread,
   });
+
+  /// True for time-skip turns, which render as interstitial passage cards.
+  bool get isTimePassage => type == 'calendar_tick';
 
   GameEvent copyWith({
     String? playerInput,
@@ -62,6 +129,10 @@ class GameEvent {
       isUserEdited: isUserEdited ?? this.isUserEdited,
       replayVariants: replayVariants ?? this.replayVariants,
       selectedReplayIndex: selectedReplayIndex ?? this.selectedReplayIndex,
+      choices: choices,
+      milestone: milestone,
+      timeAdvanced: timeAdvanced,
+      fateThread: fateThread,
     );
   }
 
@@ -95,6 +166,11 @@ class GameEvent {
       isUserEdited: json['is_user_edited'] ?? false,
       replayVariants: replay,
       selectedReplayIndex: selected,
+      choices: Choice.listFromAny(data?['choices'] ?? json['choices']),
+      milestone: (data?['milestone'] ?? json['milestone'])?.toString(),
+      timeAdvanced: (data?['time_advanced'] ?? json['time_advanced'])
+          ?.toString(),
+      fateThread: (data?['fate_thread'] ?? json['fate_thread'])?.toString(),
     );
   }
 

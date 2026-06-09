@@ -96,15 +96,16 @@ class EverloreNavBar extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
                   for (final slot in _slots)
                     slot == null
                         ? _CreateAction(onTap: onCreate)
-                        : _NavTab(
-                            slot: slot,
-                            active: currentIndex == slot.branch,
-                            onTap: () => onSelect(slot.branch),
+                        : Expanded(
+                            child: _NavTab(
+                              slot: slot,
+                              active: currentIndex == slot.branch,
+                              onTap: () => onSelect(slot.branch),
+                            ),
                           ),
                 ],
               ),
@@ -134,7 +135,7 @@ class _NavTab extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           gradient: active
@@ -150,19 +151,24 @@ class _NavTab extends StatelessWidget {
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Opacity(
               opacity: active ? 1 : 0.62,
               child: EvIcon(slot.icon, size: 22),
             ),
             const SizedBox(height: 2),
-            Text(
-              slot.label,
-              style: TextStyle(
-                fontFamily: EverloreTheme.uiFamily,
-                color: color,
-                fontSize: 9.5,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                slot.label,
+                maxLines: 1,
+                style: TextStyle(
+                  fontFamily: EverloreTheme.uiFamily,
+                  color: color,
+                  fontSize: 9.5,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                ),
               ),
             ),
           ],

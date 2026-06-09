@@ -10,6 +10,12 @@ class Memory {
   final int accessCount;
   final DateTime? createdAt;
 
+  /// Canonical entity names this memory is about (rich-atom upgrade).
+  final List<String> subjects;
+
+  /// True while this memory is an open promise/conflict awaiting payoff.
+  final bool unresolvedThread;
+
   const Memory({
     required this.id,
     required this.instanceId,
@@ -21,7 +27,17 @@ class Memory {
     this.sourceEventIds = const [],
     this.accessCount = 0,
     this.createdAt,
+    this.subjects = const [],
+    this.unresolvedThread = false,
   });
+
+  /// Whether this memory concerns [name] (by subject tag or text mention).
+  bool concerns(String name) {
+    final n = name.toLowerCase();
+    if (n.isEmpty) return false;
+    return subjects.any((s) => s.toLowerCase() == n) ||
+        text.toLowerCase().contains(n);
+  }
 
   factory Memory.fromJson(Map<String, dynamic> json) {
     return Memory(
@@ -37,6 +53,10 @@ class Memory {
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'])
           : null,
+      subjects:
+          (json['subjects'] as List?)?.map((e) => e.toString()).toList() ??
+          const [],
+      unresolvedThread: json['unresolved_thread'] == true,
     );
   }
 
@@ -56,6 +76,8 @@ class Memory {
       sourceEventIds: sourceEventIds,
       accessCount: accessCount,
       createdAt: createdAt,
+      subjects: subjects,
+      unresolvedThread: unresolvedThread,
     );
   }
 }

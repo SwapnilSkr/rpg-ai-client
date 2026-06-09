@@ -6,6 +6,9 @@ import '../state/play_cubit.dart';
 import 'widgets/narrative_bubble.dart';
 import 'widgets/player_input.dart';
 import 'widgets/world_state_bar.dart';
+import 'widgets/choice_chips.dart';
+import 'widgets/milestone_toast.dart';
+import 'widgets/bond_meters.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/event.dart';
@@ -46,14 +49,169 @@ class _PlayViewState extends State<_PlayView> {
   Object? _lastSeenTemplate;
   String? _lastSeenAiResponse;
 
+  /// One-shot composer prefill consumed by [PlayerInput] (bond actions).
+  final _composerDraft = ValueNotifier<String?>(null);
+
   /// Set when the player opens Chronicle / Thoughts / Settings from the realm
   /// menu. Cleared if they dismiss the menu outright or finish an in-sheet action.
   bool _pendingRealmMenuReturn = false;
 
   @override
   void dispose() {
+    _composerDraft.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Contextual bond actions for [character] — every action is sugar over a
+  /// normal player turn (prefilled composer) or a memory lens, never a
+  /// separate game system.
+  void _showBondActions(BuildContext context, CharacterProfile character) {
+    final cubit = context.read<PlayCubit>();
+    final name = character.canonicalName;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                style: EverloreTheme.serifDisplay(
+                  size: 18,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
+              if (character.relationship != null) ...[
+                const SizedBox(height: 8),
+                BondMeters(meters: character.relationship!),
+              ],
+              const SizedBox(height: 12),
+              _BondActionTile(
+                icon: Icons.record_voice_over_outlined,
+                label: 'Approach $name',
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _composerDraft.value = '*I approach $name.* ';
+                },
+              ),
+              _BondActionTile(
+                icon: Icons.help_outline,
+                label: 'Ask $name about…',
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _composerDraft.value = '*I turn to $name.* "Tell me about ';
+                },
+              ),
+              _BondActionTile(
+                icon: Icons.history_edu_outlined,
+                label: 'What $name remembers of you',
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _showCharacterMemories(context, cubit, character);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// "What this character remembers about you" — memory atoms filtered by
+  /// subject, straight from the rich-atom layer.
+  void _showCharacterMemories(
+    BuildContext context,
+    PlayCubit cubit,
+    CharacterProfile character,
+  ) {
+    final name = character.canonicalName;
+    final relevant = cubit.state.memories
+        .where((m) => m.concerns(name))
+        .toList()
+      ..sort((a, b) => b.importance.compareTo(a.importance));
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'What $name remembers',
+                style: EverloreTheme.serifDisplay(
+                  size: 18,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (relevant.isEmpty)
+                Text(
+                  'Nothing yet — your story together is still unwritten.',
+                  style: EverloreTheme.ui(
+                    size: 13,
+                    color: EverloreTheme.ash,
+                    fontStyle: FontStyle.italic,
+                  ),
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 380),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: relevant.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) {
+                      final m = relevant[i];
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            m.unresolvedThread
+                                ? Icons.pending_outlined
+                                : Icons.bookmark_border,
+                            size: 14,
+                            color: m.unresolvedThread
+                                ? EverloreTheme.ember
+                                : EverloreTheme.goldDim,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              m.text,
+                              style: EverloreTheme.ui(
+                                size: 13,
+                                color: EverloreTheme.parchment.withValues(
+                                  alpha: 0.9,
+                                ),
+                                height: 1.45,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _maybeShowOnboarding(BuildContext context) {
@@ -287,6 +445,11 @@ class _PlayViewState extends State<_PlayView> {
               );
             },
             onEdit: (c) => _showCharacterEdit(ctx, cubit, c),
+            onAct: (c) {
+              _pendingRealmMenuReturn = false;
+              Navigator.pop(sheetCtx);
+              _showBondActions(context, c);
+            },
           ),
         ),
       ),
@@ -806,7 +969,17 @@ class _PlayViewState extends State<_PlayView> {
                   ),
                 ),
               ] else
-                Positioned.fill(child: _AtmosphereBackground(accent: accent)),
+                // Scene tone shifts (combat reddens, romance warms) ease in
+                // over a beat instead of snapping with the new scene tag.
+                Positioned.fill(
+                  child: TweenAnimationBuilder<Color?>(
+                    tween: ColorTween(end: accent),
+                    duration: const Duration(milliseconds: 900),
+                    curve: Curves.easeInOut,
+                    builder: (context, c, _) =>
+                        _AtmosphereBackground(accent: c ?? accent),
+                  ),
+                ),
 
               // Content
               Column(
@@ -828,6 +1001,7 @@ class _PlayViewState extends State<_PlayView> {
                       expanded: _statsExpanded,
                       onToggle: () =>
                           setState(() => _statsExpanded = !_statsExpanded),
+                      deltas: state.lastStatDeltas,
                     ),
 
                   if (state.error != null)
@@ -841,12 +1015,27 @@ class _PlayViewState extends State<_PlayView> {
                         ? const _LoadingNarrative()
                         : state.events.isEmpty
                         ? const _EmptyNarrative()
-                        : ListView.builder(
+                        : Builder(builder: (context) {
+                            // Tap-to-play chips bloom under the latest settled
+                            // turn — a list row so they scroll with the story.
+                            final latest = state.events.isNotEmpty
+                                ? state.events.last
+                                : null;
+                            final showChoices =
+                                latest != null &&
+                                !latest.isOptimistic &&
+                                latest.choices.isNotEmpty &&
+                                !state.isGenerating &&
+                                state.replayingEventId == null &&
+                                state.isConnected;
+                            final itemCount =
+                                state.events.length +
+                                (state.hasOlderEvents ? 1 : 0) +
+                                (showChoices ? 1 : 0);
+                            return ListView.builder(
                             controller: _scrollController,
                             padding: const EdgeInsets.fromLTRB(2, 16, 2, 20),
-                            itemCount:
-                                state.events.length +
-                                (state.hasOlderEvents ? 1 : 0),
+                            itemCount: itemCount,
                             itemBuilder: (context, index) {
                               if (state.hasOlderEvents && index == 0) {
                                 return _OlderHistoryButton(
@@ -854,6 +1043,17 @@ class _PlayViewState extends State<_PlayView> {
                                   onTap: () => context.push(
                                     '/chronicle/${context.read<PlayCubit>().instanceId}',
                                   ),
+                                );
+                              }
+                              if (showChoices && index == itemCount - 1) {
+                                return ChoiceChips(
+                                  choices: latest.choices,
+                                  enabled: true,
+                                  // Drop the pre-formatted move into the composer
+                                  // (fills + focuses) so the player can edit the
+                                  // narration/dialogue before sending it.
+                                  onChoose: (choice) =>
+                                      _composerDraft.value = choice,
                                 );
                               }
 
@@ -898,6 +1098,23 @@ class _PlayViewState extends State<_PlayView> {
                                 event: event,
                                 isReplaying: isReplaying,
                                 isStreaming: isStreaming,
+                                characterNames: [
+                                  for (final c in state.characters)
+                                    if (!(c.isProtagonist &&
+                                        !(state.template?.isSentient ??
+                                            false)))
+                                      c.canonicalName,
+                                ],
+                                onCharacterTap: (name) {
+                                  final lower = name.toLowerCase();
+                                  for (final c in state.characters) {
+                                    if (c.canonicalName.toLowerCase() ==
+                                        lower) {
+                                      _showBondActions(context, c);
+                                      return;
+                                    }
+                                  }
+                                },
                                 onLongPress:
                                     (!event.isOptimistic &&
                                         event.sequence > 0 &&
@@ -923,16 +1140,32 @@ class _PlayViewState extends State<_PlayView> {
                                     .selectReplayVariant(event, index),
                               );
                             },
-                          ),
+                          );
+                          }),
                   ),
 
                   PlayerInput(
                     isGenerating: state.isGenerating,
                     isConnected: state.isConnected,
                     onSend: (msg) => context.read<PlayCubit>().sendMessage(msg),
+                    onContinue: () =>
+                        context.read<PlayCubit>().continueStory(),
+                    onAdvance: (span) => context
+                        .read<PlayCubit>()
+                        .continueStory(advance: span),
+                    draft: _composerDraft,
                   ),
                 ],
               ),
+
+              // Brass-seal milestone toast — one-shot, auto-dismissing.
+              if (state.lastMilestone != null)
+                MilestoneToast(
+                  label: state.lastMilestone!,
+                  stamp: state.milestoneStamp,
+                  onDismissed: () =>
+                      context.read<PlayCubit>().clearMilestone(),
+                ),
             ],
           ),
         );
@@ -1851,6 +2084,7 @@ class _ThoughtsSheet extends StatelessWidget {
   final ValueChanged<String> onFocus;
   final VoidCallback onClearFocus;
   final ValueChanged<CharacterProfile> onEdit;
+  final ValueChanged<CharacterProfile> onAct;
   final bool isSentientWorld;
 
   const _ThoughtsSheet({
@@ -1859,6 +2093,7 @@ class _ThoughtsSheet extends StatelessWidget {
     required this.onFocus,
     required this.onClearFocus,
     required this.onEdit,
+    required this.onAct,
     required this.isSentientWorld,
   });
 
@@ -2004,12 +2239,32 @@ class _ThoughtsSheet extends StatelessWidget {
                                   fontStyle: FontStyle.italic,
                                 ),
                               ),
+                            // The bond ledger: how this character stands with
+                            // the player, made inspectable and playable.
+                            if (c.relationship != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: BondMeters(
+                                  meters: c.relationship!,
+                                  dense: true,
+                                ),
+                              ),
                           ],
                         ),
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          IconButton(
+                            onPressed: () => onAct(c),
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(
+                              Icons.handshake_outlined,
+                              size: 17,
+                              color: EverloreTheme.gold,
+                            ),
+                            tooltip: 'Act',
+                          ),
                           // The creator's locked protagonist (sentient/character
                           // worlds) can't be edited; everything else can.
                           if (!(c.isProtagonist && isSentientWorld))
@@ -2043,6 +2298,47 @@ class _ThoughtsSheet extends StatelessWidget {
                   },
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One row in the bond-actions sheet.
+class _BondActionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _BondActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: EverloreTheme.gold.withValues(alpha: 0.75)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: EverloreTheme.ui(size: 14, color: EverloreTheme.parchment),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              size: 16,
+              color: EverloreTheme.ash.withValues(alpha: 0.5),
+            ),
           ],
         ),
       ),

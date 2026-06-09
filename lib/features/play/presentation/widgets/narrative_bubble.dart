@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,6 +21,11 @@ class NarrativeBubble extends StatelessWidget {
   /// This bubble is still receiving/finalizing streamed prose.
   final bool isStreaming;
 
+  /// Known character names — occurrences in the prose become tappable links
+  /// into the bonds sheet (the text itself is the game board).
+  final List<String> characterNames;
+  final ValueChanged<String>? onCharacterTap;
+
   const NarrativeBubble({
     super.key,
     required this.event,
@@ -29,6 +35,8 @@ class NarrativeBubble extends StatelessWidget {
     this.onSelectReplayVariant,
     this.isReplaying = false,
     this.isStreaming = false,
+    this.characterNames = const [],
+    this.onCharacterTap,
   });
 
   @override
@@ -59,7 +67,14 @@ class NarrativeBubble extends StatelessWidget {
                   isStreaming: true,
                 )
               : const _GeneratingIndicator(label: 'Re-weaving this turn')
-        else if (hasProse)
+        else if (hasProse) ...[
+          // Calendar-tick turns open with a passage-of-time ornament so a time
+          // skip reads as an interlude card, not another chat reply.
+          if (event.isTimePassage)
+            _TimePassageHeader(
+              label: event.timeAdvanced,
+              fateStirs: (event.fateThread ?? '').isNotEmpty,
+            ),
           GestureDetector(
             onLongPress: onLongPress,
             child: _NarratorPanel(
@@ -72,11 +87,95 @@ class NarrativeBubble extends StatelessWidget {
               onReplay: onReplay,
               onSelectReplayVariant: onSelectReplayVariant,
               isStreaming: isStreaming,
+              // Entity links only on settled prose: streaming text rebuilds
+              // every frame and would churn gesture recognizers.
+              characterNames: isStreaming ? const [] : characterNames,
+              onCharacterTap: isStreaming ? null : onCharacterTap,
             ),
-          )
-        else if (event.isOptimistic)
+          ),
+        ] else if (event.isOptimistic)
           const _GeneratingIndicator(),
       ],
+    );
+  }
+}
+
+/// Ornamental divider announcing a passage of story time (calendar tick).
+class _TimePassageHeader extends StatelessWidget {
+  final String? label;
+  final bool fateStirs;
+
+  const _TimePassageHeader({this.label, this.fateStirs = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final caption = (label == null || label!.isEmpty)
+        ? 'TIME PASSES'
+        : 'TIME PASSES — ${label!.toUpperCase()}';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 2),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: _ornamentLine(rightToLeft: false)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.hourglass_bottom_rounded,
+                      size: 11,
+                      color: EverloreTheme.gold.withValues(alpha: 0.7),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      caption,
+                      style: EverloreTheme.ui(
+                        size: 10,
+                        weight: FontWeight.w700,
+                        color: EverloreTheme.gold.withValues(alpha: 0.75),
+                        spacing: 1.8,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(child: _ornamentLine(rightToLeft: true)),
+            ],
+          ),
+          if (fateStirs)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                '✦ fate stirs ✦',
+                style: EverloreTheme.ui(
+                  size: 10,
+                  color: EverloreTheme.ember.withValues(alpha: 0.85),
+                  fontStyle: FontStyle.italic,
+                  spacing: 1.2,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _ornamentLine({required bool rightToLeft}) {
+    return Container(
+      height: 1,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: rightToLeft ? Alignment.centerRight : Alignment.centerLeft,
+          end: rightToLeft ? Alignment.centerLeft : Alignment.centerRight,
+          colors: [
+            EverloreTheme.gold.withValues(alpha: 0.45),
+            EverloreTheme.gold.withValues(alpha: 0.0),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -218,6 +317,8 @@ class _NarratorPanel extends StatelessWidget {
   final VoidCallback? onReplay;
   final ValueChanged<int>? onSelectReplayVariant;
   final bool isStreaming;
+  final List<String> characterNames;
+  final ValueChanged<String>? onCharacterTap;
 
   const _NarratorPanel({
     required this.text,
@@ -229,6 +330,8 @@ class _NarratorPanel extends StatelessWidget {
     this.onReplay,
     this.onSelectReplayVariant,
     this.isStreaming = false,
+    this.characterNames = const [],
+    this.onCharacterTap,
   });
 
   @override
@@ -272,8 +375,10 @@ class _NarratorPanel extends StatelessWidget {
                       ],
                     ],
                   ),
-                  SelectableText.rich(
-                    TextSpan(children: _narrativeSpans(text)),
+                  _ProseText(
+                    text: text,
+                    characterNames: characterNames,
+                    onCharacterTap: onCharacterTap,
                   ),
                   if (isStreaming) ...[
                     const SizedBox(height: 10),
@@ -581,6 +686,99 @@ class _CopyButton extends StatelessWidget {
 /// - malformed unmarked text defaults to narration, not dialogue.
 /// This is a single streaming-stable pass: trailing unclosed quote/asterisk
 /// reads as the in-progress span type.
+/// Narrative prose with optional tappable character names. Owns the tap
+/// recognizers so they are reliably disposed (spans alone would leak them).
+class _ProseText extends StatefulWidget {
+  final String text;
+  final List<String> characterNames;
+  final ValueChanged<String>? onCharacterTap;
+
+  const _ProseText({
+    required this.text,
+    this.characterNames = const [],
+    this.onCharacterTap,
+  });
+
+  @override
+  State<_ProseText> createState() => _ProseTextState();
+}
+
+class _ProseTextState extends State<_ProseText> {
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  @override
+  void dispose() {
+    _disposeRecognizers();
+    super.dispose();
+  }
+
+  void _disposeRecognizers() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+  }
+
+  /// Split [span]'s text on character-name occurrences, linking each match.
+  List<InlineSpan> _linkNames(TextSpan span, RegExp namePattern) {
+    final text = span.text ?? '';
+    if (text.isEmpty) return [span];
+    final matches = namePattern.allMatches(text).toList();
+    if (matches.isEmpty) return [span];
+
+    final out = <InlineSpan>[];
+    var cursor = 0;
+    for (final m in matches) {
+      if (m.start > cursor) {
+        out.add(TextSpan(text: text.substring(cursor, m.start), style: span.style));
+      }
+      final name = m.group(0)!;
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () => widget.onCharacterTap?.call(name);
+      _recognizers.add(recognizer);
+      out.add(
+        TextSpan(
+          text: name,
+          recognizer: recognizer,
+          style: (span.style ?? const TextStyle()).copyWith(
+            color: EverloreTheme.gold.withValues(alpha: 0.95),
+            decoration: TextDecoration.underline,
+            decorationColor: EverloreTheme.gold.withValues(alpha: 0.35),
+            decorationThickness: 1,
+          ),
+        ),
+      );
+      cursor = m.end;
+    }
+    if (cursor < text.length) {
+      out.add(TextSpan(text: text.substring(cursor), style: span.style));
+    }
+    return out;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Recognizers are rebuilt with the spans every build; retire the old set.
+    _disposeRecognizers();
+
+    var spans = _narrativeSpans(widget.text);
+
+    final names = widget.characterNames
+        .where((n) => n.trim().length >= 3)
+        .map(RegExp.escape)
+        .toList();
+    if (names.isNotEmpty && widget.onCharacterTap != null) {
+      final pattern = RegExp('\\b(?:${names.join('|')})\\b');
+      spans = [
+        for (final s in spans)
+          if (s is TextSpan) ..._linkNames(s, pattern) else s,
+      ];
+    }
+
+    return SelectableText.rich(TextSpan(children: spans));
+  }
+}
+
 List<InlineSpan> _narrativeSpans(
   String text, {
   TextStyle? dialogueStyle,
