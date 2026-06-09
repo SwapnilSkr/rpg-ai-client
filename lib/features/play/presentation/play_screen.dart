@@ -9,6 +9,7 @@ import 'widgets/world_state_bar.dart';
 import 'widgets/choice_chips.dart';
 import 'widgets/milestone_toast.dart';
 import 'widgets/bond_meters.dart';
+import 'widgets/bond_rail.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/event.dart';
@@ -1003,6 +1004,13 @@ class _PlayViewState extends State<_PlayView> {
                           setState(() => _statsExpanded = !_statsExpanded),
                       deltas: state.lastStatDeltas,
                     ),
+
+                  // Always-on relationship presence — the active cast with live
+                  // bond rings. Renders nothing until a bond actually exists.
+                  BondRail(
+                    characters: state.characters,
+                    onTapCharacter: (c) => _showBondActions(context, c),
+                  ),
 
                   if (state.error != null)
                     _ErrorBar(
