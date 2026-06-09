@@ -420,6 +420,9 @@ class PlayCubit extends Cubit<PlayState> {
           modelUsed: selectedVariant?.modelUsed,
           replayVariants: variants,
           selectedReplayIndex: selected,
+          // The old next-move chips were derived from the pre-replay prose;
+          // drop them so they don't mismatch the freshly woven turn.
+          choices: const [],
         );
         LocalDb.insertEvent(events[idx]);
       }
@@ -1041,6 +1044,8 @@ class PlayCubit extends Cubit<PlayState> {
         aiResponse: event.replayVariants[index].narrative,
         modelUsed: event.replayVariants[index].modelUsed,
         selectedReplayIndex: index,
+        // Chips belonged to the previously-shown variant's prose.
+        choices: const [],
       );
     }
     emit(state.copyWith(events: next, error: null));

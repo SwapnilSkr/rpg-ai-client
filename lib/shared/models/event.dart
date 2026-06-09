@@ -111,6 +111,7 @@ class GameEvent {
     bool? isUserEdited,
     List<ReplayVariant>? replayVariants,
     int? selectedReplayIndex,
+    List<Choice>? choices,
   }) {
     return GameEvent(
       id: id,
@@ -129,7 +130,7 @@ class GameEvent {
       isUserEdited: isUserEdited ?? this.isUserEdited,
       replayVariants: replayVariants ?? this.replayVariants,
       selectedReplayIndex: selectedReplayIndex ?? this.selectedReplayIndex,
-      choices: choices,
+      choices: choices ?? this.choices,
       milestone: milestone,
       timeAdvanced: timeAdvanced,
       fateThread: fateThread,
