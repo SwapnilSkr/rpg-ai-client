@@ -17,6 +17,9 @@ class NarrativeBubble extends StatelessWidget {
   /// This turn is currently being re-woven (a replay variant is streaming in).
   final bool isReplaying;
 
+  /// This bubble is still receiving/finalizing streamed prose.
+  final bool isStreaming;
+
   const NarrativeBubble({
     super.key,
     required this.event,
@@ -25,6 +28,7 @@ class NarrativeBubble extends StatelessWidget {
     this.onContinue,
     this.onSelectReplayVariant,
     this.isReplaying = false,
+    this.isStreaming = false,
   });
 
   @override
@@ -52,6 +56,7 @@ class NarrativeBubble extends StatelessWidget {
                   onContinue: onContinue,
                   onReplay: null,
                   onSelectReplayVariant: onSelectReplayVariant,
+                  isStreaming: true,
                 )
               : const _GeneratingIndicator(label: 'Re-weaving this turn')
         else if (hasProse)
@@ -66,6 +71,7 @@ class NarrativeBubble extends StatelessWidget {
               onContinue: onContinue,
               onReplay: onReplay,
               onSelectReplayVariant: onSelectReplayVariant,
+              isStreaming: isStreaming,
             ),
           )
         else if (event.isOptimistic)
@@ -211,6 +217,7 @@ class _NarratorPanel extends StatelessWidget {
   final VoidCallback? onContinue;
   final VoidCallback? onReplay;
   final ValueChanged<int>? onSelectReplayVariant;
+  final bool isStreaming;
 
   const _NarratorPanel({
     required this.text,
@@ -221,6 +228,7 @@ class _NarratorPanel extends StatelessWidget {
     this.onContinue,
     this.onReplay,
     this.onSelectReplayVariant,
+    this.isStreaming = false,
   });
 
   @override
@@ -267,54 +275,59 @@ class _NarratorPanel extends StatelessWidget {
                   SelectableText.rich(
                     TextSpan(children: _narrativeSpans(text)),
                   ),
+                  if (isStreaming) ...[
+                    const SizedBox(height: 10),
+                    const _InlineStreamingIndicator(),
+                  ],
                   const SizedBox(height: 12),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final compact = constraints.maxWidth < 300;
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                if (onContinue != null)
-                                  _ContinueTurnButton(onTap: onContinue!),
-                                if (onReplay != null)
-                                  _ReplayButton(
-                                    onTap: onReplay!,
-                                    compact: compact,
-                                  ),
-                                if (sceneTag != null)
-                                  _SceneTagBadge(
-                                    tag: sceneTag!,
-                                    accent: accent,
-                                  ),
-                                if (replayVariants.length > 1)
-                                  _ReplayArrows(
-                                    count: replayVariants.length,
-                                    selectedIndex: selectedReplayIndex.clamp(
-                                      0,
-                                      replayVariants.length - 1,
+                  if (!isStreaming)
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final compact = constraints.maxWidth < 300;
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  if (onContinue != null)
+                                    _ContinueTurnButton(onTap: onContinue!),
+                                  if (onReplay != null)
+                                    _ReplayButton(
+                                      onTap: onReplay!,
+                                      compact: compact,
                                     ),
-                                    onSelect: onSelectReplayVariant,
-                                  ),
+                                  if (sceneTag != null)
+                                    _SceneTagBadge(
+                                      tag: sceneTag!,
+                                      accent: accent,
+                                    ),
+                                  if (replayVariants.length > 1)
+                                    _ReplayArrows(
+                                      count: replayVariants.length,
+                                      selectedIndex: selectedReplayIndex.clamp(
+                                        0,
+                                        replayVariants.length - 1,
+                                      ),
+                                      onSelect: onSelectReplayVariant,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _CopyButton(text: text, compact: compact),
                               ],
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _CopyButton(text: text, compact: compact),
-                            ],
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+                          ],
+                        );
+                      },
+                    ),
                 ],
               ),
             ),
@@ -650,7 +663,6 @@ class _GeneratingIndicator extends StatefulWidget {
 class _GeneratingIndicatorState extends State<_GeneratingIndicator>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _pulse;
 
   @override
   void initState() {
@@ -659,7 +671,6 @@ class _GeneratingIndicatorState extends State<_GeneratingIndicator>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat();
-    _pulse = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
   }
 
   @override
@@ -681,7 +692,7 @@ class _GeneratingIndicatorState extends State<_GeneratingIndicator>
         ),
       ),
       child: AnimatedBuilder(
-        animation: _pulse,
+        animation: _controller,
         builder: (_, __) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -695,10 +706,7 @@ class _GeneratingIndicatorState extends State<_GeneratingIndicator>
               ).copyWith(fontFamily: GoogleFonts.ebGaramond().fontFamily),
             ),
             const SizedBox(width: 8),
-            for (var i = 0; i < 3; i++) ...[
-              _LoadingDot(progress: (_controller.value + i * 0.18) % 1),
-              if (i < 2) const SizedBox(width: 5),
-            ],
+            _StreamingDots(value: _controller.value),
           ],
         ),
       ),
@@ -706,15 +714,84 @@ class _GeneratingIndicatorState extends State<_GeneratingIndicator>
   }
 }
 
+class _InlineStreamingIndicator extends StatefulWidget {
+  const _InlineStreamingIndicator();
+
+  @override
+  State<_InlineStreamingIndicator> createState() =>
+      _InlineStreamingIndicatorState();
+}
+
+class _InlineStreamingIndicatorState extends State<_InlineStreamingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (_, __) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _StreamingDots(value: _controller.value, dotSize: 5, lift: 2.5),
+        ],
+      ),
+    );
+  }
+}
+
+class _StreamingDots extends StatelessWidget {
+  final double value;
+  final double dotSize;
+  final double lift;
+
+  const _StreamingDots({required this.value, this.dotSize = 6, this.lift = 3});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < 3; i++) ...[
+          _LoadingDot(
+            progress: (value + i * 0.18) % 1,
+            size: dotSize,
+            lift: lift,
+          ),
+          if (i < 2) SizedBox(width: dotSize * 0.8),
+        ],
+      ],
+    );
+  }
+}
+
 class _LoadingDot extends StatelessWidget {
   final double progress;
-  const _LoadingDot({required this.progress});
+  final double size;
+  final double lift;
+
+  const _LoadingDot({required this.progress, this.size = 6, this.lift = 3});
 
   @override
   Widget build(BuildContext context) {
     final lift = progress < 0.5 ? progress * 2 : (1 - progress) * 2;
     return Transform.translate(
-      offset: Offset(0, -3 * lift),
+      offset: Offset(0, -this.lift * lift),
       child: Opacity(
         opacity: 0.35 + 0.55 * lift,
         child: DecoratedBox(
@@ -722,7 +799,7 @@ class _LoadingDot extends StatelessWidget {
             color: EverloreTheme.gold,
             shape: BoxShape.circle,
           ),
-          child: const SizedBox(width: 6, height: 6),
+          child: SizedBox(width: size, height: size),
         ),
       ),
     );

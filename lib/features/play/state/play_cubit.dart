@@ -381,7 +381,26 @@ class PlayCubit extends Cubit<PlayState> {
           state.copyWith(
             events: events,
             isGenerating: false,
-            error: 'The previous response is still syncing. Try again shortly.',
+            error: null,
+          ),
+        );
+        return;
+      }
+
+      final optimisticEvents = [...state.events];
+      final optimisticIdx = optimisticEvents.lastIndexWhere((e) => e.isOptimistic);
+      final hasVisibleOptimisticText =
+          optimisticIdx >= 0 &&
+          ((optimisticEvents[optimisticIdx].aiResponse ?? '').trim().isNotEmpty);
+      if (hasVisibleOptimisticText) {
+        _finishGenerationReveal(_streamTarget);
+        _clearGenerationTimers();
+        _ws.loadInstance(instanceId);
+        emit(
+          state.copyWith(
+            events: optimisticEvents,
+            isGenerating: false,
+            error: null,
           ),
         );
         return;
@@ -739,6 +758,7 @@ class PlayCubit extends Cubit<PlayState> {
     _generationWatchdog?.cancel();
     _generationWatchdog = Timer(timeout, () {
       if (!state.isGenerating || state.replayingEventId != null) return;
+      _generationWatchdog = null;
 
       _finishGenerationReveal(_streamTarget);
       final events = [...state.events];
@@ -747,12 +767,12 @@ class PlayCubit extends Cubit<PlayState> {
           idx >= 0 && ((events[idx].aiResponse ?? '').trim().isNotEmpty);
 
       if (hasVisibleText) {
+        _ws.loadInstance(instanceId);
         emit(
           state.copyWith(
             events: events,
             isGenerating: false,
-            error:
-                'The response is still being saved. Please wait a moment before sending again.',
+            error: null,
           ),
         );
         return;
@@ -760,11 +780,12 @@ class PlayCubit extends Cubit<PlayState> {
 
       _streamBuffer = '';
       _streamTarget = '';
+      _ws.loadInstance(instanceId);
       emit(
         state.copyWith(
           events: events.where((e) => !e.isOptimistic).toList(),
           isGenerating: false,
-          error: 'The response timed out. Please try again.',
+          error: null,
         ),
       );
     });

@@ -852,6 +852,9 @@ class _PlayViewState extends State<_PlayView> {
                                   eventIndex == state.events.length - 1;
                               final isReplaying =
                                   state.replayingEventId == event.id;
+                              final isStreaming =
+                                  isReplaying ||
+                                  (event.isOptimistic && state.isGenerating);
                               final hasAiResponse = (event.aiResponse ?? '')
                                   .trim()
                                   .isNotEmpty;
@@ -878,6 +881,7 @@ class _PlayViewState extends State<_PlayView> {
                               return NarrativeBubble(
                                 event: event,
                                 isReplaying: isReplaying,
+                                isStreaming: isStreaming,
                                 onLongPress:
                                     (!event.isOptimistic &&
                                         event.sequence > 0 &&
@@ -1179,10 +1183,7 @@ class _RealmMenuSheet extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 'Chronicle, cast, and how this story flows.',
-                style: EverloreTheme.ui(
-                  size: 12,
-                  color: EverloreTheme.ash,
-                ),
+                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
               ),
               const SizedBox(height: 18),
               _RealmMenuChoice(
@@ -1273,11 +1274,7 @@ class _RealmMenuChoice extends StatelessWidget {
               ),
               child: icon != null
                   ? EvIcon(icon!, size: 24)
-                  : Icon(
-                      materialIcon,
-                      color: EverloreTheme.gold,
-                      size: 22,
-                    ),
+                  : Icon(materialIcon, color: EverloreTheme.gold, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
