@@ -11,6 +11,7 @@ class WorldInstance {
   final String mode; // chat mode key; 'free_play' = default
   final String messageLength; // 'short' | 'medium' | 'long'
   final String? focusCharacterId;
+  final String? personaId;
   final InstanceMeta meta;
   final DateTime? createdAt;
   // Enriched from list endpoint
@@ -28,6 +29,7 @@ class WorldInstance {
     this.mode = 'free_play',
     this.messageLength = 'medium',
     this.focusCharacterId,
+    this.personaId,
     this.meta = const InstanceMeta(),
     this.createdAt,
     this.template,
@@ -38,6 +40,7 @@ class WorldInstance {
     String? mode,
     String? messageLength,
     Object? focusCharacterId = _unset,
+    Object? personaId = _unset,
   }) {
     return WorldInstance(
       id: id,
@@ -52,6 +55,7 @@ class WorldInstance {
       messageLength: messageLength ?? this.messageLength,
       focusCharacterId:
           identical(focusCharacterId, _unset) ? this.focusCharacterId : focusCharacterId as String?,
+      personaId: identical(personaId, _unset) ? this.personaId : personaId as String?,
       meta: meta,
       createdAt: createdAt,
       template: template,
@@ -80,6 +84,7 @@ class WorldInstance {
       mode: json['mode'] ?? 'free_play',
       messageLength: json['message_length'] ?? 'medium',
       focusCharacterId: json['focus_character_id']?.toString(),
+      personaId: json['persona_id']?.toString(),
       meta: json['meta'] != null
           ? InstanceMeta.fromJson(json['meta'])
           : const InstanceMeta(),
@@ -117,6 +122,7 @@ class WorldInstance {
       mode: mode,
       messageLength: messageLength,
       focusCharacterId: focusCharacterId,
+      personaId: personaId,
       meta: meta,
       createdAt: createdAt,
       template: template,

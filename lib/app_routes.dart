@@ -14,6 +14,7 @@ import 'package:everlore/features/templates/presentation/template_detail_screen.
 import 'package:everlore/features/creator/presentation/my_worlds_screen.dart';
 import 'package:everlore/features/creator/presentation/forge_world_route.dart';
 import 'package:everlore/features/creator/presentation/create_character_screen.dart';
+import 'package:everlore/features/personas/presentation/personas_screen.dart';
 import 'package:everlore/shared/models/world_template.dart';
 import 'package:everlore/shared/widgets/everlore_nav_bar.dart';
 
@@ -129,6 +130,15 @@ final router = GoRouter(
               path: '/my-worlds',
               name: 'my_worlds',
               builder: (context, state) => const MyWorldsScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/personas',
+              name: 'personas',
+              builder: (context, state) => const PersonasScreen(),
             ),
           ],
         ),

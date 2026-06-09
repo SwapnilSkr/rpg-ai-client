@@ -56,7 +56,8 @@ class EverloreNavBar extends StatelessWidget {
     _Slot(AppIcons.navRealms, 'Realms', 1),
     null,
     _Slot(AppIcons.navWorlds, 'Worlds', 2),
-    _Slot(AppIcons.navProfile, 'You', 3),
+    _Slot(AppIcons.createCharacter, 'Personas', 3),
+    _Slot(AppIcons.navProfile, 'You', 4),
   ];
 
   @override

@@ -585,7 +585,9 @@ class PlayCubit extends Cubit<PlayState> {
     String? mode,
     String? messageLength,
     String? focusCharacterId,
+    String? personaId,
     bool clearFocusCharacter = false,
+    bool clearPersona = false,
   }) async {
     final inst = state.instance;
     if (inst != null) {
@@ -601,6 +603,11 @@ class PlayCubit extends Cubit<PlayState> {
       } else if (focusCharacterId != null) {
         nextInst = nextInst.copyWith(focusCharacterId: focusCharacterId);
       }
+      if (clearPersona) {
+        nextInst = nextInst.copyWith(personaId: null);
+      } else if (personaId != null) {
+        nextInst = nextInst.copyWith(personaId: personaId);
+      }
       emit(state.copyWith(instance: nextInst));
     }
     try {
@@ -610,7 +617,9 @@ class PlayCubit extends Cubit<PlayState> {
         mode: mode,
         messageLength: messageLength,
         focusCharacterId: focusCharacterId,
+        personaId: personaId,
         clearFocusCharacter: clearFocusCharacter,
+        clearPersona: clearPersona,
       );
     } catch (_) {
       emit(

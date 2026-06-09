@@ -10,6 +10,8 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/character_profile.dart';
+import '../../../shared/models/persona.dart';
+import '../../personas/data/persona_repository.dart';
 import '../../../shared/chat_modes.dart';
 import '../../../core/storage/local_db.dart';
 import '../../home/data/home_repository.dart';
@@ -123,7 +125,7 @@ class _PlayViewState extends State<_PlayView> {
     _pendingRealmMenuReturn = false;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Future<void>.delayed(const Duration(milliseconds: 140));
-      if (!mounted) return;
+      if (!mounted || !context.mounted) return;
       _showRealmMenu(context);
     });
   }
@@ -131,13 +133,20 @@ class _PlayViewState extends State<_PlayView> {
   Future<void> _openChronicleFromMenu(BuildContext context) async {
     final instanceId = context.read<PlayCubit>().instanceId;
     await context.push('/chronicle/$instanceId');
-    if (!mounted) return;
+    if (!mounted || !context.mounted) return;
     _maybeRestoreRealmMenu(context);
   }
 
-  void _showChatMenu(BuildContext context) {
+  Future<void> _showChatMenu(BuildContext context) async {
     final cubit = context.read<PlayCubit>();
     final instance = cubit.state.instance;
+    List<Persona> personas = const [];
+    try {
+      personas = await PersonaRepository.list();
+    } catch (_) {
+      personas = const [];
+    }
+    if (!mounted || !context.mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -149,12 +158,19 @@ class _PlayViewState extends State<_PlayView> {
         initialPov: instance?.narrationPov ?? 'third',
         initialMode: instance?.mode ?? kDefaultChatMode,
         initialLength: instance?.messageLength ?? 'medium',
-        onApply: (pov, mode, length) {
+        initialPersonaId: instance?.personaId,
+        // GM (non-sentient) worlds seed the protagonist from the persona once,
+        // at selection; later persona edits don't rewrite that canon character.
+        isGmWorld: !(cubit.state.template?.isSentient ?? false),
+        personas: personas,
+        onApply: (pov, mode, length, personaId) {
           _pendingRealmMenuReturn = false;
           cubit.updateSettings(
             narrationPov: pov,
             mode: mode,
             messageLength: length,
+            personaId: personaId,
+            clearPersona: personaId == null,
           );
           Navigator.pop(sheetCtx);
           _showSettingsSnack(context, pov: pov, mode: mode, length: length);
@@ -171,7 +187,7 @@ class _PlayViewState extends State<_PlayView> {
         },
       ),
     ).then((_) {
-      if (mounted) _maybeRestoreRealmMenu(context);
+      if (mounted && context.mounted) _maybeRestoreRealmMenu(context);
     });
   }
 
@@ -275,7 +291,7 @@ class _PlayViewState extends State<_PlayView> {
         ),
       ),
     ).then((_) {
-      if (mounted) _maybeRestoreRealmMenu(context);
+      if (mounted && context.mounted) _maybeRestoreRealmMenu(context);
     });
   }
 
@@ -1456,7 +1472,10 @@ class _SettingsSheet extends StatefulWidget {
   final String initialPov;
   final String initialMode;
   final String initialLength;
-  final void Function(String pov, String mode, String length) onApply;
+  final String? initialPersonaId;
+  final bool isGmWorld;
+  final List<Persona> personas;
+  final void Function(String pov, String mode, String length, String? personaId) onApply;
   final VoidCallback onReset;
   final VoidCallback onDelete;
 
@@ -1464,6 +1483,9 @@ class _SettingsSheet extends StatefulWidget {
     required this.initialPov,
     required this.initialMode,
     required this.initialLength,
+    required this.initialPersonaId,
+    required this.isGmWorld,
+    required this.personas,
     required this.onApply,
     required this.onReset,
     required this.onDelete,
@@ -1477,11 +1499,13 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   late String _pov;
   late String _mode;
   late String _length;
+  String? _personaId;
 
   bool get _dirty =>
       _pov != widget.initialPov ||
       _mode != widget.initialMode ||
-      _length != widget.initialLength;
+      _length != widget.initialLength ||
+      _personaId != widget.initialPersonaId;
 
   @override
   void initState() {
@@ -1489,12 +1513,19 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     _pov = widget.initialPov;
     _mode = widget.initialMode;
     _length = widget.initialLength;
+    // Clamp to a selectable value: the saved persona may have been deleted, or
+    // the list may have failed to load. A non-null DropdownButton value that is
+    // absent from the items asserts at build time.
+    _personaId = widget.personas.any((p) => p.id == widget.initialPersonaId)
+        ? widget.initialPersonaId
+        : null;
   }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
+        child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1599,6 +1630,51 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             ),
             const SizedBox(height: 20),
 
+            const _SettingsLabel(icon: AppIcons.createCharacter, label: 'PERSONA'),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String?>(
+              value: _personaId,
+              isExpanded: true,
+              dropdownColor: EverloreTheme.void2,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: EverloreTheme.void3,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('None', style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash)),
+                ),
+                for (final p in widget.personas)
+                  DropdownMenuItem<String?>(
+                    value: p.id,
+                    child: Text(
+                      p.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: EverloreTheme.ui(size: 13, color: EverloreTheme.parchment),
+                    ),
+                  ),
+              ],
+              onChanged: (v) => setState(() => _personaId = v),
+            ),
+            // GM worlds seed the protagonist from the persona once; later edits
+            // to the persona won't rewrite that character. Surface this so the
+            // player isn't surprised when editing a persona has no effect here.
+            if (widget.isGmWorld && _personaId != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'In Game Master worlds your protagonist is set once from this '
+                'persona. Editing the persona later won\'t change this world.',
+                style: EverloreTheme.ui(
+                  size: 11,
+                  color: EverloreTheme.ash,
+                  height: 1.4,
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+
             // Message length — drives both the prompt directive and max tokens.
             const _SettingsLabel(icon: AppIcons.length, label: 'REPLY LENGTH'),
             const SizedBox(height: 8),
@@ -1622,7 +1698,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               width: double.infinity,
               child: GestureDetector(
                 onTap: _dirty
-                    ? () => widget.onApply(_pov, _mode, _length)
+                    ? () => widget.onApply(_pov, _mode, _length, _personaId)
                     : null,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
@@ -1691,6 +1767,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

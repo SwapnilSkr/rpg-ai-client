@@ -117,7 +117,9 @@ class ChronicleRepository {
     String? mode,
     String? messageLength,
     String? focusCharacterId,
+    String? personaId,
     bool clearFocusCharacter = false,
+    bool clearPersona = false,
   }) async {
     await ApiClient.patch('/instances/$instanceId/settings', body: {
       if (narrationPov != null) 'narration_pov': narrationPov,
@@ -125,6 +127,8 @@ class ChronicleRepository {
       if (messageLength != null) 'message_length': messageLength,
       if (focusCharacterId != null) 'focus_character_id': focusCharacterId,
       if (clearFocusCharacter) 'focus_character_id': null,
+      if (personaId != null) 'persona_id': personaId,
+      if (clearPersona) 'persona_id': null,
     });
   }
 }
