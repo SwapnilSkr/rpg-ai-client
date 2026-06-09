@@ -150,6 +150,24 @@ class SceneInfo {
   }
 }
 
+/// A story landmark crossed during play (brass-seal moment), persisted in the
+/// instance meta and rendered on the story timeline.
+class Milestone {
+  final String label;
+  final int sequence;
+  final DateTime? at;
+
+  const Milestone({required this.label, required this.sequence, this.at});
+
+  factory Milestone.fromJson(Map<String, dynamic> json) {
+    return Milestone(
+      label: (json['label'] ?? '').toString(),
+      sequence: (json['sequence'] as num?)?.toInt() ?? 0,
+      at: json['at'] != null ? DateTime.tryParse(json['at'].toString()) : null,
+    );
+  }
+}
+
 class InstanceMeta {
   final int totalEvents;
   final int totalMemories;
@@ -157,12 +175,16 @@ class InstanceMeta {
   final DateTime? lastActiveAt;
   final bool isArchived;
 
+  /// Story landmarks crossed so far (oldest first), capped server-side at 50.
+  final List<Milestone> milestones;
+
   const InstanceMeta({
     this.totalEvents = 0,
     this.totalMemories = 0,
     this.totalTokensConsumed = 0,
     this.lastActiveAt,
     this.isArchived = false,
+    this.milestones = const [],
   });
 
   factory InstanceMeta.fromJson(Map<String, dynamic> json) {
@@ -174,6 +196,11 @@ class InstanceMeta {
           ? DateTime.tryParse(json['last_active_at'])
           : null,
       isArchived: json['is_archived'] ?? false,
+      milestones:
+          (json['milestones'] as List?)
+              ?.map((e) => Milestone.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList() ??
+          const [],
     );
   }
 }

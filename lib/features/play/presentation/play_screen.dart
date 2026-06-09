@@ -10,6 +10,7 @@ import 'widgets/choice_chips.dart';
 import 'widgets/milestone_toast.dart';
 import 'widgets/bond_meters.dart';
 import 'widgets/bond_rail.dart';
+import 'widgets/story_timeline_sheet.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/event.dart';
@@ -300,6 +301,12 @@ class _PlayViewState extends State<_PlayView> {
           Navigator.pop(sheetCtx);
           _openChronicleFromMenu(context);
         },
+        onTimeline: () {
+          navigatingFromMenu = true;
+          _pendingRealmMenuReturn = true;
+          Navigator.pop(sheetCtx);
+          _showTimelineSheet(context);
+        },
         onThoughts: () {
           navigatingFromMenu = true;
           _pendingRealmMenuReturn = true;
@@ -437,6 +444,33 @@ class _PlayViewState extends State<_PlayView> {
           ),
         ),
       );
+  }
+
+  void _showTimelineSheet(BuildContext context) {
+    final cubit = context.read<PlayCubit>();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => BlocProvider.value(
+        value: cubit,
+        child: BlocBuilder<PlayCubit, PlayState>(
+          builder: (ctx, state) => StoryTimelineSheet(
+            milestones: state.milestones,
+            onOpenChronicle: () {
+              _pendingRealmMenuReturn = false;
+              Navigator.pop(sheetCtx);
+              context.push('/chronicle/${cubit.instanceId}');
+            },
+          ),
+        ),
+      ),
+    ).then((_) {
+      if (mounted && context.mounted) _maybeRestoreRealmMenu(context);
+    });
   }
 
   void _showThoughtsSheet(BuildContext context) {
@@ -1436,11 +1470,13 @@ class _OlderHistoryButton extends StatelessWidget {
 /// Forged bottom sheet — Chronicle, Thoughts, and Scene Settings in one place.
 class _RealmMenuSheet extends StatelessWidget {
   final VoidCallback onChronicle;
+  final VoidCallback onTimeline;
   final VoidCallback onThoughts;
   final VoidCallback onSettings;
 
   const _RealmMenuSheet({
     required this.onChronicle,
+    required this.onTimeline,
     required this.onThoughts,
     required this.onSettings,
   });
@@ -1488,6 +1524,13 @@ class _RealmMenuSheet extends StatelessWidget {
                 title: 'Chronicle',
                 subtitle: 'Read every turn in this story.',
                 onTap: onChronicle,
+              ),
+              const SizedBox(height: 12),
+              _RealmMenuChoice(
+                materialIcon: Icons.timeline_outlined,
+                title: 'Story Timeline',
+                subtitle: 'The landmarks your story has crossed.',
+                onTap: onTimeline,
               ),
               const SizedBox(height: 12),
               _RealmMenuChoice(

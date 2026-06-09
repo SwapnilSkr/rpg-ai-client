@@ -46,6 +46,10 @@ class PlayState extends Equatable {
   /// Bumped with every milestone so identical labels still retrigger the toast.
   final int milestoneStamp;
 
+  /// Full story-landmark log (oldest first) for the timeline surface — seeded
+  /// from instance meta on load, appended live as milestones unlock.
+  final List<Milestone> milestones;
+
   const PlayState({
     this.instance,
     this.template,
@@ -62,6 +66,7 @@ class PlayState extends Equatable {
     this.lastStatDeltas,
     this.lastMilestone,
     this.milestoneStamp = 0,
+    this.milestones = const [],
   });
 
   PlayState copyWith({
@@ -80,6 +85,7 @@ class PlayState extends Equatable {
     Object? lastStatDeltas = _kUnset,
     Object? lastMilestone = _kUnset,
     int? milestoneStamp,
+    List<Milestone>? milestones,
   }) {
     return PlayState(
       instance: instance ?? this.instance,
@@ -103,6 +109,7 @@ class PlayState extends Equatable {
           ? this.lastMilestone
           : lastMilestone as String?,
       milestoneStamp: milestoneStamp ?? this.milestoneStamp,
+      milestones: milestones ?? this.milestones,
     );
   }
 
@@ -123,6 +130,7 @@ class PlayState extends Equatable {
     lastStatDeltas,
     lastMilestone,
     milestoneStamp,
+    milestones,
   ];
 }
 
@@ -231,6 +239,7 @@ class PlayCubit extends Cubit<PlayState> {
           characters: characters,
           totalEvents: totalEvents,
           hasOlderEvents: hasOlderEvents,
+          milestones: instance.meta.milestones,
           isLoading: false,
         ),
       );
@@ -357,10 +366,18 @@ class PlayCubit extends Cubit<PlayState> {
       final raw = msg['milestone'];
       final label = (raw is Map ? raw['label'] : raw)?.toString();
       if (label == null || label.isEmpty) return;
+      // Append to the timeline log (dedup by sequence) so the story-spine grows
+      // live, in addition to firing the one-shot toast.
+      final seq = (raw is Map ? raw['sequence'] as num? : null)?.toInt();
+      final milestones = [...state.milestones];
+      if (seq != null && !milestones.any((m) => m.sequence == seq)) {
+        milestones.add(Milestone(label: label, sequence: seq, at: DateTime.now()));
+      }
       emit(
         state.copyWith(
           lastMilestone: label,
           milestoneStamp: DateTime.now().millisecondsSinceEpoch,
+          milestones: milestones,
         ),
       );
     });
