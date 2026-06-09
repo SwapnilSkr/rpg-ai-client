@@ -64,9 +64,24 @@ class _PlayViewState extends State<_PlayView> {
     super.dispose();
   }
 
+  /// Trim a status phrase to a compact chip label.
+  String _shortTopic(String s) {
+    final t = s.trim();
+    return t.length <= 30 ? t : '${t.substring(0, 29)}…';
+  }
+
+  /// Fold a status phrase into the middle of a question ("Tell me about …"):
+  /// drop trailing punctuation and lowercase the first letter.
+  String _askPhrase(String s) {
+    final t = s.trim().replaceAll(RegExp(r'[.!?]+$'), '');
+    if (t.isEmpty) return t;
+    return t[0].toLowerCase() + t.substring(1);
+  }
+
   /// Contextual bond actions for [character] — every action is sugar over a
   /// normal player turn (prefilled composer) or a memory lens, never a
-  /// separate game system.
+  /// separate game system. "Ask about" topics are grounded in the character's
+  /// current state so the prompts are specific, not a dangling quote.
   void _showBondActions(BuildContext context, CharacterProfile character) {
     final cubit = context.read<PlayCubit>();
     final name = character.canonicalName;
@@ -103,14 +118,39 @@ class _PlayViewState extends State<_PlayView> {
                   _composerDraft.value = '*I approach $name.* ';
                 },
               ),
-              _BondActionTile(
-                icon: Icons.help_outline,
-                label: 'Ask $name about…',
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _composerDraft.value = '*I turn to $name.* "Tell me about ';
-                },
-              ),
+              // Grounded "ask about" prompts from the character's current state;
+              // a single open question when nothing is known yet.
+              ...(() {
+                final topics = character.mutableState
+                    .map((s) => s.trim())
+                    .where((s) => s.isNotEmpty)
+                    .take(3)
+                    .toList(growable: false);
+                if (topics.isEmpty) {
+                  return [
+                    _BondActionTile(
+                      icon: Icons.help_outline,
+                      label: 'Ask $name a question',
+                      onTap: () {
+                        Navigator.pop(sheetCtx);
+                        _composerDraft.value = '*I turn to $name.* "';
+                      },
+                    ),
+                  ];
+                }
+                return [
+                  for (final t in topics)
+                    _BondActionTile(
+                      icon: Icons.help_outline,
+                      label: 'Ask about ${_shortTopic(t)}',
+                      onTap: () {
+                        Navigator.pop(sheetCtx);
+                        _composerDraft.value =
+                            '*I turn to $name.* "Tell me about ${_askPhrase(t)}." ';
+                      },
+                    ),
+                ];
+              })(),
               _BondActionTile(
                 icon: Icons.history_edu_outlined,
                 label: 'What $name remembers of you',
