@@ -6,6 +6,7 @@ import 'widgets/edit_dialog.dart';
 import 'widgets/almanac_view.dart';
 import 'widgets/places_view.dart';
 import 'widgets/bonds_view.dart';
+import 'widgets/threads_view.dart';
 import '../../play/presentation/widgets/narrative_bubble.dart';
 import '../../../../app/theme/nexus_theme.dart';
 
@@ -67,6 +68,7 @@ class _ChronicleView extends StatelessWidget {
                         ChronicleTab.calendar => _buildAlmanac(context, state),
                         ChronicleTab.places => _buildPlaces(context, state),
                         ChronicleTab.bonds => _buildBonds(context, state),
+                        ChronicleTab.threads => _buildThreads(context, state),
                       },
               ),
             ],
@@ -174,6 +176,18 @@ class _ChronicleView extends StatelessWidget {
       instanceId: context.read<ChronicleCubit>().instanceId,
       ledger: bonds,
     );
+  }
+
+  Widget _buildThreads(BuildContext context, ChronicleState state) {
+    final threads = state.threads;
+    if (threads == null) {
+      return _EmptyState(
+        icon: Icons.flag_outlined,
+        title: 'No threads yet',
+        subtitle: 'Promises, debts, and open questions will gather here.',
+      );
+    }
+    return ThreadsView(data: threads);
   }
 
   void _confirmDelete(BuildContext context, String memoryId) {
@@ -310,6 +324,15 @@ class _ChronicleHeader extends StatelessWidget {
                     onTap: () => context
                         .read<ChronicleCubit>()
                         .switchTab(ChronicleTab.bonds),
+                  ),
+                  const SizedBox(width: 10),
+                  _TabButton(
+                    label: 'Threads',
+                    icon: Icons.flag_outlined,
+                    active: activeTab == ChronicleTab.threads,
+                    onTap: () => context
+                        .read<ChronicleCubit>()
+                        .switchTab(ChronicleTab.threads),
                   ),
                 ],
               ),

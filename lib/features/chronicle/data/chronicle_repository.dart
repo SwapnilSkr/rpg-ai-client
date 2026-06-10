@@ -5,6 +5,7 @@ import '../../../shared/models/character_profile.dart';
 import 'calendar_data.dart';
 import 'location_journal.dart';
 import 'relationship_ledger.dart';
+import 'threads_data.dart';
 
 class ChronicleRepository {
   static Future<Map<String, dynamic>> getEvents(
@@ -85,6 +86,12 @@ class ChronicleRepository {
   static Future<CalendarData> getCalendar(String instanceId) async {
     final response = await ApiClient.get('/chronicle/calendar/$instanceId');
     return CalendarData.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
+  /// Open and recently-resolved story threads (promises/conflicts/questions).
+  static Future<ThreadsData> getThreads(String instanceId) async {
+    final response = await ApiClient.get('/chronicle/threads/$instanceId');
+    return ThreadsData.fromJson(Map<String, dynamic>.from(response as Map));
   }
 
   /// Per-character standing toward the player: meters, disposition, and the

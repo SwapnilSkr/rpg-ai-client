@@ -6,8 +6,9 @@ import '../data/chronicle_repository.dart';
 import '../data/calendar_data.dart';
 import '../data/location_journal.dart';
 import '../data/relationship_ledger.dart';
+import '../data/threads_data.dart';
 
-enum ChronicleTab { timeline, memories, calendar, places, bonds }
+enum ChronicleTab { timeline, memories, calendar, places, bonds, threads }
 
 class ChronicleState extends Equatable {
   final List<GameEvent> events;
@@ -15,6 +16,7 @@ class ChronicleState extends Equatable {
   final CalendarData? calendar;
   final LocationsData? locations;
   final RelationshipLedger? bonds;
+  final ThreadsData? threads;
   final bool isLoading;
   final String? error;
   final ChronicleTab activeTab;
@@ -27,6 +29,7 @@ class ChronicleState extends Equatable {
     this.calendar,
     this.locations,
     this.bonds,
+    this.threads,
     this.isLoading = false,
     this.error,
     this.activeTab = ChronicleTab.timeline,
@@ -40,6 +43,7 @@ class ChronicleState extends Equatable {
     CalendarData? calendar,
     LocationsData? locations,
     RelationshipLedger? bonds,
+    ThreadsData? threads,
     bool? isLoading,
     String? error,
     ChronicleTab? activeTab,
@@ -52,6 +56,7 @@ class ChronicleState extends Equatable {
       calendar: calendar ?? this.calendar,
       locations: locations ?? this.locations,
       bonds: bonds ?? this.bonds,
+      threads: threads ?? this.threads,
       isLoading: isLoading ?? this.isLoading,
       error: error,
       activeTab: activeTab ?? this.activeTab,
@@ -67,6 +72,7 @@ class ChronicleState extends Equatable {
         calendar,
         locations,
         bonds,
+        threads,
         isLoading,
         error,
         activeTab,
@@ -194,6 +200,16 @@ class ChronicleCubit extends Cubit<ChronicleState> {
     }
   }
 
+  Future<void> loadThreads() async {
+    emit(state.copyWith(isLoading: true, error: null));
+    try {
+      final threads = await ChronicleRepository.getThreads(instanceId);
+      emit(state.copyWith(threads: threads, isLoading: false));
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, error: e.toString()));
+    }
+  }
+
   void switchTab(ChronicleTab tab) {
     emit(state.copyWith(activeTab: tab));
     if (tab == ChronicleTab.timeline && state.events.isEmpty) {
@@ -206,6 +222,8 @@ class ChronicleCubit extends Cubit<ChronicleState> {
       loadLocations();
     } else if (tab == ChronicleTab.bonds && state.bonds == null) {
       loadBonds();
+    } else if (tab == ChronicleTab.threads && state.threads == null) {
+      loadThreads();
     }
   }
 }
