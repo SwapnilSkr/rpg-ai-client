@@ -44,6 +44,12 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _milestoneUnlockedController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _sideChatDeltaController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _sideChatCompleteController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _sideChatErrorController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get onGenerationDelta =>
       _generationDeltaController.stream;
@@ -65,6 +71,12 @@ class WsManager {
       _replayCompleteController.stream;
   Stream<Map<String, dynamic>> get onMilestoneUnlocked =>
       _milestoneUnlockedController.stream;
+  Stream<Map<String, dynamic>> get onSideChatDelta =>
+      _sideChatDeltaController.stream;
+  Stream<Map<String, dynamic>> get onSideChatComplete =>
+      _sideChatCompleteController.stream;
+  Stream<Map<String, dynamic>> get onSideChatError =>
+      _sideChatErrorController.stream;
 
   bool get isConnected => _isConnected;
 
@@ -228,6 +240,15 @@ class WsManager {
       case 'milestone_unlocked':
         _milestoneUnlockedController.add(msg);
         break;
+      case 'side_chat_delta':
+        _sideChatDeltaController.add(msg);
+        break;
+      case 'side_chat_complete':
+        _sideChatCompleteController.add(msg);
+        break;
+      case 'side_chat_error':
+        _sideChatErrorController.add(msg);
+        break;
       case 'pong':
       case 'ack':
         break;
@@ -297,6 +318,18 @@ class WsManager {
     });
   }
 
+  void sendSideChatMessage(
+    String instanceId,
+    String characterId,
+    String message,
+  ) {
+    send({
+      'action': 'side_chat',
+      'instance_id': instanceId,
+      'payload': {'character_id': characterId, 'message': message},
+    });
+  }
+
   void loadInstance(String instanceId) {
     send({'action': 'load_instance', 'instance_id': instanceId});
   }
@@ -340,5 +373,8 @@ class WsManager {
     _replayDeltaController.close();
     _replayCompleteController.close();
     _milestoneUnlockedController.close();
+    _sideChatDeltaController.close();
+    _sideChatCompleteController.close();
+    _sideChatErrorController.close();
   }
 }

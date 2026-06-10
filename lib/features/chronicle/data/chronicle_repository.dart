@@ -7,6 +7,7 @@ import 'location_journal.dart';
 import 'relationship_ledger.dart';
 import 'threads_data.dart';
 import 'recap_data.dart';
+import 'side_chat_data.dart';
 
 class ChronicleRepository {
   static Future<Map<String, dynamic>> getEvents(
@@ -36,9 +37,7 @@ class ChronicleRepository {
     int? minImportance,
     bool unresolvedOnly = false,
   }) async {
-    final params = <String, String>{
-      'include_archived': '$includeArchived',
-    };
+    final params = <String, String>{'include_archived': '$includeArchived'};
     if (query != null && query.trim().isNotEmpty) params['q'] = query.trim();
     if (type != null && type.isNotEmpty) params['type'] = type;
     if (minImportance != null) params['min_importance'] = '$minImportance';
@@ -56,11 +55,14 @@ class ChronicleRepository {
     String? type,
     int? importance,
   }) async {
-    await ApiClient.put('/chronicle/memory/$memoryId', body: {
-      'text': text,
-      if (type != null) 'type': type,
-      if (importance != null) 'importance': importance,
-    });
+    await ApiClient.put(
+      '/chronicle/memory/$memoryId',
+      body: {
+        'text': text,
+        if (type != null) 'type': type,
+        if (importance != null) 'importance': importance,
+      },
+    );
   }
 
   static Future<void> deleteMemory(String memoryId) async {
@@ -72,10 +74,13 @@ class ChronicleRepository {
     String? aiResponse,
     String? playerInput,
   }) async {
-    await ApiClient.put('/chronicle/event/$eventId', body: {
-      if (aiResponse != null) 'ai_response': aiResponse,
-      if (playerInput != null) 'player_input': playerInput,
-    });
+    await ApiClient.put(
+      '/chronicle/event/$eventId',
+      body: {
+        if (aiResponse != null) 'ai_response': aiResponse,
+        if (playerInput != null) 'player_input': playerInput,
+      },
+    );
   }
 
   static Future<GameEvent> replayEvent(String eventId) async {
@@ -116,8 +121,12 @@ class ChronicleRepository {
   /// Per-character standing toward the player: meters, disposition, and the
   /// narrative moments that shifted each bond.
   static Future<RelationshipLedger> getRelationships(String instanceId) async {
-    final response = await ApiClient.get('/chronicle/relationships/$instanceId');
-    return RelationshipLedger.fromJson(Map<String, dynamic>.from(response as Map));
+    final response = await ApiClient.get(
+      '/chronicle/relationships/$instanceId',
+    );
+    return RelationshipLedger.fromJson(
+      Map<String, dynamic>.from(response as Map),
+    );
   }
 
   /// "What this character remembers about you" — the memories a character is
@@ -129,7 +138,22 @@ class ChronicleRepository {
     final response = await ApiClient.get(
       '/chronicle/relationships/$instanceId/$characterId/memories',
     );
-    return CharacterMemories.fromJson(Map<String, dynamic>.from(response as Map));
+    return CharacterMemories.fromJson(
+      Map<String, dynamic>.from(response as Map),
+    );
+  }
+
+  /// Private one-on-one side-character thread.
+  static Future<SideChatThread> getSideChatThread(
+    String instanceId,
+    String characterId, {
+    int page = 1,
+    int limit = 30,
+  }) async {
+    final response = await ApiClient.get(
+      '/chronicle/side-chats/$instanceId/$characterId?page=$page&limit=$limit',
+    );
+    return SideChatThread.fromJson(Map<String, dynamic>.from(response as Map));
   }
 
   /// All places with anchored events/memories + the current-location cursor.
@@ -143,8 +167,9 @@ class ChronicleRepository {
     String instanceId,
     String locationEntityId,
   ) async {
-    final response =
-        await ApiClient.get('/chronicle/locations/$instanceId/$locationEntityId');
+    final response = await ApiClient.get(
+      '/chronicle/locations/$instanceId/$locationEntityId',
+    );
     return LocationJournal.fromJson(Map<String, dynamic>.from(response as Map));
   }
 
@@ -154,17 +179,19 @@ class ChronicleRepository {
     String instanceId,
     String timelineId,
   ) async {
-    await ApiClient.put('/chronicle/calendar/$instanceId/timeline/active', body: {
-      'timeline_id': timelineId,
-    });
+    await ApiClient.put(
+      '/chronicle/calendar/$instanceId/timeline/active',
+      body: {'timeline_id': timelineId},
+    );
   }
 
   /// Rewind a playthrough to [sequence]: removes that turn and everything after,
   /// rolling back state, memories, and summaries on the server.
   static Future<void> rewind(String instanceId, int sequence) async {
-    await ApiClient.post('/chronicle/rewind/$instanceId', body: {
-      'sequence': sequence,
-    });
+    await ApiClient.post(
+      '/chronicle/rewind/$instanceId',
+      body: {'sequence': sequence},
+    );
   }
 
   /// Edit a character/protagonist card. Removed facts trigger memory
@@ -173,10 +200,13 @@ class ChronicleRepository {
     String characterId,
     Map<String, dynamic> updates,
   ) async {
-    final response =
-        await ApiClient.put('/chronicle/character/$characterId', body: updates);
+    final response = await ApiClient.put(
+      '/chronicle/character/$characterId',
+      body: updates,
+    );
     return CharacterProfile.fromJson(
-        Map<String, dynamic>.from(response['character'] as Map));
+      Map<String, dynamic>.from(response['character'] as Map),
+    );
   }
 
   /// GM onboarding: set the player's own character as this instance's locked
@@ -186,10 +216,13 @@ class ChronicleRepository {
     required String name,
     String? identity,
   }) async {
-    await ApiClient.post('/instances/$instanceId/protagonist', body: {
-      'name': name,
-      if (identity != null && identity.isNotEmpty) 'identity': identity,
-    });
+    await ApiClient.post(
+      '/instances/$instanceId/protagonist',
+      body: {
+        'name': name,
+        if (identity != null && identity.isNotEmpty) 'identity': identity,
+      },
+    );
   }
 
   /// Update in-chat session settings (POV, chat mode, reply length) for an instance.
@@ -203,14 +236,17 @@ class ChronicleRepository {
     bool clearFocusCharacter = false,
     bool clearPersona = false,
   }) async {
-    await ApiClient.patch('/instances/$instanceId/settings', body: {
-      if (narrationPov != null) 'narration_pov': narrationPov,
-      if (mode != null) 'mode': mode,
-      if (messageLength != null) 'message_length': messageLength,
-      if (focusCharacterId != null) 'focus_character_id': focusCharacterId,
-      if (clearFocusCharacter) 'focus_character_id': null,
-      if (personaId != null) 'persona_id': personaId,
-      if (clearPersona) 'persona_id': null,
-    });
+    await ApiClient.patch(
+      '/instances/$instanceId/settings',
+      body: {
+        if (narrationPov != null) 'narration_pov': narrationPov,
+        if (mode != null) 'mode': mode,
+        if (messageLength != null) 'message_length': messageLength,
+        if (focusCharacterId != null) 'focus_character_id': focusCharacterId,
+        if (clearFocusCharacter) 'focus_character_id': null,
+        if (personaId != null) 'persona_id': personaId,
+        if (clearPersona) 'persona_id': null,
+      },
+    );
   }
 }
