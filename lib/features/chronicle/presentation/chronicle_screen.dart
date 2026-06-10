@@ -5,6 +5,7 @@ import 'widgets/memory_card.dart';
 import 'widgets/edit_dialog.dart';
 import 'widgets/almanac_view.dart';
 import 'widgets/places_view.dart';
+import 'widgets/bonds_view.dart';
 import '../../play/presentation/widgets/narrative_bubble.dart';
 import '../../../../app/theme/nexus_theme.dart';
 
@@ -65,6 +66,7 @@ class _ChronicleView extends StatelessWidget {
                         ChronicleTab.memories => _buildEchoes(context, state),
                         ChronicleTab.calendar => _buildAlmanac(context, state),
                         ChronicleTab.places => _buildPlaces(context, state),
+                        ChronicleTab.bonds => _buildBonds(context, state),
                       },
               ),
             ],
@@ -157,6 +159,18 @@ class _ChronicleView extends StatelessWidget {
       instanceId: context.read<ChronicleCubit>().instanceId,
       data: locations,
     );
+  }
+
+  Widget _buildBonds(BuildContext context, ChronicleState state) {
+    final bonds = state.bonds;
+    if (bonds == null) {
+      return _EmptyState(
+        icon: Icons.favorite_border,
+        title: 'No bonds yet',
+        subtitle: 'Where others stand with you will be charted here.',
+      );
+    }
+    return BondsView(ledger: bonds);
   }
 
   void _confirmDelete(BuildContext context, String memoryId) {
@@ -284,6 +298,15 @@ class _ChronicleHeader extends StatelessWidget {
                     onTap: () => context
                         .read<ChronicleCubit>()
                         .switchTab(ChronicleTab.places),
+                  ),
+                  const SizedBox(width: 10),
+                  _TabButton(
+                    label: 'Bonds',
+                    icon: Icons.favorite_border,
+                    active: activeTab == ChronicleTab.bonds,
+                    onTap: () => context
+                        .read<ChronicleCubit>()
+                        .switchTab(ChronicleTab.bonds),
                   ),
                 ],
               ),

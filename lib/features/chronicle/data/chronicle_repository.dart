@@ -4,6 +4,7 @@ import '../../../shared/models/memory.dart';
 import '../../../shared/models/character_profile.dart';
 import 'calendar_data.dart';
 import 'location_journal.dart';
+import 'relationship_ledger.dart';
 
 class ChronicleRepository {
   static Future<Map<String, dynamic>> getEvents(
@@ -84,6 +85,13 @@ class ChronicleRepository {
   static Future<CalendarData> getCalendar(String instanceId) async {
     final response = await ApiClient.get('/chronicle/calendar/$instanceId');
     return CalendarData.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
+  /// Per-character standing toward the player: meters, disposition, and the
+  /// narrative moments that shifted each bond.
+  static Future<RelationshipLedger> getRelationships(String instanceId) async {
+    final response = await ApiClient.get('/chronicle/relationships/$instanceId');
+    return RelationshipLedger.fromJson(Map<String, dynamic>.from(response as Map));
   }
 
   /// All places with anchored events/memories + the current-location cursor.

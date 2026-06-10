@@ -5,14 +5,16 @@ import '../../../shared/models/memory.dart';
 import '../data/chronicle_repository.dart';
 import '../data/calendar_data.dart';
 import '../data/location_journal.dart';
+import '../data/relationship_ledger.dart';
 
-enum ChronicleTab { timeline, memories, calendar, places }
+enum ChronicleTab { timeline, memories, calendar, places, bonds }
 
 class ChronicleState extends Equatable {
   final List<GameEvent> events;
   final List<Memory> memories;
   final CalendarData? calendar;
   final LocationsData? locations;
+  final RelationshipLedger? bonds;
   final bool isLoading;
   final String? error;
   final ChronicleTab activeTab;
@@ -24,6 +26,7 @@ class ChronicleState extends Equatable {
     this.memories = const [],
     this.calendar,
     this.locations,
+    this.bonds,
     this.isLoading = false,
     this.error,
     this.activeTab = ChronicleTab.timeline,
@@ -36,6 +39,7 @@ class ChronicleState extends Equatable {
     List<Memory>? memories,
     CalendarData? calendar,
     LocationsData? locations,
+    RelationshipLedger? bonds,
     bool? isLoading,
     String? error,
     ChronicleTab? activeTab,
@@ -47,6 +51,7 @@ class ChronicleState extends Equatable {
       memories: memories ?? this.memories,
       calendar: calendar ?? this.calendar,
       locations: locations ?? this.locations,
+      bonds: bonds ?? this.bonds,
       isLoading: isLoading ?? this.isLoading,
       error: error,
       activeTab: activeTab ?? this.activeTab,
@@ -61,6 +66,7 @@ class ChronicleState extends Equatable {
         memories,
         calendar,
         locations,
+        bonds,
         isLoading,
         error,
         activeTab,
@@ -178,6 +184,16 @@ class ChronicleCubit extends Cubit<ChronicleState> {
     }
   }
 
+  Future<void> loadBonds() async {
+    emit(state.copyWith(isLoading: true, error: null));
+    try {
+      final bonds = await ChronicleRepository.getRelationships(instanceId);
+      emit(state.copyWith(bonds: bonds, isLoading: false));
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, error: e.toString()));
+    }
+  }
+
   void switchTab(ChronicleTab tab) {
     emit(state.copyWith(activeTab: tab));
     if (tab == ChronicleTab.timeline && state.events.isEmpty) {
@@ -188,6 +204,8 @@ class ChronicleCubit extends Cubit<ChronicleState> {
       loadCalendar();
     } else if (tab == ChronicleTab.places && state.locations == null) {
       loadLocations();
+    } else if (tab == ChronicleTab.bonds && state.bonds == null) {
+      loadBonds();
     }
   }
 }
