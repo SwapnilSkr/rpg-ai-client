@@ -23,13 +23,17 @@ class Choice {
     }
     if (raw is Map) {
       final m = Map<String, dynamic>.from(raw);
-      final label =
-          (m['label'] ?? '').toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+      final label = (m['label'] ?? '')
+          .toString()
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
       final kind = m['kind']?.toString() == 'say' ? 'say' : 'act';
       var send = (m['send'] ?? '').toString().trim();
       if (send.isEmpty) {
-        final bare =
-            label.replaceAll('*', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+        final bare = label
+            .replaceAll('*', ' ')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
         send = bare.isEmpty ? '' : (kind == 'say' ? bare : '*$bare*');
       }
       return Choice(label: label, kind: kind, send: send);
@@ -73,6 +77,9 @@ class GameEvent {
   /// In-story time that passed on a calendar-tick turn (e.g. "several days").
   final String? timeAdvanced;
 
+  /// Present on travel turns: where the protagonist moved between.
+  final TravelMove? travel;
+
   /// Open-thread text that seeded this turn's beat (fate came knocking).
   final String? fateThread;
 
@@ -101,12 +108,14 @@ class GameEvent {
     this.choices = const [],
     this.milestone,
     this.timeAdvanced,
+    this.travel,
     this.fateThread,
     this.presentCharacters = const [],
   });
 
   /// True for time-skip turns, which render as interstitial passage cards.
   bool get isTimePassage => type == 'calendar_tick';
+  bool get isTravel => type == 'travel';
 
   GameEvent copyWith({
     String? playerInput,
@@ -140,6 +149,7 @@ class GameEvent {
       choices: choices ?? this.choices,
       milestone: milestone,
       timeAdvanced: timeAdvanced,
+      travel: travel,
       fateThread: fateThread,
       presentCharacters: presentCharacters ?? this.presentCharacters,
     );
@@ -193,6 +203,7 @@ class GameEvent {
       milestone: (data?['milestone'] ?? json['milestone'])?.toString(),
       timeAdvanced: (data?['time_advanced'] ?? json['time_advanced'])
           ?.toString(),
+      travel: TravelMove.fromAny(data?['travel'] ?? json['travel']),
       fateThread: (data?['fate_thread'] ?? json['fate_thread'])?.toString(),
       presentCharacters: GameEvent.presentFromAny(
         data?['present_characters'] ?? json['present_characters'],
@@ -243,6 +254,38 @@ class GameEvent {
     'created_at': createdAt.toIso8601String(),
     'is_optimistic': isOptimistic ? 1 : 0,
   };
+}
+
+class TravelMove {
+  final String? from;
+  final String? to;
+
+  const TravelMove({this.from, this.to});
+
+  bool get hasRoute =>
+      (from != null && from!.trim().isNotEmpty) ||
+      (to != null && to!.trim().isNotEmpty);
+
+  String get label {
+    final f = from?.trim();
+    final t = to?.trim();
+    if (f != null && f.isNotEmpty && t != null && t.isNotEmpty) {
+      return 'Traveled from $f to $t';
+    }
+    if (t != null && t.isNotEmpty) return 'Traveled to $t';
+    if (f != null && f.isNotEmpty) return 'Departed $f';
+    return 'Traveled';
+  }
+
+  static TravelMove? fromAny(dynamic raw) {
+    if (raw is! Map) return null;
+    final map = Map<String, dynamic>.from(raw);
+    final move = TravelMove(
+      from: map['from']?.toString(),
+      to: map['to']?.toString(),
+    );
+    return move.hasRoute ? move : null;
+  }
 }
 
 class ReplayVariant {

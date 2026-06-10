@@ -82,6 +82,11 @@ class NarrativeBubble extends StatelessWidget {
               label: event.timeAdvanced,
               fateStirs: (event.fateThread ?? '').isNotEmpty,
             ),
+          if (event.isTravel)
+            _TravelHeader(
+              label: event.travel?.label,
+              timeAdvanced: event.timeAdvanced,
+            ),
           GestureDetector(
             onLongPress: onLongPress,
             child: _NarratorPanel(
@@ -182,6 +187,55 @@ class _TimePassageHeader extends StatelessWidget {
           colors: [
             EverloreTheme.gold.withValues(alpha: 0.45),
             EverloreTheme.gold.withValues(alpha: 0.0),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Ornamental divider announcing a concrete change of place.
+class _TravelHeader extends StatelessWidget {
+  final String? label;
+  final String? timeAdvanced;
+
+  const _TravelHeader({this.label, this.timeAdvanced});
+
+  @override
+  Widget build(BuildContext context) {
+    final caption = (label == null || label!.isEmpty) ? 'Traveled' : label!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 2),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: EverloreTheme.aether.withValues(alpha: 0.08),
+          border: Border.all(
+            color: EverloreTheme.aether.withValues(alpha: 0.22),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.near_me_outlined,
+              size: 14,
+              color: EverloreTheme.aether.withValues(alpha: 0.9),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                timeAdvanced == null || timeAdvanced!.trim().isEmpty
+                    ? caption
+                    : '$caption — ${timeAdvanced!.trim()}',
+                style: EverloreTheme.ui(
+                  size: 11,
+                  weight: FontWeight.w700,
+                  color: EverloreTheme.aether.withValues(alpha: 0.9),
+                  spacing: 0.6,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -756,7 +810,9 @@ class _ProseTextState extends State<_ProseText> {
     var cursor = 0;
     for (final m in matches) {
       if (m.start > cursor) {
-        out.add(TextSpan(text: text.substring(cursor, m.start), style: span.style));
+        out.add(
+          TextSpan(text: text.substring(cursor, m.start), style: span.style),
+        );
       }
       final name = m.group(0)!;
       final r = resolve(name);
@@ -802,10 +858,12 @@ class _ProseTextState extends State<_ProseText> {
       // One combined pattern, longest term first so "Ashen City" wins over
       // "Ash". Matching is case-sensitive — these are proper nouns in prose.
       final terms = <String>[
-        if (linkChars) ...widget.characterNames.where((n) => n.trim().length >= 3),
+        if (linkChars)
+          ...widget.characterNames.where((n) => n.trim().length >= 3),
         if (linkLore)
-          ...widget.loreEntities.where((n) =>
-              n.trim().length >= 4 && !charLower.contains(n.toLowerCase())),
+          ...widget.loreEntities.where(
+            (n) => n.trim().length >= 4 && !charLower.contains(n.toLowerCase()),
+          ),
       ]..sort((a, b) => b.length.compareTo(a.length));
       final escaped = terms.map(RegExp.escape).join('|');
       final pattern = RegExp('\\b(?:$escaped)\\b');
@@ -826,9 +884,15 @@ class _ProseTextState extends State<_ProseText> {
 
       ({VoidCallback? onTap, TextStyle style}) resolve(String matched) {
         if (charLower.contains(matched.toLowerCase())) {
-          return (onTap: () => widget.onCharacterTap?.call(matched), style: charStyle);
+          return (
+            onTap: () => widget.onCharacterTap?.call(matched),
+            style: charStyle,
+          );
         }
-        return (onTap: () => widget.onEntityTap?.call(matched), style: loreStyle);
+        return (
+          onTap: () => widget.onEntityTap?.call(matched),
+          style: loreStyle,
+        );
       }
 
       spans = [

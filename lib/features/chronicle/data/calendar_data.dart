@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../../shared/models/event.dart' show TravelMove;
 
 /// Client mirror of `timeService.listCalendar` — the calendar definitions,
 /// timeline branches, the instance's current story-time cursor, and every
@@ -11,9 +12,9 @@ class CalendarMonth extends Equatable {
   const CalendarMonth({required this.name, required this.days});
 
   factory CalendarMonth.fromJson(Map<String, dynamic> json) => CalendarMonth(
-        name: json['name'] as String? ?? '',
-        days: (json['days'] as num?)?.toInt() ?? 0,
-      );
+    name: json['name'] as String? ?? '',
+    days: (json['days'] as num?)?.toInt() ?? 0,
+  );
 
   @override
   List<Object?> get props => [name, days];
@@ -37,17 +38,20 @@ class StoryCalendar extends Equatable {
   });
 
   factory StoryCalendar.fromJson(Map<String, dynamic> json) => StoryCalendar(
-        id: json['id'] as String? ?? '',
-        name: json['name'] as String? ?? 'Calendar',
-        eras: (json['eras'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-        months: (json['months'] as List?)
-                ?.map((m) => CalendarMonth.fromJson(Map<String, dynamic>.from(m)))
-                .toList() ??
-            const [],
-        weekdays:
-            (json['weekdays'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-        isDefault: json['is_default'] == true,
-      );
+    id: json['id'] as String? ?? '',
+    name: json['name'] as String? ?? 'Calendar',
+    eras:
+        (json['eras'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+    months:
+        (json['months'] as List?)
+            ?.map((m) => CalendarMonth.fromJson(Map<String, dynamic>.from(m)))
+            .toList() ??
+        const [],
+    weekdays:
+        (json['weekdays'] as List?)?.map((e) => e.toString()).toList() ??
+        const [],
+    isDefault: json['is_default'] == true,
+  );
 
   /// Render a story-calendar date into a readable in-world label using this
   /// calendar's month/era names. Falls back to whatever partial fields exist.
@@ -57,7 +61,9 @@ class StoryCalendar extends Equatable {
 
     final parts = <String>[];
     if (date.day != null) parts.add('Day ${date.day}');
-    if (date.month != null && date.month! >= 1 && date.month! <= months.length) {
+    if (date.month != null &&
+        date.month! >= 1 &&
+        date.month! <= months.length) {
       parts.add('of ${months[date.month! - 1].name}');
     }
     final yearEra = <String>[];
@@ -85,12 +91,12 @@ class StoryDate extends Equatable {
   const StoryDate({this.year, this.month, this.day, this.era, this.label});
 
   factory StoryDate.fromJson(Map<String, dynamic> json) => StoryDate(
-        year: (json['year'] as num?)?.toInt(),
-        month: (json['month'] as num?)?.toInt(),
-        day: (json['day'] as num?)?.toInt(),
-        era: json['era'] as String?,
-        label: json['label'] as String?,
-      );
+    year: (json['year'] as num?)?.toInt(),
+    month: (json['month'] as num?)?.toInt(),
+    day: (json['day'] as num?)?.toInt(),
+    era: json['era'] as String?,
+    label: json['label'] as String?,
+  );
 
   @override
   List<Object?> get props => [year, month, day, era, label];
@@ -110,13 +116,13 @@ class TimeAnchor extends Equatable {
   });
 
   factory TimeAnchor.fromJson(Map<String, dynamic> json) => TimeAnchor(
-        sequence: (json['sequence'] as num?)?.toInt() ?? 0,
-        timelineId: json['timeline_id'] as String? ?? 'main',
-        storyDate: json['story_calendar'] != null
-            ? StoryDate.fromJson(Map<String, dynamic>.from(json['story_calendar']))
-            : null,
-        eventTimeLabel: json['event_time_label'] as String?,
-      );
+    sequence: (json['sequence'] as num?)?.toInt() ?? 0,
+    timelineId: json['timeline_id'] as String? ?? 'main',
+    storyDate: json['story_calendar'] != null
+        ? StoryDate.fromJson(Map<String, dynamic>.from(json['story_calendar']))
+        : null,
+    eventTimeLabel: json['event_time_label'] as String?,
+  );
 
   @override
   List<Object?> get props => [sequence, timelineId, storyDate, eventTimeLabel];
@@ -142,17 +148,23 @@ class TimelineBranch extends Equatable {
   bool get isActive => status == 'active';
 
   factory TimelineBranch.fromJson(Map<String, dynamic> json) => TimelineBranch(
-        id: json['id'] as String? ?? '',
-        timelineId: json['timeline_id'] as String? ?? 'main',
-        name: json['name'] as String? ?? 'Timeline',
-        parentTimelineId: json['parent_timeline_id'] as String?,
-        forkedAtSequence: (json['forked_at_sequence'] as num?)?.toInt() ?? 0,
-        status: json['status'] as String? ?? 'active',
-      );
+    id: json['id'] as String? ?? '',
+    timelineId: json['timeline_id'] as String? ?? 'main',
+    name: json['name'] as String? ?? 'Timeline',
+    parentTimelineId: json['parent_timeline_id'] as String?,
+    forkedAtSequence: (json['forked_at_sequence'] as num?)?.toInt() ?? 0,
+    status: json['status'] as String? ?? 'active',
+  );
 
   @override
-  List<Object?> get props =>
-      [id, timelineId, name, parentTimelineId, forkedAtSequence, status];
+  List<Object?> get props => [
+    id,
+    timelineId,
+    name,
+    parentTimelineId,
+    forkedAtSequence,
+    status,
+  ];
 }
 
 class CalendarEvent extends Equatable {
@@ -163,6 +175,7 @@ class CalendarEvent extends Equatable {
   final TimeAnchor? anchor;
   final String? milestone;
   final String? timeAdvanced;
+  final TravelMove? travel;
 
   const CalendarEvent({
     required this.id,
@@ -172,23 +185,32 @@ class CalendarEvent extends Equatable {
     this.anchor,
     this.milestone,
     this.timeAdvanced,
+    this.travel,
   });
 
   factory CalendarEvent.fromJson(Map<String, dynamic> json) => CalendarEvent(
-        id: json['id'] as String? ?? '',
-        sequence: (json['sequence'] as num?)?.toInt() ?? 0,
-        type: json['type'] as String? ?? 'event',
-        sceneTag: json['scene_tag'] as String?,
-        anchor: json['time_anchor'] != null
-            ? TimeAnchor.fromJson(Map<String, dynamic>.from(json['time_anchor']))
-            : null,
-        milestone: json['milestone'] as String?,
-        timeAdvanced: json['time_advanced'] as String?,
-      );
+    id: json['id'] as String? ?? '',
+    sequence: (json['sequence'] as num?)?.toInt() ?? 0,
+    type: json['type'] as String? ?? 'event',
+    sceneTag: json['scene_tag'] as String?,
+    anchor: json['time_anchor'] != null
+        ? TimeAnchor.fromJson(Map<String, dynamic>.from(json['time_anchor']))
+        : null,
+    milestone: json['milestone'] as String?,
+    timeAdvanced: json['time_advanced'] as String?,
+    travel: TravelMove.fromAny(json['travel']),
+  );
 
   @override
-  List<Object?> get props =>
-      [id, sequence, type, sceneTag, milestone, timeAdvanced];
+  List<Object?> get props => [
+    id,
+    sequence,
+    type,
+    sceneTag,
+    milestone,
+    timeAdvanced,
+    travel,
+  ];
 }
 
 class CalendarData extends Equatable {
@@ -205,33 +227,43 @@ class CalendarData extends Equatable {
   });
 
   factory CalendarData.fromJson(Map<String, dynamic> json) => CalendarData(
-        calendars: (json['calendars'] as List?)
-                ?.map((c) => StoryCalendar.fromJson(Map<String, dynamic>.from(c)))
-                .toList() ??
-            const [],
-        timelines: (json['timelines'] as List?)
-                ?.map((t) => TimelineBranch.fromJson(Map<String, dynamic>.from(t)))
-                .toList() ??
-            const [],
-        currentAnchor: json['current_time_anchor'] != null
-            ? TimeAnchor.fromJson(
-                Map<String, dynamic>.from(json['current_time_anchor']))
-            : null,
-        events: (json['events'] as List?)
-                ?.map((e) => CalendarEvent.fromJson(Map<String, dynamic>.from(e)))
-                .toList() ??
-            const [],
-      );
+    calendars:
+        (json['calendars'] as List?)
+            ?.map((c) => StoryCalendar.fromJson(Map<String, dynamic>.from(c)))
+            .toList() ??
+        const [],
+    timelines:
+        (json['timelines'] as List?)
+            ?.map((t) => TimelineBranch.fromJson(Map<String, dynamic>.from(t)))
+            .toList() ??
+        const [],
+    currentAnchor: json['current_time_anchor'] != null
+        ? TimeAnchor.fromJson(
+            Map<String, dynamic>.from(json['current_time_anchor']),
+          )
+        : null,
+    events:
+        (json['events'] as List?)
+            ?.map((e) => CalendarEvent.fromJson(Map<String, dynamic>.from(e)))
+            .toList() ??
+        const [],
+  );
 
   /// The calendar to render dates with: the default, else the first defined.
   StoryCalendar? get primaryCalendar {
     if (calendars.isEmpty) return null;
-    return calendars.firstWhere((c) => c.isDefault, orElse: () => calendars.first);
+    return calendars.firstWhere(
+      (c) => c.isDefault,
+      orElse: () => calendars.first,
+    );
   }
 
   TimelineBranch? get activeTimeline {
     if (timelines.isEmpty) return null;
-    return timelines.firstWhere((t) => t.isActive, orElse: () => timelines.first);
+    return timelines.firstWhere(
+      (t) => t.isActive,
+      orElse: () => timelines.first,
+    );
   }
 
   @override

@@ -34,7 +34,10 @@ class AlmanacView extends StatelessWidget {
               'recorded here.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: EverloreTheme.ash, fontSize: 13, height: 1.5),
+                color: EverloreTheme.ash,
+                fontSize: 13,
+                height: 1.5,
+              ),
             ),
           )
         else
@@ -47,10 +50,12 @@ class AlmanacView extends StatelessWidget {
     List<CalendarEvent> events,
     StoryCalendar? calendar,
   ) {
-    final ordered = [...events]..sort((a, b) => a.sequence.compareTo(b.sequence));
+    final ordered = [...events]
+      ..sort((a, b) => a.sequence.compareTo(b.sequence));
     final groups = <_DateGroup>[];
     for (final e in ordered) {
-      final label = calendar?.formatDate(e.anchor?.storyDate) ??
+      final label =
+          calendar?.formatDate(e.anchor?.storyDate) ??
           (e.anchor?.eventTimeLabel ?? 'Unrecorded time');
       if (groups.isNotEmpty && groups.last.label == label) {
         groups.last.events.add(e);
@@ -76,7 +81,8 @@ class _CurrentTimeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateLabel = calendar?.formatDate(anchor?.storyDate) ?? 'Unrecorded time';
+    final dateLabel =
+        calendar?.formatDate(anchor?.storyDate) ?? 'Unrecorded time';
     final subLabel = anchor?.eventTimeLabel;
 
     return Container(
@@ -99,7 +105,11 @@ class _CurrentTimeCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.wb_twilight, color: EverloreTheme.gold, size: 16),
+              const Icon(
+                Icons.wb_twilight,
+                color: EverloreTheme.gold,
+                size: 16,
+              ),
               const SizedBox(width: 6),
               Text(
                 'PRESENT MOMENT',
@@ -184,9 +194,7 @@ class _TimelineSwitcher extends StatelessWidget {
             for (final t in timelines)
               _TimelineChip(
                 branch: t,
-                onTap: t.isActive
-                    ? null
-                    : () => _confirmSwitch(context, t),
+                onTap: t.isActive ? null : () => _confirmSwitch(context, t),
               ),
           ],
         ),
@@ -211,21 +219,30 @@ class _TimelineSwitcher extends StatelessWidget {
           'Your story will continue along "${branch.name}". The path you are '
           'on now remains preserved, untouched.',
           style: const TextStyle(
-              color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+            color: EverloreTheme.ash,
+            fontSize: 14,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child:
-                const Text('Stay', style: TextStyle(color: EverloreTheme.ash)),
+            child: const Text(
+              'Stay',
+              style: TextStyle(color: EverloreTheme.ash),
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              context.read<ChronicleCubit>().setActiveTimeline(branch.timelineId);
+              context.read<ChronicleCubit>().setActiveTimeline(
+                branch.timelineId,
+              );
             },
-            child: const Text('Cross Over',
-                style: TextStyle(color: EverloreTheme.gold)),
+            child: const Text(
+              'Cross Over',
+              style: TextStyle(color: EverloreTheme.gold),
+            ),
           ),
         ],
       ),
@@ -328,9 +345,7 @@ class _DateSection extends StatelessWidget {
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final e in group.events) _EventRow(event: e),
-            ],
+            children: [for (final e in group.events) _EventRow(event: e)],
           ),
         ),
       ],
@@ -347,9 +362,12 @@ class _EventRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMilestone = event.milestone != null && event.milestone!.isNotEmpty;
     final timeJump = event.timeAdvanced;
+    final travel = event.travel;
     final label = isMilestone
         ? event.milestone!
-        : (event.anchor?.eventTimeLabel ?? _prettyTag(event.sceneTag, event.type));
+        : (travel?.label ??
+              (event.anchor?.eventTimeLabel ??
+                  _prettyTag(event.sceneTag, event.type)));
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -359,11 +377,17 @@ class _EventRow extends StatelessWidget {
           Icon(
             isMilestone
                 ? Icons.auto_awesome
-                : (timeJump != null ? Icons.fast_forward : Icons.circle),
-            size: isMilestone ? 14 : (timeJump != null ? 14 : 6),
+                : (travel != null
+                      ? Icons.near_me_outlined
+                      : (timeJump != null ? Icons.fast_forward : Icons.circle)),
+            size: isMilestone
+                ? 14
+                : (travel != null || timeJump != null ? 14 : 6),
             color: isMilestone
                 ? EverloreTheme.gold
-                : EverloreTheme.ash.withValues(alpha: 0.6),
+                : (travel != null
+                      ? EverloreTheme.aether.withValues(alpha: 0.85)
+                      : EverloreTheme.ash.withValues(alpha: 0.6)),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -375,10 +399,13 @@ class _EventRow extends StatelessWidget {
                   style: TextStyle(
                     color: isMilestone
                         ? EverloreTheme.parchment
-                        : EverloreTheme.ash,
+                        : (travel != null
+                              ? EverloreTheme.parchment
+                              : EverloreTheme.ash),
                     fontSize: 13,
-                    fontWeight:
-                        isMilestone ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isMilestone || travel != null
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                     height: 1.4,
                   ),
                 ),
