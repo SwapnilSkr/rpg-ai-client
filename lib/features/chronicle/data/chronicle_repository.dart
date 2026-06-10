@@ -6,6 +6,7 @@ import 'calendar_data.dart';
 import 'location_journal.dart';
 import 'relationship_ledger.dart';
 import 'threads_data.dart';
+import 'recap_data.dart';
 
 class ChronicleRepository {
   static Future<Map<String, dynamic>> getEvents(
@@ -86,6 +87,12 @@ class ChronicleRepository {
   static Future<CalendarData> getCalendar(String instanceId) async {
     final response = await ApiClient.get('/chronicle/calendar/$instanceId');
     return CalendarData.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
+  /// "Story so far" re-entry recap: prose spine + open threads + bonds + place.
+  static Future<RecapData> getRecap(String instanceId) async {
+    final response = await ApiClient.get('/chronicle/recap/$instanceId');
+    return RecapData.fromJson(Map<String, dynamic>.from(response as Map));
   }
 
   /// Open and recently-resolved story threads (promises/conflicts/questions).

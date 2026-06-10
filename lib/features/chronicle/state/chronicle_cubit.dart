@@ -7,8 +7,9 @@ import '../data/calendar_data.dart';
 import '../data/location_journal.dart';
 import '../data/relationship_ledger.dart';
 import '../data/threads_data.dart';
+import '../data/recap_data.dart';
 
-enum ChronicleTab { timeline, memories, calendar, places, bonds, threads }
+enum ChronicleTab { recap, timeline, memories, calendar, places, bonds, threads }
 
 class ChronicleState extends Equatable {
   final List<GameEvent> events;
@@ -17,6 +18,7 @@ class ChronicleState extends Equatable {
   final LocationsData? locations;
   final RelationshipLedger? bonds;
   final ThreadsData? threads;
+  final RecapData? recap;
   final bool isLoading;
   final String? error;
   final ChronicleTab activeTab;
@@ -30,9 +32,10 @@ class ChronicleState extends Equatable {
     this.locations,
     this.bonds,
     this.threads,
+    this.recap,
     this.isLoading = false,
     this.error,
-    this.activeTab = ChronicleTab.timeline,
+    this.activeTab = ChronicleTab.recap,
     this.totalEvents = 0,
     this.currentPage = 1,
   });
@@ -44,6 +47,7 @@ class ChronicleState extends Equatable {
     LocationsData? locations,
     RelationshipLedger? bonds,
     ThreadsData? threads,
+    RecapData? recap,
     bool? isLoading,
     String? error,
     ChronicleTab? activeTab,
@@ -57,6 +61,7 @@ class ChronicleState extends Equatable {
       locations: locations ?? this.locations,
       bonds: bonds ?? this.bonds,
       threads: threads ?? this.threads,
+      recap: recap ?? this.recap,
       isLoading: isLoading ?? this.isLoading,
       error: error,
       activeTab: activeTab ?? this.activeTab,
@@ -73,6 +78,7 @@ class ChronicleState extends Equatable {
         locations,
         bonds,
         threads,
+        recap,
         isLoading,
         error,
         activeTab,
@@ -210,9 +216,21 @@ class ChronicleCubit extends Cubit<ChronicleState> {
     }
   }
 
+  Future<void> loadRecap() async {
+    emit(state.copyWith(isLoading: true, error: null));
+    try {
+      final recap = await ChronicleRepository.getRecap(instanceId);
+      emit(state.copyWith(recap: recap, isLoading: false));
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, error: e.toString()));
+    }
+  }
+
   void switchTab(ChronicleTab tab) {
     emit(state.copyWith(activeTab: tab));
-    if (tab == ChronicleTab.timeline && state.events.isEmpty) {
+    if (tab == ChronicleTab.recap && state.recap == null) {
+      loadRecap();
+    } else if (tab == ChronicleTab.timeline && state.events.isEmpty) {
       loadEvents();
     } else if (tab == ChronicleTab.memories && state.memories.isEmpty) {
       loadMemories();

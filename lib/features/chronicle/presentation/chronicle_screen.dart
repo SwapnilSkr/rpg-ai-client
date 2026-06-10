@@ -7,6 +7,7 @@ import 'widgets/almanac_view.dart';
 import 'widgets/places_view.dart';
 import 'widgets/bonds_view.dart';
 import 'widgets/threads_view.dart';
+import 'widgets/recap_view.dart';
 import '../../play/presentation/widgets/narrative_bubble.dart';
 import '../../../../app/theme/nexus_theme.dart';
 
@@ -18,7 +19,7 @@ class ChronicleScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => ChronicleCubit(instanceId: instanceId)..loadEvents(),
+      create: (_) => ChronicleCubit(instanceId: instanceId)..loadRecap(),
       child: const _ChronicleView(),
     );
   }
@@ -63,6 +64,7 @@ class _ChronicleView extends StatelessWidget {
                         ),
                       )
                     : switch (state.activeTab) {
+                        ChronicleTab.recap => _buildRecap(context, state),
                         ChronicleTab.timeline => _buildTimeline(context, state),
                         ChronicleTab.memories => _buildEchoes(context, state),
                         ChronicleTab.calendar => _buildAlmanac(context, state),
@@ -178,6 +180,18 @@ class _ChronicleView extends StatelessWidget {
     );
   }
 
+  Widget _buildRecap(BuildContext context, ChronicleState state) {
+    final recap = state.recap;
+    if (recap == null) {
+      return _EmptyState(
+        icon: Icons.auto_stories,
+        title: 'No recap yet',
+        subtitle: 'Your story so far will be gathered here.',
+      );
+    }
+    return RecapView(data: recap);
+  }
+
   Widget _buildThreads(BuildContext context, ChronicleState state) {
     final threads = state.threads;
     if (threads == null) {
@@ -281,6 +295,15 @@ class _ChronicleHeader extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Row(
                 children: [
+                  _TabButton(
+                    label: 'Recap',
+                    icon: Icons.auto_stories,
+                    active: activeTab == ChronicleTab.recap,
+                    onTap: () => context
+                        .read<ChronicleCubit>()
+                        .switchTab(ChronicleTab.recap),
+                  ),
+                  const SizedBox(width: 10),
                   _TabButton(
                     label: 'Timeline',
                     icon: Icons.timeline,
