@@ -31,10 +31,22 @@ class ChronicleRepository {
   static Future<List<Memory>> getMemories(
     String instanceId, {
     bool includeArchived = false,
+    String? query,
+    String? type,
+    int? minImportance,
+    bool unresolvedOnly = false,
   }) async {
-    final response = await ApiClient.get(
-      '/chronicle/memories/$instanceId?include_archived=$includeArchived',
-    );
+    final params = <String, String>{
+      'include_archived': '$includeArchived',
+    };
+    if (query != null && query.trim().isNotEmpty) params['q'] = query.trim();
+    if (type != null && type.isNotEmpty) params['type'] = type;
+    if (minImportance != null) params['min_importance'] = '$minImportance';
+    if (unresolvedOnly) params['unresolved'] = 'true';
+    final qs = params.entries
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    final response = await ApiClient.get('/chronicle/memories/$instanceId?$qs');
     return (response as List).map((e) => Memory.fromJson(e)).toList();
   }
 

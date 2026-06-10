@@ -8,6 +8,7 @@ import 'widgets/places_view.dart';
 import 'widgets/bonds_view.dart';
 import 'widgets/threads_view.dart';
 import 'widgets/recap_view.dart';
+import 'widgets/echoes_filter_bar.dart';
 import '../../play/presentation/widgets/narrative_bubble.dart';
 import '../../../../app/theme/nexus_theme.dart';
 
@@ -99,14 +100,32 @@ class _ChronicleView extends StatelessWidget {
   }
 
   Widget _buildEchoes(BuildContext context, ChronicleState state) {
-    if (state.memories.isEmpty) {
-      return _EmptyState(
-        icon: Icons.bookmark_border,
-        title: 'No echoes yet',
-        subtitle: 'Memories from your journey will appear here.',
-      );
-    }
+    final filtersActive = state.memoryQuery.isNotEmpty ||
+        state.memoryType.isNotEmpty ||
+        state.memoryUnresolved ||
+        state.memoryHighImportance;
 
+    return Column(
+      children: [
+        const EchoesFilterBar(),
+        Expanded(
+          child: state.memories.isEmpty
+              ? _EmptyState(
+                  icon: filtersActive
+                      ? Icons.search_off
+                      : Icons.bookmark_border,
+                  title: filtersActive ? 'No matching echoes' : 'No echoes yet',
+                  subtitle: filtersActive
+                      ? 'Try a different search or clear the filters.'
+                      : 'Memories from your journey will appear here.',
+                )
+              : _echoesList(context, state),
+        ),
+      ],
+    );
+  }
+
+  Widget _echoesList(BuildContext context, ChronicleState state) {
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 80),
       itemCount: state.memories.length,

@@ -19,6 +19,11 @@ class ChronicleState extends Equatable {
   final RelationshipLedger? bonds;
   final ThreadsData? threads;
   final RecapData? recap;
+  // Echoes (memory) search/filters. Empty strings = unfiltered.
+  final String memoryQuery;
+  final String memoryType;
+  final bool memoryUnresolved;
+  final bool memoryHighImportance;
   final bool isLoading;
   final String? error;
   final ChronicleTab activeTab;
@@ -33,6 +38,10 @@ class ChronicleState extends Equatable {
     this.bonds,
     this.threads,
     this.recap,
+    this.memoryQuery = '',
+    this.memoryType = '',
+    this.memoryUnresolved = false,
+    this.memoryHighImportance = false,
     this.isLoading = false,
     this.error,
     this.activeTab = ChronicleTab.recap,
@@ -48,6 +57,10 @@ class ChronicleState extends Equatable {
     RelationshipLedger? bonds,
     ThreadsData? threads,
     RecapData? recap,
+    String? memoryQuery,
+    String? memoryType,
+    bool? memoryUnresolved,
+    bool? memoryHighImportance,
     bool? isLoading,
     String? error,
     ChronicleTab? activeTab,
@@ -62,6 +75,10 @@ class ChronicleState extends Equatable {
       bonds: bonds ?? this.bonds,
       threads: threads ?? this.threads,
       recap: recap ?? this.recap,
+      memoryQuery: memoryQuery ?? this.memoryQuery,
+      memoryType: memoryType ?? this.memoryType,
+      memoryUnresolved: memoryUnresolved ?? this.memoryUnresolved,
+      memoryHighImportance: memoryHighImportance ?? this.memoryHighImportance,
       isLoading: isLoading ?? this.isLoading,
       error: error,
       activeTab: activeTab ?? this.activeTab,
@@ -79,6 +96,10 @@ class ChronicleState extends Equatable {
         bonds,
         threads,
         recap,
+        memoryQuery,
+        memoryType,
+        memoryUnresolved,
+        memoryHighImportance,
         isLoading,
         error,
         activeTab,
@@ -113,11 +134,32 @@ class ChronicleCubit extends Cubit<ChronicleState> {
       final memories = await ChronicleRepository.getMemories(
         instanceId,
         includeArchived: includeArchived,
+        query: state.memoryQuery,
+        type: state.memoryType,
+        minImportance: state.memoryHighImportance ? 4 : null,
+        unresolvedOnly: state.memoryUnresolved,
       );
       emit(state.copyWith(memories: memories, isLoading: false));
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: e.toString()));
     }
+  }
+
+  /// Update the Echoes search/filters and reload. Only the provided fields
+  /// change; pass an empty string to clear the query or type.
+  Future<void> setMemoryFilters({
+    String? query,
+    String? type,
+    bool? unresolved,
+    bool? highImportance,
+  }) async {
+    emit(state.copyWith(
+      memoryQuery: query,
+      memoryType: type,
+      memoryUnresolved: unresolved,
+      memoryHighImportance: highImportance,
+    ));
+    await loadMemories();
   }
 
   Future<void> editMemory(String memoryId, String text, {String? type, int? importance}) async {
