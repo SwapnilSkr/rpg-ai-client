@@ -2,6 +2,7 @@ import '../../../core/network/api_client.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/memory.dart';
 import '../../../shared/models/character_profile.dart';
+import 'calendar_data.dart';
 
 class ChronicleRepository {
   static Future<Map<String, dynamic>> getEvents(
@@ -75,6 +76,24 @@ class ChronicleRepository {
       body: {'variant_index': variantIndex},
     );
     return GameEvent.fromJson(Map<String, dynamic>.from(response['event']));
+  }
+
+  /// Almanac payload: calendars, timeline branches, the current story-time
+  /// cursor, and all time-anchored events. Backed by GET /chronicle/calendar.
+  static Future<CalendarData> getCalendar(String instanceId) async {
+    final response = await ApiClient.get('/chronicle/calendar/$instanceId');
+    return CalendarData.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
+  /// Switch the active reality/branch for an instance. Subsequent turns and
+  /// retrieval scope to this timeline's ancestry server-side.
+  static Future<void> setActiveTimeline(
+    String instanceId,
+    String timelineId,
+  ) async {
+    await ApiClient.put('/chronicle/calendar/$instanceId/timeline/active', body: {
+      'timeline_id': timelineId,
+    });
   }
 
   /// Rewind a playthrough to [sequence]: removes that turn and everything after,

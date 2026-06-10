@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../state/chronicle_cubit.dart';
 import 'widgets/memory_card.dart';
 import 'widgets/edit_dialog.dart';
+import 'widgets/almanac_view.dart';
 import '../../play/presentation/widgets/narrative_bubble.dart';
 import '../../../../app/theme/nexus_theme.dart';
 
@@ -58,9 +59,11 @@ class _ChronicleView extends StatelessWidget {
                           ],
                         ),
                       )
-                    : state.activeTab == ChronicleTab.timeline
-                        ? _buildTimeline(context, state)
-                        : _buildEchoes(context, state),
+                    : switch (state.activeTab) {
+                        ChronicleTab.timeline => _buildTimeline(context, state),
+                        ChronicleTab.memories => _buildEchoes(context, state),
+                        ChronicleTab.calendar => _buildAlmanac(context, state),
+                      },
               ),
             ],
           ),
@@ -125,6 +128,18 @@ class _ChronicleView extends StatelessWidget {
         );
       },
     );
+  }
+
+  Widget _buildAlmanac(BuildContext context, ChronicleState state) {
+    final calendar = state.calendar;
+    if (calendar == null) {
+      return _EmptyState(
+        icon: Icons.event_note,
+        title: 'No almanac yet',
+        subtitle: 'The days of your story will be charted here.',
+      );
+    }
+    return AlmanacView(data: calendar);
   }
 
   void _confirmDelete(BuildContext context, String memoryId) {
@@ -213,7 +228,8 @@ class _ChronicleHeader extends StatelessWidget {
             ),
 
             // Tab bar
-            Padding(
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Row(
                 children: [
@@ -233,6 +249,15 @@ class _ChronicleHeader extends StatelessWidget {
                     onTap: () => context
                         .read<ChronicleCubit>()
                         .switchTab(ChronicleTab.memories),
+                  ),
+                  const SizedBox(width: 10),
+                  _TabButton(
+                    label: 'Almanac',
+                    icon: Icons.event_note,
+                    active: activeTab == ChronicleTab.calendar,
+                    onTap: () => context
+                        .read<ChronicleCubit>()
+                        .switchTab(ChronicleTab.calendar),
                   ),
                 ],
               ),

@@ -3,12 +3,14 @@ import 'package:equatable/equatable.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/memory.dart';
 import '../data/chronicle_repository.dart';
+import '../data/calendar_data.dart';
 
-enum ChronicleTab { timeline, memories }
+enum ChronicleTab { timeline, memories, calendar }
 
 class ChronicleState extends Equatable {
   final List<GameEvent> events;
   final List<Memory> memories;
+  final CalendarData? calendar;
   final bool isLoading;
   final String? error;
   final ChronicleTab activeTab;
@@ -18,6 +20,7 @@ class ChronicleState extends Equatable {
   const ChronicleState({
     this.events = const [],
     this.memories = const [],
+    this.calendar,
     this.isLoading = false,
     this.error,
     this.activeTab = ChronicleTab.timeline,
@@ -28,6 +31,7 @@ class ChronicleState extends Equatable {
   ChronicleState copyWith({
     List<GameEvent>? events,
     List<Memory>? memories,
+    CalendarData? calendar,
     bool? isLoading,
     String? error,
     ChronicleTab? activeTab,
@@ -37,6 +41,7 @@ class ChronicleState extends Equatable {
     return ChronicleState(
       events: events ?? this.events,
       memories: memories ?? this.memories,
+      calendar: calendar ?? this.calendar,
       isLoading: isLoading ?? this.isLoading,
       error: error,
       activeTab: activeTab ?? this.activeTab,
@@ -46,8 +51,16 @@ class ChronicleState extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [events, memories, isLoading, error, activeTab, totalEvents, currentPage];
+  List<Object?> get props => [
+        events,
+        memories,
+        calendar,
+        isLoading,
+        error,
+        activeTab,
+        totalEvents,
+        currentPage,
+      ];
 }
 
 class ChronicleCubit extends Cubit<ChronicleState> {
@@ -128,12 +141,35 @@ class ChronicleCubit extends Cubit<ChronicleState> {
     }
   }
 
+  Future<void> loadCalendar() async {
+    emit(state.copyWith(isLoading: true, error: null));
+    try {
+      final calendar = await ChronicleRepository.getCalendar(instanceId);
+      emit(state.copyWith(calendar: calendar, isLoading: false));
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, error: e.toString()));
+    }
+  }
+
+  /// Switch the active reality/branch, then refresh the almanac so the new
+  /// active timeline and its current cursor are reflected.
+  Future<void> setActiveTimeline(String timelineId) async {
+    try {
+      await ChronicleRepository.setActiveTimeline(instanceId, timelineId);
+      await loadCalendar();
+    } catch (e) {
+      emit(state.copyWith(error: e.toString()));
+    }
+  }
+
   void switchTab(ChronicleTab tab) {
     emit(state.copyWith(activeTab: tab));
     if (tab == ChronicleTab.timeline && state.events.isEmpty) {
       loadEvents();
     } else if (tab == ChronicleTab.memories && state.memories.isEmpty) {
       loadMemories();
+    } else if (tab == ChronicleTab.calendar && state.calendar == null) {
+      loadCalendar();
     }
   }
 }
