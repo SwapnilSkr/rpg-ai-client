@@ -63,7 +63,10 @@ class _LocationJournalScreenState extends State<LocationJournalScreen> {
                   );
                 }
                 final journal = snap.data!;
-                if (journal.events.isEmpty && journal.memories.isEmpty) {
+                if (journal.events.isEmpty &&
+                    journal.memories.isEmpty &&
+                    journal.permanentFacts.isEmpty &&
+                    journal.currentState.isEmpty) {
                   return _message(
                     'Nothing has been recorded here yet.',
                   );
@@ -156,6 +159,20 @@ class _JournalBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
       children: [
+        if (journal.permanentFacts.isNotEmpty) ...[
+          _SectionLabel(icon: Icons.menu_book, label: 'WHAT IS TRUE OF THIS PLACE'),
+          const SizedBox(height: 12),
+          for (final f in journal.permanentFacts)
+            _CanonTile(text: f, icon: Icons.brightness_1, accent: EverloreTheme.gold),
+          const SizedBox(height: 24),
+        ],
+        if (journal.currentState.isNotEmpty) ...[
+          _SectionLabel(icon: Icons.change_history, label: 'HOW IT STANDS NOW'),
+          const SizedBox(height: 12),
+          for (final s in journal.currentState)
+            _CanonTile(text: s, icon: Icons.circle, accent: EverloreTheme.aether),
+          const SizedBox(height: 24),
+        ],
         if (journal.memories.isNotEmpty) ...[
           _SectionLabel(icon: Icons.bookmark, label: 'WHAT THIS PLACE HOLDS'),
           const SizedBox(height: 12),
@@ -193,6 +210,40 @@ class _SectionLabel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _CanonTile extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  final Color accent;
+  const _CanonTile({required this.text, required this.icon, required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Icon(icon, size: 7, color: accent.withValues(alpha: 0.85)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: EverloreTheme.parchment,
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

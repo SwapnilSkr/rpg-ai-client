@@ -140,12 +140,20 @@ class LocationMemoryEntry extends Equatable {
 class LocationJournal extends Equatable {
   final String entityId;
   final String name;
+
+  /// Enduring canon about this place ("built over a buried god").
+  final List<String> permanentFacts;
+
+  /// The place's current mutable condition ("the gate now lies in ruins").
+  final List<String> currentState;
   final List<LocationEventEntry> events;
   final List<LocationMemoryEntry> memories;
 
   const LocationJournal({
     required this.entityId,
     required this.name,
+    this.permanentFacts = const [],
+    this.currentState = const [],
     this.events = const [],
     this.memories = const [],
   });
@@ -154,9 +162,13 @@ class LocationJournal extends Equatable {
     final loc = json['location'] is Map
         ? Map<String, dynamic>.from(json['location'])
         : <String, dynamic>{};
+    List<String> strList(dynamic v) =>
+        (v as List?)?.map((e) => e.toString()).toList() ?? const [];
     return LocationJournal(
       entityId: loc['entity_id'] as String? ?? '',
       name: loc['name'] as String? ?? 'This place',
+      permanentFacts: strList(loc['permanent_facts']),
+      currentState: strList(loc['current_state']),
       events: (json['events'] as List?)
               ?.map((e) => LocationEventEntry.fromJson(Map<String, dynamic>.from(e)))
               .toList() ??
@@ -170,5 +182,6 @@ class LocationJournal extends Equatable {
   }
 
   @override
-  List<Object?> get props => [entityId, name, events, memories];
+  List<Object?> get props =>
+      [entityId, name, permanentFacts, currentState, events, memories];
 }
