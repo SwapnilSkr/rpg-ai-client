@@ -76,6 +76,11 @@ class GameEvent {
   /// Open-thread text that seeded this turn's beat (fate came knocking).
   final String? fateThread;
 
+  /// Characters present in the scene at the end of this turn. Drives
+  /// scene-aware bond actions (approach when here, seek out when elsewhere).
+  /// Empty when the viewpoint was alone or presence is unknown.
+  final List<String> presentCharacters;
+
   const GameEvent({
     required this.id,
     required this.instanceId,
@@ -97,6 +102,7 @@ class GameEvent {
     this.milestone,
     this.timeAdvanced,
     this.fateThread,
+    this.presentCharacters = const [],
   });
 
   /// True for time-skip turns, which render as interstitial passage cards.
@@ -112,6 +118,7 @@ class GameEvent {
     List<ReplayVariant>? replayVariants,
     int? selectedReplayIndex,
     List<Choice>? choices,
+    List<String>? presentCharacters,
   }) {
     return GameEvent(
       id: id,
@@ -134,7 +141,22 @@ class GameEvent {
       milestone: milestone,
       timeAdvanced: timeAdvanced,
       fateThread: fateThread,
+      presentCharacters: presentCharacters ?? this.presentCharacters,
     );
+  }
+
+  /// Parse a present-characters payload (array of names) into clean strings.
+  static List<String> presentFromAny(dynamic raw) {
+    if (raw is! List) return const [];
+    final out = <String>[];
+    final seen = <String>{};
+    for (final e in raw) {
+      final s = e?.toString().replaceAll(RegExp(r'\s+'), ' ').trim() ?? '';
+      if (s.isEmpty) continue;
+      final key = s.toLowerCase();
+      if (seen.add(key)) out.add(s);
+    }
+    return out;
   }
 
   factory GameEvent.fromJson(Map<String, dynamic> json) {
@@ -172,6 +194,9 @@ class GameEvent {
       timeAdvanced: (data?['time_advanced'] ?? json['time_advanced'])
           ?.toString(),
       fateThread: (data?['fate_thread'] ?? json['fate_thread'])?.toString(),
+      presentCharacters: GameEvent.presentFromAny(
+        data?['present_characters'] ?? json['present_characters'],
+      ),
     );
   }
 

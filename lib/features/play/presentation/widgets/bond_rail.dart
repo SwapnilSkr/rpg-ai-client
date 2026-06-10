@@ -15,10 +15,15 @@ class BondRail extends StatelessWidget {
   final List<CharacterProfile> characters;
   final ValueChanged<CharacterProfile> onTapCharacter;
 
+  /// Lowercased names present in the current scene, or null when presence is
+  /// unknown. Tokens for characters who are elsewhere render dimmed.
+  final Set<String>? presentNames;
+
   const BondRail({
     super.key,
     required this.characters,
     required this.onTapCharacter,
+    this.presentNames,
   });
 
   @override
@@ -43,6 +48,11 @@ class BondRail extends StatelessWidget {
         itemCount: shown.length,
         itemBuilder: (context, i) => _BondToken(
           character: shown[i],
+          // Unknown presence (null) → treat as here, so existing worlds are
+          // unaffected; only a known-absent character dims.
+          present:
+              presentNames?.contains(shown[i].canonicalName.toLowerCase()) ??
+              true,
           onTap: () {
             HapticFeedback.lightImpact();
             onTapCharacter(shown[i]);
@@ -79,9 +89,14 @@ class BondRail extends StatelessWidget {
 
 class _BondToken extends StatelessWidget {
   final CharacterProfile character;
+  final bool present;
   final VoidCallback onTap;
 
-  const _BondToken({required this.character, required this.onTap});
+  const _BondToken({
+    required this.character,
+    required this.present,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -93,7 +108,11 @@ class _BondToken extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(28),
-      child: Column(
+      child: AnimatedOpacity(
+        // Elsewhere → dimmed so the in-scene cast reads at a glance.
+        opacity: present ? 1.0 : 0.4,
+        duration: const Duration(milliseconds: 300),
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
@@ -133,6 +152,7 @@ class _BondToken extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }

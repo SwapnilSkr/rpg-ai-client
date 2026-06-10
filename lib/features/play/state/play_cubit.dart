@@ -313,6 +313,9 @@ class PlayCubit extends Cubit<PlayState> {
         milestone: eventData['milestone']?.toString(),
         timeAdvanced: eventData['time_advanced']?.toString(),
         fateThread: eventData['fate_thread']?.toString(),
+        presentCharacters: GameEvent.presentFromAny(
+          eventData['present_characters'],
+        ),
       );
 
       // Stat deltas vs the pre-turn state — drives HUD pulses + delta chips.
@@ -420,9 +423,10 @@ class PlayCubit extends Cubit<PlayState> {
           modelUsed: selectedVariant?.modelUsed,
           replayVariants: variants,
           selectedReplayIndex: selected,
-          // The old next-move chips were derived from the pre-replay prose;
-          // drop them so they don't mismatch the freshly woven turn.
+          // The old next-move chips + scene presence were derived from the
+          // pre-replay prose; drop them so they don't mismatch the new turn.
           choices: const [],
+          presentCharacters: const [],
         );
         LocalDb.insertEvent(events[idx]);
       }
@@ -1044,8 +1048,9 @@ class PlayCubit extends Cubit<PlayState> {
         aiResponse: event.replayVariants[index].narrative,
         modelUsed: event.replayVariants[index].modelUsed,
         selectedReplayIndex: index,
-        // Chips belonged to the previously-shown variant's prose.
+        // Chips + presence belonged to the previously-shown variant's prose.
         choices: const [],
+        presentCharacters: const [],
       );
     }
     emit(state.copyWith(events: next, error: null));

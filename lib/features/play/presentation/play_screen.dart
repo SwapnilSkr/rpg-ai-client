@@ -86,6 +86,10 @@ class _PlayViewState extends State<_PlayView> {
   void _showBondActions(BuildContext context, CharacterProfile character) {
     final cubit = context.read<PlayCubit>();
     final name = character.canonicalName;
+    // Scene-aware: when the latest turn reports who is present, a character not
+    // in it is "elsewhere" — you seek them out rather than turning to thin air.
+    final presence = _presentNames(cubit.state);
+    final isPresent = presence == null || presence.contains(name.toLowerCase());
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: EverloreTheme.void2,
@@ -110,48 +114,65 @@ class _PlayViewState extends State<_PlayView> {
                 const SizedBox(height: 8),
                 BondMeters(meters: character.relationship!),
               ],
+              // Tell the player where this character stands relative to the
+              // scene, so "Seek out" vs "Approach" reads as intentional.
+              if (presence != null) ...[
+                const SizedBox(height: 10),
+                _PresenceTag(present: isPresent),
+              ],
               const SizedBox(height: 12),
-              _BondActionTile(
-                icon: Icons.record_voice_over_outlined,
-                label: 'Approach $name',
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _composerDraft.value = '*I approach $name.* ';
-                },
-              ),
-              // Grounded "ask about" prompts from the character's current state;
-              // a single open question when nothing is known yet.
-              ...(() {
-                final topics = character.mutableState
-                    .map((s) => s.trim())
-                    .where((s) => s.isNotEmpty)
-                    .take(3)
-                    .toList(growable: false);
-                if (topics.isEmpty) {
+              if (isPresent) ...[
+                _BondActionTile(
+                  icon: Icons.record_voice_over_outlined,
+                  label: 'Approach $name',
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _composerDraft.value = '*I approach $name.* ';
+                  },
+                ),
+                // Grounded "ask about" prompts from the character's current
+                // state; a single open question when nothing is known yet.
+                ...(() {
+                  final topics = character.mutableState
+                      .map((s) => s.trim())
+                      .where((s) => s.isNotEmpty)
+                      .take(3)
+                      .toList(growable: false);
+                  if (topics.isEmpty) {
+                    return [
+                      _BondActionTile(
+                        icon: Icons.help_outline,
+                        label: 'Ask $name a question',
+                        onTap: () {
+                          Navigator.pop(sheetCtx);
+                          _composerDraft.value = '*I turn to $name.* "';
+                        },
+                      ),
+                    ];
+                  }
                   return [
-                    _BondActionTile(
-                      icon: Icons.help_outline,
-                      label: 'Ask $name a question',
-                      onTap: () {
-                        Navigator.pop(sheetCtx);
-                        _composerDraft.value = '*I turn to $name.* "';
-                      },
-                    ),
+                    for (final t in topics)
+                      _BondActionTile(
+                        icon: Icons.help_outline,
+                        label: 'Ask about ${_shortTopic(t)}',
+                        onTap: () {
+                          Navigator.pop(sheetCtx);
+                          _composerDraft.value =
+                              '*I turn to $name.* "Tell me about ${_askPhrase(t)}." ';
+                        },
+                      ),
                   ];
-                }
-                return [
-                  for (final t in topics)
-                    _BondActionTile(
-                      icon: Icons.help_outline,
-                      label: 'Ask about ${_shortTopic(t)}',
-                      onTap: () {
-                        Navigator.pop(sheetCtx);
-                        _composerDraft.value =
-                            '*I turn to $name.* "Tell me about ${_askPhrase(t)}." ';
-                      },
-                    ),
-                ];
-              })(),
+                })(),
+              ] else
+                // Elsewhere — the move is to go find them, not address the room.
+                _BondActionTile(
+                  icon: Icons.directions_walk_outlined,
+                  label: 'Seek out $name',
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _composerDraft.value = '*I set out to find $name.* ';
+                  },
+                ),
               _BondActionTile(
                 icon: Icons.history_edu_outlined,
                 label: 'What $name remembers of you',
@@ -195,6 +216,20 @@ class _PlayViewState extends State<_PlayView> {
       }
     }
     return out;
+  }
+
+  /// Who is in the scene right now, lowercased — read from the latest settled
+  /// turn's `present_characters`. Returns null when presence is unknown (older
+  /// turns that predate the feature, or a turn that reported nobody), so callers
+  /// fall back to the pre-presence behaviour instead of marking everyone absent.
+  Set<String>? _presentNames(PlayState state) {
+    for (var i = state.events.length - 1; i >= 0; i--) {
+      final e = state.events[i];
+      if (e.isOptimistic) continue;
+      if (e.presentCharacters.isEmpty) return null;
+      return e.presentCharacters.map((n) => n.trim().toLowerCase()).toSet();
+    }
+    return null;
   }
 
   /// A memory lens for any entity (character, place, thing) — the rich-atom
@@ -518,6 +553,7 @@ class _PlayViewState extends State<_PlayView> {
         child: BlocBuilder<PlayCubit, PlayState>(
           builder: (ctx, state) => _ThoughtsSheet(
             characters: state.characters,
+            presentNames: _presentNames(state),
             focusedCharacterId: state.instance?.focusCharacterId,
             // In sentient/character worlds the protagonist is the creator's
             // locked main character — not player-editable. (GM worlds: the
@@ -1114,6 +1150,7 @@ class _PlayViewState extends State<_PlayView> {
                   // bond rings. Renders nothing until a bond actually exists.
                   BondRail(
                     characters: state.characters,
+                    presentNames: _presentNames(state),
                     onTapCharacter: (c) => _showBondActions(context, c),
                   ),
 
@@ -1536,60 +1573,62 @@ class _RealmMenuSheet extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(2),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: EverloreTheme.goldDim.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                'Realm Menu',
-                style: EverloreTheme.serifDisplay(
-                  size: 17,
-                  color: EverloreTheme.parchment,
-                  weight: FontWeight.w600,
+                const SizedBox(height: 18),
+                Text(
+                  'Realm Menu',
+                  style: EverloreTheme.serifDisplay(
+                    size: 17,
+                    color: EverloreTheme.parchment,
+                    weight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Chronicle, cast, and how this story flows.',
-                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-              ),
-              const SizedBox(height: 18),
-              _RealmMenuChoice(
-                icon: AppIcons.chronicle,
-                title: 'Chronicle',
-                subtitle: 'Read every turn in this story.',
-                onTap: onChronicle,
-              ),
-              const SizedBox(height: 12),
-              _RealmMenuChoice(
-                materialIcon: Icons.timeline_outlined,
-                title: 'Story Timeline',
-                subtitle: 'The landmarks your story has crossed.',
-                onTap: onTimeline,
-              ),
-              const SizedBox(height: 12),
-              _RealmMenuChoice(
-                materialIcon: Icons.psychology_alt_outlined,
-                title: 'Thoughts',
-                subtitle: 'Who is here and who you are speaking to.',
-                onTap: onThoughts,
-              ),
-              const SizedBox(height: 12),
-              _RealmMenuChoice(
-                icon: AppIcons.voice,
-                title: 'Scene Settings',
-                subtitle: 'Voice, length, and narration style.',
-                onTap: onSettings,
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  'Chronicle, cast, and how this story flows.',
+                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+                ),
+                const SizedBox(height: 18),
+                _RealmMenuChoice(
+                  icon: AppIcons.chronicle,
+                  title: 'Chronicle',
+                  subtitle: 'Read every turn in this story.',
+                  onTap: onChronicle,
+                ),
+                const SizedBox(height: 12),
+                _RealmMenuChoice(
+                  materialIcon: Icons.timeline_outlined,
+                  title: 'Story Timeline',
+                  subtitle: 'The landmarks your story has crossed.',
+                  onTap: onTimeline,
+                ),
+                const SizedBox(height: 12),
+                _RealmMenuChoice(
+                  materialIcon: Icons.psychology_alt_outlined,
+                  title: 'Thoughts',
+                  subtitle: 'Who is here and who you are speaking to.',
+                  onTap: onThoughts,
+                ),
+                const SizedBox(height: 12),
+                _RealmMenuChoice(
+                  icon: AppIcons.voice,
+                  title: 'Scene Settings',
+                  subtitle: 'Voice, length, and narration style.',
+                  onTap: onSettings,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -2221,6 +2260,10 @@ class _ThoughtsSheet extends StatelessWidget {
   final ValueChanged<CharacterProfile> onAct;
   final bool isSentientWorld;
 
+  /// Lowercased names present in the current scene, or null when presence is
+  /// unknown (older worlds). Drives the Here-now / Elsewhere sectioning.
+  final Set<String>? presentNames;
+
   const _ThoughtsSheet({
     required this.characters,
     required this.focusedCharacterId,
@@ -2229,7 +2272,12 @@ class _ThoughtsSheet extends StatelessWidget {
     required this.onEdit,
     required this.onAct,
     required this.isSentientWorld,
+    required this.presentNames,
   });
+
+  bool _isPresent(CharacterProfile c) =>
+      c.isProtagonist ||
+      (presentNames?.contains(c.canonicalName.toLowerCase()) ?? true);
 
   @override
   Widget build(BuildContext context) {
@@ -2297,15 +2345,56 @@ class _ThoughtsSheet extends StatelessWidget {
             else
               ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 420),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: characters.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(color: EverloreTheme.white10, height: 1),
-                  itemBuilder: (_, i) {
-                    final c = characters[i];
-                    final isFocused = c.id == focusedCharacterId;
-                    return ListTile(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: _rosterChildren(),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Roster body: a flat list when presence is unknown, otherwise split into
+  /// "Here now" / "Elsewhere" (the protagonist always counts as present).
+  List<Widget> _rosterChildren() {
+    const divider = Divider(color: EverloreTheme.white10, height: 1);
+    Widget header(String label) => Padding(
+      padding: const EdgeInsets.fromLTRB(2, 14, 2, 6),
+      child: Text(
+        label.toUpperCase(),
+        style: EverloreTheme.ui(
+          size: 10,
+          color: EverloreTheme.goldDim,
+          weight: FontWeight.w700,
+          spacing: 1.4,
+        ),
+      ),
+    );
+    List<Widget> section(List<CharacterProfile> list) {
+      final out = <Widget>[];
+      for (var i = 0; i < list.length; i++) {
+        if (i > 0) out.add(divider);
+        out.add(_characterTile(list[i], list[i].id == focusedCharacterId));
+      }
+      return out;
+    }
+
+    if (presentNames == null) return section(characters);
+    final here = characters.where(_isPresent).toList(growable: false);
+    final away =
+        characters.where((c) => !_isPresent(c)).toList(growable: false);
+    return [
+      if (here.isNotEmpty) ...[header('Here now'), ...section(here)],
+      if (away.isNotEmpty) ...[header('Elsewhere'), ...section(away)],
+    ];
+  }
+
+  Widget _characterTile(CharacterProfile c, bool isFocused) {
+    return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Row(
                         children: [
@@ -2429,13 +2518,6 @@ class _ThoughtsSheet extends StatelessWidget {
                         ],
                       ),
                     );
-                  },
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -2476,6 +2558,42 @@ class _BondActionTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Small status pill telling the player whether a character is in the scene
+/// ("Here now") or away from it ("Elsewhere"), so the action below reads right.
+class _PresenceTag extends StatelessWidget {
+  final bool present;
+
+  const _PresenceTag({required this.present});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = present ? EverloreTheme.verdant : EverloreTheme.ash;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: present ? 0.9 : 0.5),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 7),
+        Text(
+          present ? 'Here now' : 'Elsewhere',
+          style: EverloreTheme.ui(
+            size: 11,
+            color: color.withValues(alpha: 0.85),
+            weight: FontWeight.w700,
+            spacing: 0.6,
+          ),
+        ),
+      ],
     );
   }
 }
