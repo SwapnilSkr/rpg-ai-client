@@ -4,6 +4,7 @@ import '../state/chronicle_cubit.dart';
 import 'widgets/memory_card.dart';
 import 'widgets/edit_dialog.dart';
 import 'widgets/almanac_view.dart';
+import 'widgets/places_view.dart';
 import '../../play/presentation/widgets/narrative_bubble.dart';
 import '../../../../app/theme/nexus_theme.dart';
 
@@ -63,6 +64,7 @@ class _ChronicleView extends StatelessWidget {
                         ChronicleTab.timeline => _buildTimeline(context, state),
                         ChronicleTab.memories => _buildEchoes(context, state),
                         ChronicleTab.calendar => _buildAlmanac(context, state),
+                        ChronicleTab.places => _buildPlaces(context, state),
                       },
               ),
             ],
@@ -140,6 +142,21 @@ class _ChronicleView extends StatelessWidget {
       );
     }
     return AlmanacView(data: calendar);
+  }
+
+  Widget _buildPlaces(BuildContext context, ChronicleState state) {
+    final locations = state.locations;
+    if (locations == null) {
+      return _EmptyState(
+        icon: Icons.map_outlined,
+        title: 'No places yet',
+        subtitle: 'The places your story visits will be remembered here.',
+      );
+    }
+    return PlacesView(
+      instanceId: context.read<ChronicleCubit>().instanceId,
+      data: locations,
+    );
   }
 
   void _confirmDelete(BuildContext context, String memoryId) {
@@ -258,6 +275,15 @@ class _ChronicleHeader extends StatelessWidget {
                     onTap: () => context
                         .read<ChronicleCubit>()
                         .switchTab(ChronicleTab.calendar),
+                  ),
+                  const SizedBox(width: 10),
+                  _TabButton(
+                    label: 'Places',
+                    icon: Icons.place_outlined,
+                    active: activeTab == ChronicleTab.places,
+                    onTap: () => context
+                        .read<ChronicleCubit>()
+                        .switchTab(ChronicleTab.places),
                   ),
                 ],
               ),

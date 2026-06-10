@@ -3,6 +3,7 @@ import '../../../shared/models/event.dart';
 import '../../../shared/models/memory.dart';
 import '../../../shared/models/character_profile.dart';
 import 'calendar_data.dart';
+import 'location_journal.dart';
 
 class ChronicleRepository {
   static Future<Map<String, dynamic>> getEvents(
@@ -83,6 +84,22 @@ class ChronicleRepository {
   static Future<CalendarData> getCalendar(String instanceId) async {
     final response = await ApiClient.get('/chronicle/calendar/$instanceId');
     return CalendarData.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
+  /// All places with anchored events/memories + the current-location cursor.
+  static Future<LocationsData> getLocations(String instanceId) async {
+    final response = await ApiClient.get('/chronicle/locations/$instanceId');
+    return LocationsData.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
+  /// "What happened here before?" — one place's events and memories.
+  static Future<LocationJournal> getLocationJournal(
+    String instanceId,
+    String locationEntityId,
+  ) async {
+    final response =
+        await ApiClient.get('/chronicle/locations/$instanceId/$locationEntityId');
+    return LocationJournal.fromJson(Map<String, dynamic>.from(response as Map));
   }
 
   /// Switch the active reality/branch for an instance. Subsequent turns and
