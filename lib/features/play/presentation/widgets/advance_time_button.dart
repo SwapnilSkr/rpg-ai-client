@@ -5,8 +5,9 @@ import '../../../../../app/theme/nexus_theme.dart';
 
 /// The "let the days pass" control — Everlore's age-up button.
 ///
-/// Tap: the world advances one quiet beat (plain continue).
-/// Long-press: choose how much story time passes (calendar tick).
+/// Tap (or long-press) opens a single sheet: the first option is a quiet
+/// continue beat, the rest are calendar-tick time-skips. One discoverable
+/// gesture so players never have to guess that time travel exists.
 class AdvanceTimeButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onContinue;
@@ -60,6 +61,27 @@ class AdvanceTimeButton extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
+              // A quiet continue beat — the common case, kept at the top so it
+              // stays one quick gesture even though the sheet now owns the tap.
+              _TimeSpanTile(
+                    icon: Icons.play_arrow_rounded,
+                    label: 'A quiet moment passes',
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      HapticFeedback.lightImpact();
+                      onContinue();
+                    },
+                  )
+                  .animate()
+                  .fadeIn(duration: 200.ms)
+                  .slideX(begin: 0.08, end: 0, curve: Curves.easeOutCubic),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Divider(
+                  height: 1,
+                  color: EverloreTheme.gold.withValues(alpha: 0.12),
+                ),
+              ),
               for (var i = 0; i < _spans.length; i++)
                 _TimeSpanTile(
                       icon: _spans[i].icon,
@@ -70,7 +92,7 @@ class AdvanceTimeButton extends StatelessWidget {
                         onAdvance(_spans[i].key);
                       },
                     )
-                    .animate(delay: Duration(milliseconds: 50 * i))
+                    .animate(delay: Duration(milliseconds: 50 * (i + 1)))
                     .fadeIn(duration: 200.ms)
                     .slideX(begin: 0.08, end: 0, curve: Curves.easeOutCubic),
             ],
@@ -83,7 +105,7 @@ class AdvanceTimeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Tooltip(
-      message: 'Continue — hold to let time pass',
+      message: 'Let time pass',
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
         opacity: enabled ? 1 : 0.45,
@@ -91,12 +113,7 @@ class AdvanceTimeButton extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             customBorder: const CircleBorder(),
-            onTap: enabled
-                ? () {
-                    HapticFeedback.lightImpact();
-                    onContinue();
-                  }
-                : null,
+            onTap: enabled ? () => _showTimeSheet(context) : null,
             onLongPress: enabled ? () => _showTimeSheet(context) : null,
             child: Container(
               width: 46,
