@@ -94,6 +94,18 @@ class ChronicleRepository {
     return RelationshipLedger.fromJson(Map<String, dynamic>.from(response as Map));
   }
 
+  /// "What this character remembers about you" — the memories a character is
+  /// part of, via entity subject/object links.
+  static Future<CharacterMemories> getCharacterMemories(
+    String instanceId,
+    String characterId,
+  ) async {
+    final response = await ApiClient.get(
+      '/chronicle/relationships/$instanceId/$characterId/memories',
+    );
+    return CharacterMemories.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
   /// All places with anchored events/memories + the current-location cursor.
   static Future<LocationsData> getLocations(String instanceId) async {
     final response = await ApiClient.get('/chronicle/locations/$instanceId');

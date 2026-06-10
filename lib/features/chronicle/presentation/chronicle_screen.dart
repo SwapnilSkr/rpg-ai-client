@@ -170,7 +170,10 @@ class _ChronicleView extends StatelessWidget {
         subtitle: 'Where others stand with you will be charted here.',
       );
     }
-    return BondsView(ledger: bonds);
+    return BondsView(
+      instanceId: context.read<ChronicleCubit>().instanceId,
+      ledger: bonds,
+    );
   }
 
   void _confirmDelete(BuildContext context, String memoryId) {

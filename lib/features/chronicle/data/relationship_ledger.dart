@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'calendar_data.dart' show TimeAnchor;
 
 /// Client mirror of `characterCodexService.listRelationships` (Phase 10
 /// Relationship Ledger surface). Meters are 0-100 toward the player.
@@ -99,4 +100,79 @@ class RelationshipLedger extends Equatable {
 
   @override
   List<Object?> get props => [characters];
+}
+
+/// "What this character remembers about you" — the memories a character is
+/// part of, via entity subject/object links.
+class CharacterMemoryEntry extends Equatable {
+  final String id;
+  final String text;
+  final String type;
+  final int importance;
+  final String? emotionalValence;
+  final String? relationshipDelta;
+  final bool unresolvedThread;
+  final TimeAnchor? anchor;
+
+  const CharacterMemoryEntry({
+    required this.id,
+    required this.text,
+    required this.type,
+    required this.importance,
+    this.emotionalValence,
+    this.relationshipDelta,
+    this.unresolvedThread = false,
+    this.anchor,
+  });
+
+  factory CharacterMemoryEntry.fromJson(Map<String, dynamic> json) =>
+      CharacterMemoryEntry(
+        id: json['id'] as String? ?? '',
+        text: json['text'] as String? ?? '',
+        type: json['type'] as String? ?? 'memory',
+        importance: (json['importance'] as num?)?.toInt() ?? 0,
+        emotionalValence: json['emotional_valence'] as String?,
+        relationshipDelta: json['relationship_delta'] as String?,
+        unresolvedThread: json['unresolved_thread'] == true,
+        anchor: json['time_anchor'] != null
+            ? TimeAnchor.fromJson(Map<String, dynamic>.from(json['time_anchor']))
+            : null,
+      );
+
+  @override
+  List<Object?> get props =>
+      [id, text, type, importance, emotionalValence, relationshipDelta, unresolvedThread];
+}
+
+class CharacterMemories extends Equatable {
+  final String characterId;
+  final String name;
+  final String? role;
+  final List<CharacterMemoryEntry> memories;
+
+  const CharacterMemories({
+    required this.characterId,
+    required this.name,
+    this.role,
+    this.memories = const [],
+  });
+
+  factory CharacterMemories.fromJson(Map<String, dynamic> json) {
+    final c = json['character'] is Map
+        ? Map<String, dynamic>.from(json['character'])
+        : <String, dynamic>{};
+    return CharacterMemories(
+      characterId: c['id'] as String? ?? '',
+      name: c['name'] as String? ?? 'Someone',
+      role: c['role'] as String?,
+      memories: (json['memories'] as List?)
+              ?.map((m) =>
+                  CharacterMemoryEntry.fromJson(Map<String, dynamic>.from(m)))
+              .toList() ??
+          const [],
+    );
+  }
+
+  @override
+  List<Object?> get props => [characterId, name, role, memories];
 }

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../data/relationship_ledger.dart';
+import '../character_memory_screen.dart';
 
 /// Relationship Ledger: where each member of the cast stands toward the
 /// player. Meters (trust/affection/fear/rivalry, 0-100) come straight from the
 /// codex relationship ledger; "moments" are the narrative edges that moved them.
+/// Tapping a character opens "what they remember about you".
 class BondsView extends StatelessWidget {
+  final String instanceId;
   final RelationshipLedger ledger;
 
-  const BondsView({super.key, required this.ledger});
+  const BondsView({super.key, required this.instanceId, required this.ledger});
 
   @override
   Widget build(BuildContext context) {
@@ -29,30 +32,50 @@ class BondsView extends StatelessWidget {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
       itemCount: entries.length,
-      itemBuilder: (context, i) => _BondCard(entry: entries[i]),
+      itemBuilder: (context, i) => _BondCard(
+        entry: entries[i],
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => CharacterMemoryScreen(
+                instanceId: instanceId,
+                characterId: entries[i].id,
+                characterName: entries[i].name,
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
 
 class _BondCard extends StatelessWidget {
   final RelationshipEntry entry;
+  final VoidCallback onTap;
 
-  const _BondCard({required this.entry});
+  const _BondCard({required this.entry, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final m = entry.meters;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         color: EverloreTheme.void2,
         border: Border.all(color: EverloreTheme.white10),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -79,6 +102,8 @@ class _BondCard extends StatelessWidget {
                   ],
                 ),
               ),
+              const Icon(Icons.chevron_right,
+                  color: EverloreTheme.ash, size: 18),
             ],
           ),
           if (entry.disposition != null &&
@@ -147,7 +172,10 @@ class _BondCard extends StatelessWidget {
                 ),
               ),
           ],
-        ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
