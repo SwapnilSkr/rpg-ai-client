@@ -294,11 +294,18 @@ class ReplayVariant {
   final String modelUsed;
   final DateTime? createdAt;
 
+  /// Tap-to-play chips + scene presence derived from THIS variant's prose, so
+  /// browsing to a variant shows its own choices without a round-trip.
+  final List<Choice> choices;
+  final List<String> presentCharacters;
+
   const ReplayVariant({
     required this.id,
     required this.narrative,
     this.modelUsed = '',
     this.createdAt,
+    this.choices = const [],
+    this.presentCharacters = const [],
   });
 
   factory ReplayVariant.fromJson(Map<String, dynamic> json) {
@@ -309,6 +316,8 @@ class ReplayVariant {
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null,
+      choices: Choice.listFromAny(json['choices']),
+      presentCharacters: GameEvent.presentFromAny(json['present_characters']),
     );
   }
 }

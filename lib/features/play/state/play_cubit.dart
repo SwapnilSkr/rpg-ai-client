@@ -423,10 +423,10 @@ class PlayCubit extends Cubit<PlayState> {
           modelUsed: selectedVariant?.modelUsed,
           replayVariants: variants,
           selectedReplayIndex: selected,
-          // The old next-move chips + scene presence were derived from the
-          // pre-replay prose; drop them so they don't mismatch the new turn.
-          choices: const [],
-          presentCharacters: const [],
+          // Fresh chips + scene presence, regenerated server-side from the new
+          // variant (the old ones reflected the replaced prose).
+          choices: Choice.listFromAny(msg['choices']),
+          presentCharacters: GameEvent.presentFromAny(msg['present_characters']),
         );
         LocalDb.insertEvent(events[idx]);
       }
@@ -1048,9 +1048,9 @@ class PlayCubit extends Cubit<PlayState> {
         aiResponse: event.replayVariants[index].narrative,
         modelUsed: event.replayVariants[index].modelUsed,
         selectedReplayIndex: index,
-        // Chips + presence belonged to the previously-shown variant's prose.
-        choices: const [],
-        presentCharacters: const [],
+        // Show the browsed variant's OWN chips + presence (stored per variant).
+        choices: event.replayVariants[index].choices,
+        presentCharacters: event.replayVariants[index].presentCharacters,
       );
     }
     emit(state.copyWith(events: next, error: null));
