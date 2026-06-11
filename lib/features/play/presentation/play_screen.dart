@@ -21,6 +21,25 @@ import '../../../shared/chat_modes.dart';
 import '../../../core/storage/local_db.dart';
 import '../../home/data/home_repository.dart';
 
+/// Whether [c] should be treated as in the current scene. [presence] is the set
+/// of lowercased names the latest turn reported present, or null when presence
+/// is unknown (legacy turns) — in which case we assume present rather than mark
+/// everyone absent. Matches against the card's canonical name AND its aliases:
+/// the server normalizes `present_characters` to canonical names, but matching
+/// aliases too keeps presence correct if an alias/role string slips through
+/// (an LLM hiccup, a legacy event, a not-yet-re-seeded world). The protagonist
+/// is always present.
+bool _scenePresent(CharacterProfile c, Set<String>? presence) {
+  if (presence == null) return true;
+  if (c.isProtagonist) return true;
+  final name = c.canonicalName.trim().toLowerCase();
+  if (name.isNotEmpty && presence.contains(name)) return true;
+  return c.aliases.any((a) {
+    final alias = a.trim().toLowerCase();
+    return alias.isNotEmpty && presence.contains(alias);
+  });
+}
+
 class PlayScreen extends StatelessWidget {
   final String instanceId;
 
@@ -89,7 +108,7 @@ class _PlayViewState extends State<_PlayView> {
     // Scene-aware: when the latest turn reports who is present, a character not
     // in it is "elsewhere" — you seek them out rather than turning to thin air.
     final presence = _presentNames(cubit.state);
-    final isPresent = presence == null || presence.contains(name.toLowerCase());
+    final isPresent = _scenePresent(character, presence);
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: EverloreTheme.void2,
@@ -2275,9 +2294,7 @@ class _ThoughtsSheet extends StatelessWidget {
     required this.presentNames,
   });
 
-  bool _isPresent(CharacterProfile c) =>
-      c.isProtagonist ||
-      (presentNames?.contains(c.canonicalName.toLowerCase()) ?? true);
+  bool _isPresent(CharacterProfile c) => _scenePresent(c, presentNames);
 
   @override
   Widget build(BuildContext context) {
