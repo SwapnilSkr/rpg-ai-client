@@ -26,7 +26,6 @@ class _PlacesViewState extends State<PlacesView> {
 
   late Map<String, List<LocationPlace>> _childrenByParent;
   late List<LocationPlace> _roots;
-  late Set<String> _onCurrentPath;
 
   @override
   void initState() {
@@ -63,18 +62,8 @@ class _PlacesViewState extends State<PlacesView> {
       list.sort(byRecency);
     }
 
-    // Auto-expand the ancestry of the current place.
-    final onPath = <String>{};
-    var cur = widget.data.currentLocation?.entityId;
-    var guard = 0;
-    while (cur != null && byId.containsKey(cur) && guard++ < 32) {
-      onPath.add(cur);
-      cur = byId[cur]!.parentId;
-    }
-
     _childrenByParent = children;
     _roots = roots;
-    _onCurrentPath = onPath;
   }
 
   @override
@@ -125,9 +114,9 @@ class _PlacesViewState extends State<PlacesView> {
   void _emit(List<Widget> out, LocationPlace node, int depth, String? currentId) {
     final kids = _childrenByParent[node.entityId] ?? const [];
     final hasKids = kids.isNotEmpty;
-    // The current place's branch can't be collapsed shut from under it.
-    final forcedOpen = _onCurrentPath.contains(node.entityId);
-    final expanded = hasKids && (forcedOpen || !_collapsed.contains(node.entityId));
+    // Expanded by default; any parent can be folded. The current place stays
+    // reachable via the "YOU ARE HERE" banner even when its container is folded.
+    final expanded = hasKids && !_collapsed.contains(node.entityId);
 
     out.add(_PlaceTreeRow(
       place: node,
@@ -135,7 +124,7 @@ class _PlacesViewState extends State<PlacesView> {
       isCurrent: node.entityId == currentId,
       hasChildren: hasKids,
       expanded: expanded,
-      onToggle: hasKids && !forcedOpen
+      onToggle: hasKids
           ? () => setState(() {
                 if (!_collapsed.add(node.entityId)) _collapsed.remove(node.entityId);
               })
@@ -213,12 +202,13 @@ class _PlaceTreeRow extends StatelessWidget {
                       ? InkWell(
                           onTap: onToggle,
                           borderRadius: BorderRadius.circular(12),
-                          child: Icon(
-                            expanded ? Icons.expand_more : Icons.chevron_right,
-                            color: onToggle == null
-                                ? EverloreTheme.ash.withValues(alpha: 0.4)
-                                : EverloreTheme.ash,
-                            size: 20,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Icon(
+                              expanded ? Icons.expand_more : Icons.chevron_right,
+                              color: isCurrent ? EverloreTheme.gold : EverloreTheme.ash,
+                              size: 20,
+                            ),
                           ),
                         )
                       : const SizedBox.shrink(),
