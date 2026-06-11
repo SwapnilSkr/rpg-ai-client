@@ -11,6 +11,13 @@ class LocationPlace extends Equatable {
   final int? firstSeenSequence;
   final int? lastSeenSequence;
 
+  /// Containment spine (P2 atlas): the immediate container, the world/realm this
+  /// place belongs to, and a coarse granularity tier. `parentId` null = a root
+  /// node (a world, or a place whose container isn't discovered yet).
+  final String? parentId;
+  final String? worldRootId;
+  final String? placeKind;
+
   const LocationPlace({
     required this.entityId,
     required this.name,
@@ -18,6 +25,9 @@ class LocationPlace extends Equatable {
     this.memoryCount = 0,
     this.firstSeenSequence,
     this.lastSeenSequence,
+    this.parentId,
+    this.worldRootId,
+    this.placeKind,
   });
 
   factory LocationPlace.fromJson(Map<String, dynamic> json) => LocationPlace(
@@ -27,11 +37,23 @@ class LocationPlace extends Equatable {
         memoryCount: (json['memory_count'] as num?)?.toInt() ?? 0,
         firstSeenSequence: (json['first_seen_sequence'] as num?)?.toInt(),
         lastSeenSequence: (json['last_seen_sequence'] as num?)?.toInt(),
+        parentId: json['parent_id'] as String?,
+        worldRootId: json['world_root_id'] as String?,
+        placeKind: json['place_kind'] as String?,
       );
 
   @override
-  List<Object?> get props =>
-      [entityId, name, eventCount, memoryCount, firstSeenSequence, lastSeenSequence];
+  List<Object?> get props => [
+        entityId,
+        name,
+        eventCount,
+        memoryCount,
+        firstSeenSequence,
+        lastSeenSequence,
+        parentId,
+        worldRootId,
+        placeKind,
+      ];
 }
 
 class LocationCursor extends Equatable {
