@@ -802,8 +802,22 @@ class PlayCubit extends Cubit<PlayState> {
     emit(state.copyWith(events: optimistic, error: null));
 
     try {
-      await ChronicleRepository.editEvent(event.id, aiResponse: next);
-      await LocalDb.insertEvent(after);
+      final meta = await ChronicleRepository.editEvent(event.id, aiResponse: next);
+      // Swap in the server-regenerated chips + presence for the rewritten prose
+      // (the optimistic copy carried the old ones).
+      final settled = meta == null
+          ? after
+          : after.copyWith(
+              choices: meta.choices,
+              presentCharacters: meta.presentCharacters,
+            );
+      final committed = [...state.events];
+      final cIdx = committed.indexWhere((e) => e.id == event.id);
+      if (cIdx >= 0) {
+        committed[cIdx] = settled;
+        emit(state.copyWith(events: committed));
+      }
+      await LocalDb.insertEvent(settled);
     } catch (_) {
       final reverted = [...state.events];
       final revertIdx = reverted.indexWhere((e) => e.id == before.id);
