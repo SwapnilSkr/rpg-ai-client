@@ -300,32 +300,66 @@ class _EventTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMilestone =
         event.milestone != null && event.milestone!.trim().isNotEmpty;
-    final label = isMilestone
-        ? event.milestone!
-        : (event.anchor?.eventTimeLabel ?? _pretty(event.sceneTag, event.type));
+    final hasPreview =
+        event.preview != null && event.preview!.trim().isNotEmpty;
+    final kind = _pretty(event.sceneTag, event.type);
+    final timeLabel = event.anchor?.eventTimeLabel;
+
+    // Lead with what actually happened (player's beat → narration snippet →
+    // milestone), and demote the generic type/time to a small caption so the
+    // timeline reads with substance instead of a column of "Dialogue".
+    final mainLine =
+        isMilestone ? event.milestone! : (hasPreview ? event.preview! : kind);
+    final captionParts = <String>[
+      if (!isMilestone && hasPreview) kind,
+      if (timeLabel != null && timeLabel.isNotEmpty) timeLabel,
+    ];
+    final caption = captionParts.isEmpty ? null : captionParts.join('  ·  ');
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            isMilestone ? Icons.auto_awesome : Icons.circle,
-            size: isMilestone ? 13 : 6,
-            color: isMilestone
-                ? EverloreTheme.gold
-                : EverloreTheme.ash.withValues(alpha: 0.6),
+          Padding(
+            padding: EdgeInsets.only(top: isMilestone ? 1 : 5),
+            child: Icon(
+              isMilestone ? Icons.auto_awesome : Icons.circle,
+              size: isMilestone ? 13 : 6,
+              color: isMilestone
+                  ? EverloreTheme.gold
+                  : EverloreTheme.ash.withValues(alpha: 0.6),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                color:
-                    isMilestone ? EverloreTheme.parchment : EverloreTheme.ash,
-                fontSize: 13,
-                fontWeight: isMilestone ? FontWeight.w600 : FontWeight.normal,
-                height: 1.4,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  mainLine,
+                  style: TextStyle(
+                    color: (isMilestone || hasPreview)
+                        ? EverloreTheme.parchment
+                        : EverloreTheme.ash,
+                    fontSize: 14,
+                    fontWeight:
+                        isMilestone ? FontWeight.w600 : FontWeight.normal,
+                    height: 1.45,
+                  ),
+                ),
+                if (caption != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    caption,
+                    style: TextStyle(
+                      color: EverloreTheme.ash.withValues(alpha: 0.7),
+                      fontSize: 11,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

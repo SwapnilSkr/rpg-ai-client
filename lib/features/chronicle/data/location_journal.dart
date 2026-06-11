@@ -101,6 +101,10 @@ class LocationEventEntry extends Equatable {
   final TimeAnchor? anchor;
   final String? milestone;
 
+  /// A one-line caption of the beat — what the player did/said here (else a
+  /// narration snippet) — so a moment reads with context, not a bare type tag.
+  final String? preview;
+
   const LocationEventEntry({
     required this.id,
     required this.sequence,
@@ -108,6 +112,7 @@ class LocationEventEntry extends Equatable {
     this.sceneTag,
     this.anchor,
     this.milestone,
+    this.preview,
   });
 
   factory LocationEventEntry.fromJson(Map<String, dynamic> json) =>
@@ -120,10 +125,11 @@ class LocationEventEntry extends Equatable {
             ? TimeAnchor.fromJson(Map<String, dynamic>.from(json['time_anchor']))
             : null,
         milestone: json['milestone'] as String?,
+        preview: json['preview'] as String?,
       );
 
   @override
-  List<Object?> get props => [id, sequence, type, sceneTag, milestone];
+  List<Object?> get props => [id, sequence, type, sceneTag, milestone, preview];
 }
 
 class LocationMemoryEntry extends Equatable {
