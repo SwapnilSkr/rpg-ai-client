@@ -254,7 +254,7 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
                 const EvIcon(AppIcons.errorRune, size: 110),
                 const SizedBox(height: 16),
                 const Text(
-                  'Could not reach the realm',
+                  'Could not reach the server',
                   style: TextStyle(
                     color: EverloreTheme.parchment,
                     fontSize: 16,

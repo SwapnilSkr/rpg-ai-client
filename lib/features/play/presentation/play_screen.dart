@@ -1176,6 +1176,9 @@ class _PlayViewState extends State<_PlayView> {
                   if (state.error != null)
                     _ErrorBar(
                       message: state.error!,
+                      onRetry: (state.lastFailedInput?.trim().isNotEmpty ?? false)
+                          ? () => context.read<PlayCubit>().retryLastFailed()
+                          : null,
                       onDismiss: () => context.read<PlayCubit>().clearError(),
                     ),
 
@@ -1490,7 +1493,7 @@ class _PlayHeader extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          isConnected ? 'Realm Active' : 'Reconnecting…',
+                          isConnected ? 'Connected' : 'Reconnecting…',
                           style: EverloreTheme.ui(
                             size: 11,
                             spacing: 0.5,
@@ -2618,8 +2621,13 @@ class _PresenceTag extends StatelessWidget {
 class _ErrorBar extends StatelessWidget {
   final String message;
   final VoidCallback onDismiss;
+  final VoidCallback? onRetry;
 
-  const _ErrorBar({required this.message, required this.onDismiss});
+  const _ErrorBar({
+    required this.message,
+    required this.onDismiss,
+    this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2649,6 +2657,23 @@ class _ErrorBar extends StatelessWidget {
               ),
             ),
           ),
+          if (onRetry != null)
+            TextButton(
+              onPressed: onRetry,
+              style: TextButton.styleFrom(
+                foregroundColor: EverloreTheme.crimson,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Retry',
+                style: EverloreTheme.ui(
+                  size: 13,
+                  color: EverloreTheme.crimson,
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(
               Icons.close,

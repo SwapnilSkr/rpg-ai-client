@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../config/env.dart';
@@ -50,6 +51,10 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _sideChatErrorController =
       StreamController<Map<String, dynamic>>.broadcast();
+  /// Fired when the server reports this account was deleted (e.g. from another
+  /// device). A live session must drop to the auth screen rather than keep
+  /// running against a dead account until the next request 401s.
+  final _accountDeletedController = StreamController<void>.broadcast();
 
   Stream<Map<String, dynamic>> get onGenerationDelta =>
       _generationDeltaController.stream;
@@ -60,6 +65,7 @@ class WsManager {
   Stream<Map<String, dynamic>> get onMemoriesCurated =>
       _memoriesCuratedController.stream;
   Stream<Map<String, dynamic>> get onError => _errorController.stream;
+  Stream<void> get onAccountDeleted => _accountDeletedController.stream;
   Stream<bool> get onConnectionState => _connectionStateController.stream;
   Stream<Map<String, dynamic>> get onInstanceLoaded =>
       _instanceLoadedController.stream;
@@ -222,7 +228,8 @@ class WsManager {
       case 'validation':
         _errorController.add({
           ...msg,
-          'message': 'The server rejected this request. Please update the app.',
+          'message':
+              "That request couldn't be processed. Please try again — if it keeps happening, update the app.",
         });
         break;
       case 'instance_loaded':
@@ -249,9 +256,16 @@ class WsManager {
       case 'side_chat_error':
         _sideChatErrorController.add(msg);
         break;
+      case 'account_deleted':
+        _accountDeletedController.add(null);
+        break;
       case 'pong':
       case 'ack':
         break;
+      default:
+        // Unknown / future frame — don't silently swallow it; surface for
+        // visibility so a new server frame isn't invisibly dropped.
+        debugPrint('[ws] unhandled frame type: ${msg['type']}');
     }
   }
 
@@ -294,8 +308,22 @@ class WsManager {
       } catch (_) {
         _onDisconnected();
       }
-    } else {
+      return;
+    }
+    // Offline. Only actions that are SAFE to replay after a reconnect may be
+    // queued. A generation-triggering action (chat/continue/side_chat/replay)
+    // must NOT be blindly re-sent: if the pre-drop send already reached the
+    // server, replaying it on reconnect double-posts the turn. Drop it and
+    // surface, so the player resends once reconnected (the optimistic turn is
+    // torn down by the error handler). `load_instance` is an idempotent
+    // reconcile, safe to queue; `ping` is pointless offline, dropped silently.
+    final action = message['action']?.toString() ?? '';
+    if (action == 'load_instance') {
       _offlineQueue.add(message);
+    } else if (action != 'ping') {
+      _errorController.add({
+        'message': "You're offline — that didn't send. Reconnect and try again.",
+      });
     }
   }
 

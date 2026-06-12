@@ -31,6 +31,11 @@ class PlayState extends Equatable {
   final int totalEvents;
   final bool hasOlderEvents;
 
+  /// The player input of a turn that failed to send (lock held, error, or
+  /// offline), preserved so it can be resent with one tap instead of being
+  /// silently lost. Cleared on a successful send or when the error is dismissed.
+  final String? lastFailedInput;
+
   /// Id of the event whose AI turn is currently being re-woven (streaming a
   /// replay variant). Drives the in-bubble weaving/streaming treatment and is
   /// independent of [isGenerating] (which gates the composer for new turns).
@@ -62,6 +67,7 @@ class PlayState extends Equatable {
     this.error,
     this.totalEvents = 0,
     this.hasOlderEvents = false,
+    this.lastFailedInput,
     this.replayingEventId,
     this.lastStatDeltas,
     this.lastMilestone,
@@ -81,6 +87,7 @@ class PlayState extends Equatable {
     String? error,
     int? totalEvents,
     bool? hasOlderEvents,
+    Object? lastFailedInput = _kUnset,
     Object? replayingEventId = _kUnset,
     Object? lastStatDeltas = _kUnset,
     Object? lastMilestone = _kUnset,
@@ -99,6 +106,9 @@ class PlayState extends Equatable {
       error: error,
       totalEvents: totalEvents ?? this.totalEvents,
       hasOlderEvents: hasOlderEvents ?? this.hasOlderEvents,
+      lastFailedInput: identical(lastFailedInput, _kUnset)
+          ? this.lastFailedInput
+          : lastFailedInput as String?,
       replayingEventId: identical(replayingEventId, _kUnset)
           ? this.replayingEventId
           : replayingEventId as String?,
@@ -126,6 +136,7 @@ class PlayState extends Equatable {
     error,
     totalEvents,
     hasOlderEvents,
+    lastFailedInput,
     replayingEventId,
     lastStatDeltas,
     lastMilestone,
@@ -462,13 +473,19 @@ class PlayCubit extends Cubit<PlayState> {
         final idx = events.lastIndexWhere(
           (e) => e.isOptimistic && ((e.aiResponse ?? '').trim().isEmpty),
         );
+        // Preserve the input so it isn't silently lost, and TELL the player why
+        // nothing happened (the prior turn's lock is still held) instead of a
+        // confusing no-op.
+        final droppedInput = idx >= 0 ? events[idx].playerInput : null;
         if (idx >= 0) events.removeAt(idx);
         _clearGenerationTimers();
         emit(
           state.copyWith(
             events: events,
             isGenerating: false,
-            error: null,
+            error:
+                'Still finishing your previous turn — give it a moment, then resend.',
+            lastFailedInput: droppedInput,
           ),
         );
         return;
@@ -496,13 +513,19 @@ class PlayCubit extends Cubit<PlayState> {
       _streamBuffer = '';
       _streamTarget = '';
       _clearGenerationTimers();
-      // Drop the in-progress optimistic turn so the player can retry cleanly.
+      // Drop the in-progress optimistic turn but KEEP its text so the player can
+      // resend with one tap rather than re-typing the whole message.
+      final droppedOptimistic =
+          state.events.where((e) => e.isOptimistic).toList();
+      final droppedInput =
+          droppedOptimistic.isNotEmpty ? droppedOptimistic.last.playerInput : null;
       final events = state.events.where((e) => !e.isOptimistic).toList();
       emit(
         state.copyWith(
           events: events,
           isGenerating: false,
           error: msg['message'] ?? 'An error occurred',
+          lastFailedInput: droppedInput,
         ),
       );
     });
@@ -569,12 +592,22 @@ class PlayCubit extends Cubit<PlayState> {
         hasOlderEvents:
             state.hasOlderEvents || state.events.length >= _activeEventLimit,
         error: null,
+        lastFailedInput: null,
         lastStatDeltas: null,
       ),
     );
 
     _armGenerationWatchdog(_generationFirstTokenTimeout);
     _ws.sendChatMessage(instanceId, message);
+  }
+
+  /// Resend the input from a turn that failed to send (lock held, error, or
+  /// offline) without making the player re-type it.
+  void retryLastFailed() {
+    final pending = state.lastFailedInput;
+    if (pending == null || pending.trim().isEmpty) return;
+    if (state.isGenerating || state.replayingEventId != null) return;
+    sendMessage(pending);
   }
 
   /// Let the world advance the story autonomously — no player message.
@@ -616,7 +649,8 @@ class PlayCubit extends Cubit<PlayState> {
   }
 
   void clearError() {
-    emit(state.copyWith(error: null));
+    // Dismissing the error also abandons the retry — drop the held input.
+    emit(state.copyWith(error: null, lastFailedInput: null));
   }
 
   bool _protagonistPrompted = false;

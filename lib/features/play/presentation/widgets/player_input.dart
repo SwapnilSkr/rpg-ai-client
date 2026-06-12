@@ -245,7 +245,7 @@ class _PlayerInputState extends State<PlayerInput> {
 
   String _hintText() {
     if (widget.isGenerating) return 'The story unfolds…';
-    if (!widget.isConnected) return 'Reconnecting to the realm…';
+    if (!widget.isConnected) return 'Reconnecting…';
     return 'What do you do?';
   }
 }
