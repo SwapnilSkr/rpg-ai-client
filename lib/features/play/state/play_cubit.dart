@@ -36,6 +36,11 @@ class PlayState extends Equatable {
   /// silently lost. Cleared on a successful send or when the error is dismissed.
   final String? lastFailedInput;
 
+  /// Transient status shown while a turn is still in flight — e.g. the server
+  /// hit a hiccup and is retrying. Distinct from [error]: the turn isn't dead,
+  /// the loader stays up. Cleared once tokens resume or the turn ends/fails.
+  final String? notice;
+
   /// Id of the event whose AI turn is currently being re-woven (streaming a
   /// replay variant). Drives the in-bubble weaving/streaming treatment and is
   /// independent of [isGenerating] (which gates the composer for new turns).
@@ -68,6 +73,7 @@ class PlayState extends Equatable {
     this.totalEvents = 0,
     this.hasOlderEvents = false,
     this.lastFailedInput,
+    this.notice,
     this.replayingEventId,
     this.lastStatDeltas,
     this.lastMilestone,
@@ -88,6 +94,7 @@ class PlayState extends Equatable {
     int? totalEvents,
     bool? hasOlderEvents,
     Object? lastFailedInput = _kUnset,
+    Object? notice = _kUnset,
     Object? replayingEventId = _kUnset,
     Object? lastStatDeltas = _kUnset,
     Object? lastMilestone = _kUnset,
@@ -109,6 +116,7 @@ class PlayState extends Equatable {
       lastFailedInput: identical(lastFailedInput, _kUnset)
           ? this.lastFailedInput
           : lastFailedInput as String?,
+      notice: identical(notice, _kUnset) ? this.notice : notice as String?,
       replayingEventId: identical(replayingEventId, _kUnset)
           ? this.replayingEventId
           : replayingEventId as String?,
@@ -137,6 +145,7 @@ class PlayState extends Equatable {
     totalEvents,
     hasOlderEvents,
     lastFailedInput,
+    notice,
     replayingEventId,
     lastStatDeltas,
     lastMilestone,
@@ -151,6 +160,7 @@ class PlayCubit extends Cubit<PlayState> {
   late StreamSubscription _generationSub;
   late StreamSubscription _deltaSub;
   late StreamSubscription _streamEndSub;
+  late StreamSubscription _retryingSub;
   late StreamSubscription _memorySub;
   late StreamSubscription _errorSub;
   late StreamSubscription _connectionSub;
@@ -284,7 +294,18 @@ class PlayCubit extends Cubit<PlayState> {
     _deltaSub = _ws.onGenerationDelta.listen((msg) {
       if (msg['instanceId']?.toString() != instanceId) return;
       _armGenerationWatchdog(_generationQuietTimeout);
+      // Tokens are flowing again — drop any "retrying" notice.
+      if (state.notice != null) emit(state.copyWith(notice: null));
       _queueGenerationText(msg['delta']?.toString() ?? '');
+    });
+
+    // A turn hit a transient failure and is being retried server-side. Keep the
+    // loader up and tell the player it's still coming, rather than a dead stream.
+    _retryingSub = _ws.onGenerationRetrying.listen((msg) {
+      if (msg['instanceId']?.toString() != instanceId) return;
+      if (!state.isGenerating) return;
+      _armGenerationWatchdog(_generationQuietTimeout);
+      emit(state.copyWith(notice: 'The world stumbled — trying again…'));
     });
 
     _streamEndSub = _ws.onGenerationStreamEnd.listen((msg) {
@@ -366,6 +387,7 @@ class PlayCubit extends Cubit<PlayState> {
         state.copyWith(
           events: trimmedEvents,
           isGenerating: false,
+          notice: null,
           instance: state.instance?.applyStateDiff(eventData['state_diff']),
           totalEvents: nextTotalEvents,
           hasOlderEvents:
@@ -483,6 +505,7 @@ class PlayCubit extends Cubit<PlayState> {
           state.copyWith(
             events: events,
             isGenerating: false,
+            notice: null,
             error:
                 'Still finishing your previous turn — give it a moment, then resend.',
             lastFailedInput: droppedInput,
@@ -504,6 +527,7 @@ class PlayCubit extends Cubit<PlayState> {
           state.copyWith(
             events: optimisticEvents,
             isGenerating: false,
+            notice: null,
             error: null,
           ),
         );
@@ -524,6 +548,7 @@ class PlayCubit extends Cubit<PlayState> {
         state.copyWith(
           events: events,
           isGenerating: false,
+          notice: null,
           error: msg['message'] ?? 'An error occurred',
           lastFailedInput: droppedInput,
         ),
@@ -592,6 +617,7 @@ class PlayCubit extends Cubit<PlayState> {
         hasOlderEvents:
             state.hasOlderEvents || state.events.length >= _activeEventLimit,
         error: null,
+        notice: null,
         lastFailedInput: null,
         lastStatDeltas: null,
       ),
@@ -1134,6 +1160,7 @@ class PlayCubit extends Cubit<PlayState> {
     await _generationSub.cancel();
     await _deltaSub.cancel();
     await _streamEndSub.cancel();
+    await _retryingSub.cancel();
     await _memorySub.cancel();
     await _errorSub.cancel();
     await _connectionSub.cancel();

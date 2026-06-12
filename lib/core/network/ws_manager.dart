@@ -31,6 +31,10 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _generationStreamEndController =
       StreamController<Map<String, dynamic>>.broadcast();
+  /// A turn hit a transient failure and is being retried — the stream is still
+  /// coming. Lets the UI keep the loader up (with a hint) instead of a dead end.
+  final _generationRetryingController =
+      StreamController<Map<String, dynamic>>.broadcast();
   final _memoriesCuratedController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _errorController = StreamController<Map<String, dynamic>>.broadcast();
@@ -62,6 +66,8 @@ class WsManager {
       _generationCompleteController.stream;
   Stream<Map<String, dynamic>> get onGenerationStreamEnd =>
       _generationStreamEndController.stream;
+  Stream<Map<String, dynamic>> get onGenerationRetrying =>
+      _generationRetryingController.stream;
   Stream<Map<String, dynamic>> get onMemoriesCurated =>
       _memoriesCuratedController.stream;
   Stream<Map<String, dynamic>> get onError => _errorController.stream;
@@ -215,6 +221,9 @@ class WsManager {
         break;
       case 'generation_stream_end':
         _generationStreamEndController.add(msg);
+        break;
+      case 'generation_retrying':
+        _generationRetryingController.add(msg);
         break;
       case 'memories_curated':
         _memoriesCuratedController.add(msg);
@@ -393,6 +402,7 @@ class WsManager {
     _generationDeltaController.close();
     _generationCompleteController.close();
     _generationStreamEndController.close();
+    _generationRetryingController.close();
     _memoriesCuratedController.close();
     _errorController.close();
     _connectionStateController.close();

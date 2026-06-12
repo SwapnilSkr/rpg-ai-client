@@ -17,6 +17,11 @@ class PlayerInput extends StatefulWidget {
   /// consumes the value (fills + focuses) and resets it to null.
   final ValueNotifier<String?>? draft;
 
+  /// Transient in-flight status (e.g. retrying after a hiccup). When set during
+  /// generation it replaces the default "unfolds" hint so a stalled-looking
+  /// stream reads as "still coming" instead of dead.
+  final String? notice;
+
   const PlayerInput({
     super.key,
     required this.isGenerating,
@@ -25,6 +30,7 @@ class PlayerInput extends StatefulWidget {
     this.onContinue,
     this.onAdvance,
     this.draft,
+    this.notice,
   });
 
   @override
@@ -244,7 +250,7 @@ class _PlayerInputState extends State<PlayerInput> {
   }
 
   String _hintText() {
-    if (widget.isGenerating) return 'The story unfolds…';
+    if (widget.isGenerating) return widget.notice ?? 'The story unfolds…';
     if (!widget.isConnected) return 'Reconnecting…';
     return 'What do you do?';
   }

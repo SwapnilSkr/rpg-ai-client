@@ -1331,6 +1331,7 @@ class _PlayViewState extends State<_PlayView> {
                   PlayerInput(
                     isGenerating: state.isGenerating,
                     isConnected: state.isConnected,
+                    notice: state.notice,
                     onSend: (msg) => context.read<PlayCubit>().sendMessage(msg),
                     onContinue: () =>
                         context.read<PlayCubit>().continueStory(),
