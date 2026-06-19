@@ -66,7 +66,25 @@ class TrackableMention {
   });
 
   factory TrackableMention.fromAny(dynamic raw) {
-    final m = Map<String, dynamic>.from(raw as Map);
+    if (raw is! Map) {
+      return const TrackableMention(
+        key: '',
+        display: '',
+        tier: 'mentioned_only',
+      );
+    }
+
+    late final Map<String, dynamic> m;
+    try {
+      m = Map<String, dynamic>.from(raw);
+    } on Object {
+      return const TrackableMention(
+        key: '',
+        display: '',
+        tier: 'mentioned_only',
+      );
+    }
+
     return TrackableMention(
       key: (m['key'] ?? '').toString(),
       display: (m['display'] ?? '').toString(),
@@ -82,7 +100,6 @@ class TrackableMention {
     if (raw == null) return null;
     if (raw is! List) return const [];
     return raw
-        .whereType<Object>()
         .map(TrackableMention.fromAny)
         .where((m) => m.display.isNotEmpty)
         .toList(growable: false);
