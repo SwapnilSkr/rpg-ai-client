@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// A tap-to-play suggestion under the latest narrator turn.
 ///
 /// [label] is the chip caption the player reads; [send] is the fully-formatted
@@ -59,10 +61,15 @@ class TrackableMention {
   final String display;
   final String tier; // 'confirmed' | 'probable' | 'mentioned_only'
 
+  /// Short prose snippet the backend used to justify this mention (why it
+  /// surfaced + at which tier). May be empty for legacy payloads.
+  final String evidence;
+
   const TrackableMention({
     required this.key,
     required this.display,
     required this.tier,
+    this.evidence = '',
   });
 
   factory TrackableMention.fromAny(dynamic raw) {
@@ -89,6 +96,7 @@ class TrackableMention {
       key: (m['key'] ?? '').toString(),
       display: (m['display'] ?? '').toString(),
       tier: (m['tier'] ?? 'mentioned_only').toString(),
+      evidence: (m['evidence'] ?? '').toString(),
     );
   }
 
@@ -104,6 +112,13 @@ class TrackableMention {
         .where((m) => m.display.isNotEmpty)
         .toList(growable: false);
   }
+
+  Map<String, dynamic> toJson() => {
+    'key': key,
+    'display': display,
+    'tier': tier,
+    'evidence': evidence,
+  };
 }
 
 class GameEvent {
@@ -294,6 +309,21 @@ class GameEvent {
   }
 
   factory GameEvent.fromSqlite(Map<String, dynamic> row) {
+    // Rich metadata (choices, replay variants, presence, mentions, travel,
+    // milestone, ...) is stored as a JSON blob in the `metadata` column. Rows
+    // written before that column existed simply have it null → those rich fields
+    // stay at their defaults and are refilled by the next WS reload.
+    Map<String, dynamic>? meta;
+    final rawMeta = row['metadata'];
+    if (rawMeta is String && rawMeta.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawMeta);
+        if (decoded is Map) meta = Map<String, dynamic>.from(decoded);
+      } catch (_) {
+        meta = null;
+      }
+    }
+
     return GameEvent(
       id: row['id'] as String,
       instanceId: row['instance_id'] as String,
@@ -306,8 +336,63 @@ class GameEvent {
       createdAt:
           DateTime.tryParse(row['created_at'] as String) ?? DateTime.now(),
       isOptimistic: (row['is_optimistic'] as int?) == 1,
+      isUserEdited: meta?['is_user_edited'] == true,
+      replayVariants:
+          (meta?['replay_variants'] as List?)
+              ?.map(
+                (v) =>
+                    ReplayVariant.fromJson(Map<String, dynamic>.from(v as Map)),
+              )
+              .toList() ??
+          const <ReplayVariant>[],
+      selectedReplayIndex:
+          (meta?['selected_replay_index'] as num?)?.toInt() ?? 0,
+      choices: Choice.listFromAny(meta?['choices']),
+      milestone: (meta?['milestone'])?.toString(),
+      timeAdvanced: (meta?['time_advanced'])?.toString(),
+      travel: TravelMove.fromAny(meta?['travel']),
+      fateThread: (meta?['fate_thread'])?.toString(),
+      presentCharacters: GameEvent.presentFromAny(meta?['present_characters']),
+      trackableMentions: TrackableMention.listFromAny(
+        meta?['trackable_mentions'],
+      ),
     );
   }
+
+  /// JSON blob of the rich metadata persisted alongside the flat columns.
+  Map<String, dynamic> _metadataJson() => {
+    'is_user_edited': isUserEdited,
+    'replay_variants': replayVariants
+        .map(
+          (v) => {
+            'id': v.id,
+            'narrative': v.narrative,
+            'model_used': v.modelUsed,
+            if (v.createdAt != null)
+              'created_at': v.createdAt!.toIso8601String(),
+            'choices': v.choices
+                .map((c) => {'label': c.label, 'kind': c.kind, 'send': c.send})
+                .toList(),
+            'present_characters': v.presentCharacters,
+            if (v.trackableMentions != null)
+              'trackable_mentions':
+                  v.trackableMentions!.map((m) => m.toJson()).toList(),
+          },
+        )
+        .toList(),
+    'selected_replay_index': selectedReplayIndex,
+    'choices': choices
+        .map((c) => {'label': c.label, 'kind': c.kind, 'send': c.send})
+        .toList(),
+    if (milestone != null) 'milestone': milestone,
+    if (timeAdvanced != null) 'time_advanced': timeAdvanced,
+    if (travel != null) 'travel': {'from': travel!.from, 'to': travel!.to},
+    if (fateThread != null) 'fate_thread': fateThread,
+    'present_characters': presentCharacters,
+    if (trackableMentions != null)
+      'trackable_mentions':
+          trackableMentions!.map((m) => m.toJson()).toList(),
+  };
 
   Map<String, dynamic> toSqlite() => {
     'id': id,
@@ -320,6 +405,7 @@ class GameEvent {
     'model_used': modelUsed,
     'created_at': createdAt.toIso8601String(),
     'is_optimistic': isOptimistic ? 1 : 0,
+    'metadata': jsonEncode(_metadataJson()),
   };
 }
 
@@ -366,6 +452,11 @@ class ReplayVariant {
   final List<Choice> choices;
   final List<String> presentCharacters;
 
+  /// Backend-owned trackable mentions derived from THIS variant's prose, so
+  /// browsing to a variant updates the underline data without a round-trip.
+  /// null = legacy variant with no backend mentions (local fallback applies).
+  final List<TrackableMention>? trackableMentions;
+
   const ReplayVariant({
     required this.id,
     required this.narrative,
@@ -373,6 +464,7 @@ class ReplayVariant {
     this.createdAt,
     this.choices = const [],
     this.presentCharacters = const [],
+    this.trackableMentions,
   });
 
   factory ReplayVariant.fromJson(Map<String, dynamic> json) {
@@ -385,6 +477,9 @@ class ReplayVariant {
           : null,
       choices: Choice.listFromAny(json['choices']),
       presentCharacters: GameEvent.presentFromAny(json['present_characters']),
+      trackableMentions: TrackableMention.listFromAny(
+        json['trackable_mentions'],
+      ),
     );
   }
 }

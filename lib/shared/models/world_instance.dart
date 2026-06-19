@@ -107,6 +107,36 @@ class WorldInstance {
     );
   }
 
+  /// Apply an authoritative `instance_state` snapshot (as shipped on the
+  /// `replay_complete` frame): world_state + active_flags are merged like a diff,
+  /// and current_scene is replaced when present. current_location and
+  /// current_time_anchor are not modeled on the instance and are left to the
+  /// Chronicle's own projections.
+  WorldInstance applyInstanceState(Map<String, dynamic> snapshot) {
+    final merged = applyStateDiff(snapshot);
+    final scene = snapshot['current_scene'];
+    return WorldInstance(
+      id: merged.id,
+      templateId: merged.templateId,
+      templateVersion: merged.templateVersion,
+      playerId: merged.playerId,
+      worldState: merged.worldState,
+      activeFlags: merged.activeFlags,
+      currentScene: scene is Map
+          ? SceneInfo.fromJson(Map<String, dynamic>.from(scene))
+          : merged.currentScene,
+      narrationPov: merged.narrationPov,
+      mode: merged.mode,
+      messageLength: merged.messageLength,
+      focusCharacterId: merged.focusCharacterId,
+      personaId: merged.personaId,
+      personaName: merged.personaName,
+      meta: merged.meta,
+      createdAt: merged.createdAt,
+      template: merged.template,
+    );
+  }
+
   WorldInstance applyStateDiff(Map<String, dynamic>? diff) {
     if (diff == null) return this;
 

@@ -475,7 +475,30 @@ class PlayCubit extends Cubit<PlayState> {
         LocalDb.insertEvent(events[idx]);
       }
       _endReplay();
-      emit(state.copyWith(events: events, isGenerating: false));
+
+      // A replay can re-fold instance state (world_state / flags / scene /
+      // location / time). The server now ships that snapshot on the frame; apply
+      // it inline so the HUD + scene reflect the chosen variant without a
+      // round-trip. If the snapshot is absent (older server), fall back to a
+      // full reload to stay consistent.
+      final instanceState = msg['instance_state'];
+      if (instanceState is Map &&
+          instanceState.isNotEmpty &&
+          state.instance != null) {
+        final updated = state.instance!.applyInstanceState(
+          Map<String, dynamic>.from(instanceState),
+        );
+        emit(
+          state.copyWith(
+            events: events,
+            instance: updated,
+            isGenerating: false,
+          ),
+        );
+      } else {
+        emit(state.copyWith(events: events, isGenerating: false));
+        _ws.loadInstance(instanceId);
+      }
     });
 
     _memorySub = _ws.onMemoriesCurated.listen((msg) {
@@ -1193,6 +1216,9 @@ class PlayCubit extends Cubit<PlayState> {
           : after.copyWith(
               choices: meta.choices,
               presentCharacters: meta.presentCharacters,
+              // Refresh underline data for the rewritten prose; the optimistic
+              // copy carried the pre-edit mentions.
+              trackableMentions: meta.trackableMentions,
             );
       final committed = [...state.events];
       final cIdx = committed.indexWhere((e) => e.id == event.id);
@@ -1439,9 +1465,11 @@ class PlayCubit extends Cubit<PlayState> {
         aiResponse: event.replayVariants[index].narrative,
         modelUsed: event.replayVariants[index].modelUsed,
         selectedReplayIndex: index,
-        // Show the browsed variant's OWN chips + presence (stored per variant).
+        // Show the browsed variant's OWN chips + presence + underline mentions
+        // (all stored per variant) so the preview is internally consistent.
         choices: event.replayVariants[index].choices,
         presentCharacters: event.replayVariants[index].presentCharacters,
+        trackableMentions: event.replayVariants[index].trackableMentions,
       );
     }
     emit(state.copyWith(events: next, error: null));

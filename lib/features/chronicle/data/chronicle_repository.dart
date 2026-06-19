@@ -69,9 +69,16 @@ class ChronicleRepository {
     await ApiClient.delete('/chronicle/memory/$memoryId');
   }
 
-  /// Edits a turn and returns the server-regenerated chips + scene presence when
-  /// the narrative changed (both null when only the player input was edited).
-  static Future<({List<Choice> choices, List<String> presentCharacters})?>
+  /// Edits a turn and returns the server-regenerated chips, scene presence, and
+  /// trackable mentions when the narrative changed (all null/absent when only the
+  /// player input was edited).
+  static Future<
+    ({
+      List<Choice> choices,
+      List<String> presentCharacters,
+      List<TrackableMention>? trackableMentions,
+    })?
+  >
   editEvent(String eventId, {String? aiResponse, String? playerInput}) async {
     final response = await ApiClient.put(
       '/chronicle/event/$eventId',
@@ -86,6 +93,9 @@ class ChronicleRepository {
     return (
       choices: Choice.listFromAny(response['choices']),
       presentCharacters: GameEvent.presentFromAny(response['present_characters']),
+      trackableMentions: TrackableMention.listFromAny(
+        response['trackable_mentions'],
+      ),
     );
   }
 

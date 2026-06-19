@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import '../../../core/network/ws_manager.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/memory.dart';
 import '../data/chronicle_repository.dart';
@@ -30,6 +32,10 @@ class ChronicleState extends Equatable {
   final int totalEvents;
   final int currentPage;
 
+  /// Tabs whose backing projection changed server-side since they were last
+  /// loaded. A dirty tab is re-fetched the next time it becomes active.
+  final Set<ChronicleTab> dirtyTabs;
+
   const ChronicleState({
     this.events = const [],
     this.memories = const [],
@@ -47,6 +53,7 @@ class ChronicleState extends Equatable {
     this.activeTab = ChronicleTab.recap,
     this.totalEvents = 0,
     this.currentPage = 1,
+    this.dirtyTabs = const {},
   });
 
   ChronicleState copyWith({
@@ -66,6 +73,7 @@ class ChronicleState extends Equatable {
     ChronicleTab? activeTab,
     int? totalEvents,
     int? currentPage,
+    Set<ChronicleTab>? dirtyTabs,
   }) {
     return ChronicleState(
       events: events ?? this.events,
@@ -84,6 +92,7 @@ class ChronicleState extends Equatable {
       activeTab: activeTab ?? this.activeTab,
       totalEvents: totalEvents ?? this.totalEvents,
       currentPage: currentPage ?? this.currentPage,
+      dirtyTabs: dirtyTabs ?? this.dirtyTabs,
     );
   }
 
@@ -105,13 +114,106 @@ class ChronicleState extends Equatable {
         activeTab,
         totalEvents,
         currentPage,
+        dirtyTabs,
       ];
 }
 
 class ChronicleCubit extends Cubit<ChronicleState> {
   final String instanceId;
+  final WsManager _ws;
+  StreamSubscription<Map<String, dynamic>>? _projectionSub;
 
-  ChronicleCubit({required this.instanceId}) : super(const ChronicleState());
+  ChronicleCubit({required this.instanceId, WsManager? ws})
+      : _ws = ws ?? WsManager(),
+        super(const ChronicleState()) {
+    _projectionSub = _ws.onWorldProjectionUpdated.listen((msg) {
+      if (msg['instance_id']?.toString() != instanceId) return;
+      final scopes = (msg['scopes'] as List?)
+              ?.map((s) => s.toString())
+              .toList() ??
+          const <String>[];
+      markProjectionDirty(scopes);
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _projectionSub?.cancel();
+    return super.close();
+  }
+
+  /// Maps a server projection scope to the Chronicle tab(s) it backs. Returns
+  /// an empty set for scopes the Chronicle doesn't render (e.g. 'presence').
+  static Set<ChronicleTab> _tabsForScope(String scope) {
+    switch (scope) {
+      case 'bonds':
+        return {ChronicleTab.bonds};
+      case 'threads':
+        return {ChronicleTab.threads};
+      case 'recap':
+        return {ChronicleTab.recap};
+      case 'places':
+        return {ChronicleTab.places};
+      case 'calendar':
+        return {ChronicleTab.calendar};
+      // A codex change can shift both the relationship ledger and the recap.
+      case 'codex':
+        return {ChronicleTab.bonds, ChronicleTab.recap};
+      case 'presence':
+      default:
+        return const {};
+    }
+  }
+
+  /// Marks the tabs affected by [scopes] as dirty. The currently-active tab is
+  /// auto-refreshed immediately; the rest are lazily refreshed when next viewed
+  /// (see [switchTab]).
+  void markProjectionDirty(List<String> scopes) {
+    final affected = <ChronicleTab>{};
+    for (final s in scopes) {
+      affected.addAll(_tabsForScope(s));
+    }
+    if (affected.isEmpty) return;
+
+    emit(state.copyWith(dirtyTabs: {...state.dirtyTabs, ...affected}));
+
+    if (affected.contains(state.activeTab)) {
+      _refreshTab(state.activeTab);
+    }
+  }
+
+  /// Re-fetch a tab's backing projection and clear its dirty flag.
+  void _refreshTab(ChronicleTab tab) {
+    _clearDirty(tab);
+    switch (tab) {
+      case ChronicleTab.recap:
+        loadRecap();
+        break;
+      case ChronicleTab.timeline:
+        loadEvents(page: state.currentPage);
+        break;
+      case ChronicleTab.memories:
+        loadMemories();
+        break;
+      case ChronicleTab.calendar:
+        loadCalendar();
+        break;
+      case ChronicleTab.places:
+        loadLocations();
+        break;
+      case ChronicleTab.bonds:
+        loadBonds();
+        break;
+      case ChronicleTab.threads:
+        loadThreads();
+        break;
+    }
+  }
+
+  void _clearDirty(ChronicleTab tab) {
+    if (!state.dirtyTabs.contains(tab)) return;
+    emit(state.copyWith(dirtyTabs: {...state.dirtyTabs}..remove(tab)));
+  }
 
   Future<void> loadEvents({int page = 1}) async {
     emit(state.copyWith(isLoading: true, error: null));
@@ -270,6 +372,14 @@ class ChronicleCubit extends Cubit<ChronicleState> {
 
   void switchTab(ChronicleTab tab) {
     emit(state.copyWith(activeTab: tab));
+
+    // A tab marked dirty by a projection update is always re-fetched on view,
+    // even if it already holds (now-stale) data.
+    if (state.dirtyTabs.contains(tab)) {
+      _refreshTab(tab);
+      return;
+    }
+
     if (tab == ChronicleTab.recap && state.recap == null) {
       loadRecap();
     } else if (tab == ChronicleTab.timeline && state.events.isEmpty) {

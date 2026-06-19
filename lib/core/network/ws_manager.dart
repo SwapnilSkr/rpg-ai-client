@@ -47,6 +47,10 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _replayCompleteController =
       StreamController<Map<String, dynamic>>.broadcast();
+  /// A backend world-projection (bonds/threads/recap/places/calendar/codex/...)
+  /// changed for an instance — the Chronicle tabs derived from it are now stale.
+  final _worldProjectionUpdatedController =
+      StreamController<Map<String, dynamic>>.broadcast();
   final _milestoneUnlockedController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _sideChatDeltaController =
@@ -81,6 +85,8 @@ class WsManager {
       _replayDeltaController.stream;
   Stream<Map<String, dynamic>> get onReplayComplete =>
       _replayCompleteController.stream;
+  Stream<Map<String, dynamic>> get onWorldProjectionUpdated =>
+      _worldProjectionUpdatedController.stream;
   Stream<Map<String, dynamic>> get onMilestoneUnlocked =>
       _milestoneUnlockedController.stream;
   Stream<Map<String, dynamic>> get onSideChatDelta =>
@@ -253,6 +259,9 @@ class WsManager {
       case 'replay_complete':
         _replayCompleteController.add(msg);
         break;
+      case 'world_projection_updated':
+        _worldProjectionUpdatedController.add(msg);
+        break;
       case 'milestone_unlocked':
         _milestoneUnlockedController.add(msg);
         break;
@@ -410,6 +419,7 @@ class WsManager {
     _characterCodexUpdatedController.close();
     _replayDeltaController.close();
     _replayCompleteController.close();
+    _worldProjectionUpdatedController.close();
     _milestoneUnlockedController.close();
     _sideChatDeltaController.close();
     _sideChatCompleteController.close();

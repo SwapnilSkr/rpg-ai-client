@@ -16,7 +16,7 @@ class LocalDb {
     final path = '$dbPath/everlore_cache.db';
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE events (
@@ -31,7 +31,8 @@ class LocalDb {
           state_mutations TEXT,
           flag_mutations TEXT,
           created_at TEXT NOT NULL,
-          is_optimistic INTEGER DEFAULT 0
+          is_optimistic INTEGER DEFAULT 0,
+          metadata TEXT
         )
       ''');
         await db.execute('''
@@ -63,6 +64,12 @@ class LocalDb {
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await db.execute('ALTER TABLE events ADD COLUMN model_used TEXT');
+        }
+        if (oldVersion < 3) {
+          // Rich-metadata JSON blob (choices, replay variants, presence,
+          // trackable mentions, travel, milestone, ...). Pre-v3 rows have it
+          // null and stay metadata-poor until the next WS reload rewrites them.
+          await db.execute('ALTER TABLE events ADD COLUMN metadata TEXT');
         }
       },
     );
