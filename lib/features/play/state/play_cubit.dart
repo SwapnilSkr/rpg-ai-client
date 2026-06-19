@@ -6,6 +6,7 @@ import '../../../core/storage/secure_storage.dart';
 import '../../../core/storage/local_db.dart';
 import '../../chronicle/data/chronicle_repository.dart';
 import '../../home/data/home_repository.dart';
+import '../role_words.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/world_instance.dart';
 import '../../../shared/models/world_template.dart';
@@ -407,7 +408,9 @@ class PlayCubit extends Cubit<PlayState> {
       final seq = (raw is Map ? raw['sequence'] as num? : null)?.toInt();
       final milestones = [...state.milestones];
       if (seq != null && !milestones.any((m) => m.sequence == seq)) {
-        milestones.add(Milestone(label: label, sequence: seq, at: DateTime.now()));
+        milestones.add(
+          Milestone(label: label, sequence: seq, at: DateTime.now()),
+        );
       }
       emit(
         state.copyWith(
@@ -459,7 +462,9 @@ class PlayCubit extends Cubit<PlayState> {
           // Fresh chips + scene presence, regenerated server-side from the new
           // variant (the old ones reflected the replaced prose).
           choices: Choice.listFromAny(msg['choices']),
-          presentCharacters: GameEvent.presentFromAny(msg['present_characters']),
+          presentCharacters: GameEvent.presentFromAny(
+            msg['present_characters'],
+          ),
         );
         LocalDb.insertEvent(events[idx]);
       }
@@ -515,10 +520,14 @@ class PlayCubit extends Cubit<PlayState> {
       }
 
       final optimisticEvents = [...state.events];
-      final optimisticIdx = optimisticEvents.lastIndexWhere((e) => e.isOptimistic);
+      final optimisticIdx = optimisticEvents.lastIndexWhere(
+        (e) => e.isOptimistic,
+      );
       final hasVisibleOptimisticText =
           optimisticIdx >= 0 &&
-          ((optimisticEvents[optimisticIdx].aiResponse ?? '').trim().isNotEmpty);
+          ((optimisticEvents[optimisticIdx].aiResponse ?? '')
+              .trim()
+              .isNotEmpty);
       if (hasVisibleOptimisticText) {
         _finishGenerationReveal(_streamTarget);
         _clearGenerationTimers();
@@ -539,10 +548,12 @@ class PlayCubit extends Cubit<PlayState> {
       _clearGenerationTimers();
       // Drop the in-progress optimistic turn but KEEP its text so the player can
       // resend with one tap rather than re-typing the whole message.
-      final droppedOptimistic =
-          state.events.where((e) => e.isOptimistic).toList();
-      final droppedInput =
-          droppedOptimistic.isNotEmpty ? droppedOptimistic.last.playerInput : null;
+      final droppedOptimistic = state.events
+          .where((e) => e.isOptimistic)
+          .toList();
+      final droppedInput = droppedOptimistic.isNotEmpty
+          ? droppedOptimistic.last.playerInput
+          : null;
       final events = state.events.where((e) => !e.isOptimistic).toList();
       emit(
         state.copyWith(
@@ -735,6 +746,300 @@ class PlayCubit extends Cubit<PlayState> {
     }
   }
 
+  /// Player-driven CORRECTION / PROMOTE surface ("Track this character" /
+  /// "This person is my sister"). Mints/updates a codex card for a name visible
+  /// in the prose that the projection pipeline missed, optionally asserting a
+  /// typed kinship tie. Server-side this writes an EVENT-DERIVED projection
+  /// (delta fold + stub promotion + typed edge + ledger entry), so the card is
+  /// canonical and rewind-replayable. On success the codex list is refreshed;
+  /// the WS `character_codex_updated` frame will also arrive to reconcile.
+  Future<bool> trackEntity(
+    String name, {
+    String? role,
+    String? appearance,
+    String? persona,
+    String? relationKind,
+    String? relationLabel,
+    String? relationTo,
+  }) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return false;
+    try {
+      final result = await ChronicleRepository.trackEntity(
+        instanceId,
+        name: trimmed,
+        role: role,
+        appearance: appearance,
+        persona: persona,
+        relationKind: relationKind,
+        relationLabel: relationLabel,
+        relationTo: relationTo,
+      );
+      // Optimistically splice the tracked card in (dedup by id); the WS frame
+      // will reconcile authoritatively when it arrives.
+      final list = [
+        ...state.characters.where((c) => c.id != result.character.id),
+        result.character,
+      ];
+      emit(state.copyWith(characters: list));
+      return true;
+    } catch (_) {
+      emit(
+        state.copyWith(
+          error: 'Could not track this character. Please try again.',
+        ),
+      );
+      return false;
+    }
+  }
+
+  /// Client-side MISS AUDIT (Fix #7 client half): names visible in the latest
+  /// turn's prose that are NOT in the projection pipeline (present characters,
+  /// codex cards). Returns the display names a player could promote via
+  /// [trackEntity]. Passer-by descriptors ("the merchant", "an old woman") and
+  /// the player's own persona name are filtered so only real missed people
+  /// surface. This is the same high-recall/low-authority detector the backend
+  /// audit (`scripts/presence-codex-gap-audit.ts`) encodes; here it powers the
+  /// in-prose "Track this character" affordance on tappable un-carded names.
+  List<String> detectVisibleGaps() {
+    final event = state.events.isEmpty ? null : state.events.last;
+    final prose = event?.aiResponse ?? '';
+    if (prose.trim().isEmpty) return const [];
+
+    final covered = <String>{};
+    for (final c in state.characters) {
+      final n = _norm(c.canonicalName);
+      if (n.isNotEmpty) covered.add(n);
+      for (final a in c.aliases) {
+        final an = _norm(a);
+        if (an.isNotEmpty) covered.add(an);
+      }
+    }
+    final present = event?.presentCharacters ?? const <String>[];
+    for (final p in present) {
+      final n = _norm(p);
+      if (n.isNotEmpty) covered.add(n);
+    }
+    // Sentient worlds: the player persona is never a trackable gap.
+    final persona = state.instance?.personaName;
+    if (persona != null && persona.isNotEmpty) covered.add(_norm(persona));
+
+    final gaps = <String>[];
+    final seen = <String>{};
+    for (final cand in _visibleNameCandidates(prose)) {
+      final key = _norm(cand);
+      if (key.isEmpty || seen.contains(key) || covered.contains(key)) continue;
+      seen.add(key);
+      gaps.add(cand);
+    }
+    return gaps;
+  }
+
+  static String _norm(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp(r"[^a-z0-9\s'-]+"), '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  static const Set<String> _genericPersonDescriptors = {
+    'man',
+    'woman',
+    'boy',
+    'girl',
+    'child',
+    'kid',
+    'person',
+    'figure',
+    'stranger',
+    'old man',
+    'old woman',
+    'young man',
+    'young woman',
+    'lady',
+    'gentleman',
+    'guy',
+    'merchant',
+    'trader',
+    'vendor',
+    'shopkeeper',
+    'clerk',
+    'seller',
+    'guard',
+    'soldier',
+    'sentry',
+    'watchman',
+    'knight',
+    'officer',
+    'innkeeper',
+    'barkeep',
+    'bartender',
+    'waiter',
+    'waitress',
+    'servant',
+    'maid',
+    'driver',
+    'pilot',
+    'sailor',
+    'beggar',
+    'priest',
+    'monk',
+    'nun',
+    'farmer',
+    'hunter',
+    'fisherman',
+    'worker',
+    'passerby',
+    'passer by',
+    'bystander',
+    'crowd',
+    'people',
+    'men',
+    'women',
+    'guards',
+    'soldiers',
+    'villagers',
+    'citizens',
+  };
+
+  static final Set<String> _familyRoleWordKeys = familyRoleWords
+      .map(_norm)
+      .where((role) => role.isNotEmpty)
+      .toSet();
+
+  static bool _isGenericPersonDescriptor(String candidate) {
+    return _genericPersonDescriptors.contains(candidate) &&
+        !_familyRoleWordKeys.contains(candidate);
+  }
+
+  static const Set<String> _stopTokens = {
+    'the',
+    'a',
+    'an',
+    'and',
+    'but',
+    'or',
+    'so',
+    'then',
+    'when',
+    'while',
+    'as',
+    'he',
+    'she',
+    'they',
+    'it',
+    'his',
+    'her',
+    'their',
+    'its',
+    'him',
+    'them',
+    'i',
+    'you',
+    'we',
+    'me',
+    'my',
+    'your',
+    'our',
+    'this',
+    'that',
+    'these',
+    'those',
+    'there',
+    'here',
+    'what',
+    'who',
+    'whom',
+    'whose',
+    'which',
+    'why',
+    'how',
+    'in',
+    'on',
+    'at',
+    'to',
+    'of',
+    'for',
+    'with',
+    'without',
+    'from',
+    'into',
+    'up',
+    'down',
+    'out',
+    'over',
+    'under',
+    'back',
+    'away',
+    'off',
+    'one',
+    'two',
+    'three',
+    'first',
+    'second',
+    'next',
+    'last',
+    'yes',
+    'no',
+    'not',
+    'now',
+    'still',
+    'again',
+    'once',
+    'only',
+    'just',
+    'room',
+    'hall',
+    'door',
+    'table',
+    'fire',
+    'hand',
+    'hands',
+    'eyes',
+    'voice',
+    'night',
+    'day',
+    'morning',
+    'evening',
+  };
+
+  /// Extract person-name CANDIDATES visible in prose: Capitalized tokens
+  /// (≥3 chars, not a stopword, not a bare passer-by descriptor) plus any
+  /// family-role word the prose uses (case-insensitive). Child/self-facing
+  /// labels ("son", "daughter", "child") are deliberately excluded so the
+  /// player is never flagged as a missed "Son".
+  static List<String> _visibleNameCandidates(String prose) {
+    final out = <String>[];
+    final seen = <String>{};
+    final tokens = prose
+        .replaceAll(RegExp(r"[^A-Za-z'\s-]"), ' ')
+        .split(RegExp(r'\s+'));
+    for (final raw in tokens) {
+      final t = raw.trim().replaceFirst(
+        RegExp(r"['’]s$", caseSensitive: false),
+        '',
+      );
+      if (t.length < 3) continue;
+      if (!RegExp(r'^[A-Z][a-z]+$').hasMatch(t)) continue;
+      final lower = t.toLowerCase();
+      if (_stopTokens.contains(lower)) continue;
+      final cand = _norm(t);
+      if (cand.isEmpty || seen.contains(cand)) continue;
+      if (_isGenericPersonDescriptor(cand)) continue;
+      seen.add(cand);
+      out.add(t);
+    }
+    final lowerText = ' ${_norm(prose)} ';
+    for (final role in familyRoleWords) {
+      final r = _norm(role);
+      if (r.isEmpty) continue;
+      if (lowerText.contains(' $r ') && !seen.contains(r)) {
+        seen.add(r);
+        out.add(role[0].toUpperCase() + role.substring(1));
+      }
+    }
+    return out;
+  }
+
   /// Update in-chat settings (POV, chat mode, reply length). Optimistically reflects the
   /// change locally, then persists; the server busts its session cache so the
   /// next turn uses the new values.
@@ -862,7 +1167,10 @@ class PlayCubit extends Cubit<PlayState> {
     emit(state.copyWith(events: optimistic, error: null));
 
     try {
-      final meta = await ChronicleRepository.editEvent(event.id, aiResponse: next);
+      final meta = await ChronicleRepository.editEvent(
+        event.id,
+        aiResponse: next,
+      );
       // Swap in the server-regenerated chips + presence for the rewritten prose
       // (the optimistic copy carried the old ones).
       final settled = meta == null
@@ -949,13 +1257,7 @@ class PlayCubit extends Cubit<PlayState> {
 
       if (hasVisibleText) {
         _ws.loadInstance(instanceId);
-        emit(
-          state.copyWith(
-            events: events,
-            isGenerating: false,
-            error: null,
-          ),
-        );
+        emit(state.copyWith(events: events, isGenerating: false, error: null));
         return;
       }
 

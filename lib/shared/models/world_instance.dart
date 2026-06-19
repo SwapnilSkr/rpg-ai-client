@@ -12,6 +12,11 @@ class WorldInstance {
   final String messageLength; // 'short' | 'medium' | 'long'
   final String? focusCharacterId;
   final String? personaId;
+  /// Snapshot of the persona name selected for this instance (sentient worlds).
+  /// Parsed from the server's `persona_snapshot.name` so the client can exclude
+  /// the player persona from client-side miss-audit / track suggestions without
+  /// a persona fetch.
+  final String? personaName;
   final InstanceMeta meta;
   final DateTime? createdAt;
   // Enriched from list endpoint
@@ -30,6 +35,7 @@ class WorldInstance {
     this.messageLength = 'medium',
     this.focusCharacterId,
     this.personaId,
+    this.personaName,
     this.meta = const InstanceMeta(),
     this.createdAt,
     this.template,
@@ -41,6 +47,7 @@ class WorldInstance {
     String? messageLength,
     Object? focusCharacterId = _unset,
     Object? personaId = _unset,
+    Object? personaName = _unset,
   }) {
     return WorldInstance(
       id: id,
@@ -56,6 +63,8 @@ class WorldInstance {
       focusCharacterId:
           identical(focusCharacterId, _unset) ? this.focusCharacterId : focusCharacterId as String?,
       personaId: identical(personaId, _unset) ? this.personaId : personaId as String?,
+      personaName:
+          identical(personaName, _unset) ? this.personaName : personaName as String?,
       meta: meta,
       createdAt: createdAt,
       template: template,
@@ -85,6 +94,9 @@ class WorldInstance {
       messageLength: json['message_length'] ?? 'medium',
       focusCharacterId: json['focus_character_id']?.toString(),
       personaId: json['persona_id']?.toString(),
+      personaName: json['persona_snapshot'] is Map
+          ? (json['persona_snapshot']['name'] as String?)?.toString()
+          : null,
       meta: json['meta'] != null
           ? InstanceMeta.fromJson(json['meta'])
           : const InstanceMeta(),
@@ -123,6 +135,7 @@ class WorldInstance {
       messageLength: messageLength,
       focusCharacterId: focusCharacterId,
       personaId: personaId,
+      personaName: personaName,
       meta: meta,
       createdAt: createdAt,
       template: template,

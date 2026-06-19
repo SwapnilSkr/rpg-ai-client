@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../../shared/models/event.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
+import '../../role_words.dart';
 
 const _kNarrationMutedAlpha = 0.6;
 
@@ -31,6 +32,15 @@ class NarrativeBubble extends StatelessWidget {
   final List<String> loreEntities;
   final ValueChanged<String>? onEntityTap;
 
+  /// Names VISIBLE in this turn's prose that the projection pipeline has NOT
+  /// carded yet (the client-side miss audit). Occurrences become tappable
+  /// "Track this character" affordances — a subtle dashed-gold underline
+  /// distinct from the solid gold of known characters and the dotted lore
+  /// treatment — so the player can promote a missed person to a codex card
+  /// (and optionally assert a kinship tie) right from the prose.
+  final List<String> untrackedNames;
+  final ValueChanged<String>? onTrackEntity;
+
   const NarrativeBubble({
     super.key,
     required this.event,
@@ -44,6 +54,8 @@ class NarrativeBubble extends StatelessWidget {
     this.onCharacterTap,
     this.loreEntities = const [],
     this.onEntityTap,
+    this.untrackedNames = const [],
+    this.onTrackEntity,
   });
 
   @override
@@ -105,6 +117,8 @@ class NarrativeBubble extends StatelessWidget {
               onCharacterTap: isStreaming ? null : onCharacterTap,
               loreEntities: isStreaming ? const [] : loreEntities,
               onEntityTap: isStreaming ? null : onEntityTap,
+              untrackedNames: isStreaming ? const [] : untrackedNames,
+              onTrackEntity: isStreaming ? null : onTrackEntity,
             ),
           ),
         ] else if (event.isOptimistic)
@@ -384,6 +398,8 @@ class _NarratorPanel extends StatelessWidget {
   final ValueChanged<String>? onCharacterTap;
   final List<String> loreEntities;
   final ValueChanged<String>? onEntityTap;
+  final List<String> untrackedNames;
+  final ValueChanged<String>? onTrackEntity;
 
   const _NarratorPanel({
     required this.text,
@@ -399,6 +415,8 @@ class _NarratorPanel extends StatelessWidget {
     this.onCharacterTap,
     this.loreEntities = const [],
     this.onEntityTap,
+    this.untrackedNames = const [],
+    this.onTrackEntity,
   });
 
   @override
@@ -448,6 +466,8 @@ class _NarratorPanel extends StatelessWidget {
                     onCharacterTap: onCharacterTap,
                     loreEntities: loreEntities,
                     onEntityTap: onEntityTap,
+                    untrackedNames: untrackedNames,
+                    onTrackEntity: onTrackEntity,
                   ),
                   if (isStreaming) ...[
                     const SizedBox(height: 10),
@@ -763,6 +783,8 @@ class _ProseText extends StatefulWidget {
   final ValueChanged<String>? onCharacterTap;
   final List<String> loreEntities;
   final ValueChanged<String>? onEntityTap;
+  final List<String> untrackedNames;
+  final ValueChanged<String>? onTrackEntity;
 
   const _ProseText({
     required this.text,
@@ -770,6 +792,8 @@ class _ProseText extends StatefulWidget {
     this.onCharacterTap,
     this.loreEntities = const [],
     this.onEntityTap,
+    this.untrackedNames = const [],
+    this.onTrackEntity,
   });
 
   @override
@@ -840,7 +864,8 @@ class _ProseTextState extends State<_ProseText> {
 
     var spans = _narrativeSpans(widget.text);
 
-    // Characters take priority over lore when a term appears in both sets.
+    // Characters take priority over untracked and lore when a term appears in
+    // more than one set — a known card always wins over a promote suggestion.
     final charLower = <String>{
       for (final n in widget.characterNames)
         if (n.trim().length >= 3) n.toLowerCase(),
@@ -850,23 +875,36 @@ class _ProseTextState extends State<_ProseText> {
         if (n.trim().length >= 4 && !charLower.contains(n.toLowerCase()))
           n.toLowerCase(),
     };
+    final untrackedLower = <String>{
+      for (final n in widget.untrackedNames)
+        if (n.trim().length >= 3 &&
+            !charLower.contains(n.toLowerCase()) &&
+            !loreLower.contains(n.toLowerCase()))
+          n.toLowerCase(),
+    };
 
     final linkChars = charLower.isNotEmpty && widget.onCharacterTap != null;
     final linkLore = loreLower.isNotEmpty && widget.onEntityTap != null;
+    final linkUntracked =
+        untrackedLower.isNotEmpty && widget.onTrackEntity != null;
 
-    if (linkChars || linkLore) {
-      // One combined pattern, longest term first so "Ashen City" wins over
-      // "Ash". Matching is case-sensitive — these are proper nouns in prose.
-      final terms = <String>[
+    if (linkChars || linkLore || linkUntracked) {
+      // PASS 1 — case-sensitive (as original): known character names + lore
+      // entities + Title-case untracked names. These are proper nouns in prose,
+      // so case sensitivity is what stops an alias like "May", "Will", or
+      // "Rose" from linking the common words "may", "will", "rose".
+      final caseSensitiveTerms = <String>[
         if (linkChars)
           ...widget.characterNames.where((n) => n.trim().length >= 3),
         if (linkLore)
           ...widget.loreEntities.where(
             (n) => n.trim().length >= 4 && !charLower.contains(n.toLowerCase()),
           ),
+        if (linkUntracked)
+          ...widget.untrackedNames.where((n) => n.trim().length >= 3),
       ]..sort((a, b) => b.length.compareTo(a.length));
-      final escaped = terms.map(RegExp.escape).join('|');
-      final pattern = RegExp('\\b(?:$escaped)\\b');
+      final csEscaped = caseSensitiveTerms.map(RegExp.escape).join('|');
+      final csPattern = RegExp('\\b(?:$csEscaped)\\b');
 
       final charStyle = TextStyle(
         color: EverloreTheme.gold.withValues(alpha: 0.95),
@@ -881,12 +919,29 @@ class _ProseTextState extends State<_ProseText> {
         decorationColor: EverloreTheme.goldDim.withValues(alpha: 0.5),
         decorationThickness: 1,
       );
+      // Untracked (promote-target) names: a distinct dashed gold underline so
+      // the player sees "the story saw this person but hasn't tracked them yet
+      // — tap to track". Dimmer than a known character, more prominent than lore.
+      final trackStyle = TextStyle(
+        color: EverloreTheme.gold.withValues(alpha: 0.7),
+        decoration: TextDecoration.underline,
+        decorationStyle: TextDecorationStyle.dashed,
+        decorationColor: EverloreTheme.gold.withValues(alpha: 0.45),
+        decorationThickness: 1,
+      );
 
       ({VoidCallback? onTap, TextStyle style}) resolve(String matched) {
-        if (charLower.contains(matched.toLowerCase())) {
+        final m = matched.toLowerCase();
+        if (charLower.contains(m)) {
           return (
             onTap: () => widget.onCharacterTap?.call(matched),
             style: charStyle,
+          );
+        }
+        if (untrackedLower.contains(m)) {
+          return (
+            onTap: () => widget.onTrackEntity?.call(matched),
+            style: trackStyle,
           );
         }
         return (
@@ -897,8 +952,53 @@ class _ProseTextState extends State<_ProseText> {
 
       spans = [
         for (final s in spans)
-          if (s is TextSpan) ..._linkEntities(s, pattern, resolve) else s,
+          if (s is TextSpan) ..._linkEntities(s, csPattern, resolve) else s,
       ];
+
+      // PASS 2 — case-insensitive, ROLE WORDS ONLY: family/titled role words
+      // ("sister", "father", "butler", "king") may appear lowercased in prose
+      // ("her sister scoffed") and would be missed by the case-sensitive pass
+      // above. Role words are never common English verbs/nouns that would
+      // false-positive in lowercase (unlike an untracked proper name like
+      // "Will"), so the case-insensitive pass is restricted to the role-word
+      // vocabulary (familyRoleWords) — a proper-name candidate that happens to
+      // be untracked is NOT included here, so lowercase "will" in prose never
+      // links. Skip spans already linked by pass 1 so a Title-case "Sister"
+      // isn't double-linked.
+      if (linkUntracked) {
+        final roleTerms =
+            widget.untrackedNames
+                .where(
+                  (n) =>
+                      n.trim().length >= 3 &&
+                      familyRoleWords.contains(n.toLowerCase()),
+                )
+                .toList()
+              ..sort((a, b) => b.length.compareTo(a.length));
+        // Guard: an empty alternation (no role words among the untracked names)
+        // would build RegExp('\\b(?:)\\b') which matches zero-width at every
+        // word boundary. Skip the whole pass when there are no role terms.
+        if (roleTerms.isNotEmpty) {
+          final roleEscaped = roleTerms.map(RegExp.escape).join('|');
+          final rolePattern = RegExp(
+            '\\b(?:$roleEscaped)\\b',
+            caseSensitive: false,
+          );
+          ({VoidCallback? onTap, TextStyle style}) roleResolve(
+            String matched,
+          ) => (
+            onTap: () => widget.onTrackEntity?.call(matched),
+            style: trackStyle,
+          );
+          spans = [
+            for (final s in spans)
+              if (s is TextSpan && s.recognizer == null)
+                ..._linkEntities(s, rolePattern, roleResolve)
+              else
+                s,
+          ];
+        }
+      }
     }
 
     return SelectableText.rich(TextSpan(children: spans));

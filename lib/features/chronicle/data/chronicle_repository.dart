@@ -215,6 +215,48 @@ class ChronicleRepository {
     );
   }
 
+  /// Player-driven correction / promote surface: track a character visible in
+  /// the prose who never became a codex card ("Track this character"), or
+  /// assert a typed kinship tie the narrator established but the graph missed
+  /// ("This person is my sister"). Server mints/updates the card via the same
+  /// delta fold the turn pipeline uses, promotes any scene-participant / kinship
+  /// stub entity, writes the typed edge (creating a stub for a still-uncarded
+  /// endpoint), and ledgers the synthetic delta on the latest event so a rewind
+  /// replays it. Returns the canonicalized card + the asserted relation (if any).
+  static Future<({CharacterProfile character, Map<String, dynamic>? relation})>
+  trackEntity(
+    String instanceId, {
+    required String name,
+    String? role,
+    String? appearance,
+    String? persona,
+    String? relationKind,
+    String? relationLabel,
+    String? relationTo,
+  }) async {
+    final response = await ApiClient.post(
+      '/chronicle/track/$instanceId',
+      body: {
+        'name': name,
+        if (role != null && role.isNotEmpty) 'role': role,
+        if (appearance != null && appearance.isNotEmpty) 'appearance': appearance,
+        if (persona != null && persona.isNotEmpty) 'persona': persona,
+        if (relationKind != null && relationKind.isNotEmpty)
+          'relation_kind': relationKind,
+        if (relationLabel != null && relationLabel.isNotEmpty)
+          'relation_label': relationLabel,
+        if (relationTo != null && relationTo.isNotEmpty) 'relation_to': relationTo,
+      },
+    );
+    final character = CharacterProfile.fromJson(
+      Map<String, dynamic>.from(response['character'] as Map),
+    );
+    final relation = response['relation_asserted'] is Map
+        ? Map<String, dynamic>.from(response['relation_asserted'] as Map)
+        : null;
+    return (character: character, relation: relation);
+  }
+
   /// GM onboarding: set the player's own character as this instance's locked
   /// protagonist (first play).
   static Future<void> setProtagonist(
