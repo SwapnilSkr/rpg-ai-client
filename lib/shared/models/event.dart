@@ -50,6 +50,45 @@ class Choice {
   }
 }
 
+/// A backend-OWNED trackable mention: a person the prose surfaced this turn that
+/// isn't already present/carded, with a confidence [tier] the SERVER decided
+/// (confirmed > probable > mentioned_only). The client renders these instead of
+/// running its own canon-gap detection, so the two can't drift.
+class TrackableMention {
+  final String key;
+  final String display;
+  final String tier; // 'confirmed' | 'probable' | 'mentioned_only'
+
+  const TrackableMention({
+    required this.key,
+    required this.display,
+    required this.tier,
+  });
+
+  factory TrackableMention.fromAny(dynamic raw) {
+    final m = Map<String, dynamic>.from(raw as Map);
+    return TrackableMention(
+      key: (m['key'] ?? '').toString(),
+      display: (m['display'] ?? '').toString(),
+      tier: (m['tier'] ?? 'mentioned_only').toString(),
+    );
+  }
+
+  /// Parse the `trackable_mentions` payload. Returns null when the field is ABSENT
+  /// (a legacy turn that predates backend-owned mentions → the client falls back
+  /// to local detection), and a (possibly empty) list when the backend supplied it
+  /// (empty meaning "the backend found none" — authoritative, no local fallback).
+  static List<TrackableMention>? listFromAny(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Object>()
+        .map(TrackableMention.fromAny)
+        .where((m) => m.display.isNotEmpty)
+        .toList(growable: false);
+  }
+}
+
 class GameEvent {
   final String id;
   final String instanceId;
@@ -88,6 +127,11 @@ class GameEvent {
   /// Empty when the viewpoint was alone or presence is unknown.
   final List<String> presentCharacters;
 
+  /// Backend-owned trackable mentions for this turn. null = a legacy turn with no
+  /// backend mentions (client falls back to local gap detection); non-null (even
+  /// empty) = authoritative backend list.
+  final List<TrackableMention>? trackableMentions;
+
   const GameEvent({
     required this.id,
     required this.instanceId,
@@ -111,6 +155,7 @@ class GameEvent {
     this.travel,
     this.fateThread,
     this.presentCharacters = const [],
+    this.trackableMentions,
   });
 
   /// True for time-skip turns, which render as interstitial passage cards.
@@ -128,6 +173,7 @@ class GameEvent {
     int? selectedReplayIndex,
     List<Choice>? choices,
     List<String>? presentCharacters,
+    List<TrackableMention>? trackableMentions,
   }) {
     return GameEvent(
       id: id,
@@ -152,6 +198,7 @@ class GameEvent {
       travel: travel,
       fateThread: fateThread,
       presentCharacters: presentCharacters ?? this.presentCharacters,
+      trackableMentions: trackableMentions ?? this.trackableMentions,
     );
   }
 
@@ -207,6 +254,9 @@ class GameEvent {
       fateThread: (data?['fate_thread'] ?? json['fate_thread'])?.toString(),
       presentCharacters: GameEvent.presentFromAny(
         data?['present_characters'] ?? json['present_characters'],
+      ),
+      trackableMentions: TrackableMention.listFromAny(
+        data?['trackable_mentions'] ?? json['trackable_mentions'],
       ),
     );
   }
