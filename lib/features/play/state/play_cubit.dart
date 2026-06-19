@@ -349,6 +349,9 @@ class PlayCubit extends Cubit<PlayState> {
         presentCharacters: GameEvent.presentFromAny(
           eventData['present_characters'],
         ),
+        trackableMentions: TrackableMention.listFromAny(
+          eventData['trackable_mentions'],
+        ),
       );
 
       // Stat deltas vs the pre-turn state — drives HUD pulses + delta chips.
@@ -464,6 +467,9 @@ class PlayCubit extends Cubit<PlayState> {
           choices: Choice.listFromAny(msg['choices']),
           presentCharacters: GameEvent.presentFromAny(
             msg['present_characters'],
+          ),
+          trackableMentions: TrackableMention.listFromAny(
+            msg['trackable_mentions'],
           ),
         );
         LocalDb.insertEvent(events[idx]);
@@ -805,6 +811,15 @@ class PlayCubit extends Cubit<PlayState> {
     final event = state.events.isEmpty ? null : state.events.last;
     final prose = event?.aiResponse ?? '';
     if (prose.trim().isEmpty) return const [];
+
+    // Backend OWNS canon-gap detection now: when the turn carries server-decided
+    // `trackableMentions`, render those (authoritative — empty means "none") and
+    // skip the local heuristic entirely. The local detector below is only a
+    // fallback for legacy turns that predate the backend contract.
+    final mentions = event?.trackableMentions;
+    if (mentions != null) {
+      return mentions.map((m) => m.display).toList(growable: false);
+    }
 
     final covered = <String>{};
     for (final c in state.characters) {
