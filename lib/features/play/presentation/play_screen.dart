@@ -260,10 +260,9 @@ class _PlayViewState extends State<_PlayView> {
     required String title,
     required String emptyText,
   }) {
-    final relevant = cubit.state.memories
-        .where((m) => m.concerns(name))
-        .toList()
-      ..sort((a, b) => b.importance.compareTo(a.importance));
+    final relevant =
+        cubit.state.memories.where((m) => m.concerns(name)).toList()
+          ..sort((a, b) => b.importance.compareTo(a.importance));
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -662,28 +661,29 @@ class _PlayViewState extends State<_PlayView> {
       ),
       builder: (sheetCtx) => _TrackEntitySheet(
         name: name,
-        onTrack: ({
-          required String trackName,
-          String? role,
-          String? relationKind,
-          String? relationLabel,
-        }) async {
-          final ok = await cubit.trackEntity(
-            trackName,
-            role: role,
-            relationKind: relationKind,
-            relationLabel: relationLabel,
-          );
-          if (sheetCtx.mounted) Navigator.pop(sheetCtx);
-          if (!ok && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Could not track this character.'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
-        },
+        onTrack:
+            ({
+              required String trackName,
+              String? role,
+              String? relationKind,
+              String? relationLabel,
+            }) async {
+              final ok = await cubit.trackEntity(
+                trackName,
+                role: role,
+                relationKind: relationKind,
+                relationLabel: relationLabel,
+              );
+              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+              if (!ok && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Could not track this character.'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
       ),
     );
   }
@@ -1223,7 +1223,8 @@ class _PlayViewState extends State<_PlayView> {
                   if (state.error != null)
                     _ErrorBar(
                       message: state.error!,
-                      onRetry: (state.lastFailedInput?.trim().isNotEmpty ?? false)
+                      onRetry:
+                          (state.lastFailedInput?.trim().isNotEmpty ?? false)
                           ? () => context.read<PlayCubit>().retryLastFailed()
                           : null,
                       onDismiss: () => context.read<PlayCubit>().clearError(),
@@ -1234,163 +1235,215 @@ class _PlayViewState extends State<_PlayView> {
                         ? const _LoadingNarrative()
                         : state.events.isEmpty
                         ? const _EmptyNarrative()
-                        : Builder(builder: (context) {
-                            // Tap-to-play chips bloom under the latest settled
-                            // turn — a list row so they scroll with the story.
-                            final latest = state.events.isNotEmpty
-                                ? state.events.last
-                                : null;
-                            final showChoices =
-                                latest != null &&
-                                !latest.isOptimistic &&
-                                latest.choices.isNotEmpty &&
-                                !state.isGenerating &&
-                                state.replayingEventId == null &&
-                                state.isConnected;
-                            final itemCount =
-                                state.events.length +
-                                (state.hasOlderEvents ? 1 : 0) +
-                                (showChoices ? 1 : 0);
-                            // World entities (places/things) harvested from
-                            // memory atoms — computed once for all bubbles.
-                            final loreEntities = _loreEntities(state);
-                            return ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.fromLTRB(2, 16, 2, 20),
-                            itemCount: itemCount,
-                            itemBuilder: (context, index) {
-                              if (state.hasOlderEvents && index == 0) {
-                                return _OlderHistoryButton(
-                                  totalEvents: state.totalEvents,
-                                  onTap: () => context.push(
-                                    '/chronicle/${context.read<PlayCubit>().instanceId}',
-                                  ),
-                                );
-                              }
-                              if (showChoices && index == itemCount - 1) {
-                                return ChoiceChips(
-                                  choices: latest.choices,
-                                  enabled: true,
-                                  // Drop the pre-formatted move into the composer
-                                  // (fills + focuses) so the player can edit the
-                                  // narration/dialogue before sending it.
-                                  onChoose: (choice) =>
-                                      _composerDraft.value = choice,
-                                );
-                              }
-
-                              final eventIndex = state.hasOlderEvents
-                                  ? index - 1
-                                  : index;
-                              final event = state.events[eventIndex];
-                              // Replay is valid for the latest generated AI
-                              // turn, including Continue turns. The seed
-                              // greeting is not generated, so keep it excluded.
-                              final isLatest =
-                                  eventIndex == state.events.length - 1;
-                              final isReplaying =
-                                  state.replayingEventId == event.id;
-                              final isStreaming =
-                                  isReplaying ||
-                                  (event.isOptimistic && state.isGenerating);
-                              final hasAiResponse = (event.aiResponse ?? '')
-                                  .trim()
-                                  .isNotEmpty;
-                              final isSeedGreeting =
-                                  event.modelUsed == 'seed' ||
-                                  (event.modelUsed.isEmpty &&
-                                      event.sequence == 1 &&
-                                      (event.playerInput?.trim().isEmpty ??
-                                          true));
-                              final canReplay =
-                                  !event.isOptimistic &&
-                                  isLatest &&
+                        : Builder(
+                            builder: (context) {
+                              // Tap-to-play chips bloom under the latest settled
+                              // turn — a list row so they scroll with the story.
+                              final latest = state.events.isNotEmpty
+                                  ? state.events.last
+                                  : null;
+                              // Settled turn: the finalized event carries choices.
+                              final settledChoices =
+                                  latest != null &&
+                                  !latest.isOptimistic &&
+                                  latest.choices.isNotEmpty &&
+                                  !state.isGenerating;
+                              // Early path: the narrator's choices arrived ahead of
+                              // generation_complete (choices_ready) and are attached
+                              // to the still-in-flight optimistic turn — show them
+                              // with the settled prose. Guards on isGenerating +
+                              // isOptimistic so a stale flag can never misfire.
+                              final previewChoices =
+                                  latest != null &&
+                                  latest.isOptimistic &&
+                                  state.isGenerating &&
+                                  state.choicesPreview &&
+                                  latest.choices.isNotEmpty;
+                              final showChoices =
+                                  (settledChoices || previewChoices) &&
                                   state.replayingEventId == null &&
-                                  !state.isGenerating &&
-                                  hasAiResponse &&
-                                  !isSeedGreeting;
-                              final canContinue =
-                                  !event.isOptimistic &&
-                                  isLatest &&
+                                  state.isConnected;
+                              // Fallback window: prose has settled but no choices yet
+                              // (narrator emitted none → they come with the metadata
+                              // pass at generation_complete). Show a quiet "preparing
+                              // options" hint so the wait reads as intentional, not a
+                              // frozen finished bubble.
+                              final showChoicesLoading =
+                                  !showChoices &&
+                                  latest != null &&
+                                  latest.isOptimistic &&
+                                  state.isGenerating &&
+                                  !state.narrativeStreaming &&
                                   state.replayingEventId == null &&
-                                  !state.isGenerating &&
-                                  state.isConnected &&
-                                  ((event.aiResponse ?? '').trim().isNotEmpty);
-                              return NarrativeBubble(
-                                event: event,
-                                isReplaying: isReplaying,
-                                isStreaming: isStreaming,
-                                characterNames: [
-                                  for (final c in state.characters)
-                                    if (!(c.isProtagonist &&
-                                        !(state.template?.isSentient ??
-                                            false)))
-                                      c.canonicalName,
-                                ],
-                                onCharacterTap: (name) {
-                                  final lower = name.toLowerCase();
-                                  for (final c in state.characters) {
-                                    if (c.canonicalName.toLowerCase() ==
-                                        lower) {
-                                      _showBondActions(context, c);
-                                      return;
-                                    }
+                                  state.isConnected;
+                              final showTrailingSlot =
+                                  showChoices || showChoicesLoading;
+                              final itemCount =
+                                  state.events.length +
+                                  (state.hasOlderEvents ? 1 : 0) +
+                                  (showTrailingSlot ? 1 : 0);
+                              // World entities (places/things) harvested from
+                              // memory atoms — computed once for all bubbles.
+                              final loreEntities = _loreEntities(state);
+                              return ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.fromLTRB(
+                                  2,
+                                  16,
+                                  2,
+                                  20,
+                                ),
+                                itemCount: itemCount,
+                                itemBuilder: (context, index) {
+                                  if (state.hasOlderEvents && index == 0) {
+                                    return _OlderHistoryButton(
+                                      totalEvents: state.totalEvents,
+                                      onTap: () => context.push(
+                                        '/chronicle/${context.read<PlayCubit>().instanceId}',
+                                      ),
+                                    );
                                   }
+                                  if (showTrailingSlot &&
+                                      index == itemCount - 1) {
+                                    if (showChoices) {
+                                      return ChoiceChips(
+                                        choices: latest.choices,
+                                        enabled: true,
+                                        // Drop the pre-formatted move into the composer
+                                        // (fills + focuses) so the player can edit the
+                                        // narration/dialogue before sending it.
+                                        onChoose: (choice) =>
+                                            _composerDraft.value = choice,
+                                      );
+                                    }
+                                    return const _ChoicesPreparingHint();
+                                  }
+
+                                  final eventIndex = state.hasOlderEvents
+                                      ? index - 1
+                                      : index;
+                                  final event = state.events[eventIndex];
+                                  // Replay is valid for the latest generated AI
+                                  // turn, including Continue turns. The seed
+                                  // greeting is not generated, so keep it excluded.
+                                  final isLatest =
+                                      eventIndex == state.events.length - 1;
+                                  final isReplaying =
+                                      state.replayingEventId == event.id;
+                                  // Tie the in-bubble "writing" treatment to the
+                                  // PROSE stream, not the whole turn: it clears the
+                                  // moment the narrative is fully revealed, even
+                                  // while post-prose bookkeeping (choices, codex)
+                                  // still runs under isGenerating.
+                                  final isStreaming =
+                                      isReplaying ||
+                                      (event.isOptimistic &&
+                                          state.narrativeStreaming);
+                                  final hasAiResponse = (event.aiResponse ?? '')
+                                      .trim()
+                                      .isNotEmpty;
+                                  final isSeedGreeting =
+                                      event.modelUsed == 'seed' ||
+                                      (event.modelUsed.isEmpty &&
+                                          event.sequence == 1 &&
+                                          (event.playerInput?.trim().isEmpty ??
+                                              true));
+                                  final canReplay =
+                                      !event.isOptimistic &&
+                                      isLatest &&
+                                      state.replayingEventId == null &&
+                                      !state.isGenerating &&
+                                      hasAiResponse &&
+                                      !isSeedGreeting;
+                                  final canContinue =
+                                      !event.isOptimistic &&
+                                      isLatest &&
+                                      state.replayingEventId == null &&
+                                      !state.isGenerating &&
+                                      state.isConnected &&
+                                      ((event.aiResponse ?? '')
+                                          .trim()
+                                          .isNotEmpty);
+                                  return NarrativeBubble(
+                                    event: event,
+                                    isReplaying: isReplaying,
+                                    isStreaming: isStreaming,
+                                    characterNames: [
+                                      for (final c in state.characters)
+                                        if (!(c.isProtagonist &&
+                                            !(state.template?.isSentient ??
+                                                false)))
+                                          c.canonicalName,
+                                    ],
+                                    onCharacterTap: (name) {
+                                      final lower = name.toLowerCase();
+                                      for (final c in state.characters) {
+                                        if (c.canonicalName.toLowerCase() ==
+                                            lower) {
+                                          _showBondActions(context, c);
+                                          return;
+                                        }
+                                      }
+                                    },
+                                    loreEntities: loreEntities,
+                                    onEntityTap: (name) => _showEntityMemories(
+                                      context,
+                                      context.read<PlayCubit>(),
+                                      name,
+                                      title: name,
+                                      emptyText:
+                                          'The story has not marked $name yet.',
+                                    ),
+                                    // Client-side miss audit (Fix #7 client half):
+                                    // only on the latest SETTLED turn (no streaming,
+                                    // no replay, not generating) so the detector
+                                    // doesn't churn during scroll. Un-carded visible
+                                    // names become tappable "Track this character"
+                                    // affordances (Fix #5 UI).
+                                    untrackedNames:
+                                        (isLatest &&
+                                            !isStreaming &&
+                                            !isReplaying &&
+                                            state.replayingEventId == null &&
+                                            !state.isGenerating)
+                                        ? context
+                                              .read<PlayCubit>()
+                                              .detectVisibleGaps()
+                                        : const [],
+                                    onTrackEntity: (name) =>
+                                        _showTrackEntitySheet(
+                                          context,
+                                          context.read<PlayCubit>(),
+                                          name,
+                                        ),
+                                    onLongPress:
+                                        (!event.isOptimistic &&
+                                            event.sequence > 0 &&
+                                            state.replayingEventId == null)
+                                        ? () => _showTurnMenu(
+                                            context,
+                                            event,
+                                            canReplay,
+                                          )
+                                        : null,
+                                    onReplay: canReplay
+                                        ? () => context
+                                              .read<PlayCubit>()
+                                              .replayAiResponse(event)
+                                        : null,
+                                    onContinue: canContinue
+                                        ? () => context
+                                              .read<PlayCubit>()
+                                              .continueStory()
+                                        : null,
+                                    onSelectReplayVariant: (index) => context
+                                        .read<PlayCubit>()
+                                        .selectReplayVariant(event, index),
+                                  );
                                 },
-                                loreEntities: loreEntities,
-                                onEntityTap: (name) => _showEntityMemories(
-                                  context,
-                                  context.read<PlayCubit>(),
-                                  name,
-                                  title: name,
-                                  emptyText:
-                                      'The story has not marked $name yet.',
-                                ),
-                                // Client-side miss audit (Fix #7 client half):
-                                // only on the latest SETTLED turn (no streaming,
-                                // no replay, not generating) so the detector
-                                // doesn't churn during scroll. Un-carded visible
-                                // names become tappable "Track this character"
-                                // affordances (Fix #5 UI).
-                                untrackedNames: (isLatest &&
-                                        !isStreaming &&
-                                        !isReplaying &&
-                                        state.replayingEventId == null &&
-                                        !state.isGenerating)
-                                    ? context.read<PlayCubit>().detectVisibleGaps()
-                                    : const [],
-                                onTrackEntity: (name) => _showTrackEntitySheet(
-                                  context,
-                                  context.read<PlayCubit>(),
-                                  name,
-                                ),
-                                onLongPress:
-                                    (!event.isOptimistic &&
-                                        event.sequence > 0 &&
-                                        state.replayingEventId == null)
-                                    ? () => _showTurnMenu(
-                                        context,
-                                        event,
-                                        canReplay,
-                                      )
-                                    : null,
-                                onReplay: canReplay
-                                    ? () => context
-                                          .read<PlayCubit>()
-                                          .replayAiResponse(event)
-                                    : null,
-                                onContinue: canContinue
-                                    ? () => context
-                                          .read<PlayCubit>()
-                                          .continueStory()
-                                    : null,
-                                onSelectReplayVariant: (index) => context
-                                    .read<PlayCubit>()
-                                    .selectReplayVariant(event, index),
                               );
                             },
-                          );
-                          }),
+                          ),
                   ),
 
                   PlayerInput(
@@ -1398,11 +1451,9 @@ class _PlayViewState extends State<_PlayView> {
                     isConnected: state.isConnected,
                     notice: state.notice,
                     onSend: (msg) => context.read<PlayCubit>().sendMessage(msg),
-                    onContinue: () =>
-                        context.read<PlayCubit>().continueStory(),
-                    onAdvance: (span) => context
-                        .read<PlayCubit>()
-                        .continueStory(advance: span),
+                    onContinue: () => context.read<PlayCubit>().continueStory(),
+                    onAdvance: (span) =>
+                        context.read<PlayCubit>().continueStory(advance: span),
                     draft: _composerDraft,
                   ),
                 ],
@@ -1413,8 +1464,7 @@ class _PlayViewState extends State<_PlayView> {
                 MilestoneToast(
                   label: state.lastMilestone!,
                   stamp: state.milestoneStamp,
-                  onDismissed: () =>
-                      context.read<PlayCubit>().clearMilestone(),
+                  onDismissed: () => context.read<PlayCubit>().clearMilestone(),
                 ),
             ],
           ),
@@ -1583,6 +1633,61 @@ class _PlayHeader extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Quiet placeholder shown after the prose has settled but before the choices
+/// arrive (the fallback path, where the narrator emitted no tail and the options
+/// come from the metadata pass at generation_complete). Reads as "still preparing"
+/// so the finished bubble never looks frozen with a locked composer and no moves.
+class _ChoicesPreparingHint extends StatefulWidget {
+  const _ChoicesPreparingHint();
+
+  @override
+  State<_ChoicesPreparingHint> createState() => _ChoicesPreparingHintState();
+}
+
+class _ChoicesPreparingHintState extends State<_ChoicesPreparingHint>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (!WidgetsBinding.instance.platformDispatcher.accessibilityFeatures
+        .disableAnimations) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = Text(
+      'Weaving your options…',
+      style: EverloreTheme.ui(
+        size: 13,
+        color: EverloreTheme.ash,
+        fontStyle: FontStyle.italic,
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: FadeTransition(
+        opacity: Tween<double>(begin: 0.45, end: 0.95).animate(
+          CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+        ),
+        child: label,
       ),
     );
   }
@@ -1969,7 +2074,8 @@ class _SettingsSheet extends StatefulWidget {
   final String? initialPersonaId;
   final bool isGmWorld;
   final List<Persona> personas;
-  final void Function(String pov, String mode, String length, String? personaId) onApply;
+  final void Function(String pov, String mode, String length, String? personaId)
+  onApply;
   final VoidCallback onReset;
   final VoidCallback onDelete;
 
@@ -2020,248 +2126,268 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     return SafeArea(
       child: SingleChildScrollView(
         child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: EverloreTheme.void4,
-                  borderRadius: BorderRadius.circular(2),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: EverloreTheme.void4,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Scene Settings',
-              style: EverloreTheme.serifDisplay(
-                size: 18,
-                color: EverloreTheme.parchment,
+              const SizedBox(height: 16),
+              Text(
+                'Scene Settings',
+                style: EverloreTheme.serifDisplay(
+                  size: 18,
+                  color: EverloreTheme.parchment,
+                ),
               ),
-            ),
-            const SizedBox(height: 18),
+              const SizedBox(height: 18),
 
-            // Narration POV
-            const _SettingsLabel(icon: AppIcons.pov, label: 'NARRATION'),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _SegOption(
-                  label: 'Third person',
-                  selected: _pov == 'third',
-                  onTap: () => setState(() => _pov = 'third'),
-                ),
-                const SizedBox(width: 8),
-                _SegOption(
-                  label: 'First person',
-                  selected: _pov == 'first',
-                  onTap: () => setState(() => _pov = 'first'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
+              // Narration POV
+              const _SettingsLabel(icon: AppIcons.pov, label: 'NARRATION'),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _SegOption(
+                    label: 'Third person',
+                    selected: _pov == 'third',
+                    onTap: () => setState(() => _pov = 'third'),
+                  ),
+                  const SizedBox(width: 8),
+                  _SegOption(
+                    label: 'First person',
+                    selected: _pov == 'first',
+                    onTap: () => setState(() => _pov = 'first'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
 
-            // Chat Mode — how the chat flows (pacing/intent). Orthogonal to the
-            // creator-locked narrative voice, which players cannot change here.
-            const _SettingsLabel(icon: AppIcons.voice, label: 'MODE'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: kChatModes.map((m) {
-                final selected = _mode == m.key;
-                return GestureDetector(
-                  onTap: () => setState(() => _mode = m.key),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      color: selected
-                          ? EverloreTheme.gold.withValues(alpha: 0.12)
-                          : EverloreTheme.void3,
-                      border: Border.all(
+              // Chat Mode — how the chat flows (pacing/intent). Orthogonal to the
+              // creator-locked narrative voice, which players cannot change here.
+              const _SettingsLabel(icon: AppIcons.voice, label: 'MODE'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: kChatModes.map((m) {
+                  final selected = _mode == m.key;
+                  return GestureDetector(
+                    onTap: () => setState(() => _mode = m.key),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
                         color: selected
-                            ? EverloreTheme.gold.withValues(alpha: 0.5)
-                            : EverloreTheme.goldDim.withValues(alpha: 0.2),
+                            ? EverloreTheme.gold.withValues(alpha: 0.12)
+                            : EverloreTheme.void3,
+                        border: Border.all(
+                          color: selected
+                              ? EverloreTheme.gold.withValues(alpha: 0.5)
+                              : EverloreTheme.goldDim.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Text(
+                        m.label,
+                        style: EverloreTheme.ui(
+                          size: 13,
+                          color: selected
+                              ? EverloreTheme.gold
+                              : EverloreTheme.ash,
+                          weight: selected ? FontWeight.w600 : FontWeight.w400,
+                        ),
                       ),
                     ),
-                    child: Text(
-                      m.label,
-                      style: EverloreTheme.ui(
-                        size: 13,
-                        color: selected
-                            ? EverloreTheme.gold
-                            : EverloreTheme.ash,
-                        weight: selected ? FontWeight.w600 : FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _mode == 'ardent'
-                  ? 'Ardent escalates intensity — explicit content only in mature worlds with NSFW enabled in your preferences.'
-                  : kChatModes
-                        .firstWhere(
-                          (m) => m.key == _mode,
-                          orElse: () => kChatModes.first,
-                        )
-                        .blurb,
-              style: EverloreTheme.ui(
-                size: 11,
-                color: EverloreTheme.ash,
-                height: 1.4,
+                  );
+                }).toList(),
               ),
-            ),
-            const SizedBox(height: 20),
-
-            const _SettingsLabel(icon: AppIcons.createCharacter, label: 'PERSONA'),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String?>(
-              value: _personaId,
-              isExpanded: true,
-              dropdownColor: EverloreTheme.void2,
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: EverloreTheme.void3,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              items: [
-                DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('None', style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash)),
-                ),
-                for (final p in widget.personas)
-                  DropdownMenuItem<String?>(
-                    value: p.id,
-                    child: Text(
-                      p.name,
-                      overflow: TextOverflow.ellipsis,
-                      style: EverloreTheme.ui(size: 13, color: EverloreTheme.parchment),
-                    ),
-                  ),
-              ],
-              onChanged: (v) => setState(() => _personaId = v),
-            ),
-            // GM worlds seed the protagonist from the persona once; later edits
-            // to the persona won't rewrite that character. Surface this so the
-            // player isn't surprised when editing a persona has no effect here.
-            if (widget.isGmWorld && _personaId != null) ...[
               const SizedBox(height: 8),
               Text(
-                'In Game Master worlds your protagonist is set once from this '
-                'persona. Editing the persona later won\'t change this world.',
+                _mode == 'ardent'
+                    ? 'Ardent escalates intensity — explicit content only in mature worlds with NSFW enabled in your preferences.'
+                    : kChatModes
+                          .firstWhere(
+                            (m) => m.key == _mode,
+                            orElse: () => kChatModes.first,
+                          )
+                          .blurb,
                 style: EverloreTheme.ui(
                   size: 11,
                   color: EverloreTheme.ash,
                   height: 1.4,
                 ),
               ),
-            ],
-            const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-            // Message length — drives both the prompt directive and max tokens.
-            const _SettingsLabel(icon: AppIcons.length, label: 'REPLY LENGTH'),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                for (final l in kMessageLengths) ...[
-                  _SegOption(
-                    label: l.$2,
-                    selected: _length == l.$1,
-                    onTap: () => setState(() => _length = l.$1),
-                  ),
-                  if (l != kMessageLengths.last) const SizedBox(width: 8),
-                ],
-              ],
-            ),
-            const SizedBox(height: 22),
-
-            // Deliberate save: disabled until a setting actually changes, so the
-            // player always knows the apply took effect (snackbar confirms when).
-            SizedBox(
-              width: double.infinity,
-              child: GestureDetector(
-                onTap: _dirty
-                    ? () => widget.onApply(_pov, _mode, _length, _personaId)
-                    : null,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
+              const _SettingsLabel(
+                icon: AppIcons.createCharacter,
+                label: 'PERSONA',
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String?>(
+                value: _personaId,
+                isExpanded: true,
+                dropdownColor: EverloreTheme.void2,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: EverloreTheme.void3,
+                  border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    color: _dirty
-                        ? EverloreTheme.gold.withValues(alpha: 0.16)
-                        : EverloreTheme.void3,
-                    border: Border.all(
-                      color: _dirty
-                          ? EverloreTheme.gold.withValues(alpha: 0.6)
-                          : EverloreTheme.goldDim.withValues(alpha: 0.15),
+                  ),
+                ),
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(
+                      'None',
+                      style: EverloreTheme.ui(
+                        size: 13,
+                        color: EverloreTheme.ash,
+                      ),
                     ),
                   ),
-                  child: Center(
-                    child: Text(
-                      _dirty ? 'Apply changes' : 'No changes',
-                      style: EverloreTheme.ui(
-                        size: 14,
-                        weight: FontWeight.w600,
+                  for (final p in widget.personas)
+                    DropdownMenuItem<String?>(
+                      value: p.id,
+                      child: Text(
+                        p.name,
+                        overflow: TextOverflow.ellipsis,
+                        style: EverloreTheme.ui(
+                          size: 13,
+                          color: EverloreTheme.parchment,
+                        ),
+                      ),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _personaId = v),
+              ),
+              // GM worlds seed the protagonist from the persona once; later edits
+              // to the persona won't rewrite that character. Surface this so the
+              // player isn't surprised when editing a persona has no effect here.
+              if (widget.isGmWorld && _personaId != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'In Game Master worlds your protagonist is set once from this '
+                  'persona. Editing the persona later won\'t change this world.',
+                  style: EverloreTheme.ui(
+                    size: 11,
+                    color: EverloreTheme.ash,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+
+              // Message length — drives both the prompt directive and max tokens.
+              const _SettingsLabel(
+                icon: AppIcons.length,
+                label: 'REPLY LENGTH',
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  for (final l in kMessageLengths) ...[
+                    _SegOption(
+                      label: l.$2,
+                      selected: _length == l.$1,
+                      onTap: () => setState(() => _length = l.$1),
+                    ),
+                    if (l != kMessageLengths.last) const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 22),
+
+              // Deliberate save: disabled until a setting actually changes, so the
+              // player always knows the apply took effect (snackbar confirms when).
+              SizedBox(
+                width: double.infinity,
+                child: GestureDetector(
+                  onTap: _dirty
+                      ? () => widget.onApply(_pov, _mode, _length, _personaId)
+                      : null,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: _dirty
+                          ? EverloreTheme.gold.withValues(alpha: 0.16)
+                          : EverloreTheme.void3,
+                      border: Border.all(
                         color: _dirty
-                            ? EverloreTheme.gold
-                            : EverloreTheme.ash.withValues(alpha: 0.5),
+                            ? EverloreTheme.gold.withValues(alpha: 0.6)
+                            : EverloreTheme.goldDim.withValues(alpha: 0.15),
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        _dirty ? 'Apply changes' : 'No changes',
+                        style: EverloreTheme.ui(
+                          size: 14,
+                          weight: FontWeight.w600,
+                          color: _dirty
+                              ? EverloreTheme.gold
+                              : EverloreTheme.ash.withValues(alpha: 0.5),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 18),
-            const Divider(color: EverloreTheme.white10, height: 1),
-            const SizedBox(height: 6),
+              const SizedBox(height: 18),
+              const Divider(color: EverloreTheme.white10, height: 1),
+              const SizedBox(height: 6),
 
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(
-                Icons.restart_alt_rounded,
-                color: EverloreTheme.gold,
-              ),
-              title: Text(
-                'Reset this chat',
-                style: EverloreTheme.ui(
-                  size: 15,
-                  color: EverloreTheme.parchment,
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(
+                  Icons.restart_alt_rounded,
+                  color: EverloreTheme.gold,
                 ),
+                title: Text(
+                  'Reset this chat',
+                  style: EverloreTheme.ui(
+                    size: 15,
+                    color: EverloreTheme.parchment,
+                  ),
+                ),
+                subtitle: Text(
+                  'Start over from the opening line. Keeps the world & character.',
+                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+                ),
+                onTap: widget.onReset,
               ),
-              subtitle: Text(
-                'Start over from the opening line. Keeps the world & character.',
-                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+              const Divider(color: EverloreTheme.white10, height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: EverloreTheme.crimson,
+                ),
+                title: Text(
+                  'Delete this chat',
+                  style: EverloreTheme.ui(
+                    size: 15,
+                    color: EverloreTheme.crimson,
+                  ),
+                ),
+                onTap: widget.onDelete,
               ),
-              onTap: widget.onReset,
-            ),
-            const Divider(color: EverloreTheme.white10, height: 1),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(
-                Icons.delete_outline,
-                color: EverloreTheme.crimson,
-              ),
-              title: Text(
-                'Delete this chat',
-                style: EverloreTheme.ui(size: 15, color: EverloreTheme.crimson),
-              ),
-              onTap: widget.onDelete,
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -2471,8 +2597,9 @@ class _ThoughtsSheet extends StatelessWidget {
 
     if (presentNames == null) return section(characters);
     final here = characters.where(_isPresent).toList(growable: false);
-    final away =
-        characters.where((c) => !_isPresent(c)).toList(growable: false);
+    final away = characters
+        .where((c) => !_isPresent(c))
+        .toList(growable: false);
     return [
       if (here.isNotEmpty) ...[header('Here now'), ...section(here)],
       if (away.isNotEmpty) ...[header('Elsewhere'), ...section(away)],
@@ -2481,129 +2608,116 @@ class _ThoughtsSheet extends StatelessWidget {
 
   Widget _characterTile(CharacterProfile c, bool isFocused) {
     return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              c.canonicalName,
-                              style: EverloreTheme.ui(
-                                size: 15,
-                                color: EverloreTheme.parchment,
-                                weight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          if (c.isProtagonist) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: EverloreTheme.gold.withValues(
-                                  alpha: 0.12,
-                                ),
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: EverloreTheme.goldDim.withValues(
-                                    alpha: 0.4,
-                                  ),
-                                ),
-                              ),
-                              child: Text(
-                                'PROTAGONIST',
-                                style: EverloreTheme.ui(
-                                  size: 9,
-                                  color: EverloreTheme.gold,
-                                  weight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (c.dispositionToPlayer.trim().isNotEmpty)
-                              Text(
-                                'Disposition: ${c.dispositionToPlayer}',
-                                style: EverloreTheme.ui(
-                                  size: 12,
-                                  color: EverloreTheme.goldDim,
-                                ),
-                              ),
-                            if (c.hiddenThought.trim().isNotEmpty)
-                              Text(
-                                '"${c.hiddenThought}"',
-                                style: EverloreTheme.ui(
-                                  size: 13,
-                                  color: EverloreTheme.ash,
-                                  height: 1.45,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            // The bond ledger: how this character stands with
-                            // the player, made inspectable and playable.
-                            if (c.relationship != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: BondMeters(
-                                  meters: c.relationship!,
-                                  dense: true,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            onPressed: () => onAct(c),
-                            visualDensity: VisualDensity.compact,
-                            icon: const Icon(
-                              Icons.handshake_outlined,
-                              size: 17,
-                              color: EverloreTheme.gold,
-                            ),
-                            tooltip: 'Act',
-                          ),
-                          // The creator's locked protagonist (sentient/character
-                          // worlds) can't be edited; everything else can.
-                          if (!(c.isProtagonist && isSentientWorld))
-                            IconButton(
-                              onPressed: () => onEdit(c),
-                              visualDensity: VisualDensity.compact,
-                              icon: const Icon(
-                                Icons.edit_outlined,
-                                size: 17,
-                                color: EverloreTheme.ash,
-                              ),
-                              tooltip: 'Edit',
-                            ),
-                          if (!c.isProtagonist)
-                            TextButton(
-                              onPressed: isFocused ? null : () => onFocus(c.id),
-                              child: Text(
-                                isFocused ? 'Focused' : 'Focus',
-                                style: EverloreTheme.ui(
-                                  size: 12,
-                                  color: isFocused
-                                      ? EverloreTheme.gold
-                                      : EverloreTheme.violetBright,
-                                  weight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
+      contentPadding: EdgeInsets.zero,
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              c.canonicalName,
+              style: EverloreTheme.ui(
+                size: 15,
+                color: EverloreTheme.parchment,
+                weight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (c.isProtagonist) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: EverloreTheme.gold.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Text(
+                'PROTAGONIST',
+                style: EverloreTheme.ui(
+                  size: 9,
+                  color: EverloreTheme.gold,
+                  weight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (c.dispositionToPlayer.trim().isNotEmpty)
+              Text(
+                'Disposition: ${c.dispositionToPlayer}',
+                style: EverloreTheme.ui(size: 12, color: EverloreTheme.goldDim),
+              ),
+            if (c.hiddenThought.trim().isNotEmpty)
+              Text(
+                '"${c.hiddenThought}"',
+                style: EverloreTheme.ui(
+                  size: 13,
+                  color: EverloreTheme.ash,
+                  height: 1.45,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            // The bond ledger: how this character stands with
+            // the player, made inspectable and playable.
+            if (c.relationship != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: BondMeters(meters: c.relationship!, dense: true),
+              ),
+          ],
+        ),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            onPressed: () => onAct(c),
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(
+              Icons.handshake_outlined,
+              size: 17,
+              color: EverloreTheme.gold,
+            ),
+            tooltip: 'Act',
+          ),
+          // The creator's locked protagonist (sentient/character
+          // worlds) can't be edited; everything else can.
+          if (!(c.isProtagonist && isSentientWorld))
+            IconButton(
+              onPressed: () => onEdit(c),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(
+                Icons.edit_outlined,
+                size: 17,
+                color: EverloreTheme.ash,
+              ),
+              tooltip: 'Edit',
+            ),
+          if (!c.isProtagonist)
+            TextButton(
+              onPressed: isFocused ? null : () => onFocus(c.id),
+              child: Text(
+                isFocused ? 'Focused' : 'Focus',
+                style: EverloreTheme.ui(
+                  size: 12,
+                  color: isFocused
+                      ? EverloreTheme.gold
+                      : EverloreTheme.violetBright,
+                  weight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -2628,12 +2742,19 @@ class _BondActionTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: EverloreTheme.gold.withValues(alpha: 0.75)),
+            Icon(
+              icon,
+              size: 18,
+              color: EverloreTheme.gold.withValues(alpha: 0.75),
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
                 label,
-                style: EverloreTheme.ui(size: 14, color: EverloreTheme.parchment),
+                style: EverloreTheme.ui(
+                  size: 14,
+                  color: EverloreTheme.parchment,
+                ),
               ),
             ),
             Icon(
@@ -2734,10 +2855,7 @@ class _ErrorBar extends StatelessWidget {
               ),
               child: Text(
                 'Retry',
-                style: EverloreTheme.ui(
-                  size: 13,
-                  color: EverloreTheme.crimson,
-                ),
+                style: EverloreTheme.ui(size: 13, color: EverloreTheme.crimson),
               ),
             ),
           IconButton(
@@ -3164,9 +3282,9 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
 }
 
 /// "Track this character" / "This person is my sister" promote sheet — the
-/// player-driven CORRECTION surface that repairs a projection miss. The player
-/// confirms the name (pre-filled from the tapped prose term), optionally adds a
-/// role, and optionally asserts a typed kinship tie. On submit the cubit calls
+/// player-driven CORRECTION surface that repairs a projection miss. The default
+/// path is one-tap confirmation; role/relationship fields are advanced
+/// corrections for exceptional ambiguity. On submit the cubit calls
 /// the server's track endpoint, which writes an EVENT-DERIVED projection (delta
 /// fold + stub promotion + typed edge + ledger entry) so the card is canonical
 /// and rewind-replayable.
@@ -3177,7 +3295,8 @@ class _TrackEntitySheet extends StatefulWidget {
     String? role,
     String? relationKind,
     String? relationLabel,
-  }) onTrack;
+  })
+  onTrack;
 
   const _TrackEntitySheet({required this.name, required this.onTrack});
 
@@ -3191,6 +3310,7 @@ class _TrackEntitySheetState extends State<_TrackEntitySheet> {
   late final TextEditingController _relationLabel;
   String? _relationKind;
   bool _saving = false;
+  bool _showAdvanced = false;
 
   static const _relationOptions = <(String, String)>[
     ('', 'No relation'),
@@ -3228,8 +3348,12 @@ class _TrackEntitySheetState extends State<_TrackEntitySheet> {
     await widget.onTrack(
       trackName: trackName,
       role: _role.text.trim().isEmpty ? null : _role.text.trim(),
-      relationKind: _relationKind == null || _relationKind!.isEmpty ? null : _relationKind,
-      relationLabel: _relationLabel.text.trim().isEmpty ? null : _relationLabel.text.trim(),
+      relationKind: _relationKind == null || _relationKind!.isEmpty
+          ? null
+          : _relationKind,
+      relationLabel: _relationLabel.text.trim().isEmpty
+          ? null
+          : _relationLabel.text.trim(),
     );
     // The parent pops the sheet; guard in case it was already dismissed.
     if (mounted) setState(() => _saving = false);
@@ -3271,8 +3395,8 @@ class _TrackEntitySheetState extends State<_TrackEntitySheet> {
               const SizedBox(height: 4),
               Text(
                 'The story showed this person but hasn\'t tracked them yet. '
-                'Confirm to add them to your codex — the story will honor them '
-                'from the next turn. Optionally assert a relationship.',
+                'Track them now; you can correct roles and relationships later '
+                'from the Chronicle if needed.',
                 style: EverloreTheme.ui(
                   size: 12,
                   color: EverloreTheme.ash,
@@ -3281,47 +3405,74 @@ class _TrackEntitySheetState extends State<_TrackEntitySheet> {
               ),
               const SizedBox(height: 14),
               _sheetField('Name', _name),
-              _sheetField('Role (optional)', _role),
-              const SizedBox(height: 8),
-              Text(
-                'Relationship (optional)',
-                style: EverloreTheme.ui(
-                  size: 12,
-                  color: EverloreTheme.parchment,
-                  weight: FontWeight.w600,
+              TextButton.icon(
+                onPressed: () => setState(() => _showAdvanced = !_showAdvanced),
+                icon: Icon(
+                  _showAdvanced
+                      ? Icons.expand_less_rounded
+                      : Icons.tune_rounded,
+                  color: EverloreTheme.goldDim,
+                  size: 17,
                 ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: EverloreTheme.void4.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _relationKind ?? '',
-                    isExpanded: true,
-                    dropdownColor: EverloreTheme.void2,
-                    style: EverloreTheme.ui(size: 14, color: EverloreTheme.parchment),
-                    items: _relationOptions
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e.$1,
-                            child: Text(e.$2),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setState(() => _relationKind = v),
+                label: Text(
+                  _showAdvanced ? 'Hide corrections' : 'Advanced correction',
+                  style: EverloreTheme.ui(
+                    size: 12,
+                    color: EverloreTheme.goldDim,
+                    weight: FontWeight.w700,
                   ),
                 ),
               ),
-              if (_relationKind != null && _relationKind!.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                _sheetField('Relation label (e.g. "sister", "father")', _relationLabel),
+              if (_showAdvanced) ...[
+                const SizedBox(height: 4),
+                _sheetField('Role', _role),
+                const SizedBox(height: 8),
+                Text(
+                  'Relationship',
+                  style: EverloreTheme.ui(
+                    size: 12,
+                    color: EverloreTheme.parchment,
+                    weight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: EverloreTheme.void4.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _relationKind ?? '',
+                      isExpanded: true,
+                      dropdownColor: EverloreTheme.void2,
+                      style: EverloreTheme.ui(
+                        size: 14,
+                        color: EverloreTheme.parchment,
+                      ),
+                      items: _relationOptions
+                          .map(
+                            (e) => DropdownMenuItem(
+                              value: e.$1,
+                              child: Text(e.$2),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _relationKind = v),
+                    ),
+                  ),
+                ),
+                if (_relationKind != null && _relationKind!.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _sheetField(
+                    'Relation label (e.g. "sister", "father")',
+                    _relationLabel,
+                  ),
+                ],
               ],
               const SizedBox(height: 18),
               Row(
@@ -3330,12 +3481,17 @@ class _TrackEntitySheetState extends State<_TrackEntitySheet> {
                     onPressed: _saving ? null : () => Navigator.pop(context),
                     child: Text(
                       'Cancel',
-                      style: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
+                      style: EverloreTheme.ui(
+                        size: 14,
+                        color: EverloreTheme.ash,
+                      ),
                     ),
                   ),
                   const Spacer(),
                   GestureDetector(
-                    onTap: (_name.text.trim().length >= 2 && !_saving) ? _track : null,
+                    onTap: (_name.text.trim().length >= 2 && !_saving)
+                        ? _track
+                        : null,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
@@ -3375,7 +3531,11 @@ class _TrackEntitySheetState extends State<_TrackEntitySheet> {
     );
   }
 
-  Widget _sheetField(String label, TextEditingController ctrl, {int maxLines = 1}) {
+  Widget _sheetField(
+    String label,
+    TextEditingController ctrl, {
+    int maxLines = 1,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(

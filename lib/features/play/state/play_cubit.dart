@@ -26,6 +26,21 @@ class PlayState extends Equatable {
   final List<Memory> memories;
   final List<CharacterProfile> characters;
   final bool isGenerating;
+
+  /// True only while the NARRATIVE prose is still streaming/revealing into the
+  /// bubble — drives the in-bubble "still writing" indicator. Distinct from
+  /// [isGenerating] (which stays true through post-prose server work — choices,
+  /// codex, kinship — and gates the composer). It flips false the instant the
+  /// prose reveal finishes, so the typing indicator doesn't hang while the rest
+  /// of the turn's bookkeeping completes.
+  final bool narrativeStreaming;
+
+  /// True once the narrator's choices have arrived early (the `choices_ready`
+  /// event), before generation_complete. Lets the chips render on the still-in-
+  /// flight optimistic turn so options appear with the prose. Cleared when the
+  /// turn finalizes or a new one starts.
+  final bool choicesPreview;
+
   final bool isConnected;
   final bool isLoading;
   final String? error;
@@ -68,6 +83,8 @@ class PlayState extends Equatable {
     this.memories = const [],
     this.characters = const [],
     this.isGenerating = false,
+    this.narrativeStreaming = false,
+    this.choicesPreview = false,
     this.isConnected = false,
     this.isLoading = true,
     this.error,
@@ -89,6 +106,8 @@ class PlayState extends Equatable {
     List<Memory>? memories,
     List<CharacterProfile>? characters,
     bool? isGenerating,
+    bool? narrativeStreaming,
+    bool? choicesPreview,
     bool? isConnected,
     bool? isLoading,
     String? error,
@@ -109,6 +128,8 @@ class PlayState extends Equatable {
       memories: memories ?? this.memories,
       characters: characters ?? this.characters,
       isGenerating: isGenerating ?? this.isGenerating,
+      narrativeStreaming: narrativeStreaming ?? this.narrativeStreaming,
+      choicesPreview: choicesPreview ?? this.choicesPreview,
       isConnected: isConnected ?? this.isConnected,
       isLoading: isLoading ?? this.isLoading,
       error: error,
@@ -140,6 +161,8 @@ class PlayState extends Equatable {
     memories,
     characters,
     isGenerating,
+    narrativeStreaming,
+    choicesPreview,
     isConnected,
     isLoading,
     error,
@@ -161,6 +184,7 @@ class PlayCubit extends Cubit<PlayState> {
   late StreamSubscription _generationSub;
   late StreamSubscription _deltaSub;
   late StreamSubscription _streamEndSub;
+  late StreamSubscription _choicesReadySub;
   late StreamSubscription _retryingSub;
   late StreamSubscription _memorySub;
   late StreamSubscription _errorSub;
@@ -176,6 +200,12 @@ class PlayCubit extends Cubit<PlayState> {
   String _streamTarget = '';
   Timer? _streamRevealTimer;
   Timer? _generationWatchdog;
+
+  /// Set when the server signals the prose is complete (the choices/bookkeeping
+  /// tail may still be generating). Lets the reveal loop know that once it
+  /// catches up to the target it can clear [PlayState.narrativeStreaming] — the
+  /// story is done even though [isGenerating] stays up for the rest of the turn.
+  bool _proseStreamEnded = false;
 
   /// In-progress streaming replay of an existing turn.
   String? _replayEventId;
@@ -315,8 +345,28 @@ class PlayCubit extends Cubit<PlayState> {
       if (narrative != null && narrative.length > _streamTarget.length) {
         _streamTarget = narrative;
       }
+      // The story prose is complete (any choices/bookkeeping tail is hidden and
+      // still generating). Mark it so the reveal loop can drop the "writing"
+      // indicator once it finishes painting the remaining buffered text — the
+      // composer stays locked via isGenerating until generation_complete.
+      _proseStreamEnded = true;
       _armGenerationWatchdog(_generationFinalizationTimeout);
       _startGenerationReveal();
+    });
+
+    // The narrator's choices arrive ahead of generation_complete. Attach them to
+    // the in-flight optimistic turn so the chips appear with the settled prose,
+    // instead of after the post-prose bookkeeping. generation_complete will later
+    // replace the event with the final (audited) choices.
+    _choicesReadySub = _ws.onChoicesReady.listen((msg) {
+      if (msg['instanceId']?.toString() != instanceId) return;
+      final choices = Choice.listFromAny(msg['choices']);
+      if (choices.isEmpty) return;
+      final events = [...state.events];
+      final idx = events.lastIndexWhere((e) => e.isOptimistic);
+      if (idx < 0) return;
+      events[idx] = events[idx].copyWith(choices: choices);
+      emit(state.copyWith(events: events, choicesPreview: true));
     });
 
     _generationSub = _ws.onGenerationComplete.listen((msg) {
@@ -391,6 +441,8 @@ class PlayCubit extends Cubit<PlayState> {
         state.copyWith(
           events: trimmedEvents,
           isGenerating: false,
+          narrativeStreaming: false,
+          choicesPreview: false,
           notice: null,
           instance: state.instance?.applyStateDiff(eventData['state_diff']),
           totalEvents: nextTotalEvents,
@@ -644,6 +696,7 @@ class PlayCubit extends Cubit<PlayState> {
 
     _streamBuffer = '';
     _streamTarget = '';
+    _proseStreamEnded = false;
     _clearGenerationTimers();
     final optimisticEvent = GameEvent.optimistic(
       instanceId: instanceId,
@@ -654,6 +707,8 @@ class PlayCubit extends Cubit<PlayState> {
       state.copyWith(
         events: _trimEvents([...state.events, optimisticEvent]),
         isGenerating: true,
+        narrativeStreaming: true,
+        choicesPreview: false,
         hasOlderEvents:
             state.hasOlderEvents || state.events.length >= _activeEventLimit,
         error: null,
@@ -686,6 +741,7 @@ class PlayCubit extends Cubit<PlayState> {
 
     _streamBuffer = '';
     _streamTarget = '';
+    _proseStreamEnded = false;
     _clearGenerationTimers();
     final optimisticEvent = GameEvent.optimistic(
       instanceId: instanceId,
@@ -696,6 +752,8 @@ class PlayCubit extends Cubit<PlayState> {
       state.copyWith(
         events: _trimEvents([...state.events, optimisticEvent]),
         isGenerating: true,
+        narrativeStreaming: true,
+        choicesPreview: false,
         hasOlderEvents:
             state.hasOlderEvents || state.events.length >= _activeEventLimit,
         error: null,
@@ -1334,6 +1392,12 @@ class PlayCubit extends Cubit<PlayState> {
       if (_streamBuffer.length >= _streamTarget.length) {
         _streamRevealTimer?.cancel();
         _streamRevealTimer = null;
+        // Reveal has caught up to the prose. If the server already signalled the
+        // prose is done, the story is fully painted — drop the "writing"
+        // indicator now instead of holding it until generation_complete.
+        if (_proseStreamEnded && state.narrativeStreaming) {
+          emit(state.copyWith(narrativeStreaming: false));
+        }
         return;
       }
 
@@ -1349,6 +1413,7 @@ class PlayCubit extends Cubit<PlayState> {
   void _finishGenerationReveal(String narrative) {
     _streamRevealTimer?.cancel();
     _streamRevealTimer = null;
+    _proseStreamEnded = false;
     if (narrative.isEmpty) return;
     _streamTarget = narrative;
     _streamBuffer = narrative;
@@ -1505,6 +1570,7 @@ class PlayCubit extends Cubit<PlayState> {
     await _generationSub.cancel();
     await _deltaSub.cancel();
     await _streamEndSub.cancel();
+    await _choicesReadySub.cancel();
     await _retryingSub.cancel();
     await _memorySub.cancel();
     await _errorSub.cancel();
