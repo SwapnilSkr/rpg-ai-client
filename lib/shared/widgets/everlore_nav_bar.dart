@@ -5,7 +5,7 @@ import '../../app/theme/nexus_theme.dart';
 import '../app_icons.dart';
 
 /// Persistent shell scaffold: hosts the four nav branches (Explore · Realms ·
-/// Worlds · You) and the single, always-on [EverloreNavBar]. The branches keep
+/// Worlds · Personas) and the single, always-on [EverloreNavBar]. The branches keep
 /// their own navigation stacks (state preserved across tab switches); detail
 /// screens push over this shell at the root, so back / OS-back behave.
 class ScaffoldWithNavBar extends StatelessWidget {
@@ -57,7 +57,6 @@ class EverloreNavBar extends StatelessWidget {
     null,
     _Slot(AppIcons.navWorlds, 'Worlds', 2),
     _Slot(AppIcons.createCharacter, 'Personas', 3),
-    _Slot(AppIcons.navProfile, 'You', 4),
   ];
 
   @override

@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../domain/realm_group.dart';
 import '../state/home_cubit.dart';
 import 'widgets/realm_group_card.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/app_icons.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
+import '../../../../shared/widgets/everlore_top_bar.dart';
 import '../../../../shared/widgets/neu.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -31,79 +31,57 @@ class _HomeView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: EverloreTheme.void1,
-      body: BlocBuilder<HomeCubit, HomeState>(
-        builder: (context, state) {
-          return CustomScrollView(
-            slivers: [
-              _buildAppBar(context, state),
-              if (state.isLoading && state.instances.isEmpty)
-                const SliverFillRemaining(child: _LoadingView())
-              else if (state.error != null &&
-                  state.error!.contains('Unauthorized') &&
-                  state.instances.isEmpty)
-                const SliverFillRemaining(child: _UnauthView())
-              else if (state.error != null && state.instances.isEmpty)
-                SliverFillRemaining(child: _ErrorView(message: state.error!))
-              else if (state.instances.isEmpty)
-                const SliverFillRemaining(child: _EmptyView())
-              else
-                _buildRealmList(context, state),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  SliverAppBar _buildAppBar(BuildContext context, HomeState state) {
-    return SliverAppBar(
-      backgroundColor: EverloreTheme.void0,
-      expandedHeight: 110,
-      floating: true,
-      snap: true,
-      pinned: false,
-      elevation: 0,
-      flexibleSpace: FlexibleSpaceBar(
-        background: Container(
-          decoration: const BoxDecoration(color: EverloreTheme.void0),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const ForgeMark(size: 30),
-                      const SizedBox(width: 10),
-                      Text(
-                        'EVERLORE',
-                        style: GoogleFonts.cinzel(
-                          color: EverloreTheme.gold,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Your Realms',
-                    style: TextStyle(
-                      color: EverloreTheme.parchment,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
+      body: Column(
+        children: [
+          BlocBuilder<HomeCubit, HomeState>(
+            buildWhen: (previous, current) =>
+                previous.isLoading != current.isLoading ||
+                previous.instances.length != current.instances.length,
+            builder: (context, state) {
+              return EverloreTopBar(
+                title: 'Your Realms',
+                subtitle: state.instances.isEmpty
+                    ? 'Worlds and stories'
+                    : '${groupInstancesByRealm(state.instances).length} worlds',
+                actions: [
+                  EverloreTopBarIcon(
+                    icon: Icons.refresh_rounded,
+                    tooltip: 'Refresh realms',
+                    isLoading: state.isLoading && state.instances.isNotEmpty,
+                    onTap: () => context.read<HomeCubit>().loadInstances(
+                      forceRefresh: true,
                     ),
                   ),
                 ],
-              ),
+              );
+            },
+          ),
+          Expanded(
+            child: BlocBuilder<HomeCubit, HomeState>(
+              builder: (context, state) {
+                return CustomScrollView(
+                  slivers: [
+                    if (state.isLoading && state.instances.isEmpty)
+                      const SliverFillRemaining(child: _LoadingView())
+                    else if (state.error != null &&
+                        state.error!.contains('Unauthorized') &&
+                        state.instances.isEmpty)
+                      const SliverFillRemaining(child: _UnauthView())
+                    else if (state.error != null && state.instances.isEmpty)
+                      SliverFillRemaining(
+                        child: _ErrorView(message: state.error!),
+                      )
+                    else if (state.instances.isEmpty)
+                      const SliverFillRemaining(child: _EmptyView())
+                    else
+                      _buildRealmList(context, state),
+                  ],
+                );
+              },
             ),
           ),
-        ),
+        ],
       ),
-      actions: const [SizedBox(width: 0)],
     );
   }
 
@@ -125,7 +103,9 @@ class _HomeView extends StatelessWidget {
                   ),
                   const Spacer(),
                   GestureDetector(
-                    onTap: () => context.read<HomeCubit>().loadInstances(),
+                    onTap: () => context.read<HomeCubit>().loadInstances(
+                      forceRefresh: true,
+                    ),
                     child: const Text(
                       'Refresh',
                       style: TextStyle(color: EverloreTheme.gold, fontSize: 12),
@@ -139,24 +119,26 @@ class _HomeView extends StatelessWidget {
           final group = groups[index - 1];
           return RealmGroupCard(
             group: group,
-            onTap: () async {
-              if (group.hasMultipleStories) {
-                await context.push('/realms/${group.templateId}');
-              } else {
-                await context.push('/play/${group.latest.id}');
-              }
+            onViewStories: () async {
+              await context.push('/realms/${group.templateId}');
               if (context.mounted) {
                 unawaited(
                   context.read<HomeCubit>().loadInstances(silent: true),
                 );
               }
             },
-            onArchive: group.hasMultipleStories
-                ? null
-                : () => context.read<HomeCubit>().archiveInstance(group.latest.id),
-            onDelete: group.hasMultipleStories
-                ? null
-                : () => context.read<HomeCubit>().deleteInstance(group.latest.id),
+            onStoryTap: (story) async {
+              await context.push('/play/${story.id}');
+              if (context.mounted) {
+                unawaited(
+                  context.read<HomeCubit>().loadInstances(silent: true),
+                );
+              }
+            },
+            onArchiveStory: (story) =>
+                context.read<HomeCubit>().archiveInstance(story.id),
+            onDeleteStory: (story) =>
+                context.read<HomeCubit>().deleteInstance(story.id),
           );
         }, childCount: groups.length + 1),
       ),

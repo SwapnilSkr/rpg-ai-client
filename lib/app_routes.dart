@@ -56,9 +56,8 @@ final router = GoRouter(
     GoRoute(
       path: '/templates/:templateId',
       name: 'template_detail',
-      builder: (context, state) => TemplateDetailScreen(
-        templateId: state.pathParameters['templateId']!,
-      ),
+      builder: (context, state) =>
+          TemplateDetailScreen(templateId: state.pathParameters['templateId']!),
     ),
     GoRoute(
       path: '/realms/:templateId',
@@ -70,16 +69,14 @@ final router = GoRouter(
     GoRoute(
       path: '/play/:instanceId',
       name: 'play',
-      builder: (context, state) => PlayScreen(
-        instanceId: state.pathParameters['instanceId']!,
-      ),
+      builder: (context, state) =>
+          PlayScreen(instanceId: state.pathParameters['instanceId']!),
     ),
     GoRoute(
       path: '/chronicle/:instanceId',
       name: 'chronicle',
-      builder: (context, state) => ChronicleScreen(
-        instanceId: state.pathParameters['instanceId']!,
-      ),
+      builder: (context, state) =>
+          ChronicleScreen(instanceId: state.pathParameters['instanceId']!),
     ),
     GoRoute(
       path: '/characters/new',
@@ -99,8 +96,13 @@ final router = GoRouter(
         existing: state.extra as WorldTemplate?,
       ),
     ),
+    GoRoute(
+      path: '/profile',
+      name: 'profile',
+      builder: (context, state) => const AuthScreen(),
+    ),
 
-    // ── The persistent shell: four branches, each with its own stack + state,
+    // ── The persistent shell: four primary branches, each with its own stack + state,
     // wrapped by the always-on EverloreNavBar. ──
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>
@@ -139,15 +141,6 @@ final router = GoRouter(
               path: '/personas',
               name: 'personas',
               builder: (context, state) => const PersonasScreen(),
-            ),
-          ],
-        ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/profile',
-              name: 'profile',
-              builder: (context, state) => const AuthScreen(),
             ),
           ],
         ),

@@ -31,6 +31,11 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _generationStreamEndController =
       StreamController<Map<String, dynamic>>.broadcast();
+  /// The narrator's choices, parsed from the streamed tail and delivered the moment
+  /// the prose settles — ahead of generation_complete (which waits on post-prose
+  /// bookkeeping). Lets the chips appear with the story instead of after the wait.
+  final _choicesReadyController =
+      StreamController<Map<String, dynamic>>.broadcast();
   /// A turn hit a transient failure and is being retried — the stream is still
   /// coming. Lets the UI keep the loader up (with a hint) instead of a dead end.
   final _generationRetryingController =
@@ -70,6 +75,8 @@ class WsManager {
       _generationCompleteController.stream;
   Stream<Map<String, dynamic>> get onGenerationStreamEnd =>
       _generationStreamEndController.stream;
+  Stream<Map<String, dynamic>> get onChoicesReady =>
+      _choicesReadyController.stream;
   Stream<Map<String, dynamic>> get onGenerationRetrying =>
       _generationRetryingController.stream;
   Stream<Map<String, dynamic>> get onMemoriesCurated =>
@@ -227,6 +234,9 @@ class WsManager {
         break;
       case 'generation_stream_end':
         _generationStreamEndController.add(msg);
+        break;
+      case 'choices_ready':
+        _choicesReadyController.add(msg);
         break;
       case 'generation_retrying':
         _generationRetryingController.add(msg);
@@ -411,6 +421,7 @@ class WsManager {
     _generationDeltaController.close();
     _generationCompleteController.close();
     _generationStreamEndController.close();
+    _choicesReadyController.close();
     _generationRetryingController.close();
     _memoriesCuratedController.close();
     _errorController.close();

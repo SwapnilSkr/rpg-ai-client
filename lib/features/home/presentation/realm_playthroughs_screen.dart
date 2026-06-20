@@ -15,7 +15,8 @@ class RealmPlaythroughsScreen extends StatefulWidget {
   const RealmPlaythroughsScreen({super.key, required this.templateId});
 
   @override
-  State<RealmPlaythroughsScreen> createState() => _RealmPlaythroughsScreenState();
+  State<RealmPlaythroughsScreen> createState() =>
+      _RealmPlaythroughsScreenState();
 }
 
 class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
@@ -35,7 +36,10 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
       _error = null;
     });
     try {
-      final data = await HomeRepository.getStoriesByTemplate(widget.templateId);
+      final data = await HomeRepository.getStoriesByTemplate(
+        widget.templateId,
+        forceRefresh: true,
+      );
       if (!mounted) return;
       setState(() {
         _data = data;
@@ -50,8 +54,7 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
     }
   }
 
-  String get _title =>
-      _data?.template?['title'] as String? ?? 'Your stories';
+  String get _title => _data?.template?['title'] as String? ?? 'Your stories';
 
   Future<void> _beginNewStory() async {
     try {
@@ -82,7 +85,11 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
         backgroundColor: EverloreTheme.void0,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: EverloreTheme.ash, size: 18),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: EverloreTheme.ash,
+            size: 18,
+          ),
           onPressed: () => context.pop(),
         ),
         title: Text(
@@ -265,7 +272,9 @@ class _StoryCard extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: [Color(0xFF231A12), Color(0xFF0D0A07)],
           ),
-          border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.22)),
+          border: Border.all(
+            color: EverloreTheme.goldDim.withValues(alpha: 0.22),
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.45),
@@ -335,7 +344,10 @@ class _StoryCard extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text(
                         '${story.summary.totalEvents} turns',
-                        style: const TextStyle(color: EverloreTheme.ash, fontSize: 12),
+                        style: const TextStyle(
+                          color: EverloreTheme.ash,
+                          fontSize: 12,
+                        ),
                       ),
                       const Spacer(),
                       Text(
@@ -428,7 +440,10 @@ class _StoryCard extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Keep it', style: TextStyle(color: EverloreTheme.ash)),
+            child: const Text(
+              'Keep it',
+              style: TextStyle(color: EverloreTheme.ash),
+            ),
           ),
           TextButton(
             onPressed: () {

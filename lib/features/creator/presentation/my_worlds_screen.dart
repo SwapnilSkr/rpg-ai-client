@@ -8,6 +8,7 @@ import '../../../core/auth/auth_service.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
+import '../../../shared/widgets/everlore_top_bar.dart';
 import '../../../shared/widgets/neu.dart';
 
 class MyWorldsScreen extends StatelessWidget {
@@ -34,8 +35,15 @@ class _MyWorldsView extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             backgroundColor: EverloreTheme.void1,
-            body: Center(
-              child: EverloreSessionLoader(message: 'Opening your forge'),
+            body: Column(
+              children: [
+                EverloreTopBar(title: 'Worlds', subtitle: 'Your creations'),
+                Expanded(
+                  child: Center(
+                    child: EverloreSessionLoader(message: 'Opening your forge'),
+                  ),
+                ),
+              ],
             ),
           );
         }
@@ -51,16 +59,14 @@ class _MyWorldsView extends StatelessWidget {
   Widget _buildGate(BuildContext context, _GateType type) {
     return Scaffold(
       backgroundColor: EverloreTheme.void1,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSimpleHeader(context),
-            Expanded(
-              child: type == _GateType.unauth ? _UnauthGate() : _UpgradeGate(),
-            ),
-          ],
-        ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const EverloreTopBar(title: 'Worlds', subtitle: 'Your creations'),
+          Expanded(
+            child: type == _GateType.unauth ? _UnauthGate() : _UpgradeGate(),
+          ),
+        ],
       ),
     );
   }
@@ -88,82 +94,102 @@ class _MyWorldsView extends StatelessWidget {
           }
         },
         builder: (context, state) {
-          return CustomScrollView(
-            slivers: [
-              _buildSliverHeader(context, state),
-              if (state.isLoading && state.worlds.isEmpty)
-                const SliverFillRemaining(child: _LoadingView())
-              else if (!state.isLoading && state.worlds.isEmpty)
-                SliverFillRemaining(
-                  child: _EmptyForgeView(
-                    onForge: () => context.push('/my-worlds/forge'),
-                  ),
-                )
-              else ...[
-                if (state.drafts.isNotEmpty) ...[
-                  _sectionHeader(
-                    '${state.drafts.length} DRAFTS',
-                    Icons.edit_note,
-                    EverloreTheme.ember,
-                  ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (ctx, i) => MyWorldCard(
-                          template: state.drafts[i],
-                          isPublishing: state.publishingIds.contains(
-                            state.drafts[i].id,
-                          ),
-                          onEdit: () => context.push(
-                            '/my-worlds/${state.drafts[i].id}/forge',
-                            extra: state.drafts[i],
-                          ),
-                          onPublish: () => _confirmPublish(
-                            context,
-                            state.drafts[i].id,
-                            state.drafts[i].title,
-                          ),
-                          onDelete: () => context.read<MyWorldsCubit>().delete(
-                            state.drafts[i].id,
-                          ),
-                        ),
-                        childCount: state.drafts.length,
-                      ),
-                    ),
+          return Column(
+            children: [
+              EverloreTopBar(
+                title: 'Worlds',
+                subtitle: '${state.worlds.length} creations',
+                actions: [
+                  EverloreTopBarIcon(
+                    icon: Icons.refresh_rounded,
+                    tooltip: 'Refresh worlds',
+                    isLoading: state.isLoading && state.worlds.isNotEmpty,
+                    onTap: () =>
+                        context.read<MyWorldsCubit>().load(forceRefresh: true),
                   ),
                 ],
-                if (state.published.isNotEmpty) ...[
-                  _sectionHeader(
-                    '${state.published.length} PUBLISHED',
-                    Icons.public,
-                    EverloreTheme.verdant,
-                  ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (ctx, i) => MyWorldCard(
-                          template: state.published[i],
-                          isPublishing: false,
-                          onEdit: () => context.push(
-                            '/my-worlds/${state.published[i].id}/forge',
-                            extra: state.published[i],
-                          ),
-                          onTap: () => context.push(
-                            '/templates/${state.published[i].id}',
-                          ),
-                          onDelete: () => context.read<MyWorldsCubit>().delete(
-                            state.published[i].id,
+              ),
+              Expanded(
+                child: CustomScrollView(
+                  slivers: [
+                    if (state.isLoading && state.worlds.isEmpty)
+                      const SliverFillRemaining(child: _LoadingView())
+                    else if (!state.isLoading && state.worlds.isEmpty)
+                      SliverFillRemaining(
+                        child: _EmptyForgeView(
+                          onForge: () => context.push('/my-worlds/forge'),
+                        ),
+                      )
+                    else ...[
+                      if (state.drafts.isNotEmpty) ...[
+                        _sectionHeader(
+                          '${state.drafts.length} DRAFTS',
+                          Icons.edit_note,
+                          EverloreTheme.ember,
+                        ),
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (ctx, i) => MyWorldCard(
+                                template: state.drafts[i],
+                                isPublishing: state.publishingIds.contains(
+                                  state.drafts[i].id,
+                                ),
+                                onEdit: () => context.push(
+                                  '/my-worlds/${state.drafts[i].id}/forge',
+                                  extra: state.drafts[i],
+                                ),
+                                onPublish: () => _confirmPublish(
+                                  context,
+                                  state.drafts[i].id,
+                                  state.drafts[i].title,
+                                ),
+                                onDelete: () => context
+                                    .read<MyWorldsCubit>()
+                                    .delete(state.drafts[i].id),
+                              ),
+                              childCount: state.drafts.length,
+                            ),
                           ),
                         ),
-                        childCount: state.published.length,
+                      ],
+                      if (state.published.isNotEmpty) ...[
+                        _sectionHeader(
+                          '${state.published.length} PUBLISHED',
+                          Icons.public,
+                          EverloreTheme.verdant,
+                        ),
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (ctx, i) => MyWorldCard(
+                                template: state.published[i],
+                                isPublishing: false,
+                                onEdit: () => context.push(
+                                  '/my-worlds/${state.published[i].id}/forge',
+                                  extra: state.published[i],
+                                ),
+                                onTap: () => context.push(
+                                  '/templates/${state.published[i].id}',
+                                ),
+                                onDelete: () => context
+                                    .read<MyWorldsCubit>()
+                                    .delete(state.published[i].id),
+                              ),
+                              childCount: state.published.length,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SliverPadding(
+                        padding: EdgeInsets.only(bottom: 120),
                       ),
-                    ),
-                  ),
-                ],
-                const SliverPadding(padding: EdgeInsets.only(bottom: 120)),
-              ],
+                    ],
+                  ],
+                ),
+              ),
             ],
           );
         },
@@ -190,99 +216,6 @@ class _MyWorldsView extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  SliverAppBar _buildSliverHeader(BuildContext context, MyWorldsState state) {
-    return SliverAppBar(
-      backgroundColor: EverloreTheme.void0,
-      expandedHeight: 110,
-      floating: true,
-      snap: true,
-      pinned: false,
-      elevation: 0,
-      automaticallyImplyLeading: false,
-      flexibleSpace: FlexibleSpaceBar(
-        background: Container(
-          decoration: const BoxDecoration(color: EverloreTheme.void0),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const ForgeMark(size: 28),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'MY WORLDS',
-                        style: TextStyle(
-                          color: EverloreTheme.gold,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 3,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (state.isLoading)
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            color: EverloreTheme.goldDim,
-                          ),
-                        )
-                      else
-                        GestureDetector(
-                          onTap: () => context.read<MyWorldsCubit>().load(),
-                          child: const Icon(
-                            Icons.refresh,
-                            color: EverloreTheme.ash,
-                            size: 20,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Your Creations',
-                    style: TextStyle(
-                      color: EverloreTheme.parchment,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-      actions: const [SizedBox(width: 0)],
-    );
-  }
-
-  Widget _buildSimpleHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        children: [
-          const ForgeMark(size: 28),
-          const SizedBox(width: 10),
-          const Text(
-            'MY WORLDS',
-            style: TextStyle(
-              color: EverloreTheme.gold,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 3,
-            ),
-          ),
-        ],
       ),
     );
   }

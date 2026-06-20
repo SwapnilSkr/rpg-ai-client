@@ -44,10 +44,12 @@ class MyWorldsState extends Equatable {
 class MyWorldsCubit extends Cubit<MyWorldsState> {
   MyWorldsCubit() : super(const MyWorldsState());
 
-  Future<void> load() async {
+  Future<void> load({bool forceRefresh = false}) async {
     emit(state.copyWith(isLoading: true, clearError: true));
     try {
-      final worlds = await CreatorRepository.listMine();
+      final worlds = await CreatorRepository.listMine(
+        forceRefresh: forceRefresh,
+      );
       emit(state.copyWith(worlds: worlds, isLoading: false));
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: _friendly(e)));

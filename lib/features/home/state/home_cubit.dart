@@ -82,10 +82,15 @@ class HomeCubit extends Cubit<HomeState> {
     }
   }
 
-  Future<void> loadInstances({bool silent = false}) async {
+  Future<void> loadInstances({
+    bool silent = false,
+    bool forceRefresh = false,
+  }) async {
     if (!silent) emit(state.copyWith(isLoading: true, error: null));
     try {
-      final instances = await HomeRepository.getInstances();
+      final instances = await HomeRepository.getInstances(
+        forceRefresh: forceRefresh,
+      );
       emit(state.copyWith(instances: instances, isLoading: false));
     } catch (e) {
       if (!silent) emit(state.copyWith(isLoading: false, error: e.toString()));

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/models/persona.dart';
+import '../../../shared/widgets/everlore_top_bar.dart';
 import '../data/persona_repository.dart';
 
 const _genderOptions = [
@@ -71,57 +72,62 @@ class _PersonasScreenState extends State<PersonasScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: EverloreTheme.void0,
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          color: EverloreTheme.gold,
-          backgroundColor: EverloreTheme.void2,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Personas',
-                      style: EverloreTheme.serifDisplay(
-                        size: 30,
-                        color: EverloreTheme.parchment,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => _openEditor(),
-                    icon: const Icon(Icons.add, color: EverloreTheme.gold),
-                  ),
-                ],
+      body: Column(
+        children: [
+          EverloreTopBar(
+            title: 'Personas',
+            subtitle: '${_personas.length} saved identities',
+            actions: [
+              EverloreTopBarIcon(
+                icon: Icons.add_rounded,
+                tooltip: 'Create persona',
+                onTap: () => _openEditor(),
               ),
-              const SizedBox(height: 14),
-              if (_loading)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: 80),
-                    child: CircularProgressIndicator(color: EverloreTheme.gold),
-                  ),
-                )
-              else if (_error != null)
-                _EmptyPersonaState(text: _error!, action: _load)
-              else if (_personas.isEmpty)
-                _EmptyPersonaState(
-                  text: 'No personas yet.',
-                  action: () => _openEditor(),
-                  actionLabel: 'Create persona',
-                )
-              else
-                for (final p in _personas)
-                  _PersonaCard(
-                    persona: p,
-                    onTap: () => _openEditor(p),
-                    onDelete: () => _delete(p),
-                  ),
+              EverloreTopBarIcon(
+                icon: Icons.refresh_rounded,
+                tooltip: 'Refresh personas',
+                isLoading: _loading && _personas.isNotEmpty,
+                onTap: _load,
+              ),
             ],
           ),
-        ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              color: EverloreTheme.gold,
+              backgroundColor: EverloreTheme.void2,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
+                children: [
+                  if (_loading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 80),
+                        child: CircularProgressIndicator(
+                          color: EverloreTheme.gold,
+                        ),
+                      ),
+                    )
+                  else if (_error != null)
+                    _EmptyPersonaState(text: _error!, action: _load)
+                  else if (_personas.isEmpty)
+                    _EmptyPersonaState(
+                      text: 'No personas yet.',
+                      action: () => _openEditor(),
+                      actionLabel: 'Create persona',
+                    )
+                  else
+                    for (final p in _personas)
+                      _PersonaCard(
+                        persona: p,
+                        onTap: () => _openEditor(p),
+                        onDelete: () => _delete(p),
+                      ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -141,10 +147,12 @@ class _PersonaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final meta = [
-      _genderOptions.firstWhere(
-        (g) => g.$1 == persona.gender,
-        orElse: () => _genderOptions.last,
-      ).$2,
+      _genderOptions
+          .firstWhere(
+            (g) => g.$1 == persona.gender,
+            orElse: () => _genderOptions.last,
+          )
+          .$2,
       if (persona.age != null) '${persona.age}',
     ].join(' • ');
     return Container(
@@ -152,7 +160,9 @@ class _PersonaCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: EverloreTheme.void2,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.22)),
+        border: Border.all(
+          color: EverloreTheme.goldDim.withValues(alpha: 0.22),
+        ),
       ),
       child: ListTile(
         onTap: onTap,
@@ -171,7 +181,11 @@ class _PersonaCard extends StatelessWidget {
           ].join('\n'),
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
-          style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash, height: 1.35),
+          style: EverloreTheme.ui(
+            size: 12,
+            color: EverloreTheme.ash,
+            height: 1.35,
+          ),
         ),
         trailing: IconButton(
           onPressed: onDelete,
@@ -199,11 +213,17 @@ class _EmptyPersonaState extends StatelessWidget {
       padding: const EdgeInsets.only(top: 90),
       child: Column(
         children: [
-          Text(text, style: EverloreTheme.ui(size: 14, color: EverloreTheme.ash)),
+          Text(
+            text,
+            style: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
+          ),
           const SizedBox(height: 14),
           TextButton(
             onPressed: action,
-            child: Text(actionLabel, style: const TextStyle(color: EverloreTheme.gold)),
+            child: Text(
+              actionLabel,
+              style: const TextStyle(color: EverloreTheme.gold),
+            ),
           ),
         ],
       ),
@@ -296,7 +316,10 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
             children: [
               Text(
                 widget.persona == null ? 'New Persona' : 'Edit Persona',
-                style: EverloreTheme.serifDisplay(size: 22, color: EverloreTheme.parchment),
+                style: EverloreTheme.serifDisplay(
+                  size: 22,
+                  color: EverloreTheme.parchment,
+                ),
               ),
               const SizedBox(height: 16),
               _PersonaField(controller: _name, label: 'Name', maxLength: 60),
@@ -313,7 +336,9 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
                       backgroundColor: EverloreTheme.void3,
                       labelStyle: EverloreTheme.ui(
                         size: 12,
-                        color: _gender == g.$1 ? EverloreTheme.gold : EverloreTheme.ash,
+                        color: _gender == g.$1
+                            ? EverloreTheme.gold
+                            : EverloreTheme.ash,
                       ),
                     ),
                 ],

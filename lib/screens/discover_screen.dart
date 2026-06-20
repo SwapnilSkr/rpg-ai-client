@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../app/theme/nexus_theme.dart';
 import '../core/auth/auth_service.dart';
 import '../shared/app_icons.dart';
 import '../shared/models/world_template.dart';
 import '../shared/narrative_styles.dart';
 import '../shared/widgets/everlore_session_loader.dart';
+import '../shared/widgets/everlore_top_bar.dart';
 import '../shared/widgets/mature_content_chip.dart';
 import '../shared/widgets/neu.dart';
 import '../features/templates/data/template_repository.dart';
@@ -47,13 +47,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     if (mounted) _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
     try {
-      final result = await TemplateRepository.listPublished();
+      final result = await TemplateRepository.listPublished(
+        forceRefresh: forceRefresh,
+      );
       final ranked = await orderTemplatesForFeed(
         List<WorldTemplate>.from(result['templates']),
       );
@@ -86,69 +88,29 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: EverloreTheme.void0,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _buildTopBar(),
-            _buildTabs(),
-            const SizedBox(height: 4),
-            Expanded(child: _buildBody()),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 14, 6),
-      child: Row(
+      body: Column(
         children: [
-          const ForgeMark(size: 30),
-          const SizedBox(width: 10),
-          Text(
-            'EVERLORE',
-            style: GoogleFonts.cinzel(
-              color: EverloreTheme.gold,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.5,
-            ),
+          EverloreTopBar(
+            title: 'Explore',
+            subtitle: 'Find worlds and characters',
+            actions: [
+              EverloreTopBarIcon(
+                icon: Icons.search_rounded,
+                tooltip: 'Search worlds',
+                onTap: () => context.push('/templates'),
+              ),
+              EverloreTopBarIcon(
+                icon: Icons.refresh_rounded,
+                tooltip: 'Refresh explore',
+                isLoading: _isLoading && _templates.isNotEmpty,
+                onTap: () => _load(forceRefresh: true),
+              ),
+            ],
           ),
-          const Spacer(),
-          _iconButton(Icons.search, () => context.push('/templates')),
+          _buildTabs(),
+          const SizedBox(height: 4),
+          Expanded(child: _buildBody()),
         ],
-      ),
-    );
-  }
-
-  Widget _iconButton(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [EverloreTheme.void3, EverloreTheme.void1],
-          ),
-          border: Border.all(
-            color: EverloreTheme.goldDim.withValues(alpha: 0.25),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 6,
-              offset: const Offset(1, 2),
-            ),
-          ],
-        ),
-        child: Icon(icon, color: EverloreTheme.gold, size: 19),
       ),
     );
   }
@@ -279,7 +241,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     return RefreshIndicator(
       color: EverloreTheme.gold,
       backgroundColor: EverloreTheme.void2,
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(
@@ -397,8 +359,7 @@ class _DiscoverCard extends StatelessWidget {
                     runSpacing: 6,
                     children: [
                       _genreChip(genre),
-                      if (template.isNsfwCapable)
-                        const MatureContentChip(),
+                      if (template.isNsfwCapable) const MatureContentChip(),
                     ],
                   ),
                 ],
