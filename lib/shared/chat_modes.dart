@@ -1,6 +1,6 @@
 /// CHAT MODES — the player's per-conversation lever for HOW THE CHAT FLOWS
-/// (pacing, intent, escalation). Orthogonal to narrative voice, which is
-/// creator-locked. Mirrors everlore-server/src/utils/chat-modes.ts — keep keys
+/// (pacing, intent, escalation). Orthogonal to template voice and the player's
+/// narration tone. Mirrors everlore-server/src/utils/chat-modes.ts — keep keys
 /// in sync. `Ardent` is the mature on-ramp (server-side gated).
 class ChatMode {
   final String key;

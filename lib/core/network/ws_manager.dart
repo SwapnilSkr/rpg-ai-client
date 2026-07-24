@@ -27,18 +27,26 @@ class WsManager {
 
   final _generationDeltaController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _generationStartedController =
+      StreamController<Map<String, dynamic>>.broadcast();
   final _generationCompleteController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _generationStreamEndController =
       StreamController<Map<String, dynamic>>.broadcast();
+
   /// The narrator's choices, parsed from the streamed tail and delivered the moment
   /// the prose settles — ahead of generation_complete (which waits on post-prose
   /// bookkeeping). Lets the chips appear with the story instead of after the wait.
   final _choicesReadyController =
       StreamController<Map<String, dynamic>>.broadcast();
+
   /// A turn hit a transient failure and is being retried — the stream is still
   /// coming. Lets the UI keep the loader up (with a hint) instead of a dead end.
   final _generationRetryingController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  /// The server discarded a partial narrator stream. The next retry must start
+  /// with a fresh optimistic bubble rather than append to a cut-off fragment.
+  final _generationResetController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _memoriesCuratedController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -52,6 +60,7 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _replayCompleteController =
       StreamController<Map<String, dynamic>>.broadcast();
+
   /// A backend world-projection (bonds/threads/recap/places/calendar/codex/...)
   /// changed for an instance — the Chronicle tabs derived from it are now stale.
   final _worldProjectionUpdatedController =
@@ -64,6 +73,7 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _sideChatErrorController =
       StreamController<Map<String, dynamic>>.broadcast();
+
   /// Fired when the server reports this account was deleted (e.g. from another
   /// device). A live session must drop to the auth screen rather than keep
   /// running against a dead account until the next request 401s.
@@ -71,6 +81,8 @@ class WsManager {
 
   Stream<Map<String, dynamic>> get onGenerationDelta =>
       _generationDeltaController.stream;
+  Stream<Map<String, dynamic>> get onGenerationStarted =>
+      _generationStartedController.stream;
   Stream<Map<String, dynamic>> get onGenerationComplete =>
       _generationCompleteController.stream;
   Stream<Map<String, dynamic>> get onGenerationStreamEnd =>
@@ -79,6 +91,8 @@ class WsManager {
       _choicesReadyController.stream;
   Stream<Map<String, dynamic>> get onGenerationRetrying =>
       _generationRetryingController.stream;
+  Stream<Map<String, dynamic>> get onGenerationReset =>
+      _generationResetController.stream;
   Stream<Map<String, dynamic>> get onMemoriesCurated =>
       _memoriesCuratedController.stream;
   Stream<Map<String, dynamic>> get onError => _errorController.stream;
@@ -229,6 +243,9 @@ class WsManager {
       case 'generation_delta':
         _generationDeltaController.add(msg);
         break;
+      case 'generation_started':
+        _generationStartedController.add(msg);
+        break;
       case 'generation_complete':
         _generationCompleteController.add(msg);
         break;
@@ -240,6 +257,9 @@ class WsManager {
         break;
       case 'generation_retrying':
         _generationRetryingController.add(msg);
+        break;
+      case 'generation_reset':
+        _generationResetController.add(msg);
         break;
       case 'memories_curated':
         _memoriesCuratedController.add(msg);
@@ -253,8 +273,7 @@ class WsManager {
       case 'validation':
         _errorController.add({
           ...msg,
-          'message':
-              "That request couldn't be processed. Please try again — if it keeps happening, update the app.",
+          'message': "That action couldn't be processed. Please try again.",
         });
         break;
       case 'instance_loaded':
@@ -350,7 +369,8 @@ class WsManager {
       _offlineQueue.add(message);
     } else if (action != 'ping') {
       _errorController.add({
-        'message': "You're offline — that didn't send. Reconnect and try again.",
+        'message':
+            "You're offline — that didn't send. Reconnect and try again.",
       });
     }
   }
@@ -401,6 +421,16 @@ class WsManager {
     });
   }
 
+  /// Submit a player-confirmed world-state action. Unlike a chat message, this
+  /// payload is structured and server-validated before narration begins.
+  void sendWorldAction(String instanceId, Map<String, dynamic> payload) {
+    send({
+      'action': 'world_action',
+      'instance_id': instanceId,
+      'payload': payload,
+    });
+  }
+
   /// Request a streaming alternative response for an existing turn.
   void sendReplay(String instanceId, String eventId) {
     send({'action': 'replay', 'instance_id': instanceId, 'event_id': eventId});
@@ -419,10 +449,12 @@ class WsManager {
   void dispose() {
     _connectivitySub?.cancel();
     _generationDeltaController.close();
+    _generationStartedController.close();
     _generationCompleteController.close();
     _generationStreamEndController.close();
     _choicesReadyController.close();
     _generationRetryingController.close();
+    _generationResetController.close();
     _memoriesCuratedController.close();
     _errorController.close();
     _connectionStateController.close();

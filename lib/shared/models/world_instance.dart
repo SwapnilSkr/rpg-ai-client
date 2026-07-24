@@ -10,8 +10,14 @@ class WorldInstance {
   final String narrationPov; // 'first' | 'third'
   final String mode; // chat mode key; 'free_play' = default
   final String messageLength; // 'short' | 'medium' | 'long'
+  /// Null inherits the template's authored voice; '' deliberately selects neutral.
+  final String? narrativeStyleOverride;
+
+  /// Player-selected narration wording/register. Separate from Scene Mode.
+  final String narrationTone;
   final String? focusCharacterId;
   final String? personaId;
+
   /// Snapshot of the persona name selected for this instance (sentient worlds).
   /// Parsed from the server's `persona_snapshot.name` so the client can exclude
   /// the player persona from client-side miss-audit / track suggestions without
@@ -33,6 +39,8 @@ class WorldInstance {
     this.narrationPov = 'third',
     this.mode = 'free_play',
     this.messageLength = 'medium',
+    this.narrativeStyleOverride,
+    this.narrationTone = 'modern',
     this.focusCharacterId,
     this.personaId,
     this.personaName,
@@ -45,6 +53,8 @@ class WorldInstance {
     String? narrationPov,
     String? mode,
     String? messageLength,
+    Object? narrativeStyleOverride = _unset,
+    String? narrationTone,
     Object? focusCharacterId = _unset,
     Object? personaId = _unset,
     Object? personaName = _unset,
@@ -60,11 +70,19 @@ class WorldInstance {
       narrationPov: narrationPov ?? this.narrationPov,
       mode: mode ?? this.mode,
       messageLength: messageLength ?? this.messageLength,
-      focusCharacterId:
-          identical(focusCharacterId, _unset) ? this.focusCharacterId : focusCharacterId as String?,
-      personaId: identical(personaId, _unset) ? this.personaId : personaId as String?,
-      personaName:
-          identical(personaName, _unset) ? this.personaName : personaName as String?,
+      narrativeStyleOverride: identical(narrativeStyleOverride, _unset)
+          ? this.narrativeStyleOverride
+          : narrativeStyleOverride as String?,
+      narrationTone: narrationTone ?? this.narrationTone,
+      focusCharacterId: identical(focusCharacterId, _unset)
+          ? this.focusCharacterId
+          : focusCharacterId as String?,
+      personaId: identical(personaId, _unset)
+          ? this.personaId
+          : personaId as String?,
+      personaName: identical(personaName, _unset)
+          ? this.personaName
+          : personaName as String?,
       meta: meta,
       createdAt: createdAt,
       template: template,
@@ -92,6 +110,10 @@ class WorldInstance {
       narrationPov: json['narration_pov'] ?? 'third',
       mode: json['mode'] ?? 'free_play',
       messageLength: json['message_length'] ?? 'medium',
+      narrativeStyleOverride: json.containsKey('narrative_style_override')
+          ? json['narrative_style_override']?.toString()
+          : null,
+      narrationTone: json['narration_tone'] ?? 'modern',
       focusCharacterId: json['focus_character_id']?.toString(),
       personaId: json['persona_id']?.toString(),
       personaName: json['persona_snapshot'] is Map
@@ -241,7 +263,9 @@ class InstanceMeta {
       isArchived: json['is_archived'] ?? false,
       milestones:
           (json['milestones'] as List?)
-              ?.map((e) => Milestone.fromJson(Map<String, dynamic>.from(e as Map)))
+              ?.map(
+                (e) => Milestone.fromJson(Map<String, dynamic>.from(e as Map)),
+              )
               .toList() ??
           const [],
     );

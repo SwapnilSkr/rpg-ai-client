@@ -2,6 +2,7 @@ import '../../../core/network/api_client.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/models/memory.dart';
 import '../../../shared/models/character_profile.dart';
+import '../../../shared/models/relation_candidate.dart';
 import 'calendar_data.dart';
 import 'location_journal.dart';
 import 'relationship_ledger.dart';
@@ -92,7 +93,9 @@ class ChronicleRepository {
     }
     return (
       choices: Choice.listFromAny(response['choices']),
-      presentCharacters: GameEvent.presentFromAny(response['present_characters']),
+      presentCharacters: GameEvent.presentFromAny(
+        response['present_characters'],
+      ),
       trackableMentions: TrackableMention.listFromAny(
         response['trackable_mentions'],
       ),
@@ -144,6 +147,55 @@ class ChronicleRepository {
       Map<String, dynamic>.from(response as Map),
     );
   }
+
+  static Future<Map<String, String>> getConfirmedKinship(
+    String instanceId,
+  ) async {
+    final response = await ApiClient.get('/chronicle/kinship/$instanceId');
+    return Map<String, dynamic>.from(
+      response['relations'] as Map? ?? const {},
+    ).map((key, value) => MapEntry(key, value.toString()));
+  }
+
+  static Future<void> setKinship(
+    String instanceId, {
+    required String character,
+    required String relation,
+    required bool correction,
+    String? replacesRelation,
+  }) => ApiClient.post(
+    '/chronicle/kinship/$instanceId',
+    body: {
+      'character': character,
+      'relation': relation,
+      'correction': correction,
+      if (replacesRelation != null) 'replaces_relation': replacesRelation,
+    },
+  );
+
+  static Future<List<RelationCandidate>> getRelationCandidates(
+    String instanceId,
+  ) async {
+    final response = await ApiClient.get(
+      '/chronicle/relation-candidates/$instanceId',
+    );
+    return ((response['candidates'] as List?) ?? const [])
+        .map(
+          (item) => RelationCandidate.fromJson(
+            Map<String, dynamic>.from(item as Map),
+          ),
+        )
+        .toList();
+  }
+
+  static Future<void> resolveRelationCandidate(
+    String candidateId, {
+    required String action,
+    String? relation,
+  }) => ApiClient.post(
+    '/chronicle/relation-candidate/$candidateId/resolve',
+    body: {if (relation != null) 'relation': relation, 'action': action},
+  );
 
   /// "What this character remembers about you" — the memories a character is
   /// part of, via entity subject/object links.
@@ -207,7 +259,12 @@ class ChronicleRepository {
     await ApiClient.post(
       '/chronicle/rewind/$instanceId',
       body: {'sequence': sequence},
-    );
+    )
+    // A deep rewind can take longer than an ordinary REST request. This is
+    // a client-side reconciliation boundary only: the server keeps its
+    // shared operation lock and the cubit reloads authoritative state if
+    // the reply is lost.
+    .timeout(const Duration(minutes: 2));
   }
 
   /// Edit a character/protagonist card. Removed facts trigger memory
@@ -249,13 +306,15 @@ class ChronicleRepository {
       body: {
         'name': name,
         if (role != null && role.isNotEmpty) 'role': role,
-        if (appearance != null && appearance.isNotEmpty) 'appearance': appearance,
+        if (appearance != null && appearance.isNotEmpty)
+          'appearance': appearance,
         if (persona != null && persona.isNotEmpty) 'persona': persona,
         if (relationKind != null && relationKind.isNotEmpty)
           'relation_kind': relationKind,
         if (relationLabel != null && relationLabel.isNotEmpty)
           'relation_label': relationLabel,
-        if (relationTo != null && relationTo.isNotEmpty) 'relation_to': relationTo,
+        if (relationTo != null && relationTo.isNotEmpty)
+          'relation_to': relationTo,
       },
     );
     final character = CharacterProfile.fromJson(
@@ -289,9 +348,12 @@ class ChronicleRepository {
     String? narrationPov,
     String? mode,
     String? messageLength,
+    String? narrativeStyleOverride,
+    String? narrationTone,
     String? focusCharacterId,
     String? personaId,
     bool clearFocusCharacter = false,
+    bool clearNarrativeStyleOverride = false,
     bool clearPersona = false,
   }) async {
     await ApiClient.patch(
@@ -300,6 +362,10 @@ class ChronicleRepository {
         if (narrationPov != null) 'narration_pov': narrationPov,
         if (mode != null) 'mode': mode,
         if (messageLength != null) 'message_length': messageLength,
+        if (narrativeStyleOverride != null)
+          'narrative_style_override': narrativeStyleOverride,
+        if (clearNarrativeStyleOverride) 'narrative_style_override': null,
+        if (narrationTone != null) 'narration_tone': narrationTone,
         if (focusCharacterId != null) 'focus_character_id': focusCharacterId,
         if (clearFocusCharacter) 'focus_character_id': null,
         if (personaId != null) 'persona_id': personaId,

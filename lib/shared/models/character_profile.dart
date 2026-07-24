@@ -24,6 +24,29 @@ class RelationshipMeters {
   }
 }
 
+/// A server-validated conversation action derived from a character's current
+/// state. Unlike [CharacterProfile.mutableState], this is safe to render as
+/// player-facing copy and already contains its complete composer draft.
+class CharacterInteractionHint {
+  final String label;
+  final String draft;
+  final String sourceState;
+
+  const CharacterInteractionHint({
+    required this.label,
+    required this.draft,
+    required this.sourceState,
+  });
+
+  factory CharacterInteractionHint.fromJson(Map<String, dynamic> json) {
+    return CharacterInteractionHint(
+      label: (json['label'] ?? '').toString(),
+      draft: (json['draft'] ?? '').toString(),
+      sourceState: (json['source_state'] ?? '').toString(),
+    );
+  }
+}
+
 class CharacterProfile {
   final String id;
   final String canonicalName;
@@ -33,6 +56,7 @@ class CharacterProfile {
   final String persona;
   final List<String> immutableFacts;
   final List<String> mutableState;
+  final List<CharacterInteractionHint> interactionHints;
   final String dispositionToPlayer;
   final String hiddenThought;
   final int mentionCount;
@@ -50,6 +74,7 @@ class CharacterProfile {
     this.persona = '',
     this.immutableFacts = const [],
     this.mutableState = const [],
+    this.interactionHints = const [],
     this.dispositionToPlayer = '',
     this.hiddenThought = '',
     this.mentionCount = 0,
@@ -61,14 +86,31 @@ class CharacterProfile {
     return CharacterProfile(
       id: (json['id'] ?? json['_id'] ?? '').toString(),
       canonicalName: (json['canonical_name'] ?? '').toString(),
-      aliases: (json['aliases'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      aliases:
+          (json['aliases'] as List?)?.map((e) => e.toString()).toList() ??
+          const [],
       role: (json['role'] ?? '').toString(),
       appearance: (json['appearance'] ?? '').toString(),
       persona: (json['persona'] ?? '').toString(),
       immutableFacts:
-          (json['immutable_facts'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+          (json['immutable_facts'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
       mutableState:
-          (json['mutable_state'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+          (json['mutable_state'] as List?)?.map((e) => e.toString()).toList() ??
+          const [],
+      interactionHints:
+          (json['interaction_hints'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (e) => CharacterInteractionHint.fromJson(
+                  Map<String, dynamic>.from(e),
+                ),
+              )
+              .where((hint) => hint.label.isNotEmpty && hint.draft.isNotEmpty)
+              .toList() ??
+          const [],
       dispositionToPlayer: (json['disposition_to_player'] ?? '').toString(),
       hiddenThought: (json['hidden_thought'] ?? '').toString(),
       mentionCount: (json['mention_count'] as num?)?.toInt() ?? 0,

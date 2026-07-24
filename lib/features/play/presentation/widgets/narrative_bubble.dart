@@ -384,6 +384,7 @@ class _NarratorPanel extends StatelessWidget {
   final VoidCallback? onReplay;
   final ValueChanged<int>? onSelectReplayVariant;
   final bool isStreaming;
+
   /// Whether to show the post-turn action row (continue / replay / copy / scene
   /// badge). False while a turn is still in flight (the optimistic bubble), so a
   /// settled-but-not-finalized turn doesn't render an empty action area — the gap
@@ -946,8 +947,8 @@ List<InlineSpan> _narrativeSpans(
   var inQuote = false;
 
   TextStyle styleNow() {
-    if (inNarration) return narration;
     if (inQuote) return dialogue;
+    if (inNarration) return narration;
     return narration;
   }
 
@@ -960,14 +961,10 @@ List<InlineSpan> _narrativeSpans(
   for (var i = 0; i < text.length; i++) {
     final c = text[i];
 
-    if (c == '*' && !inQuote) {
-      flush();
-      inNarration = !inNarration;
-      if (i + 1 < text.length && text[i + 1] == '*') i++;
-      continue;
-    }
-
-    if ((c == '"' || c == '“' || c == '”') && !inNarration) {
+    // Quotes are semantic dialogue boundaries, even inside `*narration*`.
+    // Keeping narration mode active underneath lets us resume italic prose after
+    // the closing quote while rendering every spoken span upright and bold.
+    if (c == '"' || c == '“' || c == '”') {
       if (!inQuote) {
         flush();
         inQuote = true;
@@ -977,6 +974,13 @@ List<InlineSpan> _narrativeSpans(
         flush();
         inQuote = false;
       }
+      continue;
+    }
+
+    if (c == '*' && !inQuote) {
+      flush();
+      inNarration = !inNarration;
+      if (i + 1 < text.length && text[i + 1] == '*') i++;
       continue;
     }
 

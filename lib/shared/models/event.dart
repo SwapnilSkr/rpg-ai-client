@@ -156,8 +156,13 @@ class GameEvent {
 
   /// Characters present in the scene at the end of this turn. Drives
   /// scene-aware bond actions (approach when here, seek out when elsewhere).
-  /// Empty when the viewpoint was alone or presence is unknown.
+  /// An empty list is a valid, known solo scene when [presenceKnown] is true.
   final List<String> presentCharacters;
+
+  /// Distinguishes a current, known-empty scene from legacy payloads that never
+  /// had presence projection. Without this, a solo scene hid the Here now /
+  /// Elsewhere grouping by looking identical to an old unknown-presence event.
+  final bool presenceKnown;
 
   /// Backend-owned trackable mentions for this turn. null = a legacy turn with no
   /// backend mentions (client falls back to local gap detection); non-null (even
@@ -187,6 +192,7 @@ class GameEvent {
     this.travel,
     this.fateThread,
     this.presentCharacters = const [],
+    this.presenceKnown = false,
     this.trackableMentions,
   });
 
@@ -205,6 +211,7 @@ class GameEvent {
     int? selectedReplayIndex,
     List<Choice>? choices,
     List<String>? presentCharacters,
+    bool? presenceKnown,
     List<TrackableMention>? trackableMentions,
   }) {
     return GameEvent(
@@ -230,6 +237,7 @@ class GameEvent {
       travel: travel,
       fateThread: fateThread,
       presentCharacters: presentCharacters ?? this.presentCharacters,
+      presenceKnown: presenceKnown ?? this.presenceKnown,
       trackableMentions: trackableMentions ?? this.trackableMentions,
     );
   }
@@ -287,6 +295,9 @@ class GameEvent {
       presentCharacters: GameEvent.presentFromAny(
         data?['present_characters'] ?? json['present_characters'],
       ),
+      presenceKnown:
+          (data?.containsKey('present_characters') ?? false) ||
+          json.containsKey('present_characters'),
       trackableMentions: TrackableMention.listFromAny(
         data?['trackable_mentions'] ?? json['trackable_mentions'],
       ),
@@ -353,6 +364,9 @@ class GameEvent {
       travel: TravelMove.fromAny(meta?['travel']),
       fateThread: (meta?['fate_thread'])?.toString(),
       presentCharacters: GameEvent.presentFromAny(meta?['present_characters']),
+      presenceKnown:
+          meta?['presence_known'] == true ||
+          (meta?.containsKey('present_characters') ?? false),
       trackableMentions: TrackableMention.listFromAny(
         meta?['trackable_mentions'],
       ),
@@ -375,8 +389,9 @@ class GameEvent {
                 .toList(),
             'present_characters': v.presentCharacters,
             if (v.trackableMentions != null)
-              'trackable_mentions':
-                  v.trackableMentions!.map((m) => m.toJson()).toList(),
+              'trackable_mentions': v.trackableMentions!
+                  .map((m) => m.toJson())
+                  .toList(),
           },
         )
         .toList(),
@@ -389,9 +404,9 @@ class GameEvent {
     if (travel != null) 'travel': {'from': travel!.from, 'to': travel!.to},
     if (fateThread != null) 'fate_thread': fateThread,
     'present_characters': presentCharacters,
+    'presence_known': presenceKnown,
     if (trackableMentions != null)
-      'trackable_mentions':
-          trackableMentions!.map((m) => m.toJson()).toList(),
+      'trackable_mentions': trackableMentions!.map((m) => m.toJson()).toList(),
   };
 
   Map<String, dynamic> toSqlite() => {

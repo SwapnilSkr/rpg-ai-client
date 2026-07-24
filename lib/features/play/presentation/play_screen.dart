@@ -18,8 +18,11 @@ import '../../../shared/models/character_profile.dart';
 import '../../../shared/models/persona.dart';
 import '../../personas/data/persona_repository.dart';
 import '../../../shared/chat_modes.dart';
+import '../../../shared/narrative_styles.dart';
+import '../../../shared/narration_tones.dart';
 import '../../../core/storage/local_db.dart';
 import '../../home/data/home_repository.dart';
+import '../../chronicle/data/chronicle_repository.dart';
 
 /// Whether [c] should be treated as in the current scene. [presence] is the set
 /// of lowercased names the latest turn reported present, or null when presence
@@ -84,24 +87,12 @@ class _PlayViewState extends State<_PlayView> {
     super.dispose();
   }
 
-  /// Trim a status phrase to a compact chip label.
-  String _shortTopic(String s) {
-    final t = s.trim();
-    return t.length <= 30 ? t : '${t.substring(0, 29)}…';
-  }
-
-  /// Fold a status phrase into the middle of a question ("Tell me about …"):
-  /// drop trailing punctuation and lowercase the first letter.
-  String _askPhrase(String s) {
-    final t = s.trim().replaceAll(RegExp(r'[.!?]+$'), '');
-    if (t.isEmpty) return t;
-    return t[0].toLowerCase() + t.substring(1);
-  }
-
   /// Contextual bond actions for [character] — every action is sugar over a
   /// normal player turn (prefilled composer) or a memory lens, never a
   /// separate game system. "Ask about" topics are grounded in the character's
-  /// current state so the prompts are specific, not a dangling quote.
+  /// current state so the prompts are specific, not a dangling quote. The
+  /// server owns that display copy; raw current-state strings remain internal
+  /// continuity data and are never rendered as action labels.
   void _showBondActions(BuildContext context, CharacterProfile character) {
     final cubit = context.read<PlayCubit>();
     final name = character.canonicalName;
@@ -149,35 +140,33 @@ class _PlayViewState extends State<_PlayView> {
                     _composerDraft.value = '*I approach $name.* ';
                   },
                 ),
-                // Grounded "ask about" prompts from the character's current
-                // state; a single open question when nothing is known yet.
+                // These are server-authored and validated alongside the
+                // character's canonical state. Never turn raw mutable_state
+                // strings into UI copy here: values like "irritated" are
+                // continuity facts, not necessarily grammatical topics.
                 ...(() {
-                  final topics = character.mutableState
-                      .map((s) => s.trim())
-                      .where((s) => s.isNotEmpty)
-                      .take(3)
-                      .toList(growable: false);
-                  if (topics.isEmpty) {
+                  final hints = character.interactionHints;
+                  if (hints.isEmpty) {
                     return [
                       _BondActionTile(
                         icon: Icons.help_outline,
-                        label: 'Ask $name a question',
+                        label: 'Check in with $name',
                         onTap: () {
                           Navigator.pop(sheetCtx);
-                          _composerDraft.value = '*I turn to $name.* "';
+                          _composerDraft.value =
+                              '*I turn to $name.* "How are you feeling?" ';
                         },
                       ),
                     ];
                   }
                   return [
-                    for (final t in topics)
+                    for (final hint in hints)
                       _BondActionTile(
                         icon: Icons.help_outline,
-                        label: 'Ask about ${_shortTopic(t)}',
+                        label: hint.label,
                         onTap: () {
                           Navigator.pop(sheetCtx);
-                          _composerDraft.value =
-                              '*I turn to $name.* "Tell me about ${_askPhrase(t)}." ';
+                          _composerDraft.value = hint.draft;
                         },
                       ),
                   ];
@@ -238,17 +227,28 @@ class _PlayViewState extends State<_PlayView> {
   }
 
   /// Who is in the scene right now, lowercased — read from the latest settled
-  /// turn's `present_characters`. Returns null when presence is unknown (older
-  /// turns that predate the feature, or a turn that reported nobody), so callers
-  /// fall back to the pre-presence behaviour instead of marking everyone absent.
+  /// turn's `present_characters`. Returns null only when presence is unknown
+  /// (legacy events that predate the projection). A known empty list means the
+  /// player is alone, so the roster correctly shows everyone else as elsewhere.
   Set<String>? _presentNames(PlayState state) {
     for (var i = state.events.length - 1; i >= 0; i--) {
       final e = state.events[i];
       if (e.isOptimistic) continue;
-      if (e.presentCharacters.isEmpty) return null;
+      if (!e.presenceKnown) return null;
       return e.presentCharacters.map((n) => n.trim().toLowerCase()).toSet();
     }
     return null;
+  }
+
+  /// Preserve the original display names for the journey sheet. This is kept
+  /// separate from [_presentNames], whose normalized values are for matching.
+  List<String> _presentCharacterNames(PlayState state) {
+    for (var i = state.events.length - 1; i >= 0; i--) {
+      final event = state.events[i];
+      if (event.isOptimistic) continue;
+      return event.presentCharacters;
+    }
+    return const [];
   }
 
   /// A memory lens for any entity (character, place, thing) — the rich-atom
@@ -447,23 +447,39 @@ class _PlayViewState extends State<_PlayView> {
       builder: (sheetCtx) => _SettingsSheet(
         initialPov: instance?.narrationPov ?? 'third',
         initialMode: instance?.mode ?? kDefaultChatMode,
+        initialVoiceOverride: instance?.narrativeStyleOverride,
+        worldVoice: cubit.state.template?.narrativeStyle ?? '',
+        initialTone: instance?.narrationTone ?? kDefaultNarrationTone,
         initialLength: instance?.messageLength ?? 'medium',
         initialPersonaId: instance?.personaId,
         // GM (non-sentient) worlds seed the protagonist from the persona once,
         // at selection; later persona edits don't rewrite that canon character.
         isGmWorld: !(cubit.state.template?.isSentient ?? false),
         personas: personas,
-        onApply: (pov, mode, length, personaId) {
-          _pendingRealmMenuReturn = false;
-          cubit.updateSettings(
+        onApply: (pov, mode, voiceOverride, tone, length, personaId) async {
+          final saved = await cubit.updateSettings(
             narrationPov: pov,
             mode: mode,
+            narrativeStyleOverride: voiceOverride,
+            clearNarrativeStyleOverride: voiceOverride == null,
+            narrationTone: tone,
             messageLength: length,
             personaId: personaId,
             clearPersona: personaId == null,
           );
+          if (!saved || !mounted || !context.mounted) return false;
+          _pendingRealmMenuReturn = false;
           Navigator.pop(sheetCtx);
-          _showSettingsSnack(context, pov: pov, mode: mode, length: length);
+          _showSettingsSnack(
+            context,
+            pov: pov,
+            mode: mode,
+            voiceOverride: voiceOverride,
+            worldVoice: cubit.state.template?.narrativeStyle ?? '',
+            tone: tone,
+            length: length,
+          );
+          return true;
         },
         onReset: () {
           _pendingRealmMenuReturn = false;
@@ -487,14 +503,18 @@ class _PlayViewState extends State<_PlayView> {
     BuildContext context, {
     required String pov,
     required String mode,
+    required String? voiceOverride,
+    required String worldVoice,
+    required String tone,
     required String length,
   }) {
     final povLabel = pov == 'first' ? 'First person' : 'Third person';
     final modeLabel = chatModeLabel(mode);
+    final voiceLabel = narrativeStyleLabel(voiceOverride ?? worldVoice);
     final lenLabel = length[0].toUpperCase() + length.substring(1);
     _showSceneSnack(
       context,
-      '$povLabel · $modeLabel · $lenLabel — applies from your next message.',
+      '$povLabel · $modeLabel · $voiceLabel · ${narrationToneLabel(tone)} · $lenLabel — applies from your next message.',
     );
   }
 
@@ -1383,13 +1403,56 @@ class _PlayViewState extends State<_PlayView> {
                   ),
 
                   PlayerInput(
-                    isGenerating: state.isGenerating,
+                    isGenerating: state.isGenerating || state.isRewinding,
                     isConnected: state.isConnected,
                     notice: state.notice,
                     onSend: (msg) => context.read<PlayCubit>().sendMessage(msg),
                     onContinue: () => context.read<PlayCubit>().continueStory(),
                     onAdvance: (span) =>
                         context.read<PlayCubit>().continueStory(advance: span),
+                    onTravel: (destination, companions, advance) =>
+                        context.read<PlayCubit>().travelTo(
+                          destination: destination,
+                          companions: companions,
+                          advance: advance,
+                        ),
+                    onRelationship:
+                        (character, relation, correction, replacesRelation) =>
+                            context.read<PlayCubit>().setRelationship(
+                              character: character,
+                              relation: relation,
+                              correction: correction,
+                              replacesRelation: replacesRelation,
+                            ),
+                    characters: state.characters,
+                    presentCharacters: _presentCharacterNames(state),
+                    loadKnownDestinations: () async {
+                      final locations = await ChronicleRepository.getLocations(
+                        context.read<PlayCubit>().instanceId,
+                      );
+                      final current = locations.currentLocation?.name
+                          .trim()
+                          .toLowerCase();
+                      return locations.places
+                          .map((place) => place.name)
+                          .where((name) => name.trim().toLowerCase() != current)
+                          .toList();
+                    },
+                    onRenameCharacter: (character, newName) =>
+                        context.read<PlayCubit>().editCharacter(character.id, {
+                          'canonical_name': newName,
+                        }),
+                    loadRelationCandidates: () =>
+                        context.read<PlayCubit>().loadRelationCandidates(),
+                    loadConfirmedKinship: () =>
+                        context.read<PlayCubit>().loadConfirmedKinship(),
+                    onResolveRelationCandidate:
+                        (candidateId, action, relation) =>
+                            context.read<PlayCubit>().resolveRelationCandidate(
+                              candidateId,
+                              action,
+                              relation,
+                            ),
                     draft: _composerDraft,
                   ),
                 ],
@@ -1595,7 +1658,10 @@ class _ChoicesPreparingHintState extends State<_ChoicesPreparingHint>
   @override
   void initState() {
     super.initState();
-    if (!WidgetsBinding.instance.platformDispatcher.accessibilityFeatures
+    if (!WidgetsBinding
+        .instance
+        .platformDispatcher
+        .accessibilityFeatures
         .disableAnimations) {
       _controller.repeat(reverse: true);
     }
@@ -2006,11 +2072,21 @@ class _EmptyNarrative extends StatelessWidget {
 class _SettingsSheet extends StatefulWidget {
   final String initialPov;
   final String initialMode;
+  final String? initialVoiceOverride;
+  final String worldVoice;
+  final String initialTone;
   final String initialLength;
   final String? initialPersonaId;
   final bool isGmWorld;
   final List<Persona> personas;
-  final void Function(String pov, String mode, String length, String? personaId)
+  final Future<bool> Function(
+    String pov,
+    String mode,
+    String? voiceOverride,
+    String tone,
+    String length,
+    String? personaId,
+  )
   onApply;
   final VoidCallback onReset;
   final VoidCallback onDelete;
@@ -2018,6 +2094,9 @@ class _SettingsSheet extends StatefulWidget {
   const _SettingsSheet({
     required this.initialPov,
     required this.initialMode,
+    required this.initialVoiceOverride,
+    required this.worldVoice,
+    required this.initialTone,
     required this.initialLength,
     required this.initialPersonaId,
     required this.isGmWorld,
@@ -2034,12 +2113,17 @@ class _SettingsSheet extends StatefulWidget {
 class _SettingsSheetState extends State<_SettingsSheet> {
   late String _pov;
   late String _mode;
+  String? _voiceOverride;
+  late String _tone;
   late String _length;
   String? _personaId;
+  bool _isApplying = false;
 
   bool get _dirty =>
       _pov != widget.initialPov ||
       _mode != widget.initialMode ||
+      _voiceOverride != widget.initialVoiceOverride ||
+      _tone != widget.initialTone ||
       _length != widget.initialLength ||
       _personaId != widget.initialPersonaId;
 
@@ -2048,6 +2132,8 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     super.initState();
     _pov = widget.initialPov;
     _mode = widget.initialMode;
+    _voiceOverride = widget.initialVoiceOverride;
+    _tone = widget.initialTone;
     _length = widget.initialLength;
     // Clamp to a selectable value: the saved persona may have been deleted, or
     // the list may have failed to load. A non-null DropdownButton value that is
@@ -2107,8 +2193,8 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               ),
               const SizedBox(height: 20),
 
-              // Chat Mode — how the chat flows (pacing/intent). Orthogonal to the
-              // creator-locked narrative voice, which players cannot change here.
+              // Chat Mode — how the chat flows (pacing/intent). It does not
+              // control prose register; that is the Narration Tone below.
               const _SettingsLabel(icon: AppIcons.voice, label: 'MODE'),
               const SizedBox(height: 8),
               Wrap(
@@ -2158,6 +2244,133 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             orElse: () => kChatModes.first,
                           )
                           .blurb,
+                style: EverloreTheme.ui(
+                  size: 11,
+                  color: EverloreTheme.ash,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Voice is the broad authored style; unlike Tone, it can move a
+              // save from Noir to Romance, for example. Null keeps the creator's
+              // world default without mutating that template for anyone else.
+              const _SettingsLabel(
+                icon: AppIcons.voice,
+                label: 'NARRATIVE VOICE',
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String?>(
+                value: _voiceOverride,
+                isExpanded: true,
+                dropdownColor: EverloreTheme.void2,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: EverloreTheme.void3,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(
+                      'World default — ${narrativeStyleLabel(widget.worldVoice)}',
+                      overflow: TextOverflow.ellipsis,
+                      style: EverloreTheme.ui(
+                        size: 13,
+                        color: EverloreTheme.parchment,
+                      ),
+                    ),
+                  ),
+                  for (final voice in kNarrativeStyles)
+                    DropdownMenuItem<String?>(
+                      value: voice.key,
+                      child: Text(
+                        voice.key.isEmpty
+                            ? 'Neutral / no voice preset'
+                            : voice.label,
+                        overflow: TextOverflow.ellipsis,
+                        style: EverloreTheme.ui(
+                          size: 13,
+                          color: EverloreTheme.parchment,
+                        ),
+                      ),
+                    ),
+                ],
+                onChanged: (voice) => setState(() => _voiceOverride = voice),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _voiceOverride == null
+                    ? 'Uses this world\'s authored voice. Your choice affects only this save.'
+                    : kNarrativeStyles
+                          .firstWhere(
+                            (voice) => voice.key == _voiceOverride,
+                            orElse: () => kNarrativeStyles.first,
+                          )
+                          .blurb,
+                style: EverloreTheme.ui(
+                  size: 11,
+                  color: EverloreTheme.ash,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Narration tone is intentionally independent from Mode: Mode
+              // controls pacing/initiative, while tone controls the actual
+              // wording and literary register of future turns.
+              const _SettingsLabel(
+                icon: AppIcons.voice,
+                label: 'NARRATION TONE',
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: kNarrationTones.map((tone) {
+                  final selected = _tone == tone.key;
+                  return GestureDetector(
+                    onTap: () => setState(() => _tone = tone.key),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        color: selected
+                            ? EverloreTheme.gold.withValues(alpha: 0.12)
+                            : EverloreTheme.void3,
+                        border: Border.all(
+                          color: selected
+                              ? EverloreTheme.gold.withValues(alpha: 0.5)
+                              : EverloreTheme.goldDim.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Text(
+                        tone.label,
+                        style: EverloreTheme.ui(
+                          size: 13,
+                          color: selected
+                              ? EverloreTheme.gold
+                              : EverloreTheme.ash,
+                          weight: selected ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                kNarrationTones
+                    .firstWhere(
+                      (tone) => tone.key == _tone,
+                      orElse: () => kNarrationTones.first,
+                    )
+                    .blurb,
                 style: EverloreTheme.ui(
                   size: 11,
                   color: EverloreTheme.ash,
@@ -2250,8 +2463,19 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               SizedBox(
                 width: double.infinity,
                 child: GestureDetector(
-                  onTap: _dirty
-                      ? () => widget.onApply(_pov, _mode, _length, _personaId)
+                  onTap: _dirty && !_isApplying
+                      ? () async {
+                          setState(() => _isApplying = true);
+                          await widget.onApply(
+                            _pov,
+                            _mode,
+                            _voiceOverride,
+                            _tone,
+                            _length,
+                            _personaId,
+                          );
+                          if (mounted) setState(() => _isApplying = false);
+                        }
                       : null,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
@@ -2269,7 +2493,11 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                     ),
                     child: Center(
                       child: Text(
-                        _dirty ? 'Apply changes' : 'No changes',
+                        _isApplying
+                            ? 'Saving settings…'
+                            : _dirty
+                            ? 'Apply changes'
+                            : 'No changes',
                         style: EverloreTheme.ui(
                           size: 14,
                           weight: FontWeight.w600,

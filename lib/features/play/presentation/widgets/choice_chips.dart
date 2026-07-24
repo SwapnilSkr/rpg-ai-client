@@ -11,6 +11,12 @@ import '../../../../shared/motion.dart';
 /// pre-formatted [Choice.send] (a *narrated action* or a spoken line) through
 /// the same pipeline as typed input, so the ledger, memory extraction, and
 /// rewind/replay all treat it identically. Free text always remains.
+///
+/// A destination in a chip label is a player-facing promise. Older generated
+/// choices occasionally made that promise in the label but used vague prose in
+/// `send` ("Head for the cafe" → "the one place that feels neutral"). Keep the
+/// exact destination in the dispatched turn so the server can anchor it rather
+/// than asking the narrator to infer it.
 class ChoiceChips extends StatelessWidget {
   final List<Choice> choices;
   final bool enabled;
@@ -40,7 +46,7 @@ class ChoiceChips extends StatelessWidget {
         enabled: enabled,
         onTap: () {
           HapticFeedback.lightImpact();
-          onChoose(choice.send);
+          onChoose(_payloadForChoice(choice));
         },
       );
       if (reduce) return built;
@@ -49,7 +55,12 @@ class ChoiceChips extends StatelessWidget {
       return built
           .animate(delay: Duration(milliseconds: 80 * i))
           .fadeIn(duration: 250.ms, curve: Curves.easeOut)
-          .slideY(begin: 0.35, end: 0, duration: 300.ms, curve: Curves.easeOutCubic)
+          .slideY(
+            begin: 0.35,
+            end: 0,
+            duration: 300.ms,
+            curve: Curves.easeOutCubic,
+          )
           .scaleXY(begin: 0.96, end: 1, duration: 300.ms);
     }
 
@@ -61,6 +72,26 @@ class ChoiceChips extends StatelessWidget {
         children: [for (var i = 0; i < choices.length; i++) chip(i)],
       ),
     );
+  }
+
+  String _payloadForChoice(Choice choice) {
+    if (choice.kind != 'act') return choice.send;
+
+    final match = RegExp(
+      r'^\s*(?:head|go|travel|walk|run|return|make\s+(?:my\s+)?way)\s+(?:to|for)\s+(.+?)\s*[.!?]*\s*$',
+      caseSensitive: false,
+    ).firstMatch(choice.label);
+    final destination = match?.group(1)?.trim();
+    if (destination == null || destination.isEmpty) return choice.send;
+
+    final normalizedDestination = destination.toLowerCase();
+    if (choice.send.toLowerCase().contains(normalizedDestination)) {
+      return choice.send;
+    }
+
+    // The label and payload disagree. The visible label is the explicit player
+    // choice, so prefer its destination over an ambiguous generated flourish.
+    return '*I head for $destination.*';
   }
 }
 

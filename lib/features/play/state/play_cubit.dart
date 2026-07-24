@@ -11,6 +11,7 @@ import '../../../shared/models/world_instance.dart';
 import '../../../shared/models/world_template.dart';
 import '../../../shared/models/memory.dart';
 import '../../../shared/models/character_profile.dart';
+import '../../../shared/models/relation_candidate.dart';
 
 /// Sentinel so [PlayState.copyWith] can distinguish "leave unchanged" from
 /// "set to null" for nullable fields like [replayingEventId].
@@ -25,6 +26,10 @@ class PlayState extends Equatable {
   final List<Memory> memories;
   final List<CharacterProfile> characters;
   final bool isGenerating;
+
+  /// A destructive rewind is rebuilding server projections. It is distinct from
+  /// prose generation but must gate competing story mutations just as strictly.
+  final bool isRewinding;
 
   /// True only while the NARRATIVE prose is still streaming/revealing into the
   /// bubble — drives the in-bubble "still writing" indicator. Distinct from
@@ -82,6 +87,7 @@ class PlayState extends Equatable {
     this.memories = const [],
     this.characters = const [],
     this.isGenerating = false,
+    this.isRewinding = false,
     this.narrativeStreaming = false,
     this.choicesPreview = false,
     this.isConnected = false,
@@ -105,6 +111,7 @@ class PlayState extends Equatable {
     List<Memory>? memories,
     List<CharacterProfile>? characters,
     bool? isGenerating,
+    bool? isRewinding,
     bool? narrativeStreaming,
     bool? choicesPreview,
     bool? isConnected,
@@ -127,6 +134,7 @@ class PlayState extends Equatable {
       memories: memories ?? this.memories,
       characters: characters ?? this.characters,
       isGenerating: isGenerating ?? this.isGenerating,
+      isRewinding: isRewinding ?? this.isRewinding,
       narrativeStreaming: narrativeStreaming ?? this.narrativeStreaming,
       choicesPreview: choicesPreview ?? this.choicesPreview,
       isConnected: isConnected ?? this.isConnected,
@@ -160,6 +168,7 @@ class PlayState extends Equatable {
     memories,
     characters,
     isGenerating,
+    isRewinding,
     narrativeStreaming,
     choicesPreview,
     isConnected,
@@ -181,10 +190,12 @@ class PlayCubit extends Cubit<PlayState> {
   final WsManager _ws;
   final String instanceId;
   late StreamSubscription _generationSub;
+  late StreamSubscription _generationStartedSub;
   late StreamSubscription _deltaSub;
   late StreamSubscription _streamEndSub;
   late StreamSubscription _choicesReadySub;
   late StreamSubscription _retryingSub;
+  late StreamSubscription _generationResetSub;
   late StreamSubscription _memorySub;
   late StreamSubscription _errorSub;
   late StreamSubscription _connectionSub;
@@ -199,6 +210,15 @@ class PlayCubit extends Cubit<PlayState> {
   String _streamTarget = '';
   Timer? _streamRevealTimer;
   Timer? _generationWatchdog;
+  Timer? _reconciliationTimer;
+
+  /// A message submitted after the client has lost a generation stream. The
+  /// server still owns the sequencing lock, so retain one explicit next action
+  /// and send it automatically once a reconnect/load confirms the prior turn
+  /// settled. This is deliberately a single slot: the newest player intent wins
+  /// and no invisible chain of actions can be fired into an unknown story state.
+  String? _queuedMessage;
+  static const _reconciliationInterval = Duration(seconds: 3);
 
   /// Set when the server signals the prose is complete (the choices/bookkeeping
   /// tail may still be generating). Lets the reveal loop know that once it
@@ -280,6 +300,8 @@ class PlayCubit extends Cubit<PlayState> {
           (eventWindow?['total'] as num?)?.toInt() ?? instance.meta.totalEvents;
       final hasOlderEvents =
           eventWindow?['hasOlder'] == true || totalEvents > events.length;
+      final operation = data['operation'] as Map?;
+      final operationKind = operation?['kind']?.toString();
 
       emit(
         state.copyWith(
@@ -294,6 +316,21 @@ class PlayCubit extends Cubit<PlayState> {
           isLoading: false,
         ),
       );
+
+      if (_queuedMessage != null) {
+        if (operationKind != null) {
+          emit(
+            state.copyWith(
+              notice: operationKind == 'rewind'
+                  ? 'Rewind still settling — your message is queued.'
+                  : 'Finishing the previous turn — your message is queued.',
+            ),
+          );
+          _scheduleReconciliation();
+        } else {
+          _sendQueuedMessage();
+        }
+      }
     });
 
     _characterCodexSub = _ws.onCharacterCodexUpdated.listen((msg) {
@@ -329,6 +366,16 @@ class PlayCubit extends Cubit<PlayState> {
       _queueGenerationText(msg['delta']?.toString() ?? '');
     });
 
+    // The worker has accepted this turn and is assembling its context packet.
+    // This happens before the provider can return a first token, especially on
+    // a cold retrieval path, so give the otherwise-empty optimistic bubble an
+    // accurate status instead of making it look stalled.
+    _generationStartedSub = _ws.onGenerationStarted.listen((msg) {
+      if (msg['instanceId']?.toString() != instanceId) return;
+      if (!state.isGenerating || state.replayingEventId != null) return;
+      emit(state.copyWith(notice: 'Gathering the scene…'));
+    });
+
     // A turn hit a transient failure and is being retried server-side. Keep the
     // loader up and tell the player it's still coming, rather than a dead stream.
     _retryingSub = _ws.onGenerationRetrying.listen((msg) {
@@ -338,11 +385,50 @@ class PlayCubit extends Cubit<PlayState> {
       emit(state.copyWith(notice: 'The world stumbled — trying again…'));
     });
 
+    // Never present a truncated provider fragment as a finished story turn.
+    // The worker sends this before retrying (or before its final failure), so
+    // reset the local streaming state and retain only the player's action.
+    _generationResetSub = _ws.onGenerationReset.listen((msg) {
+      if (msg['instanceId']?.toString() != instanceId) return;
+      if (!state.isGenerating || state.replayingEventId != null) return;
+
+      _streamBuffer = '';
+      _streamTarget = '';
+      _proseStreamEnded = false;
+      _clearGenerationTimers();
+
+      final events = [...state.events];
+      final idx = events.lastIndexWhere((event) => event.isOptimistic);
+      if (idx >= 0) {
+        events[idx] = GameEvent.optimistic(
+          instanceId: instanceId,
+          playerInput: events[idx].playerInput ?? '',
+        );
+      }
+      emit(
+        state.copyWith(
+          events: events,
+          narrativeStreaming: true,
+          choicesPreview: false,
+          notice: 'The world stumbled — trying again…',
+        ),
+      );
+      _armGenerationWatchdog(_generationFirstTokenTimeout);
+    });
+
     _streamEndSub = _ws.onGenerationStreamEnd.listen((msg) {
       if (msg['instanceId']?.toString() != instanceId) return;
       final narrative = msg['narrative']?.toString();
-      if (narrative != null && narrative.length > _streamTarget.length) {
+      if (narrative != null) {
+        // The server may have removed only a provider's unfinished trailing
+        // clause. A stream-end frame is authoritative, even when it is shorter
+        // than text already painted from deltas; never leave that fragment on
+        // screen while post-prose bookkeeping completes.
         _streamTarget = narrative;
+        if (_streamBuffer.length > narrative.length) {
+          _streamBuffer = narrative;
+          _replaceOptimisticAiResponse(narrative);
+        }
       }
       // The story prose is complete (any choices/bookkeeping tail is hidden and
       // still generating). Mark it so the reveal loop can drop the "writing"
@@ -376,7 +462,15 @@ class PlayCubit extends Cubit<PlayState> {
       _finishGenerationReveal(narrative);
       final events = [...state.events];
       final idx = events.lastIndexWhere((e) => e.isOptimistic);
-      final playerInput = idx >= 0 ? events[idx].playerInput : null;
+      // Structured world actions have no player-authored chat bubble. Prefer
+      // the server's persisted field even when it is intentionally empty;
+      // older servers omit it, in which case the optimistic input remains the
+      // backwards-compatible fallback.
+      final playerInput = eventData.containsKey('player_input')
+          ? eventData['player_input']?.toString()
+          : idx >= 0
+          ? events[idx].playerInput
+          : null;
 
       // Finalize the streamed turn as one event (player input + AI response),
       // matching how the server persists and reloads turns.
@@ -398,6 +492,7 @@ class PlayCubit extends Cubit<PlayState> {
         presentCharacters: GameEvent.presentFromAny(
           eventData['present_characters'],
         ),
+        presenceKnown: eventData.containsKey('present_characters'),
         trackableMentions: TrackableMention.listFromAny(
           eventData['trackable_mentions'],
         ),
@@ -519,6 +614,7 @@ class PlayCubit extends Cubit<PlayState> {
           presentCharacters: GameEvent.presentFromAny(
             msg['present_characters'],
           ),
+          presenceKnown: msg.containsKey('present_characters'),
           trackableMentions: TrackableMention.listFromAny(
             msg['trackable_mentions'],
           ),
@@ -580,9 +676,9 @@ class PlayCubit extends Cubit<PlayState> {
         final idx = events.lastIndexWhere(
           (e) => e.isOptimistic && ((e.aiResponse ?? '').trim().isEmpty),
         );
-        // Preserve the input so it isn't silently lost, and TELL the player why
-        // nothing happened (the prior turn's lock is still held) instead of a
-        // confusing no-op.
+        // The prior server operation may have completed while the socket was
+        // down. Preserve this next action and reconcile instead of making the
+        // player wait, retype, and manually resend it.
         final droppedInput = idx >= 0 ? events[idx].playerInput : null;
         if (idx >= 0) events.removeAt(idx);
         _clearGenerationTimers();
@@ -591,11 +687,14 @@ class PlayCubit extends Cubit<PlayState> {
             events: events,
             isGenerating: false,
             notice: null,
-            error:
-                'Still finishing your previous turn — give it a moment, then resend.',
-            lastFailedInput: droppedInput,
+            error: null,
+            lastFailedInput: null,
           ),
         );
+        if (droppedInput != null && droppedInput.trim().isNotEmpty) {
+          _queueMessage(droppedInput);
+        }
+        _ws.loadInstance(instanceId);
         return;
       }
 
@@ -648,6 +747,7 @@ class PlayCubit extends Cubit<PlayState> {
 
     _connectionSub = _ws.onConnectionState.listen((connected) {
       emit(state.copyWith(isConnected: connected));
+      if (connected && _queuedMessage != null) _ws.loadInstance(instanceId);
     });
   }
 
@@ -683,9 +783,12 @@ class PlayCubit extends Cubit<PlayState> {
   }
 
   Future<void> sendMessage(String message) async {
-    if (state.isGenerating ||
-        state.replayingEventId != null ||
-        message.trim().isEmpty) {
+    if (message.trim().isEmpty) return;
+    if (state.isRewinding) {
+      _queueMessage(message);
+      return;
+    }
+    if (state.isGenerating || state.replayingEventId != null) {
       return;
     }
 
@@ -764,6 +867,78 @@ class PlayCubit extends Cubit<PlayState> {
     _ws.sendContinue(instanceId, advance: advance);
   }
 
+  /// Start a server-validated travel action. Destination, party, and optional
+  /// time passage are all explicit player choices rather than prose inference.
+  Future<void> travelTo({
+    required String destination,
+    required List<String> companions,
+    String? advance,
+  }) => _sendWorldAction(
+    // Travel is a structured world-state command, not a chat line. The route
+    // and destination are represented by the travel event / world_action
+    // payload, while the narrator shows the resulting journey.
+    optimisticInput: '',
+    payload: {
+      'kind': 'travel',
+      'destination': destination,
+      'companions': companions,
+      if (advance != null) 'time_advance': advance,
+    },
+  );
+
+  /// Confirm or correct a relationship as player-authored canon.
+  Future<void> setRelationship({
+    required String character,
+    required String relation,
+    required bool correction,
+    String? replacesRelation,
+  }) async {
+    if (state.isGenerating) return;
+    try {
+      await ChronicleRepository.setKinship(
+        instanceId,
+        character: character,
+        relation: relation,
+        correction: correction,
+        replacesRelation: replacesRelation,
+      );
+    } catch (_) {
+      emit(state.copyWith(error: 'Could not save the relationship.'));
+    }
+  }
+
+  Future<void> _sendWorldAction({
+    required String optimisticInput,
+    required Map<String, dynamic> payload,
+  }) async {
+    if (state.isGenerating || state.replayingEventId != null) return;
+    await _flushPendingVariant();
+    _streamBuffer = '';
+    _streamTarget = '';
+    _proseStreamEnded = false;
+    _clearGenerationTimers();
+    final optimisticEvent = GameEvent.optimistic(
+      instanceId: instanceId,
+      playerInput: optimisticInput,
+    );
+    emit(
+      state.copyWith(
+        events: _trimEvents([...state.events, optimisticEvent]),
+        isGenerating: true,
+        narrativeStreaming: true,
+        choicesPreview: false,
+        hasOlderEvents:
+            state.hasOlderEvents || state.events.length >= _activeEventLimit,
+        error: null,
+        notice: null,
+        lastFailedInput: null,
+        lastStatDeltas: null,
+      ),
+    );
+    _armGenerationWatchdog(_generationFirstTokenTimeout);
+    _ws.sendWorldAction(instanceId, payload);
+  }
+
   /// One-shot acknowledgement of the milestone toast.
   void clearMilestone() {
     if (state.lastMilestone != null) {
@@ -790,7 +965,7 @@ class PlayCubit extends Cubit<PlayState> {
   void skipProtagonistOnboarding() => _protagonistPrompted = true;
 
   /// Persist a player edit to a character/protagonist card and reflect it locally.
-  Future<void> editCharacter(
+  Future<bool> editCharacter(
     String characterId,
     Map<String, dynamic> updates,
   ) async {
@@ -803,8 +978,34 @@ class PlayCubit extends Cubit<PlayState> {
           .map((c) => c.id == characterId ? updated : c)
           .toList();
       emit(state.copyWith(characters: list));
+      return true;
     } catch (_) {
       emit(state.copyWith(error: 'Could not save character changes.'));
+      return false;
+    }
+  }
+
+  Future<List<RelationCandidate>> loadRelationCandidates() =>
+      ChronicleRepository.getRelationCandidates(instanceId);
+
+  Future<Map<String, String>> loadConfirmedKinship() =>
+      ChronicleRepository.getConfirmedKinship(instanceId);
+
+  Future<bool> resolveRelationCandidate(
+    String candidateId,
+    String action,
+    String? relation,
+  ) async {
+    try {
+      await ChronicleRepository.resolveRelationCandidate(
+        candidateId,
+        action: action,
+        relation: relation,
+      );
+      return true;
+    } catch (_) {
+      emit(state.copyWith(error: 'Could not update the story detail.'));
+      return false;
     }
   }
 
@@ -879,16 +1080,19 @@ class PlayCubit extends Cubit<PlayState> {
     }
   }
 
-  /// Update in-chat settings (POV, chat mode, reply length). Optimistically reflects the
+  /// Update in-chat settings (POV, mode, voice, narration tone, reply length). Optimistically reflects the
   /// change locally, then persists; the server busts its session cache so the
   /// next turn uses the new values.
-  Future<void> updateSettings({
+  Future<bool> updateSettings({
     String? narrationPov,
     String? mode,
     String? messageLength,
+    String? narrativeStyleOverride,
+    String? narrationTone,
     String? focusCharacterId,
     String? personaId,
     bool clearFocusCharacter = false,
+    bool clearNarrativeStyleOverride = false,
     bool clearPersona = false,
   }) async {
     final inst = state.instance;
@@ -899,6 +1103,10 @@ class PlayCubit extends Cubit<PlayState> {
         narrationPov: narrationPov,
         mode: mode,
         messageLength: messageLength,
+        narrativeStyleOverride: clearNarrativeStyleOverride
+            ? null
+            : narrativeStyleOverride,
+        narrationTone: narrationTone,
       );
       if (clearFocusCharacter) {
         nextInst = nextInst.copyWith(focusCharacterId: null);
@@ -918,15 +1126,23 @@ class PlayCubit extends Cubit<PlayState> {
         narrationPov: narrationPov,
         mode: mode,
         messageLength: messageLength,
+        narrativeStyleOverride: narrativeStyleOverride,
+        narrationTone: narrationTone,
         focusCharacterId: focusCharacterId,
         personaId: personaId,
         clearFocusCharacter: clearFocusCharacter,
+        clearNarrativeStyleOverride: clearNarrativeStyleOverride,
         clearPersona: clearPersona,
       );
+      return true;
     } catch (_) {
       emit(
-        state.copyWith(error: 'Could not update settings. Please try again.'),
+        state.copyWith(
+          instance: inst,
+          error: 'Could not update settings. Please try again.',
+        ),
       );
+      return false;
     }
   }
 
@@ -965,7 +1181,11 @@ class PlayCubit extends Cubit<PlayState> {
   /// Optimistically trims the UI, asks the server to roll back state/memories,
   /// then reloads the authoritative state.
   Future<void> rewind(int sequence) async {
-    if (state.isGenerating) return;
+    if (state.isGenerating ||
+        state.isRewinding ||
+        state.replayingEventId != null) {
+      return;
+    }
 
     final kept = state.events.where((e) => e.sequence < sequence).toList();
     emit(
@@ -974,6 +1194,8 @@ class PlayCubit extends Cubit<PlayState> {
         totalEvents: kept.length,
         hasOlderEvents: false,
         error: null,
+        isRewinding: true,
+        notice: 'Rewinding your story…',
       ),
     );
 
@@ -983,9 +1205,17 @@ class PlayCubit extends Cubit<PlayState> {
       // Pull the rolled-back state (events, stats, memories) back from the server.
       _ws.loadInstance(instanceId);
     } catch (_) {
-      emit(state.copyWith(error: 'Could not rewind. Please try again.'));
+      emit(
+        state.copyWith(
+          isRewinding: false,
+          notice: null,
+          error: 'Could not confirm the rewind. Reconnecting to your story…',
+        ),
+      );
       _ws.loadInstance(instanceId); // resync to server truth on failure
+      return;
     }
+    emit(state.copyWith(isRewinding: false, notice: null));
   }
 
   /// Edit a generated AI response and persist it to the backend. Memories
@@ -1114,6 +1344,47 @@ class PlayCubit extends Cubit<PlayState> {
         ),
       );
     });
+  }
+
+  void _queueMessage(String message) {
+    final next = message.trim();
+    if (next.isEmpty) return;
+    _queuedMessage = next;
+    emit(
+      state.copyWith(
+        notice: 'Your message is queued until the story reconnects.',
+        error: null,
+        lastFailedInput: null,
+      ),
+    );
+    _scheduleReconciliation();
+  }
+
+  void _scheduleReconciliation() {
+    if (_queuedMessage == null || _reconciliationTimer != null) return;
+    _reconciliationTimer = Timer.periodic(_reconciliationInterval, (_) {
+      if (_queuedMessage == null || isClosed) {
+        _reconciliationTimer?.cancel();
+        _reconciliationTimer = null;
+        return;
+      }
+      if (_ws.isConnected) _ws.loadInstance(instanceId);
+    });
+  }
+
+  void _sendQueuedMessage() {
+    final queued = _queuedMessage;
+    if (queued == null ||
+        state.isGenerating ||
+        state.isRewinding ||
+        !state.isConnected) {
+      return;
+    }
+    _queuedMessage = null;
+    _reconciliationTimer?.cancel();
+    _reconciliationTimer = null;
+    emit(state.copyWith(notice: null));
+    unawaited(sendMessage(queued));
   }
 
   void _clearGenerationTimers() {
@@ -1308,13 +1579,17 @@ class PlayCubit extends Cubit<PlayState> {
   @override
   Future<void> close() async {
     _replayWatchdog?.cancel();
+    _reconciliationTimer?.cancel();
+    _reconciliationTimer = null;
     _clearGenerationTimers();
     _replayRevealTimer?.cancel();
     await _generationSub.cancel();
+    await _generationStartedSub.cancel();
     await _deltaSub.cancel();
     await _streamEndSub.cancel();
     await _choicesReadySub.cancel();
     await _retryingSub.cancel();
+    await _generationResetSub.cancel();
     await _memorySub.cancel();
     await _errorSub.cancel();
     await _connectionSub.cancel();

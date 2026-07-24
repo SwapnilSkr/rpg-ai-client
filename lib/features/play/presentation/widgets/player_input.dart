@@ -1,17 +1,49 @@
 import 'package:flutter/material.dart';
 import '../../../../../app/theme/nexus_theme.dart';
-import 'advance_time_button.dart';
+import '../../../../../shared/models/character_profile.dart';
+import '../../../../../shared/models/relation_candidate.dart';
+import 'world_actions_button.dart';
 
 class PlayerInput extends StatefulWidget {
   final bool isGenerating;
   final bool isConnected;
   final ValueChanged<String> onSend;
 
-  /// Tap on the hourglass — quiet continue. Null hides the control.
+  /// Explicit world controls shown while the composer is empty.
   final VoidCallback? onContinue;
 
   /// Long-press time-skip ('hours' | 'day' | 'days' | 'season').
   final ValueChanged<String>? onAdvance;
+
+  final void Function(
+    String destination,
+    List<String> companions,
+    String? advance,
+  )?
+  onTravel;
+  final void Function(
+    String character,
+    String relation,
+    bool correction,
+    String? replacesRelation,
+  )?
+  onRelationship;
+  final List<CharacterProfile> characters;
+
+  /// Latest settled scene cast. The journey control must not offer people who
+  /// exist in the codex but are currently elsewhere.
+  final List<String> presentCharacters;
+  final Future<List<String>> Function()? loadKnownDestinations;
+  final Future<bool> Function(CharacterProfile character, String newName)?
+  onRenameCharacter;
+  final Future<List<RelationCandidate>> Function()? loadRelationCandidates;
+  final Future<Map<String, String>> Function()? loadConfirmedKinship;
+  final Future<bool> Function(
+    String candidateId,
+    String action,
+    String? relation,
+  )?
+  onResolveRelationCandidate;
 
   /// One-shot composer prefill (bond actions: "Approach Mira…"). The input
   /// consumes the value (fills + focuses) and resets it to null.
@@ -29,6 +61,15 @@ class PlayerInput extends StatefulWidget {
     required this.onSend,
     this.onContinue,
     this.onAdvance,
+    this.onTravel,
+    this.onRelationship,
+    this.characters = const [],
+    this.presentCharacters = const [],
+    this.loadKnownDestinations,
+    this.onRenameCharacter,
+    this.loadRelationCandidates,
+    this.loadConfirmedKinship,
+    this.onResolveRelationCandidate,
     this.draft,
     this.notice,
   });
@@ -174,7 +215,9 @@ class _PlayerInputState extends State<PlayerInput> {
                             border: Border.all(
                               color: focused
                                   ? EverloreTheme.gold.withValues(alpha: 0.55)
-                                  : EverloreTheme.goldDim.withValues(alpha: 0.22),
+                                  : EverloreTheme.goldDim.withValues(
+                                      alpha: 0.22,
+                                    ),
                               width: focused ? 1.4 : 1,
                             ),
                             boxShadow: focused
@@ -212,25 +255,32 @@ class _PlayerInputState extends State<PlayerInput> {
                       ),
                     ),
                   ),
-                  // The hourglass appears when the composer is empty (the
-                  // "nothing to say — let the world move" affordance) and
+                  // World actions appear when the composer is empty and
                   // yields its spot to the send orb once the player types.
                   if (!_hasText &&
                       widget.onContinue != null &&
-                      widget.onAdvance != null) ...[
+                      widget.onAdvance != null &&
+                      widget.onTravel != null &&
+                      widget.onRelationship != null) ...[
                     const SizedBox(width: 10),
-                    AdvanceTimeButton(
+                    WorldActionsButton(
                       enabled: enabled,
                       onContinue: widget.onContinue!,
                       onAdvance: widget.onAdvance!,
+                      onTravel: widget.onTravel!,
+                      onRelationship: widget.onRelationship!,
+                      characters: widget.characters,
+                      presentCharacters: widget.presentCharacters,
+                      loadKnownDestinations: widget.loadKnownDestinations,
+                      onRenameCharacter: widget.onRenameCharacter,
+                      loadRelationCandidates: widget.loadRelationCandidates,
+                      loadConfirmedKinship: widget.loadConfirmedKinship,
+                      onResolveRelationCandidate:
+                          widget.onResolveRelationCandidate,
                     ),
                   ],
                   const SizedBox(width: 10),
-                  _SendOrb(
-                    isGenerating: widget.isGenerating,
-                    canSend: canSend,
-                    onTap: canSend ? _submit : null,
-                  ),
+                  _SendOrb(canSend: canSend, onTap: canSend ? _submit : null),
                 ],
               ),
               const SizedBox(height: 8),
@@ -251,6 +301,7 @@ class _PlayerInputState extends State<PlayerInput> {
 
   String _hintText() {
     if (widget.isGenerating) return widget.notice ?? 'The story unfolds…';
+    if (widget.notice != null) return widget.notice!;
     if (!widget.isConnected) return 'Reconnecting…';
     return 'What do you do?';
   }
@@ -389,15 +440,10 @@ class _NarrationMarkerButton extends StatelessWidget {
 }
 
 class _SendOrb extends StatelessWidget {
-  final bool isGenerating;
   final bool canSend;
   final VoidCallback? onTap;
 
-  const _SendOrb({
-    required this.isGenerating,
-    required this.canSend,
-    this.onTap,
-  });
+  const _SendOrb({required this.canSend, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -428,22 +474,17 @@ class _SendOrb extends StatelessWidget {
             onTap: onTap,
             customBorder: const CircleBorder(),
             child: Center(
-              child: isGenerating
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        color: EverloreTheme.gold,
-                      ),
-                    )
-                  : Icon(
-                      Icons.send_rounded,
-                      size: 19,
-                      color: canSend
-                          ? EverloreTheme.void0
-                          : EverloreTheme.ash.withValues(alpha: 0.3),
-                    ),
+              // Keep the send affordance visually stable while a turn is in
+              // progress. The hourglass already communicates generation; a
+              // second spinner in the send orb looked actionable and implied a
+              // separate loading operation. [onTap] is null while disabled.
+              child: Icon(
+                Icons.send_rounded,
+                size: 19,
+                color: canSend
+                    ? EverloreTheme.void0
+                    : EverloreTheme.ash.withValues(alpha: 0.3),
+              ),
             ),
           ),
         ),
