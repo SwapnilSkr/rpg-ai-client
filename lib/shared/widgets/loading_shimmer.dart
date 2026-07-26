@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 class LoadingShimmer extends StatefulWidget {
   final double width;
   final double height;
+  final double radius;
 
   const LoadingShimmer({
     super.key,
     this.width = double.infinity,
     this.height = 16,
+    this.radius = 4,
   });
 
   @override
@@ -42,14 +44,14 @@ class _LoadingShimmerState extends State<LoadingShimmer>
           width: widget.width,
           height: widget.height,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(widget.radius),
             gradient: LinearGradient(
               begin: Alignment(-1.0 + 2.0 * _controller.value, 0),
               end: Alignment(1.0 + 2.0 * _controller.value, 0),
               colors: const [
-                Color(0xFF13132A),
-                Color(0xFF252548),
-                Color(0xFF13132A),
+                Color(0xFF191716),
+                Color(0xFF393024),
+                Color(0xFF191716),
               ],
             ),
           ),
