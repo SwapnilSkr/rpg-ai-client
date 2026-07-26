@@ -446,6 +446,17 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: EverloreTheme.goldDim.withValues(alpha: 0.42),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
               Text(
                 widget.persona == null ? 'New Persona' : 'Edit Persona',
                 style: EverloreTheme.serifDisplay(
@@ -453,9 +464,32 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
                   color: EverloreTheme.parchment,
                 ),
               ),
-              const SizedBox(height: 16),
-              _PersonaField(controller: _name, label: 'Name', maxLength: 60),
-              const SizedBox(height: 12),
+              const SizedBox(height: 5),
+              Text(
+                widget.persona == null
+                    ? 'A reusable identity for your journeys.'
+                    : 'Refine the identity carried into your journeys.',
+                style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+              ),
+              const SizedBox(height: 22),
+              _PersonaField(
+                controller: _name,
+                label: 'Name',
+                hint: 'The name you want to be known by',
+                maxLength: 60,
+                required: true,
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'IDENTITY',
+                style: EverloreTheme.ui(
+                  size: 11,
+                  color: EverloreTheme.goldDim,
+                  weight: FontWeight.w700,
+                  spacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 children: [
@@ -479,32 +513,45 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
               _PersonaField(
                 controller: _age,
                 label: 'Age',
+                hint: 'Optional · 13–120',
                 keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 12),
-              _PersonaField(
-                controller: _description,
-                label: 'Description',
-                maxLength: 500,
-                maxLines: 4,
-              ),
-              const SizedBox(height: 12),
-              _PersonaField(
-                controller: _other,
-                label: 'Other information',
-                maxLength: 500,
-                maxLines: 4,
+                optional: true,
               ),
               const SizedBox(height: 18),
+              _PersonaField(
+                controller: _description,
+                label: 'Persona essence',
+                hint: 'A few traits, a voice, or a past they carry.',
+                helper: 'This helps a world recognize who you are.',
+                maxLength: 500,
+                maxLines: 3,
+                optional: true,
+              ),
+              const SizedBox(height: 18),
+              _PersonaField(
+                controller: _other,
+                label: 'Private notes',
+                hint: 'Anything else you want remembered.',
+                helper: 'Optional details for future journeys.',
+                maxLength: 500,
+                maxLines: 3,
+                optional: true,
+              ),
+              const SizedBox(height: 22),
               SizedBox(
                 width: double.infinity,
+                height: 52,
                 child: ElevatedButton(
                   onPressed: _saving ? null : _save,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: EverloreTheme.gold,
                     foregroundColor: EverloreTheme.void0,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
-                  child: Text(_saving ? 'Saving...' : 'Save'),
+                  child: Text(_saving ? 'Saving persona…' : 'Save persona'),
                 ),
               ),
             ],
@@ -518,32 +565,111 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
 class _PersonaField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
+  final String hint;
+  final String? helper;
   final int? maxLength;
   final int maxLines;
   final TextInputType? keyboardType;
+  final bool required;
+  final bool optional;
 
   const _PersonaField({
     required this.controller,
     required this.label,
+    required this.hint,
+    this.helper,
     this.maxLength,
     this.maxLines = 1,
     this.keyboardType,
+    this.required = false,
+    this.optional = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      maxLength: maxLength,
-      maxLines: maxLines,
-      keyboardType: keyboardType,
-      style: EverloreTheme.ui(size: 14, color: EverloreTheme.parchment),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-        filled: true,
-        fillColor: EverloreTheme.void3,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: EverloreTheme.ui(
+                  size: 11,
+                  color: EverloreTheme.goldDim,
+                  weight: FontWeight.w700,
+                  spacing: 1.1,
+                ),
+              ),
+              if (required) ...[
+                const SizedBox(width: 6),
+                Text(
+                  'REQUIRED',
+                  style: EverloreTheme.ui(size: 10, color: EverloreTheme.ash),
+                ),
+              ] else if (optional) ...[
+                const SizedBox(width: 6),
+                Text(
+                  'OPTIONAL',
+                  style: EverloreTheme.ui(size: 10, color: EverloreTheme.ash),
+                ),
+              ],
+              const Spacer(),
+              if (maxLength != null)
+                Text(
+                  '${value.text.characters.length} / $maxLength',
+                  style: EverloreTheme.ui(size: 11, color: EverloreTheme.ash),
+                ),
+            ],
+          ),
+          if (helper != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              helper!,
+              style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+            ),
+          ],
+          const SizedBox(height: 8),
+          TextField(
+            controller: controller,
+            maxLength: maxLength,
+            maxLines: maxLines,
+            keyboardType: keyboardType,
+            style: EverloreTheme.ui(size: 14, color: EverloreTheme.parchment),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
+              counterText: '',
+              filled: true,
+              fillColor: EverloreTheme.void3,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: maxLines > 1 ? 14 : 13,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.26),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.26),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(
+                  color: EverloreTheme.gold,
+                  width: 1.2,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
