@@ -49,10 +49,16 @@ class BondRail extends StatelessWidget {
         itemBuilder: (context, i) => _BondToken(
           character: shown[i],
           // Unknown presence (null) → treat as here, so existing worlds are
-          // unaffected; only a known-absent character dims.
-          present:
-              presentNames?.contains(shown[i].canonicalName.toLowerCase()) ??
-              true,
+          // unaffected; only a known-absent character dims. Presence is
+          // allowed to arrive under a role/kin alias ("Sister") while a
+          // matured codex card may be canonicalized as "Twin Sister".
+          present: presentNames == null
+              ? true
+              : [shown[i].canonicalName, ...shown[i].aliases].any((name) {
+                  final normalized = name.trim().toLowerCase();
+                  return normalized.isNotEmpty &&
+                      presentNames!.contains(normalized);
+                }),
           onTap: () {
             HapticFeedback.lightImpact();
             onTapCharacter(shown[i]);
@@ -113,45 +119,45 @@ class _BondToken extends StatelessWidget {
         opacity: present ? 1.0 : 0.4,
         duration: const Duration(milliseconds: 300),
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 46,
-            height: 46,
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(end: (meter.value / 100).clamp(0.0, 1.0)),
-              duration: const Duration(milliseconds: 650),
-              curve: Curves.easeOutCubic,
-              builder: (context, sweep, _) => CustomPaint(
-                painter: _RingPainter(sweep: sweep, color: meter.color),
-                child: Center(
-                  child: Text(
-                    initial,
-                    style: EverloreTheme.serifDisplay(
-                      size: 17,
-                      color: EverloreTheme.parchment,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 46,
+              height: 46,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(end: (meter.value / 100).clamp(0.0, 1.0)),
+                duration: const Duration(milliseconds: 650),
+                curve: Curves.easeOutCubic,
+                builder: (context, sweep, _) => CustomPaint(
+                  painter: _RingPainter(sweep: sweep, color: meter.color),
+                  child: Center(
+                    child: Text(
+                      initial,
+                      style: EverloreTheme.serifDisplay(
+                        size: 17,
+                        color: EverloreTheme.parchment,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 4),
-          SizedBox(
-            width: 52,
-            child: Text(
-              firstName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: EverloreTheme.ui(
-                size: 10,
-                color: EverloreTheme.ash,
-                spacing: 0.2,
+            const SizedBox(height: 4),
+            SizedBox(
+              width: 52,
+              child: Text(
+                firstName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: EverloreTheme.ui(
+                  size: 10,
+                  color: EverloreTheme.ash,
+                  spacing: 0.2,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -173,11 +179,7 @@ class _RingPainter extends CustomPainter {
     final rect = Rect.fromCircle(center: center, radius: radius);
 
     // Avatar disc.
-    canvas.drawCircle(
-      center,
-      radius - 1,
-      Paint()..color = EverloreTheme.void3,
-    );
+    canvas.drawCircle(center, radius - 1, Paint()..color = EverloreTheme.void3);
 
     // Full track.
     canvas.drawCircle(
