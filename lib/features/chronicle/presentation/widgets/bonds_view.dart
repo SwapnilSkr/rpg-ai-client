@@ -3,6 +3,7 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../data/relationship_ledger.dart';
 import '../character_memory_screen.dart';
 import '../side_chat_screen.dart';
+import '../../../../shared/widgets/everlore_empty_state.dart';
 
 /// Relationship Ledger: where each member of the cast stands toward the
 /// player. Meters (trust/affection/fear/rivalry, 0-100) come straight from the
@@ -18,20 +19,14 @@ class BondsView extends StatelessWidget {
   Widget build(BuildContext context) {
     final entries = ledger.characters;
     if (entries.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(40),
-          child: Text(
-            'No bonds yet. As you meet others and your dealings with them '
-            'deepen, where they stand with you will be charted here.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: EverloreTheme.ash,
-              fontSize: 13,
-              height: 1.5,
-            ),
-          ),
-        ),
+      return const EverloreEmptyState(
+        icon: Icons.favorite_border_rounded,
+        eyebrow: 'RELATIONSHIPS',
+        title: 'Bonds are still forming',
+        message:
+            'As you meet people and your choices matter to them, their feelings toward you will be charted here.',
+        accent: EverloreTheme.rose,
+        compact: true,
       );
     }
     return ListView.builder(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../data/location_journal.dart';
 import '../location_journal_screen.dart';
+import '../../../../shared/widgets/everlore_empty_state.dart';
 
 /// Location Atlas (P2): the world's places as a nested containment tree —
 /// rooms under their building, buildings under their settlement, and so on up to
@@ -80,13 +81,15 @@ class _PlacesViewState extends State<PlacesView> {
             const SizedBox(height: 16),
           ],
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
-            child: Text(
-              'No places recorded yet. As your journey takes you somewhere, '
-              'each place will remember what happened there.',
-              textAlign: TextAlign.center,
-              style:
-                  TextStyle(color: EverloreTheme.ash, fontSize: 13, height: 1.5),
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: EverloreEmptyState(
+              icon: Icons.map_outlined,
+              eyebrow: 'LOCATION ATLAS',
+              title: 'No places recorded yet',
+              message:
+                  'When your journey carries you somewhere new, each place will remember what happened there.',
+              accent: EverloreTheme.cyanBright,
+              compact: true,
             ),
           ),
         ],
@@ -111,36 +114,45 @@ class _PlacesViewState extends State<PlacesView> {
   }
 
   /// Depth-first emit of a node and (when expanded) its descendants.
-  void _emit(List<Widget> out, LocationPlace node, int depth, String? currentId) {
+  void _emit(
+    List<Widget> out,
+    LocationPlace node,
+    int depth,
+    String? currentId,
+  ) {
     final kids = _childrenByParent[node.entityId] ?? const [];
     final hasKids = kids.isNotEmpty;
     // Expanded by default; any parent can be folded. The current place stays
     // reachable via the "YOU ARE HERE" banner even when its container is folded.
     final expanded = hasKids && !_collapsed.contains(node.entityId);
 
-    out.add(_PlaceTreeRow(
-      place: node,
-      depth: depth,
-      isCurrent: node.entityId == currentId,
-      hasChildren: hasKids,
-      expanded: expanded,
-      onToggle: hasKids
-          ? () => setState(() {
-                if (!_collapsed.add(node.entityId)) _collapsed.remove(node.entityId);
+    out.add(
+      _PlaceTreeRow(
+        place: node,
+        depth: depth,
+        isCurrent: node.entityId == currentId,
+        hasChildren: hasKids,
+        expanded: expanded,
+        onToggle: hasKids
+            ? () => setState(() {
+                if (!_collapsed.add(node.entityId)) {
+                  _collapsed.remove(node.entityId);
+                }
               })
-          : null,
-      onOpen: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => LocationJournalScreen(
-              instanceId: widget.instanceId,
-              placeName: node.name,
-              locationEntityId: node.entityId,
+            : null,
+        onOpen: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => LocationJournalScreen(
+                instanceId: widget.instanceId,
+                placeName: node.name,
+                locationEntityId: node.entityId,
+              ),
             ),
-          ),
-        );
-      },
-    ));
+          );
+        },
+      ),
+    );
 
     if (expanded) {
       for (final child in kids) {
@@ -205,8 +217,12 @@ class _PlaceTreeRow extends StatelessWidget {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
                             child: Icon(
-                              expanded ? Icons.expand_more : Icons.chevron_right,
-                              color: isCurrent ? EverloreTheme.gold : EverloreTheme.ash,
+                              expanded
+                                  ? Icons.expand_more
+                                  : Icons.chevron_right,
+                              color: isCurrent
+                                  ? EverloreTheme.gold
+                                  : EverloreTheme.ash,
                               size: 20,
                             ),
                           ),
@@ -228,21 +244,27 @@ class _PlaceTreeRow extends StatelessWidget {
                         style: TextStyle(
                           color: EverloreTheme.parchment,
                           fontSize: 15,
-                          fontWeight:
-                              isCurrent ? FontWeight.w700 : FontWeight.w600,
+                          fontWeight: isCurrent
+                              ? FontWeight.w700
+                              : FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 3),
                       Text(
                         _subtitle(place),
                         style: const TextStyle(
-                            color: EverloreTheme.ash, fontSize: 12),
+                          color: EverloreTheme.ash,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right,
-                    color: EverloreTheme.ash, size: 18),
+                const Icon(
+                  Icons.chevron_right,
+                  color: EverloreTheme.ash,
+                  size: 18,
+                ),
               ],
             ),
           ),

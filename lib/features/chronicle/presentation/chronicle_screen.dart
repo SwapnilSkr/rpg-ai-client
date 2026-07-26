@@ -11,16 +11,32 @@ import 'widgets/recap_view.dart';
 import 'widgets/echoes_filter_bar.dart';
 import '../../play/presentation/widgets/narrative_bubble.dart';
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../shared/widgets/everlore_empty_state.dart';
 
 class ChronicleScreen extends StatelessWidget {
   final String instanceId;
+  final String? initialSection;
 
-  const ChronicleScreen({super.key, required this.instanceId});
+  const ChronicleScreen({
+    super.key,
+    required this.instanceId,
+    this.initialSection,
+  });
+
+  ChronicleTab get _initialTab => switch (initialSection) {
+    'story' => ChronicleTab.timeline,
+    'people' => ChronicleTab.bonds,
+    'world' => ChronicleTab.places,
+    'archive' => ChronicleTab.memories,
+    _ => ChronicleTab.recap,
+  };
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => ChronicleCubit(instanceId: instanceId)..loadRecap(),
+      create: (_) =>
+          ChronicleCubit(instanceId: instanceId, initialTab: _initialTab)
+            ..loadInitial(),
       child: const _ChronicleView(),
     );
   }
@@ -64,15 +80,16 @@ class _ChronicleView extends StatelessWidget {
                           ],
                         ),
                       )
-                    : switch (state.activeTab) {
-                        ChronicleTab.recap => _buildRecap(context, state),
-                        ChronicleTab.timeline => _buildTimeline(context, state),
-                        ChronicleTab.memories => _buildEchoes(context, state),
-                        ChronicleTab.calendar => _buildAlmanac(context, state),
-                        ChronicleTab.places => _buildPlaces(context, state),
-                        ChronicleTab.bonds => _buildBonds(context, state),
-                        ChronicleTab.threads => _buildThreads(context, state),
-                      },
+                    : state.activeTab == ChronicleTab.recap
+                    ? _buildRecap(context, state)
+                    : state.activeTab == ChronicleTab.timeline
+                    ? _buildTimeline(context, state)
+                    : state.activeTab == ChronicleTab.memories
+                    ? _buildEchoes(context, state)
+                    : state.activeTab == ChronicleTab.bonds ||
+                          state.activeTab == ChronicleTab.threads
+                    ? _buildPeople(context, state)
+                    : _buildWorld(context, state),
               ),
             ],
           ),
@@ -100,7 +117,8 @@ class _ChronicleView extends StatelessWidget {
   }
 
   Widget _buildEchoes(BuildContext context, ChronicleState state) {
-    final filtersActive = state.memoryQuery.isNotEmpty ||
+    final filtersActive =
+        state.memoryQuery.isNotEmpty ||
         state.memoryType.isNotEmpty ||
         state.memoryUnresolved ||
         state.memoryHighImportance;
@@ -144,11 +162,11 @@ class _ChronicleView extends StatelessWidget {
             );
             if (result != null && context.mounted) {
               context.read<ChronicleCubit>().editMemory(
-                    memory.id,
-                    result['text'],
-                    type: result['type'],
-                    importance: result['importance'],
-                  );
+                memory.id,
+                result['text'],
+                type: result['type'],
+                importance: result['importance'],
+              );
             }
           },
           onDelete: () => _confirmDelete(context, memory.id),
@@ -223,6 +241,50 @@ class _ChronicleView extends StatelessWidget {
     return ThreadsView(data: threads);
   }
 
+  Widget _buildPeople(BuildContext context, ChronicleState state) {
+    final showBonds = state.activeTab == ChronicleTab.bonds;
+    return Column(
+      children: [
+        _CollectionSwitch(
+          first: 'Bonds',
+          second: 'Threads',
+          firstActive: showBonds,
+          onFirst: () =>
+              context.read<ChronicleCubit>().switchTab(ChronicleTab.bonds),
+          onSecond: () =>
+              context.read<ChronicleCubit>().switchTab(ChronicleTab.threads),
+        ),
+        Expanded(
+          child: showBonds
+              ? _buildBonds(context, state)
+              : _buildThreads(context, state),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWorld(BuildContext context, ChronicleState state) {
+    final showPlaces = state.activeTab == ChronicleTab.places;
+    return Column(
+      children: [
+        _CollectionSwitch(
+          first: 'Places',
+          second: 'Almanac',
+          firstActive: showPlaces,
+          onFirst: () =>
+              context.read<ChronicleCubit>().switchTab(ChronicleTab.places),
+          onSecond: () =>
+              context.read<ChronicleCubit>().switchTab(ChronicleTab.calendar),
+        ),
+        Expanded(
+          child: showPlaces
+              ? _buildPlaces(context, state)
+              : _buildAlmanac(context, state),
+        ),
+      ],
+    );
+  }
+
   void _confirmDelete(BuildContext context, String memoryId) {
     showDialog(
       context: context,
@@ -230,8 +292,7 @@ class _ChronicleView extends StatelessWidget {
         backgroundColor: EverloreTheme.void2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(
-              color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
+          side: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
         ),
         title: const Text(
           'Erase This Echo?',
@@ -239,22 +300,25 @@ class _ChronicleView extends StatelessWidget {
         ),
         content: const Text(
           'This memory will be permanently forgotten and lost from the world.',
-          style: TextStyle(
-              color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+          style: TextStyle(color: EverloreTheme.ash, fontSize: 14, height: 1.5),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Keep',
-                style: TextStyle(color: EverloreTheme.ash)),
+            child: const Text(
+              'Keep',
+              style: TextStyle(color: EverloreTheme.ash),
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               context.read<ChronicleCubit>().deleteMemory(memoryId);
             },
-            child: const Text('Erase',
-                style: TextStyle(color: EverloreTheme.crimson)),
+            child: const Text(
+              'Erase',
+              style: TextStyle(color: EverloreTheme.crimson),
+            ),
           ),
         ],
       ),
@@ -285,8 +349,11 @@ class _ChronicleHeader extends StatelessWidget {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new,
-                        color: EverloreTheme.ash, size: 18),
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new,
+                      color: EverloreTheme.ash,
+                      size: 18,
+                    ),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   const Icon(
@@ -315,66 +382,52 @@ class _ChronicleHeader extends StatelessWidget {
               child: Row(
                 children: [
                   _TabButton(
-                    label: 'Recap',
+                    label: 'Overview',
                     icon: Icons.auto_stories,
                     active: activeTab == ChronicleTab.recap,
-                    onTap: () => context
-                        .read<ChronicleCubit>()
-                        .switchTab(ChronicleTab.recap),
+                    onTap: () => context.read<ChronicleCubit>().switchTab(
+                      ChronicleTab.recap,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   _TabButton(
-                    label: 'Timeline',
+                    label: 'Story',
                     icon: Icons.timeline,
                     active: activeTab == ChronicleTab.timeline,
-                    onTap: () => context
-                        .read<ChronicleCubit>()
-                        .switchTab(ChronicleTab.timeline),
+                    onTap: () => context.read<ChronicleCubit>().switchTab(
+                      ChronicleTab.timeline,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   _TabButton(
-                    label: 'Echoes',
+                    label: 'People',
+                    icon: Icons.people_alt_outlined,
+                    active:
+                        activeTab == ChronicleTab.bonds ||
+                        activeTab == ChronicleTab.threads,
+                    onTap: () => context.read<ChronicleCubit>().switchTab(
+                      ChronicleTab.bonds,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _TabButton(
+                    label: 'World',
+                    icon: Icons.public_outlined,
+                    active:
+                        activeTab == ChronicleTab.places ||
+                        activeTab == ChronicleTab.calendar,
+                    onTap: () => context.read<ChronicleCubit>().switchTab(
+                      ChronicleTab.places,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _TabButton(
+                    label: 'Archive',
                     icon: Icons.bookmark_outline,
                     active: activeTab == ChronicleTab.memories,
-                    onTap: () => context
-                        .read<ChronicleCubit>()
-                        .switchTab(ChronicleTab.memories),
-                  ),
-                  const SizedBox(width: 10),
-                  _TabButton(
-                    label: 'Almanac',
-                    icon: Icons.event_note,
-                    active: activeTab == ChronicleTab.calendar,
-                    onTap: () => context
-                        .read<ChronicleCubit>()
-                        .switchTab(ChronicleTab.calendar),
-                  ),
-                  const SizedBox(width: 10),
-                  _TabButton(
-                    label: 'Places',
-                    icon: Icons.place_outlined,
-                    active: activeTab == ChronicleTab.places,
-                    onTap: () => context
-                        .read<ChronicleCubit>()
-                        .switchTab(ChronicleTab.places),
-                  ),
-                  const SizedBox(width: 10),
-                  _TabButton(
-                    label: 'Bonds',
-                    icon: Icons.favorite_border,
-                    active: activeTab == ChronicleTab.bonds,
-                    onTap: () => context
-                        .read<ChronicleCubit>()
-                        .switchTab(ChronicleTab.bonds),
-                  ),
-                  const SizedBox(width: 10),
-                  _TabButton(
-                    label: 'Threads',
-                    icon: Icons.flag_outlined,
-                    active: activeTab == ChronicleTab.threads,
-                    onTap: () => context
-                        .read<ChronicleCubit>()
-                        .switchTab(ChronicleTab.threads),
+                    onTap: () => context.read<ChronicleCubit>().switchTab(
+                      ChronicleTab.memories,
+                    ),
                   ),
                 ],
               ),
@@ -384,6 +437,61 @@ class _ChronicleHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CollectionSwitch extends StatelessWidget {
+  final String first;
+  final String second;
+  final bool firstActive;
+  final VoidCallback onFirst;
+  final VoidCallback onSecond;
+
+  const _CollectionSwitch({
+    required this.first,
+    required this.second,
+    required this.firstActive,
+    required this.onFirst,
+    required this.onSecond,
+  });
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+    child: Row(
+      children: [
+        Expanded(child: _switchButton(first, firstActive, onFirst)),
+        const SizedBox(width: 8),
+        Expanded(child: _switchButton(second, !firstActive, onSecond)),
+      ],
+    ),
+  );
+
+  Widget _switchButton(String label, bool selected, VoidCallback onTap) =>
+      GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: selected
+                ? EverloreTheme.gold.withValues(alpha: 0.12)
+                : EverloreTheme.void2,
+            border: Border.all(
+              color: selected ? EverloreTheme.goldDim : EverloreTheme.white10,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? EverloreTheme.gold : EverloreTheme.ash,
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+        ),
+      );
 }
 
 class _TabButton extends StatelessWidget {
@@ -455,39 +563,13 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: EverloreTheme.goldDim.withValues(alpha: 0.3),
-              size: 52,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: const TextStyle(
-                color: EverloreTheme.parchment,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: EverloreTheme.ash,
-                fontSize: 13,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return EverloreEmptyState(
+      icon: icon,
+      eyebrow: 'CHRONICLE',
+      title: title,
+      message: subtitle,
+      accent: EverloreTheme.gold,
+      compact: true,
     );
   }
 }

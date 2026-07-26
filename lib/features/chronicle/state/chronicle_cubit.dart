@@ -11,7 +11,15 @@ import '../data/relationship_ledger.dart';
 import '../data/threads_data.dart';
 import '../data/recap_data.dart';
 
-enum ChronicleTab { recap, timeline, memories, calendar, places, bonds, threads }
+enum ChronicleTab {
+  recap,
+  timeline,
+  memories,
+  calendar,
+  places,
+  bonds,
+  threads,
+}
 
 class ChronicleState extends Equatable {
   final List<GameEvent> events;
@@ -98,24 +106,24 @@ class ChronicleState extends Equatable {
 
   @override
   List<Object?> get props => [
-        events,
-        memories,
-        calendar,
-        locations,
-        bonds,
-        threads,
-        recap,
-        memoryQuery,
-        memoryType,
-        memoryUnresolved,
-        memoryHighImportance,
-        isLoading,
-        error,
-        activeTab,
-        totalEvents,
-        currentPage,
-        dirtyTabs,
-      ];
+    events,
+    memories,
+    calendar,
+    locations,
+    bonds,
+    threads,
+    recap,
+    memoryQuery,
+    memoryType,
+    memoryUnresolved,
+    memoryHighImportance,
+    isLoading,
+    error,
+    activeTab,
+    totalEvents,
+    currentPage,
+    dirtyTabs,
+  ];
 }
 
 class ChronicleCubit extends Cubit<ChronicleState> {
@@ -123,18 +131,22 @@ class ChronicleCubit extends Cubit<ChronicleState> {
   final WsManager _ws;
   StreamSubscription<Map<String, dynamic>>? _projectionSub;
 
-  ChronicleCubit({required this.instanceId, WsManager? ws})
-      : _ws = ws ?? WsManager(),
-        super(const ChronicleState()) {
+  ChronicleCubit({
+    required this.instanceId,
+    ChronicleTab initialTab = ChronicleTab.recap,
+    WsManager? ws,
+  }) : _ws = ws ?? WsManager(),
+       super(ChronicleState(activeTab: initialTab)) {
     _projectionSub = _ws.onWorldProjectionUpdated.listen((msg) {
       if (msg['instance_id']?.toString() != instanceId) return;
-      final scopes = (msg['scopes'] as List?)
-              ?.map((s) => s.toString())
-              .toList() ??
+      final scopes =
+          (msg['scopes'] as List?)?.map((s) => s.toString()).toList() ??
           const <String>[];
       markProjectionDirty(scopes);
     });
   }
+
+  void loadInitial() => _refreshTab(state.activeTab);
 
   @override
   Future<void> close() {
@@ -218,13 +230,18 @@ class ChronicleCubit extends Cubit<ChronicleState> {
   Future<void> loadEvents({int page = 1}) async {
     emit(state.copyWith(isLoading: true, error: null));
     try {
-      final result = await ChronicleRepository.getEvents(instanceId, page: page);
-      emit(state.copyWith(
-        events: result['events'],
-        totalEvents: result['total'],
-        currentPage: page,
-        isLoading: false,
-      ));
+      final result = await ChronicleRepository.getEvents(
+        instanceId,
+        page: page,
+      );
+      emit(
+        state.copyWith(
+          events: result['events'],
+          totalEvents: result['total'],
+          currentPage: page,
+          isLoading: false,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: e.toString()));
     }
@@ -255,16 +272,23 @@ class ChronicleCubit extends Cubit<ChronicleState> {
     bool? unresolved,
     bool? highImportance,
   }) async {
-    emit(state.copyWith(
-      memoryQuery: query,
-      memoryType: type,
-      memoryUnresolved: unresolved,
-      memoryHighImportance: highImportance,
-    ));
+    emit(
+      state.copyWith(
+        memoryQuery: query,
+        memoryType: type,
+        memoryUnresolved: unresolved,
+        memoryHighImportance: highImportance,
+      ),
+    );
     await loadMemories();
   }
 
-  Future<void> editMemory(String memoryId, String text, {String? type, int? importance}) async {
+  Future<void> editMemory(
+    String memoryId,
+    String text, {
+    String? type,
+    int? importance,
+  }) async {
     try {
       await ChronicleRepository.editMemory(
         memoryId,
@@ -272,14 +296,16 @@ class ChronicleCubit extends Cubit<ChronicleState> {
         type: type,
         importance: importance,
       );
-      emit(state.copyWith(
-        memories: state.memories.map((m) {
-          if (m.id == memoryId) {
-            return m.copyWith(text: text, type: type, importance: importance);
-          }
-          return m;
-        }).toList(),
-      ));
+      emit(
+        state.copyWith(
+          memories: state.memories.map((m) {
+            if (m.id == memoryId) {
+              return m.copyWith(text: text, type: type, importance: importance);
+            }
+            return m;
+          }).toList(),
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
     }
@@ -288,15 +314,21 @@ class ChronicleCubit extends Cubit<ChronicleState> {
   Future<void> deleteMemory(String memoryId) async {
     try {
       await ChronicleRepository.deleteMemory(memoryId);
-      emit(state.copyWith(
-        memories: state.memories.where((m) => m.id != memoryId).toList(),
-      ));
+      emit(
+        state.copyWith(
+          memories: state.memories.where((m) => m.id != memoryId).toList(),
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
     }
   }
 
-  Future<void> editEvent(String eventId, {String? aiResponse, String? playerInput}) async {
+  Future<void> editEvent(
+    String eventId, {
+    String? aiResponse,
+    String? playerInput,
+  }) async {
     try {
       await ChronicleRepository.editEvent(
         eventId,

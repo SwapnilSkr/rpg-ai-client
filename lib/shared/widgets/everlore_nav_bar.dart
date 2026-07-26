@@ -97,15 +97,17 @@ class EverloreNavBar extends StatelessWidget {
               child: Row(
                 children: [
                   for (final slot in _slots)
-                    slot == null
-                        ? _CreateAction(onTap: onCreate)
-                        : Expanded(
-                            child: _NavTab(
-                              slot: slot,
-                              active: currentIndex == slot.branch,
-                              onTap: () => onSelect(slot.branch),
-                            ),
-                          ),
+                    Expanded(
+                      child: Center(
+                        child: slot == null
+                            ? _CreateAction(onTap: onCreate)
+                            : _NavTab(
+                                slot: slot,
+                                active: currentIndex == slot.branch,
+                                onTap: () => onSelect(slot.branch),
+                              ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -134,27 +136,18 @@ class _NavTab extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          gradient: active
-              ? LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    EverloreTheme.gold.withValues(alpha: 0.18),
-                    EverloreTheme.gold.withValues(alpha: 0.05),
-                  ],
-                )
-              : null,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+        // The forge button owns the visual weight in this bar. A filled active
+        // tab made a second CTA-sized focal point beside it, so selection is an
+        // engraved label plus a tiny brass rule instead.
+        decoration: const BoxDecoration(),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Opacity(
-              opacity: active ? 1 : 0.62,
-              child: EvIcon(slot.icon, size: 22),
+              opacity: active ? 1 : 0.54,
+              child: EvIcon(slot.icon, size: 21),
             ),
             const SizedBox(height: 2),
             FittedBox(
@@ -168,6 +161,19 @@ class _NavTab extends StatelessWidget {
                   fontSize: 9.5,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 ),
+              ),
+            ),
+            const SizedBox(height: 3),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOutCubic,
+              width: active ? 16 : 4,
+              height: 2,
+              decoration: BoxDecoration(
+                color: active
+                    ? EverloreTheme.gold
+                    : EverloreTheme.goldDim.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(99),
               ),
             ),
           ],

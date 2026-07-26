@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../data/recap_data.dart';
+import '../../../../shared/widgets/everlore_empty_state.dart';
 
 /// "Story so far" — a memory-aware recap for re-entering a world. The scene
 /// summary forms the prose spine; live open threads, bonds, and the current
@@ -13,16 +14,14 @@ class RecapView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (data.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(40),
-          child: Text(
-            'Your story is just beginning. Once a few scenes have passed, '
-            'a recap will wait for you here whenever you return.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: EverloreTheme.ash, fontSize: 13, height: 1.5),
-          ),
-        ),
+      return const EverloreEmptyState(
+        icon: Icons.auto_stories_rounded,
+        eyebrow: 'STORY SO FAR',
+        title: 'The tale is just beginning',
+        message:
+            'Once a few scenes have passed, a living recap will be waiting here whenever you return.',
+        accent: EverloreTheme.gold,
+        compact: true,
       );
     }
 
@@ -72,7 +71,10 @@ class RecapView extends StatelessWidget {
                     child: Text(
                       t.text,
                       style: const TextStyle(
-                          color: EverloreTheme.ash, fontSize: 13, height: 1.5),
+                        color: EverloreTheme.ash,
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
                     ),
                   ),
                 ],
@@ -109,14 +111,20 @@ class _SpineCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: EverloreTheme.goldDim.withValues(alpha: 0.35),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_stories, color: EverloreTheme.gold, size: 15),
+              const Icon(
+                Icons.auto_stories,
+                color: EverloreTheme.gold,
+                size: 15,
+              ),
               const SizedBox(width: 6),
               Text(
                 'THE STORY SO FAR',
@@ -174,8 +182,16 @@ class _BondLine extends StatelessWidget {
                     ),
                     if (m != null) ...[
                       const SizedBox(width: 8),
-                      _Spark(label: 'trust', value: m.trust, color: EverloreTheme.aether),
-                      _Spark(label: 'warmth', value: m.affection, color: EverloreTheme.rose),
+                      _Spark(
+                        label: 'trust',
+                        value: m.trust,
+                        color: EverloreTheme.aether,
+                      ),
+                      _Spark(
+                        label: 'warmth',
+                        value: m.affection,
+                        color: EverloreTheme.rose,
+                      ),
                     ],
                   ],
                 ),

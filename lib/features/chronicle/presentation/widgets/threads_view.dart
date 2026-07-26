@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../data/threads_data.dart';
+import '../../../../shared/widgets/everlore_empty_state.dart';
 
 /// Promise/Quest Tracker: the story's open threads — unkept promises, looming
 /// threats, unanswered questions — and the ones recently laid to rest. Built on
@@ -13,16 +14,14 @@ class ThreadsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (data.open.isEmpty && data.resolved.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(40),
-          child: Text(
-            'No threads yet. Promises made, debts owed, and questions left '
-            'hanging will gather here, waiting to be answered.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: EverloreTheme.ash, fontSize: 13, height: 1.5),
-          ),
-        ),
+      return const EverloreEmptyState(
+        icon: Icons.flag_outlined,
+        eyebrow: 'OPEN THREADS',
+        title: 'Nothing is hanging yet',
+        message:
+            'Promises made, debts owed, and unanswered questions will gather here when the story gives them weight.',
+        accent: EverloreTheme.gold,
+        compact: true,
       );
     }
 
@@ -135,13 +134,10 @@ class _ThreadCard extends StatelessWidget {
                 Text(
                   thread.text,
                   style: TextStyle(
-                    color: open
-                        ? EverloreTheme.parchment
-                        : EverloreTheme.ash,
+                    color: open ? EverloreTheme.parchment : EverloreTheme.ash,
                     fontSize: 14,
                     height: 1.5,
-                    decoration:
-                        open ? null : TextDecoration.lineThrough,
+                    decoration: open ? null : TextDecoration.lineThrough,
                     decorationColor: EverloreTheme.ash.withValues(alpha: 0.4),
                   ),
                 ),

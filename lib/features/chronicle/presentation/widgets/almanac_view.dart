@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../data/calendar_data.dart';
 import '../../state/chronicle_cubit.dart';
+import '../../../../shared/widgets/everlore_empty_state.dart';
 
 /// The Almanac: surfaces the story-time backend (calendars, timeline branches,
 /// the current in-world cursor) that the engine has always tracked but the
@@ -28,16 +29,15 @@ class AlmanacView extends StatelessWidget {
         const SizedBox(height: 20),
         if (groups.isEmpty)
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
-            child: Text(
-              'No dated events yet. As your story unfolds, its days will be '
-              'recorded here.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: EverloreTheme.ash,
-                fontSize: 13,
-                height: 1.5,
-              ),
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: EverloreEmptyState(
+              icon: Icons.event_note_outlined,
+              eyebrow: 'ALMANAC',
+              title: 'No days marked yet',
+              message:
+                  'As your story unfolds, its days and turning points will be recorded here.',
+              accent: EverloreTheme.gold,
+              compact: true,
             ),
           )
         else
