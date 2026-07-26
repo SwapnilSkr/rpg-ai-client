@@ -70,26 +70,27 @@ class CreateCharacterState extends Equatable {
     String? instanceId,
     bool clearError = false,
   }) => CreateCharacterState(
-        name: name ?? this.name,
-        tagline: tagline ?? this.tagline,
-        persona: persona ?? this.persona,
-        greeting: greeting ?? this.greeting,
-        backstory: backstory ?? this.backstory,
-        narrativeStyle: narrativeStyle ?? this.narrativeStyle,
-        styleNotes: styleNotes ?? this.styleNotes,
-        imagePrompt: imagePrompt ?? this.imagePrompt,
-        imageUrl: imageUrl ?? this.imageUrl,
-        isImageBusy: isImageBusy ?? this.isImageBusy,
-        imageError: clearImageError ? null : (imageError ?? this.imageError),
-        isAutofilling: isAutofilling ?? this.isAutofilling,
-        autofillError:
-            clearAutofillError ? null : (autofillError ?? this.autofillError),
-        autofillStamp: autofillStamp ?? this.autofillStamp,
-        isNsfwCapable: isNsfwCapable ?? this.isNsfwCapable,
-        isSubmitting: isSubmitting ?? this.isSubmitting,
-        error: clearError ? null : (error ?? this.error),
-        instanceId: instanceId ?? this.instanceId,
-      );
+    name: name ?? this.name,
+    tagline: tagline ?? this.tagline,
+    persona: persona ?? this.persona,
+    greeting: greeting ?? this.greeting,
+    backstory: backstory ?? this.backstory,
+    narrativeStyle: narrativeStyle ?? this.narrativeStyle,
+    styleNotes: styleNotes ?? this.styleNotes,
+    imagePrompt: imagePrompt ?? this.imagePrompt,
+    imageUrl: imageUrl ?? this.imageUrl,
+    isImageBusy: isImageBusy ?? this.isImageBusy,
+    imageError: clearImageError ? null : (imageError ?? this.imageError),
+    isAutofilling: isAutofilling ?? this.isAutofilling,
+    autofillError: clearAutofillError
+        ? null
+        : (autofillError ?? this.autofillError),
+    autofillStamp: autofillStamp ?? this.autofillStamp,
+    isNsfwCapable: isNsfwCapable ?? this.isNsfwCapable,
+    isSubmitting: isSubmitting ?? this.isSubmitting,
+    error: clearError ? null : (error ?? this.error),
+    instanceId: instanceId ?? this.instanceId,
+  );
 
   bool get canCreate =>
       name.trim().length >= 2 &&
@@ -98,25 +99,25 @@ class CreateCharacterState extends Equatable {
 
   @override
   List<Object?> get props => [
-        name,
-        tagline,
-        persona,
-        greeting,
-        backstory,
-        narrativeStyle,
-        styleNotes,
-        imagePrompt,
-        imageUrl,
-        isImageBusy,
-        imageError,
-        isAutofilling,
-        autofillError,
-        autofillStamp,
-        isNsfwCapable,
-        isSubmitting,
-        error,
-        instanceId,
-      ];
+    name,
+    tagline,
+    persona,
+    greeting,
+    backstory,
+    narrativeStyle,
+    styleNotes,
+    imagePrompt,
+    imageUrl,
+    isImageBusy,
+    imageError,
+    isAutofilling,
+    autofillError,
+    autofillStamp,
+    isNsfwCapable,
+    isSubmitting,
+    error,
+    instanceId,
+  ];
 }
 
 class CreateCharacterCubit extends Cubit<CreateCharacterState> {
@@ -147,21 +148,25 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
         'is_nsfw_capable': state.isNsfwCapable,
         'narrative_style': state.narrativeStyle,
       });
-      emit(state.copyWith(
-        name: (d['name'] ?? state.name).toString(),
-        tagline: (d['tagline'] ?? state.tagline).toString(),
-        persona: (d['persona'] ?? state.persona).toString(),
-        greeting: (d['greeting'] ?? state.greeting).toString(),
-        backstory: (d['backstory'] ?? state.backstory).toString(),
-        narrativeStyle:
-            (d['narrative_style'] ?? state.narrativeStyle).toString(),
-        styleNotes: (d['style_notes'] ?? state.styleNotes).toString(),
-        imagePrompt: (d['image_prompt'] ?? state.imagePrompt).toString(),
-        isAutofilling: false,
-        autofillStamp: state.autofillStamp + 1,
-      ));
+      emit(
+        state.copyWith(
+          name: (d['name'] ?? state.name).toString(),
+          tagline: (d['tagline'] ?? state.tagline).toString(),
+          persona: (d['persona'] ?? state.persona).toString(),
+          greeting: (d['greeting'] ?? state.greeting).toString(),
+          backstory: (d['backstory'] ?? state.backstory).toString(),
+          narrativeStyle: (d['narrative_style'] ?? state.narrativeStyle)
+              .toString(),
+          styleNotes: (d['style_notes'] ?? state.styleNotes).toString(),
+          imagePrompt: (d['image_prompt'] ?? state.imagePrompt).toString(),
+          isAutofilling: false,
+          autofillStamp: state.autofillStamp + 1,
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(isAutofilling: false, autofillError: _autofillErr(e)));
+      emit(
+        state.copyWith(isAutofilling: false, autofillError: _autofillErr(e)),
+      );
     }
   }
 
@@ -173,7 +178,6 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
     }
     return 'Could not draft the character. Please try again.';
   }
-
 
   /// Render (or re-roll) the avatar from the current visual prompt. The prompt
   /// comes from "Generate with AI" or is typed by the creator; the UI disables
@@ -193,8 +197,12 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
 
   String _imageErr(Object e) {
     if (e is ApiException) {
-      if (e.statusCode == 403) return 'Image generation needs Premium or Creator.';
-      if (e.statusCode == 429) return 'Too many image generations — try again shortly.';
+      if (e.statusCode == 403) {
+        return 'Image generation needs Premium or Creator.';
+      }
+      if (e.statusCode == 429) {
+        return 'Too many image generations — try again shortly.';
+      }
       return e.message;
     }
     return 'Could not generate the image. Please try again.';
@@ -202,10 +210,13 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
 
   /// Builds the character template, publishes it, spins up an instance, and
   /// returns the instance id so the UI can jump straight into the chat.
-  Future<void> create() async {
+  Future<void> create({String? personaId}) async {
     if (!state.canCreate) {
-      emit(state.copyWith(
-          error: 'Give your character a name, a tagline, and a personality.'));
+      emit(
+        state.copyWith(
+          error: 'Give your character a name, a tagline, and a personality.',
+        ),
+      );
       return;
     }
     emit(state.copyWith(isSubmitting: true, clearError: true));
@@ -229,16 +240,16 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
         'image_url': state.imageUrl,
         'image_prompt': state.imagePrompt.trim(),
         'opening_line': state.greeting.trim(),
-        'protagonist': {
-          'name': name,
-          'persona': tagline,
-        },
+        'protagonist': {'name': name, 'persona': tagline},
         'base_stats_template': <String, dynamic>{},
       };
 
       final template = await CreatorRepository.create(payload);
       await CreatorRepository.publish(template.id);
-      final instance = await HomeRepository.createInstance(template.id);
+      final instance = await HomeRepository.createInstance(
+        template.id,
+        personaId: personaId,
+      );
       emit(state.copyWith(isSubmitting: false, instanceId: instance.id));
     } catch (e) {
       emit(state.copyWith(isSubmitting: false, error: _friendly(e)));

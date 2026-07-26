@@ -24,6 +24,45 @@ class RelationshipMeters {
   }
 }
 
+class RelationshipMoment {
+  final String meter;
+  final int delta;
+  final String evidence;
+  final int sequence;
+
+  const RelationshipMoment({
+    required this.meter,
+    required this.delta,
+    required this.evidence,
+    required this.sequence,
+  });
+
+  factory RelationshipMoment.fromJson(Map<String, dynamic> json) =>
+      RelationshipMoment(
+        meter: (json['meter'] ?? '').toString(),
+        delta: (json['delta'] as num?)?.toInt() ?? 0,
+        evidence: (json['evidence'] ?? '').toString(),
+        sequence: (json['sequence'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// The codex's evidence-backed plain-language meaning of a bond. The meter
+/// values remain the playable axes; this keeps their human context visible.
+class RelationshipState {
+  final String summary;
+  final List<String> tags;
+
+  const RelationshipState({required this.summary, this.tags = const []});
+
+  factory RelationshipState.fromJson(Map<String, dynamic> json) =>
+      RelationshipState(
+        summary: (json['summary'] ?? '').toString(),
+        tags:
+            (json['tags'] as List?)?.map((tag) => tag.toString()).toList() ??
+            const [],
+      );
+}
+
 /// A server-validated conversation action derived from a character's current
 /// state. Unlike [CharacterProfile.mutableState], this is safe to render as
 /// player-facing copy and already contains its complete composer draft.
@@ -64,6 +103,8 @@ class CharacterProfile {
 
   /// Present once the story has moved this character's meters at least once.
   final RelationshipMeters? relationship;
+  final List<RelationshipMoment> relationshipMoments;
+  final RelationshipState? relationshipState;
 
   const CharacterProfile({
     required this.id,
@@ -80,6 +121,8 @@ class CharacterProfile {
     this.mentionCount = 0,
     this.isProtagonist = false,
     this.relationship,
+    this.relationshipMoments = const [],
+    this.relationshipState,
   });
 
   factory CharacterProfile.fromJson(Map<String, dynamic> json) {
@@ -118,6 +161,21 @@ class CharacterProfile {
       relationship: json['relationship'] is Map
           ? RelationshipMeters.fromJson(
               Map<String, dynamic>.from(json['relationship'] as Map),
+            )
+          : null,
+      relationshipMoments:
+          (json['relationship_moments'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (row) =>
+                    RelationshipMoment.fromJson(Map<String, dynamic>.from(row)),
+              )
+              .where((moment) => moment.meter.isNotEmpty && moment.delta != 0)
+              .toList() ??
+          const [],
+      relationshipState: json['relationship_state'] is Map
+          ? RelationshipState.fromJson(
+              Map<String, dynamic>.from(json['relationship_state'] as Map),
             )
           : null,
     );

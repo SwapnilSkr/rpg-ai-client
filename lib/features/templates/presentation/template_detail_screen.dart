@@ -28,7 +28,12 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
   Future<void> _load() async {
     try {
       final t = await TemplateRepository.getById(widget.templateId);
-      if (mounted) setState(() { _template = t; _isLoading = false; });
+      if (mounted) {
+        setState(() {
+          _template = t;
+          _isLoading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -40,6 +45,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
       context,
       templateId: widget.templateId,
       worldTitle: title,
+      isSentient: _template?.isSentient ?? false,
     );
   }
 
@@ -53,12 +59,14 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                 width: 28,
                 height: 28,
                 child: CircularProgressIndicator(
-                    strokeWidth: 1.5, color: EverloreTheme.gold),
+                  strokeWidth: 1.5,
+                  color: EverloreTheme.gold,
+                ),
               ),
             )
           : _template == null
-              ? _buildNotFound(context)
-              : _buildContent(context, _template!),
+          ? _buildNotFound(context)
+          : _buildContent(context, _template!),
     );
   }
 
@@ -68,8 +76,11 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
       appBar: AppBar(
         backgroundColor: EverloreTheme.void0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
-              color: EverloreTheme.ash, size: 18),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: EverloreTheme.ash,
+            size: 18,
+          ),
           onPressed: () => context.canPop() ? context.pop() : context.go('/'),
         ),
         title: const Text('World Not Found'),
@@ -84,8 +95,9 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
   }
 
   Widget _buildContent(BuildContext context, WorldTemplate t) {
-    final accentColor =
-        t.isSentient ? EverloreTheme.violetBright : EverloreTheme.cyanBright;
+    final accentColor = t.isSentient
+        ? EverloreTheme.violetBright
+        : EverloreTheme.cyanBright;
 
     return Stack(
       children: [
@@ -97,8 +109,11 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
               expandedHeight: 180,
               pinned: true,
               leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new,
-                    color: EverloreTheme.ash, size: 18),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: EverloreTheme.ash,
+                  size: 18,
+                ),
                 onPressed: () =>
                     context.canPop() ? context.pop() : context.go('/templates'),
               ),
@@ -109,10 +124,11 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                     // Generated hero image (behind the gradient scrim)
                     if (t.imageUrl.isNotEmpty)
                       Positioned.fill(
-                        child: Image.network(t.imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                const SizedBox.shrink()),
+                        child: Image.network(
+                          t.imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
                       ),
                     // Gradient bg / scrim
                     Container(
@@ -160,9 +176,9 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                                 shape: BoxShape.circle,
                                 color: accentColor.withValues(alpha: 0.12),
                                 border: Border.all(
-                                    color:
-                                        accentColor.withValues(alpha: 0.4),
-                                    width: 1.5),
+                                  color: accentColor.withValues(alpha: 0.4),
+                                  width: 1.5,
+                                ),
                                 image: t.imageUrl.isNotEmpty
                                     ? DecorationImage(
                                         image: NetworkImage(t.imageUrl),
@@ -200,15 +216,21 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                                     children: [
                                       Container(
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 3),
+                                          horizontal: 8,
+                                          vertical: 3,
+                                        ),
                                         decoration: BoxDecoration(
-                                          borderRadius:
-                                              BorderRadius.circular(20),
-                                          color: accentColor
-                                              .withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                          color: accentColor.withValues(
+                                            alpha: 0.1,
+                                          ),
                                           border: Border.all(
-                                              color: accentColor
-                                                  .withValues(alpha: 0.3)),
+                                            color: accentColor.withValues(
+                                              alpha: 0.3,
+                                            ),
+                                          ),
                                         ),
                                         child: Text(
                                           t.isSentient
@@ -289,18 +311,24 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                       children: t.sceneTags.map((tag) {
                         return Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(20),
                             color: EverloreTheme.void3,
                             border: Border.all(
-                                color: EverloreTheme.goldDim
-                                    .withValues(alpha: 0.2)),
+                              color: EverloreTheme.goldDim.withValues(
+                                alpha: 0.2,
+                              ),
+                            ),
                           ),
                           child: Text(
                             tag,
                             style: const TextStyle(
-                                color: EverloreTheme.ash, fontSize: 12),
+                              color: EverloreTheme.ash,
+                              fontSize: 12,
+                            ),
                           ),
                         );
                       }).toList(),
@@ -340,7 +368,8 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                     foregroundColor: EverloreTheme.void0,
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                     elevation: 0,
                   ),
                   child: const Row(
@@ -409,14 +438,14 @@ class _StatPreview extends StatelessWidget {
     final color = pct >= 0.6
         ? EverloreTheme.verdant
         : pct >= 0.3
-            ? EverloreTheme.ember
-            : EverloreTheme.crimson;
+        ? EverloreTheme.ember
+        : EverloreTheme.crimson;
 
     final displayName = name
         .split(' ')
-        .map((w) => w.isNotEmpty
-            ? '${w[0].toUpperCase()}${w.substring(1)}'
-            : '')
+        .map(
+          (w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '',
+        )
         .join(' ');
 
     return Column(
@@ -460,10 +489,7 @@ class _StatPreview extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(3),
                   gradient: LinearGradient(
-                    colors: [
-                      color.withValues(alpha: 0.7),
-                      color,
-                    ],
+                    colors: [color.withValues(alpha: 0.7), color],
                   ),
                 ),
               ),

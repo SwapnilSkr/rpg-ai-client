@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../state/create_character_cubit.dart';
+import '../../home/presentation/realm_entry_flow.dart';
 import 'widgets/voice_picker.dart';
 import 'widgets/image_forge.dart';
 import 'widgets/autofill_card.dart';
@@ -109,7 +110,13 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
                   busy: state.isSubmitting,
                   onBack: _back,
                   onNext: _next,
-                  onCreate: cubit.create,
+                  onCreate: () async {
+                    final personaId = await choosePersonaForNewSentientStory(
+                      context,
+                    );
+                    if (!context.mounted) return;
+                    cubit.create(personaId: personaId);
+                  },
                 ),
               ],
             ),
@@ -120,7 +127,10 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
   }
 
   Widget _buildStep(
-      BuildContext context, CreateCharacterCubit cubit, CreateCharacterState state) {
+    BuildContext context,
+    CreateCharacterCubit cubit,
+    CreateCharacterState state,
+  ) {
     switch (_step) {
       case 0:
         return _stepWhoTheyAre(cubit, state);
@@ -131,7 +141,10 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
     }
   }
 
-  Widget _stepWhoTheyAre(CreateCharacterCubit cubit, CreateCharacterState state) {
+  Widget _stepWhoTheyAre(
+    CreateCharacterCubit cubit,
+    CreateCharacterState state,
+  ) {
     return SingleChildScrollView(
       key: const ValueKey(0),
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -141,8 +154,11 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
           Text(
             'Create someone to talk to. They\'ll remember your conversations and '
             'grow with them.',
-            style:
-                EverloreTheme.ui(size: 13, color: EverloreTheme.ash, height: 1.5),
+            style: EverloreTheme.ui(
+              size: 13,
+              color: EverloreTheme.ash,
+              height: 1.5,
+            ),
           ),
           const SizedBox(height: 16),
           AutofillLauncher(
@@ -190,7 +206,10 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
     );
   }
 
-  Widget _stepVoiceStory(CreateCharacterCubit cubit, CreateCharacterState state) {
+  Widget _stepVoiceStory(
+    CreateCharacterCubit cubit,
+    CreateCharacterState state,
+  ) {
     return SingleChildScrollView(
       key: const ValueKey(1),
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -200,8 +219,11 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
           Text(
             'How they sound, and what they always know. All optional — skip and '
             'they\'ll still come alive.',
-            style:
-                EverloreTheme.ui(size: 13, color: EverloreTheme.ash, height: 1.5),
+            style: EverloreTheme.ui(
+              size: 13,
+              color: EverloreTheme.ash,
+              height: 1.5,
+            ),
           ),
           const SizedBox(height: 20),
           VoicePicker(
@@ -246,8 +268,11 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
           Text(
             'An optional portrait — shown on their card and as the chat '
             'background. Drafted by “Generate with AI”, or write your own.',
-            style:
-                EverloreTheme.ui(size: 13, color: EverloreTheme.ash, height: 1.5),
+            style: EverloreTheme.ui(
+              size: 13,
+              color: EverloreTheme.ash,
+              height: 1.5,
+            ),
           ),
           const SizedBox(height: 20),
           ImageForge(
@@ -286,16 +311,23 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
                 child: Row(
                   children: [
                     Flexible(
-                      child: Text(label,
-                          style: EverloreTheme.ui(
-                              size: 13,
-                              color: EverloreTheme.parchment,
-                              weight: FontWeight.w600)),
+                      child: Text(
+                        label,
+                        style: EverloreTheme.ui(
+                          size: 13,
+                          color: EverloreTheme.parchment,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                     if (required)
-                      Text('  *',
-                          style: EverloreTheme.ui(
-                              size: 13, color: EverloreTheme.gold)),
+                      Text(
+                        '  *',
+                        style: EverloreTheme.ui(
+                          size: 13,
+                          color: EverloreTheme.gold,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -312,29 +344,38 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
             maxLength: maxLength,
             textCapitalization: textCapitalization,
             style: EverloreTheme.ui(
-                size: 14, color: EverloreTheme.parchment, height: 1.5),
+              size: 14,
+              color: EverloreTheme.parchment,
+              height: 1.5,
+            ),
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
               counterText: '',
               filled: true,
               fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+                ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+                ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide:
-                    const BorderSide(color: EverloreTheme.gold, width: 1.2),
+                borderSide: const BorderSide(
+                  color: EverloreTheme.gold,
+                  width: 1.2,
+                ),
               ),
             ),
           ),
@@ -390,19 +431,28 @@ class _Header extends StatelessWidget {
                 context.canPop() ? context.pop() : context.go('/');
               }
             },
-            child: const Icon(Icons.arrow_back_ios_new,
-                size: 18, color: EverloreTheme.ash),
+            child: const Icon(
+              Icons.arrow_back_ios_new,
+              size: 18,
+              color: EverloreTheme.ash,
+            ),
           ),
           const SizedBox(width: 12),
-          const Icon(Icons.person_add_alt_1,
-              color: EverloreTheme.violetBright, size: 16),
+          const Icon(
+            Icons.person_add_alt_1,
+            color: EverloreTheme.violetBright,
+            size: 16,
+          ),
           const SizedBox(width: 6),
-          Text('NEW CHARACTER',
-              style: EverloreTheme.ui(
-                  size: 12,
-                  color: EverloreTheme.violetBright,
-                  weight: FontWeight.w800,
-                  spacing: 2)),
+          Text(
+            'NEW CHARACTER',
+            style: EverloreTheme.ui(
+              size: 12,
+              color: EverloreTheme.violetBright,
+              weight: FontWeight.w800,
+              spacing: 2,
+            ),
+          ),
         ],
       ),
     );
@@ -423,7 +473,10 @@ class _CharStepProgress extends StatelessWidget {
           Text(
             _charStepNames[step],
             style: EverloreTheme.ui(
-                size: 18, color: EverloreTheme.parchment, weight: FontWeight.w700),
+              size: 18,
+              color: EverloreTheme.parchment,
+              weight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 10),
           Row(
@@ -434,13 +487,15 @@ class _CharStepProgress extends StatelessWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   height: active ? 3 : 2,
-                  margin: EdgeInsets.only(right: i < _charStepCount - 1 ? 4 : 0),
+                  margin: EdgeInsets.only(
+                    right: i < _charStepCount - 1 ? 4 : 0,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(2),
                     color: filled
                         ? (active
-                            ? EverloreTheme.violetBright
-                            : EverloreTheme.violet)
+                              ? EverloreTheme.violetBright
+                              : EverloreTheme.violet)
                         : EverloreTheme.void4,
                   ),
                 ),
@@ -479,23 +534,28 @@ class _MatureToggle extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.shield_outlined,
-                size: 18,
-                color: value ? EverloreTheme.crimson : EverloreTheme.ash),
+            Icon(
+              Icons.shield_outlined,
+              size: 18,
+              color: value ? EverloreTheme.crimson : EverloreTheme.ash,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Mature character',
-                      style: EverloreTheme.ui(
-                          size: 14,
-                          color: EverloreTheme.parchment,
-                          weight: FontWeight.w600)),
                   Text(
-                      'Allows mature themes if you enable them in preferences. Also steers “Generate with AI”.',
-                      style:
-                          EverloreTheme.ui(size: 12, color: EverloreTheme.ash)),
+                    'Mature character',
+                    style: EverloreTheme.ui(
+                      size: 14,
+                      color: EverloreTheme.parchment,
+                      weight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    'Allows mature themes if you enable them in preferences. Also steers “Generate with AI”.',
+                    style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+                  ),
                 ],
               ),
             ),
@@ -516,16 +576,17 @@ class _ErrorText extends StatelessWidget {
   const _ErrorText(this.message);
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: EverloreTheme.crimson.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
-          border:
-              Border.all(color: EverloreTheme.crimson.withValues(alpha: 0.35)),
-        ),
-        child: Text(message,
-            style: EverloreTheme.ui(size: 13, color: EverloreTheme.crimson)),
-      );
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: EverloreTheme.crimson.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: EverloreTheme.crimson.withValues(alpha: 0.35)),
+    ),
+    child: Text(
+      message,
+      style: EverloreTheme.ui(size: 13, color: EverloreTheme.crimson),
+    ),
+  );
 }
 
 class _CharNavBar extends StatelessWidget {
@@ -570,14 +631,18 @@ class _CharNavBar extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   color: EverloreTheme.void3,
                   border: Border.all(
-                      color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+                    color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+                  ),
                 ),
                 child: Center(
-                  child: Text('Back',
-                      style: EverloreTheme.ui(
-                          size: 14,
-                          color: EverloreTheme.ash,
-                          weight: FontWeight.w600)),
+                  child: Text(
+                    'Back',
+                    style: EverloreTheme.ui(
+                      size: 14,
+                      color: EverloreTheme.ash,
+                      weight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -631,7 +696,8 @@ class _PrimaryBtn extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           gradient: enabled
               ? const LinearGradient(
-                  colors: [EverloreTheme.violetBright, EverloreTheme.violet])
+                  colors: [EverloreTheme.violetBright, EverloreTheme.violet],
+                )
               : null,
           color: enabled ? null : EverloreTheme.void3,
         ),
@@ -641,24 +707,31 @@ class _PrimaryBtn extends StatelessWidget {
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: EverloreTheme.parchment),
+                    strokeWidth: 2,
+                    color: EverloreTheme.parchment,
+                  ),
                 )
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(label,
-                        style: EverloreTheme.ui(
-                            size: 15,
-                            color: enabled
-                                ? EverloreTheme.parchment
-                                : EverloreTheme.ash,
-                            weight: FontWeight.w700)),
-                    const SizedBox(width: 8),
-                    Icon(icon,
-                        size: 18,
+                    Text(
+                      label,
+                      style: EverloreTheme.ui(
+                        size: 15,
                         color: enabled
                             ? EverloreTheme.parchment
-                            : EverloreTheme.ash),
+                            : EverloreTheme.ash,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      icon,
+                      size: 18,
+                      color: enabled
+                          ? EverloreTheme.parchment
+                          : EverloreTheme.ash,
+                    ),
                   ],
                 ),
         ),

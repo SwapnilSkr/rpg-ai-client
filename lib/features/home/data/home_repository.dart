@@ -131,10 +131,16 @@ class HomeRepository {
     return instances;
   }
 
-  static Future<WorldInstance> createInstance(String templateId) async {
+  static Future<WorldInstance> createInstance(
+    String templateId, {
+    String? personaId,
+  }) async {
     final response = await ApiClient.post(
       '/instances',
-      body: {'template_id': templateId},
+      body: {
+        'template_id': templateId,
+        if (personaId != null && personaId.isNotEmpty) 'persona_id': personaId,
+      },
     );
     final instance = response['instance'];
     final created = WorldInstance.fromJson(instance);

@@ -123,6 +123,18 @@ class _BondCard extends StatelessWidget {
                               ),
                             ),
                           ],
+                          if (entry.bondContext != null &&
+                              entry.bondContext!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 7),
+                            Text(
+                              entry.bondContext!,
+                              style: const TextStyle(
+                                color: EverloreTheme.ash,
+                                fontSize: 12,
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

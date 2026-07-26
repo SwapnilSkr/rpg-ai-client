@@ -8,6 +8,7 @@ import '../../../shared/models/realm_play_status.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/neu.dart';
 import '../data/home_repository.dart';
+import 'realm_entry_flow.dart';
 
 class RealmPlaythroughsScreen extends StatefulWidget {
   final String templateId;
@@ -57,24 +58,12 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
   String get _title => _data?.template?['title'] as String? ?? 'Your stories';
 
   Future<void> _beginNewStory() async {
-    try {
-      final instance = await showEverloreSessionLoading(
-        context,
-        message: 'Opening the gate',
-        task: () => HomeRepository.createInstance(widget.templateId),
-      );
-      if (!mounted || instance == null) return;
-      await context.push('/play/${instance.id}');
-      if (mounted) unawaited(_load());
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: EverloreTheme.crimson.withValues(alpha: 0.9),
-        ),
-      );
-    }
+    await beginNewRealmStory(
+      context,
+      widget.templateId,
+      isSentient: _data?.template?['is_sentient'] == true,
+    );
+    if (mounted) unawaited(_load());
   }
 
   @override

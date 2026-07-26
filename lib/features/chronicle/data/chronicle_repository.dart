@@ -10,14 +10,41 @@ import 'threads_data.dart';
 import 'recap_data.dart';
 import 'side_chat_data.dart';
 
+/// A player protagonist from another save of the same GM template. This is a
+/// copy source, never a shared mutable character card.
+class ReusableProtagonist {
+  final String sourceInstanceId;
+  final String name;
+  final String identity;
+  final String appearance;
+
+  const ReusableProtagonist({
+    required this.sourceInstanceId,
+    required this.name,
+    this.identity = '',
+    this.appearance = '',
+  });
+
+  factory ReusableProtagonist.fromJson(Map<String, dynamic> json) {
+    return ReusableProtagonist(
+      sourceInstanceId: (json['source_instance_id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      identity: (json['identity'] ?? '').toString(),
+      appearance: (json['appearance'] ?? '').toString(),
+    );
+  }
+}
+
 class ChronicleRepository {
   static Future<Map<String, dynamic>> getEvents(
     String instanceId, {
     int page = 1,
     int limit = 50,
+    int? beforeSequence,
     String? type,
   }) async {
     String path = '/chronicle/events/$instanceId?page=$page&limit=$limit';
+    if (beforeSequence != null) path += '&before_sequence=$beforeSequence';
     if (type != null) path += '&type=$type';
     final response = await ApiClient.get(path);
     final events = (response['events'] as List)
@@ -27,6 +54,7 @@ class ChronicleRepository {
       'events': events,
       'total': response['total'],
       'page': response['page'],
+      'hasOlder': response['hasOlder'] == true,
     };
   }
 
@@ -330,16 +358,36 @@ class ChronicleRepository {
   /// protagonist (first play).
   static Future<void> setProtagonist(
     String instanceId, {
-    required String name,
+    String? name,
     String? identity,
+    String? reuseFromInstanceId,
   }) async {
     await ApiClient.post(
       '/instances/$instanceId/protagonist',
       body: {
-        'name': name,
+        if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
         if (identity != null && identity.isNotEmpty) 'identity': identity,
+        if (reuseFromInstanceId != null && reuseFromInstanceId.isNotEmpty)
+          'reuse_from_instance_id': reuseFromInstanceId,
       },
     );
+  }
+
+  static Future<List<ReusableProtagonist>> getReusableProtagonists(
+    String instanceId,
+  ) async {
+    final response = await ApiClient.get(
+      '/instances/$instanceId/reusable-protagonists',
+    );
+    final rows = (response['protagonists'] as List?) ?? const [];
+    return rows
+        .map(
+          (row) => ReusableProtagonist.fromJson(
+            Map<String, dynamic>.from(row as Map),
+          ),
+        )
+        .where((row) => row.sourceInstanceId.isNotEmpty && row.name.isNotEmpty)
+        .toList();
   }
 
   /// Update in-chat session settings (POV, chat mode, reply length) for an instance.

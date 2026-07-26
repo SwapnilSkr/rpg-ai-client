@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'calendar_data.dart' show TimeAnchor;
+import '../../../shared/models/character_profile.dart' show RelationshipMoment;
 
 /// Client mirror of `characterCodexService.listRelationships` (Phase 10
 /// Relationship Ledger surface). Meters are 0-100 toward the player.
@@ -36,9 +37,9 @@ class BondMoment extends Equatable {
   const BondMoment({required this.label, required this.sequence});
 
   factory BondMoment.fromJson(Map<String, dynamic> json) => BondMoment(
-        label: json['label'] as String? ?? '',
-        sequence: (json['sequence'] as num?)?.toInt() ?? 0,
-      );
+    label: json['label'] as String? ?? '',
+    sequence: (json['sequence'] as num?)?.toInt() ?? 0,
+  );
 
   @override
   List<Object?> get props => [label, sequence];
@@ -50,8 +51,10 @@ class RelationshipEntry extends Equatable {
   final String? role;
   final String? disposition;
   final RelationshipMeters? meters;
+  final String? bondContext;
   final int mentionCount;
   final List<BondMoment> moments;
+  final List<RelationshipMoment> observations;
 
   const RelationshipEntry({
     required this.id,
@@ -59,8 +62,10 @@ class RelationshipEntry extends Equatable {
     this.role,
     this.disposition,
     this.meters,
+    this.bondContext,
     this.mentionCount = 0,
     this.moments = const [],
+    this.observations = const [],
   });
 
   factory RelationshipEntry.fromJson(Map<String, dynamic> json) =>
@@ -70,18 +75,42 @@ class RelationshipEntry extends Equatable {
         role: json['role'] as String?,
         disposition: json['disposition'] as String?,
         meters: json['meters'] != null
-            ? RelationshipMeters.fromJson(Map<String, dynamic>.from(json['meters']))
+            ? RelationshipMeters.fromJson(
+                Map<String, dynamic>.from(json['meters']),
+              )
+            : null,
+        bondContext: json['state'] is Map
+            ? (json['state']['summary'] ?? '').toString()
             : null,
         mentionCount: (json['mention_count'] as num?)?.toInt() ?? 0,
-        moments: (json['moments'] as List?)
+        moments:
+            (json['moments'] as List?)
                 ?.map((m) => BondMoment.fromJson(Map<String, dynamic>.from(m)))
+                .toList() ??
+            const [],
+        observations:
+            (json['observations'] as List?)
+                ?.whereType<Map>()
+                .map(
+                  (m) =>
+                      RelationshipMoment.fromJson(Map<String, dynamic>.from(m)),
+                )
                 .toList() ??
             const [],
       );
 
   @override
-  List<Object?> get props =>
-      [id, name, role, disposition, meters, mentionCount, moments];
+  List<Object?> get props => [
+    id,
+    name,
+    role,
+    disposition,
+    meters,
+    bondContext,
+    mentionCount,
+    moments,
+    observations,
+  ];
 }
 
 class RelationshipLedger extends Equatable {
@@ -91,9 +120,12 @@ class RelationshipLedger extends Equatable {
 
   factory RelationshipLedger.fromJson(Map<String, dynamic> json) =>
       RelationshipLedger(
-        characters: (json['characters'] as List?)
-                ?.map((c) =>
-                    RelationshipEntry.fromJson(Map<String, dynamic>.from(c)))
+        characters:
+            (json['characters'] as List?)
+                ?.map(
+                  (c) =>
+                      RelationshipEntry.fromJson(Map<String, dynamic>.from(c)),
+                )
                 .toList() ??
             const [],
       );
@@ -135,13 +167,22 @@ class CharacterMemoryEntry extends Equatable {
         relationshipDelta: json['relationship_delta'] as String?,
         unresolvedThread: json['unresolved_thread'] == true,
         anchor: json['time_anchor'] != null
-            ? TimeAnchor.fromJson(Map<String, dynamic>.from(json['time_anchor']))
+            ? TimeAnchor.fromJson(
+                Map<String, dynamic>.from(json['time_anchor']),
+              )
             : null,
       );
 
   @override
-  List<Object?> get props =>
-      [id, text, type, importance, emotionalValence, relationshipDelta, unresolvedThread];
+  List<Object?> get props => [
+    id,
+    text,
+    type,
+    importance,
+    emotionalValence,
+    relationshipDelta,
+    unresolvedThread,
+  ];
 }
 
 class CharacterMemories extends Equatable {
@@ -165,9 +206,12 @@ class CharacterMemories extends Equatable {
       characterId: c['id'] as String? ?? '',
       name: c['name'] as String? ?? 'Someone',
       role: c['role'] as String?,
-      memories: (json['memories'] as List?)
-              ?.map((m) =>
-                  CharacterMemoryEntry.fromJson(Map<String, dynamic>.from(m)))
+      memories:
+          (json['memories'] as List?)
+              ?.map(
+                (m) =>
+                    CharacterMemoryEntry.fromJson(Map<String, dynamic>.from(m)),
+              )
               .toList() ??
           const [],
     );

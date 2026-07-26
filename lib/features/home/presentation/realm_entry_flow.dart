@@ -3,9 +3,11 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../shared/models/realm_play_status.dart';
+import '../../../shared/models/persona.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/neu.dart';
 import '../data/home_repository.dart';
+import '../../personas/data/persona_repository.dart';
 
 enum RealmEntryChoice { continueStory, beginAnew }
 
@@ -22,6 +24,7 @@ Future<void> enterRealmFromTemplate(
   BuildContext context, {
   required String templateId,
   required String worldTitle,
+  bool isSentient = false,
 }) async {
   final loggedIn = await AuthService.isLoggedIn();
   if (!context.mounted) return;
@@ -39,7 +42,7 @@ Future<void> enterRealmFromTemplate(
   if (!context.mounted || status == null) return;
 
   if (!status.hasPlayed) {
-    await _beginNewStory(context, templateId);
+    await beginNewRealmStory(context, templateId, isSentient: isSentient);
     return;
   }
 
@@ -56,17 +59,28 @@ Future<void> enterRealmFromTemplate(
       if (id != null) context.push('/play/$id');
       break;
     case RealmEntryChoice.beginAnew:
-      await _beginNewStory(context, templateId);
+      await beginNewRealmStory(context, templateId, isSentient: isSentient);
       break;
   }
 }
 
-Future<void> _beginNewStory(BuildContext context, String templateId) async {
+Future<void> beginNewRealmStory(
+  BuildContext context,
+  String templateId, {
+  bool isSentient = false,
+}) async {
   try {
+    String? personaId;
+    if (isSentient) {
+      final choice = await _chooseSentientPersona(context);
+      if (!context.mounted || choice == null) return;
+      personaId = choice.personaId;
+    }
     final instance = await showEverloreSessionLoading(
       context,
       message: 'Opening the gate',
-      task: () => HomeRepository.createInstance(templateId),
+      task: () =>
+          HomeRepository.createInstance(templateId, personaId: personaId),
     );
     if (!context.mounted || instance == null) return;
     context.push('/play/${instance.id}');
@@ -82,6 +96,242 @@ Future<void> _beginNewStory(BuildContext context, String templateId) async {
       ),
     );
   }
+}
+
+class _PersonaStartChoice {
+  final String? personaId;
+  const _PersonaStartChoice({this.personaId});
+}
+
+Future<_PersonaStartChoice?> _chooseSentientPersona(
+  BuildContext context,
+) async {
+  List<Persona> personas = const [];
+  try {
+    personas = await PersonaRepository.list();
+  } catch (_) {
+    // New stories must still be playable when the optional account persona
+    // library cannot be reached.
+  }
+  if (!context.mounted) return null;
+  return showModalBottomSheet<_PersonaStartChoice>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: EverloreTheme.void2,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (sheetCtx) => _SentientPersonaStartSheet(personas: personas),
+  );
+}
+
+/// Used by the creator's immediate-play flow. A null result means the player
+/// chose to start without a saved persona (or dismissed this optional step).
+Future<String?> choosePersonaForNewSentientStory(BuildContext context) async {
+  final choice = await _chooseSentientPersona(context);
+  return choice?.personaId;
+}
+
+class _SentientPersonaStartSheet extends StatefulWidget {
+  final List<Persona> personas;
+  const _SentientPersonaStartSheet({required this.personas});
+
+  @override
+  State<_SentientPersonaStartSheet> createState() =>
+      _SentientPersonaStartSheetState();
+}
+
+class _SentientPersonaStartSheetState
+    extends State<_SentientPersonaStartSheet> {
+  final _name = TextEditingController();
+  final _description = TextEditingController();
+  bool _creating = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createAndUse() async {
+    final name = _name.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _creating = true);
+    try {
+      final persona = await PersonaRepository.create(
+        name: name,
+        gender: 'non_binary',
+        description: _description.text.trim(),
+      );
+      if (mounted) {
+        Navigator.pop(context, _PersonaStartChoice(personaId: persona.id));
+      }
+    } catch (_) {
+      if (mounted) setState(() => _creating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          16,
+          20,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: EverloreTheme.void4,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Who enters this story?',
+              style: EverloreTheme.serifDisplay(
+                size: 19,
+                color: EverloreTheme.parchment,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Choose a reusable persona or create one. This story receives a '
+              'snapshot, so your later edits never rewrite its past.',
+              style: EverloreTheme.ui(
+                size: 12.5,
+                color: EverloreTheme.ash,
+                height: 1.45,
+              ),
+            ),
+            if (widget.personas.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              Text(
+                'YOUR PERSONAS',
+                style: EverloreTheme.ui(
+                  size: 11,
+                  color: EverloreTheme.gold,
+                  weight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: widget.personas.map((persona) {
+                  final subtitle = persona.description.trim();
+                  return GestureDetector(
+                    onTap: () => Navigator.pop(
+                      context,
+                      _PersonaStartChoice(personaId: persona.id),
+                    ),
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 280),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 13,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: EverloreTheme.gold.withValues(alpha: 0.09),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: EverloreTheme.gold.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Text(
+                        subtitle.isEmpty
+                            ? persona.name
+                            : '${persona.name} · $subtitle',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: EverloreTheme.ui(
+                          size: 13,
+                          color: EverloreTheme.parchment,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+            const SizedBox(height: 20),
+            Text(
+              'CREATE A NEW PERSONA',
+              style: EverloreTheme.ui(
+                size: 11,
+                color: EverloreTheme.gold,
+                weight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _name,
+              textCapitalization: TextCapitalization.words,
+              style: EverloreTheme.ui(size: 15, color: EverloreTheme.parchment),
+              decoration: _personaDecoration('Name'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _description,
+              minLines: 1,
+              maxLines: 2,
+              textCapitalization: TextCapitalization.sentences,
+              style: EverloreTheme.ui(size: 14, color: EverloreTheme.parchment),
+              decoration: _personaDecoration(
+                'Optional: a few defining details',
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pop(context, const _PersonaStartChoice()),
+                  child: Text(
+                    'Continue without one',
+                    style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+                  ),
+                ),
+                const Spacer(),
+                FilledButton(
+                  onPressed: _creating ? null : _createAndUse,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: EverloreTheme.gold,
+                    foregroundColor: EverloreTheme.void1,
+                  ),
+                  child: Text(_creating ? 'Saving…' : 'Create and use'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _personaDecoration(String hint) => InputDecoration(
+    hintText: hint,
+    hintStyle: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+    filled: true,
+    fillColor: EverloreTheme.void3,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(
+        color: EverloreTheme.goldDim.withValues(alpha: .25),
+      ),
+    ),
+  );
 }
 
 Future<RealmEntryResult?> showRealmContinueSheet(
@@ -110,7 +360,10 @@ Future<RealmEntryResult?> showRealmContinueSheet(
         ),
         onPickStory: (id) => Navigator.pop(
           sheetCtx,
-          RealmEntryResult(choice: RealmEntryChoice.continueStory, instanceId: id),
+          RealmEntryResult(
+            choice: RealmEntryChoice.continueStory,
+            instanceId: id,
+          ),
         ),
       );
     },
@@ -257,7 +510,9 @@ class _StoryPickTile extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: [EverloreTheme.void3, EverloreTheme.void2],
           ),
-          border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+          border: Border.all(
+            color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+          ),
         ),
         child: Row(
           children: [
@@ -276,12 +531,19 @@ class _StoryPickTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     _subtitle(),
-                    style: const TextStyle(color: EverloreTheme.ash, fontSize: 12),
+                    style: const TextStyle(
+                      color: EverloreTheme.ash,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: EverloreTheme.goldDim, size: 22),
+            const Icon(
+              Icons.chevron_right,
+              color: EverloreTheme.goldDim,
+              size: 22,
+            ),
           ],
         ),
       ),
