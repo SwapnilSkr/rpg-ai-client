@@ -157,9 +157,9 @@ class WorldActionsButton extends StatelessWidget {
                       _ActionTile(
                         icon: Icons.fact_check_outlined,
                         title:
-                            'Review possible relationship${candidates.length > 1 ? 's' : ''}',
+                            'Review story detail${candidates.length > 1 ? 's' : ''}',
                         subtitle: candidates.length == 1
-                            ? '${candidates.first.characterName} may be your ${_relationLabel(candidates.first.relation)}'
+                            ? _candidateSummary(candidates.first)
                             : '${candidates.length} details await your decision',
                         onTap: () {
                           Navigator.of(sheetContext).pop();
@@ -227,8 +227,7 @@ class WorldActionsButton extends StatelessWidget {
                 ...candidates.map(
                   (candidate) => _ActionTile(
                     icon: Icons.account_tree_outlined,
-                    title:
-                        '${candidate.characterName} may be your ${_relationLabel(candidate.relation)}',
+                    title: _candidateTitle(candidate),
                     subtitle: candidate.evidence,
                     onTap: () {
                       Navigator.of(sheetContext).pop();
@@ -248,6 +247,15 @@ class WorldActionsButton extends StatelessWidget {
     BuildContext context,
     RelationCandidate candidate,
   ) {
+    if (candidate.kind == 'identity_rename' ||
+        candidate.kind == 'identity_merge') {
+      _showIdentityCandidateDetail(context, candidate);
+      return;
+    }
+    if (candidate.kind == 'kinship_revision') {
+      _showKinshipRevisionDetail(context, candidate);
+      return;
+    }
     String relation = candidate.relation;
     const relations = [
       'mother',
@@ -357,6 +365,238 @@ class WorldActionsButton extends StatelessWidget {
                               }
                             },
                       child: const Text('Not related'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onResolveRelationCandidate == null
+                          ? null
+                          : () async {
+                              if (await onResolveRelationCandidate!(
+                                    candidate.id,
+                                    'defer',
+                                    null,
+                                  ) &&
+                                  sheetContext.mounted) {
+                                Navigator.of(sheetContext).pop();
+                              }
+                            },
+                      child: const Text('Not now'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showIdentityCandidateDetail(
+    BuildContext context,
+    RelationCandidate candidate,
+  ) {
+    final isMerge = candidate.kind == 'identity_merge';
+    final revealedName =
+        candidate.proposedName ??
+        candidate.counterpartCharacterName ??
+        'this identity';
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SheetHeader(
+                icon: Icons.person_search_outlined,
+                title: isMerge
+                    ? 'POSSIBLE SAME PERSON'
+                    : 'POSSIBLE NAME REVEAL',
+                subtitle: isMerge
+                    ? 'Nothing is merged until you confirm it.'
+                    : 'The old name stays as an alias if you confirm it.',
+                onBack: () {
+                  Navigator.of(sheetContext).pop();
+                  _showRelationCandidates(context, [candidate]);
+                },
+              ),
+              Text(
+                isMerge
+                    ? '${candidate.characterName} and $revealedName may be the same person.'
+                    : '${candidate.characterName} may actually be $revealedName.',
+                style: EverloreTheme.ui(
+                  size: 15,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
+              _FieldLabel('STORY EVIDENCE'),
+              Text(
+                candidate.evidence,
+                style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+              ),
+              const SizedBox(height: 16),
+              _PrimaryAction(
+                label: isMerge ? 'Merge identities' : 'Confirm name reveal',
+                enabled: onResolveRelationCandidate != null,
+                onTap: () async {
+                  final resolve = onResolveRelationCandidate;
+                  if (resolve == null ||
+                      !await resolve(candidate.id, 'accept', null)) {
+                    return;
+                  }
+                  if (sheetContext.mounted) {
+                    Navigator.of(sheetContext).pop();
+                  }
+                  if (context.mounted) {
+                    showTopConfirmationToast(
+                      context,
+                      icon: Icons.verified_user_outlined,
+                      message: isMerge
+                          ? 'Identity merged — ${candidate.characterName} is $revealedName.'
+                          : 'Name revealed — ${candidate.characterName} is $revealedName.',
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onResolveRelationCandidate == null
+                          ? null
+                          : () async {
+                              if (await onResolveRelationCandidate!(
+                                    candidate.id,
+                                    'reject',
+                                    null,
+                                  ) &&
+                                  sheetContext.mounted) {
+                                Navigator.of(sheetContext).pop();
+                              }
+                            },
+                      child: const Text('Keep separate'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onResolveRelationCandidate == null
+                          ? null
+                          : () async {
+                              if (await onResolveRelationCandidate!(
+                                    candidate.id,
+                                    'defer',
+                                    null,
+                                  ) &&
+                                  sheetContext.mounted) {
+                                Navigator.of(sheetContext).pop();
+                              }
+                            },
+                      child: const Text('Not now'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showKinshipRevisionDetail(
+    BuildContext context,
+    RelationCandidate candidate,
+  ) {
+    final relation = candidate.replacesRelation ?? candidate.relation;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SheetHeader(
+                icon: Icons.history_toggle_off_outlined,
+                title: 'POSSIBLE FAMILY RETCON',
+                subtitle:
+                    'This changes structural canon only if you confirm it.',
+                onBack: () {
+                  Navigator.of(sheetContext).pop();
+                  _showRelationCandidates(context, [candidate]);
+                },
+              ),
+              Text(
+                'Mark ${candidate.characterName} as not your ${_relationLabel(relation).toLowerCase()}?',
+                style: EverloreTheme.ui(
+                  size: 15,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
+              _FieldLabel('STORY EVIDENCE'),
+              Text(
+                candidate.evidence,
+                style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+              ),
+              const SizedBox(height: 16),
+              _PrimaryAction(
+                label: 'Confirm retcon',
+                enabled: onResolveRelationCandidate != null,
+                onTap: () async {
+                  final resolve = onResolveRelationCandidate;
+                  if (resolve == null ||
+                      !await resolve(candidate.id, 'accept', null)) {
+                    return;
+                  }
+                  if (sheetContext.mounted) {
+                    Navigator.of(sheetContext).pop();
+                  }
+                  if (context.mounted) {
+                    showTopConfirmationToast(
+                      context,
+                      icon: Icons.history_toggle_off_outlined,
+                      message:
+                          'Family canon updated — ${candidate.characterName} is no longer your ${_relationLabel(relation).toLowerCase()}.',
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onResolveRelationCandidate == null
+                          ? null
+                          : () async {
+                              if (await onResolveRelationCandidate!(
+                                    candidate.id,
+                                    'reject',
+                                    null,
+                                  ) &&
+                                  sheetContext.mounted) {
+                                Navigator.of(sheetContext).pop();
+                              }
+                            },
+                      child: const Text('Keep canon'),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -974,6 +1214,22 @@ class WorldActionsButton extends StatelessWidget {
       ),
     );
   }
+
+  String _candidateTitle(RelationCandidate candidate) {
+    switch (candidate.kind) {
+      case 'identity_rename':
+        return '${candidate.characterName} may actually be ${candidate.proposedName ?? 'someone else'}';
+      case 'identity_merge':
+        return '${candidate.characterName} and ${candidate.counterpartCharacterName ?? candidate.proposedName ?? 'another character'} may be the same person';
+      case 'kinship_revision':
+        return '${candidate.characterName} may not be your ${_relationLabel(candidate.replacesRelation ?? candidate.relation).toLowerCase()}';
+      default:
+        return '${candidate.characterName} may be your ${_relationLabel(candidate.relation)}';
+    }
+  }
+
+  String _candidateSummary(RelationCandidate candidate) =>
+      _candidateTitle(candidate);
 
   String _relationLabel(String relation) {
     const labels = {'fiance': 'Fiancé', 'fiancee': 'Fiancée'};
