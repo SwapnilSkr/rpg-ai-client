@@ -7,6 +7,8 @@ import '../data/template_repository.dart';
 import '../data/interest_ranking.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
+import '../../../../shared/widgets/everlore_network_image.dart';
+import '../../../../shared/widgets/everlore_empty_state.dart';
 import '../../../../shared/widgets/mature_content_chip.dart';
 
 class BrowseTemplatesScreen extends StatefulWidget {
@@ -19,9 +21,13 @@ class BrowseTemplatesScreen extends StatefulWidget {
 class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
   List<WorldTemplate> _templates = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  int _page = 1;
+  int _total = 0;
   String? _error;
   String _kindFilter = 'all'; // 'all' | 'world' | 'character'
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
 
   List<WorldTemplate> get _visible {
     if (_kindFilter == 'character') {
@@ -36,12 +42,14 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_maybeLoadMore);
     _loadTemplates();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -51,12 +59,18 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
       _error = null;
     });
     try {
-      final result = await TemplateRepository.listPublished(search: search);
+      final result = await TemplateRepository.listPublished(
+        page: 1,
+        limit: 20,
+        search: search,
+      );
       final ranked = await orderTemplatesForFeed(
         List<WorldTemplate>.from(result['templates']),
       );
       setState(() {
         _templates = ranked;
+        _page = 1;
+        _total = (result['total'] as num?)?.toInt() ?? ranked.length;
         _isLoading = false;
       });
     } catch (e) {
@@ -64,6 +78,40 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
         _isLoading = false;
         _error = e.toString().replaceFirst('Exception: ', '');
       });
+    }
+  }
+
+  void _maybeLoadMore() {
+    if (!_scrollController.hasClients ||
+        _scrollController.position.extentAfter > 520) {
+      return;
+    }
+    _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoading || _isLoadingMore || _templates.length >= _total) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final result = await TemplateRepository.listPublished(
+        page: _page + 1,
+        limit: 20,
+        search: _searchController.text.trim(),
+      );
+      final next = await orderTemplatesForFeed(
+        List<WorldTemplate>.from(result['templates']),
+      );
+      if (!mounted) return;
+      final ids = _templates.map((t) => t.id).toSet();
+      setState(() {
+        _templates = [..._templates, ...next.where((t) => ids.add(t.id))];
+        _page += 1;
+        _total = (result['total'] as num?)?.toInt() ?? _templates.length;
+      });
+    } catch (_) {
+      // The existing list remains usable; the next scroll can retry.
+    } finally {
+      if (mounted) setState(() => _isLoadingMore = false);
     }
   }
 
@@ -89,11 +137,28 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
         ),
       ),
       body: CustomScrollView(
+        controller: _scrollController,
         slivers: [
           _buildHeader(context),
           _buildSearchBar(),
           _buildSegments(),
           _buildContent(context),
+          if (_isLoadingMore)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 24),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: EverloreTheme.gold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -287,32 +352,26 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
     if (visible.isEmpty) {
       final isChar = _kindFilter == 'character';
       return SliverFillRemaining(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              EvIcon(
-                isChar ? AppIcons.navProfile : AppIcons.emptyRealms,
-                size: 110,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                isChar ? 'No characters yet' : 'No worlds found',
-                style: const TextStyle(
-                  color: EverloreTheme.parchment,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                isChar
-                    ? 'Tap “Character” to create someone to talk to.'
-                    : 'Try a different search term.',
-                style: const TextStyle(color: EverloreTheme.ash, fontSize: 13),
-              ),
-            ],
-          ),
+        child: EverloreEmptyState(
+          icon: isChar
+              ? Icons.person_add_alt_1_rounded
+              : Icons.search_off_rounded,
+          eyebrow: isChar ? 'CHARACTER FORGE' : 'EXPLORE',
+          title: isChar
+              ? 'No characters here yet'
+              : 'Nothing answered that search',
+          message: isChar
+              ? 'Create a character to give this shelf its first voice.'
+              : 'Try a different phrase, or clear the search to see every realm.',
+          actionLabel: isChar ? 'Create character' : 'Clear search',
+          actionIcon: isChar ? Icons.add_rounded : Icons.restart_alt_rounded,
+          accent: isChar ? EverloreTheme.violetBright : EverloreTheme.gold,
+          onAction: isChar
+              ? () => context.push('/characters/new')
+              : () {
+                  _searchController.clear();
+                  _loadTemplates();
+                },
         ),
       );
     }
@@ -388,15 +447,13 @@ class _WorldCard extends StatelessWidget {
                             border: Border.all(
                               color: accentColor.withValues(alpha: 0.3),
                             ),
-                            image: template.imageUrl.isNotEmpty
-                                ? DecorationImage(
-                                    image: NetworkImage(template.imageUrl),
-                                    fit: BoxFit.cover,
-                                  )
-                                : null,
                           ),
                           child: template.imageUrl.isNotEmpty
-                              ? null
+                              ? EverloreNetworkImage(
+                                  imageUrl: template.imageUrl,
+                                  memCacheWidth: 160,
+                                  semanticLabel: template.title,
+                                )
                               : Icon(
                                   template.isCharacter
                                       ? Icons.person

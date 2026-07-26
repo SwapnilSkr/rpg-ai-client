@@ -6,6 +6,8 @@ import '../shared/app_icons.dart';
 import '../shared/models/world_template.dart';
 import '../shared/narrative_styles.dart';
 import '../shared/widgets/everlore_session_loader.dart';
+import '../shared/widgets/everlore_network_image.dart';
+import '../shared/widgets/everlore_empty_state.dart';
 import '../shared/widgets/everlore_top_bar.dart';
 import '../shared/widgets/mature_content_chip.dart';
 import '../shared/widgets/neu.dart';
@@ -28,18 +30,24 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   List<WorldTemplate> _templates = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  int _page = 1;
+  int _total = 0;
   String? _error;
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     AuthService.sessionEpoch.addListener(_onSessionChanged);
+    _scrollController.addListener(_maybeLoadMore);
     _load();
   }
 
   @override
   void dispose() {
     AuthService.sessionEpoch.removeListener(_onSessionChanged);
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -54,6 +62,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     });
     try {
       final result = await TemplateRepository.listPublished(
+        page: 1,
+        limit: 20,
         forceRefresh: forceRefresh,
       );
       final ranked = await orderTemplatesForFeed(
@@ -62,6 +72,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       if (!mounted) return;
       setState(() {
         _templates = ranked;
+        _page = 1;
+        _total = (result['total'] as num?)?.toInt() ?? ranked.length;
         _isLoading = false;
       });
     } catch (e) {
@@ -70,6 +82,37 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         _isLoading = false;
         _error = e.toString().replaceFirst('Exception: ', '');
       });
+    }
+  }
+
+  void _maybeLoadMore() {
+    if (!_scrollController.hasClients ||
+        _scrollController.position.extentAfter > 520) {
+      return;
+    }
+    _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoading || _isLoadingMore || _templates.length >= _total) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final result = await TemplateRepository.listPublished(
+        page: _page + 1,
+        limit: 20,
+      );
+      final next = await orderTemplatesForFeed(
+        List<WorldTemplate>.from(result['templates']),
+      );
+      if (!mounted) return;
+      final known = _templates.map((t) => t.id).toSet();
+      setState(() {
+        _templates = [..._templates, ...next.where((t) => known.add(t.id))];
+        _page += 1;
+        _total = (result['total'] as num?)?.toInt() ?? _templates.length;
+      });
+    } finally {
+      if (mounted) setState(() => _isLoadingMore = false);
     }
   }
 
@@ -216,18 +259,24 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
     final visible = _visible;
     if (visible.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const EvIcon(AppIcons.emptyRealms, size: 110),
-            const SizedBox(height: 14),
-            Text(
-              _tab == 2 ? 'No characters yet.' : 'No worlds found.',
-              style: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
-            ),
-          ],
-        ),
+      final isCharacters = _tab == 2;
+      return EverloreEmptyState(
+        icon: isCharacters
+            ? Icons.person_search_rounded
+            : Icons.explore_outlined,
+        eyebrow: isCharacters ? 'CHARACTER SHELF' : 'WORLD SHELF',
+        title: isCharacters ? 'No characters to meet yet' : 'No worlds in view',
+        message: isCharacters
+            ? 'New companions and characters will appear here as the collection grows.'
+            : 'Try another shelf or return soon—new realms are always being forged.',
+        actionLabel: isCharacters ? 'Browse worlds' : 'Show everything',
+        actionIcon: isCharacters
+            ? Icons.explore_rounded
+            : Icons.auto_awesome_rounded,
+        accent: isCharacters ? EverloreTheme.violetBright : EverloreTheme.gold,
+        onAction: isCharacters
+            ? () => setState(() => _tab = 0)
+            : () => setState(() => _tab = 0),
       );
     }
 
@@ -243,6 +292,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       backgroundColor: EverloreTheme.void2,
       onRefresh: () => _load(forceRefresh: true),
       child: SingleChildScrollView(
+        controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(
           16,
@@ -250,12 +300,28 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           16,
           110,
         ), // clear floating nav
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
           children: [
-            Expanded(child: _column(left)),
-            const SizedBox(width: 12),
-            Expanded(child: _column(right)),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _column(left)),
+                const SizedBox(width: 12),
+                Expanded(child: _column(right)),
+              ],
+            ),
+            if (_isLoadingMore)
+              const Padding(
+                padding: EdgeInsets.only(top: 8, bottom: 10),
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.8,
+                    color: EverloreTheme.gold,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -400,12 +466,12 @@ class _DiscoverCard extends StatelessWidget {
 
   Widget _cover() {
     if (template.imageUrl.isNotEmpty) {
-      return Image.network(
-        template.imageUrl,
+      return EverloreNetworkImage(
+        imageUrl: template.imageUrl,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _coverFallback(),
-        loadingBuilder: (context, child, progress) =>
-            progress == null ? child : _coverFallback(),
+        memCacheWidth: 720,
+        errorWidget: _coverFallback(),
+        semanticLabel: template.title,
       );
     }
     return _coverFallback();

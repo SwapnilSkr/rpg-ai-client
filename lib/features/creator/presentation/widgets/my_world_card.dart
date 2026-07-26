@@ -3,6 +3,7 @@ import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
 import '../../../../../shared/models/world_template.dart';
 import '../../../../../shared/widgets/mature_content_chip.dart';
+import '../../../../../shared/widgets/everlore_network_image.dart';
 
 class MyWorldCard extends StatelessWidget {
   final WorldTemplate template;
@@ -10,7 +11,8 @@ class MyWorldCard extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onPublish;
   final VoidCallback? onTap;
-  final VoidCallback? onDelete;
+  final Future<bool> Function()? onDelete;
+  final bool isDeleting;
 
   const MyWorldCard({
     super.key,
@@ -20,6 +22,7 @@ class MyWorldCard extends StatelessWidget {
     this.onPublish,
     this.onTap,
     this.onDelete,
+    this.isDeleting = false,
   });
 
   @override
@@ -28,11 +31,27 @@ class MyWorldCard extends StatelessWidget {
     final accent = template.isSentient
         ? EverloreTheme.violet
         : EverloreTheme.cyan;
+    final isWorking = isPublishing || isDeleting;
+    final statusColor = isPublishing
+        ? EverloreTheme.gold
+        : isDeleting
+        ? EverloreTheme.crimson
+        : isDraft
+        ? EverloreTheme.ember
+        : EverloreTheme.verdant;
+    final statusLabel = isPublishing
+        ? 'RELEASING'
+        : isDeleting
+        ? 'DELETING'
+        : isDraft
+        ? 'DRAFT'
+        : 'LIVE';
 
     return GestureDetector(
-      onTap: onTap ?? onEdit,
+      onTap: isWorking ? null : (onTap ?? onEdit),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           gradient: LinearGradient(
@@ -66,28 +85,8 @@ class MyWorldCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top stripe
-            Container(
-              height: 3,
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(16),
-                ),
-                gradient: LinearGradient(
-                  colors: isDraft
-                      ? [
-                          EverloreTheme.ember.withValues(alpha: 0.6),
-                          EverloreTheme.ember.withValues(alpha: 0.2),
-                        ]
-                      : [
-                          EverloreTheme.verdant.withValues(alpha: 0.6),
-                          EverloreTheme.verdant.withValues(alpha: 0.2),
-                        ],
-                ),
-              ),
-            ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -106,15 +105,13 @@ class MyWorldCard extends StatelessWidget {
                           border: Border.all(
                             color: accent.withValues(alpha: 0.3),
                           ),
-                          image: template.imageUrl.isNotEmpty
-                              ? DecorationImage(
-                                  image: NetworkImage(template.imageUrl),
-                                  fit: BoxFit.cover,
-                                )
-                              : null,
                         ),
                         child: template.imageUrl.isNotEmpty
-                            ? null
+                            ? EverloreNetworkImage(
+                                imageUrl: template.imageUrl,
+                                memCacheWidth: 160,
+                                semanticLabel: template.title,
+                              )
                             : Icon(
                                 template.isSentient
                                     ? Icons.psychology_alt
@@ -183,33 +180,35 @@ class MyWorldCard extends StatelessWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: isDraft
-                              ? EverloreTheme.ember.withValues(alpha: 0.12)
-                              : EverloreTheme.verdant.withValues(alpha: 0.12),
+                          color: statusColor.withValues(alpha: 0.10),
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: isDraft
-                                ? EverloreTheme.ember.withValues(alpha: 0.4)
-                                : EverloreTheme.verdant.withValues(alpha: 0.4),
+                            color: statusColor.withValues(alpha: 0.35),
                           ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              isDraft ? Icons.edit_note : Icons.public,
-                              size: 11,
-                              color: isDraft
-                                  ? EverloreTheme.ember
-                                  : EverloreTheme.verdant,
-                            ),
+                            if (isWorking)
+                              SizedBox(
+                                width: 11,
+                                height: 11,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.4,
+                                  color: statusColor,
+                                ),
+                              )
+                            else
+                              Icon(
+                                isDraft ? Icons.edit_note : Icons.public,
+                                size: 11,
+                                color: statusColor,
+                              ),
                             const SizedBox(width: 4),
                             Text(
-                              isDraft ? 'DRAFT' : 'LIVE',
+                              statusLabel,
                               style: TextStyle(
-                                color: isDraft
-                                    ? EverloreTheme.ember
-                                    : EverloreTheme.verdant,
+                                color: statusColor,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.8,
@@ -286,7 +285,7 @@ class MyWorldCard extends StatelessWidget {
                             icon: Icons.edit_outlined,
                             label: 'Edit',
                             color: EverloreTheme.ash,
-                            onTap: onEdit!,
+                            onTap: isWorking ? null : onEdit!,
                           ),
                         if (onDelete != null) ...[
                           const SizedBox(width: 16),
@@ -294,26 +293,24 @@ class MyWorldCard extends StatelessWidget {
                             assetIcon: AppIcons.destroy,
                             label: 'Delete',
                             color: EverloreTheme.crimson,
-                            onTap: () => _confirmDelete(context),
+                            onTap: isWorking
+                                ? null
+                                : () => _confirmDelete(context),
                           ),
                         ],
                         const Spacer(),
-                        if (onPublish != null)
-                          isPublishing
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 1.5,
-                                    color: EverloreTheme.gold,
-                                  ),
-                                )
-                              : _ActionButton(
-                                  assetIcon: AppIcons.publish,
-                                  label: 'Release to Realm',
-                                  color: EverloreTheme.gold,
-                                  onTap: onPublish!,
-                                ),
+                        if (isWorking)
+                          _ActionProgress(
+                            label: isPublishing ? 'Releasing…' : 'Deleting…',
+                            color: statusColor,
+                          )
+                        else if (onPublish != null)
+                          _ActionButton(
+                            assetIcon: AppIcons.publish,
+                            label: 'Release to Realm',
+                            color: EverloreTheme.gold,
+                            onTap: onPublish!,
+                          ),
                       ],
                     ),
                   ] else if (onEdit != null ||
@@ -329,19 +326,24 @@ class MyWorldCard extends StatelessWidget {
                             icon: Icons.edit_outlined,
                             label: 'Edit',
                             color: EverloreTheme.ash,
-                            onTap: onEdit!,
+                            onTap: isWorking ? null : onEdit!,
                           ),
                         const Spacer(),
-                        if (onDelete != null)
+                        if (isDeleting)
+                          _ActionProgress(
+                            label: 'Deleting…',
+                            color: statusColor,
+                          )
+                        else if (onDelete != null)
                           _ActionButton(
                             assetIcon: AppIcons.destroy,
                             label: 'Delete',
                             color: EverloreTheme.crimson,
                             onTap: () => _confirmDelete(context),
                           ),
-                        if (onDelete != null && onTap != null)
+                        if (!isDeleting && onDelete != null && onTap != null)
                           const SizedBox(width: 16),
-                        if (onTap != null)
+                        if (!isDeleting && onTap != null)
                           _ActionButton(
                             icon: Icons.visibility_outlined,
                             label: 'Preview',
@@ -364,61 +366,104 @@ class MyWorldCard extends StatelessWidget {
     final isDraft = !template.isPublished;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: EverloreTheme.void2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: EverloreTheme.crimson.withValues(alpha: 0.3)),
-        ),
-        title: Row(
-          children: [
-            const Icon(
-              Icons.warning_amber,
-              color: EverloreTheme.crimson,
-              size: 24,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                isDraft ? 'Unforge This World?' : 'Destroy This World?',
-                style: const TextStyle(
-                  color: EverloreTheme.parchment,
-                  fontSize: 18,
-                ),
+      barrierDismissible: false,
+      builder: (ctx) {
+        var isDestroying = false;
+        String? deleteError;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            backgroundColor: EverloreTheme.void2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                color: EverloreTheme.crimson.withValues(alpha: 0.3),
               ),
             ),
-          ],
-        ),
-        content: Text(
-          isDraft
-              ? 'This draft will be permanently deleted. This action cannot be undone.'
-              : 'This will permanently delete your world and all adventurer realms created from it. This action cannot be undone.',
-          style: const TextStyle(
-            color: EverloreTheme.ash,
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Keep World',
-              style: TextStyle(color: EverloreTheme.ash),
+            title: Row(
+              children: [
+                const Icon(
+                  Icons.warning_amber,
+                  color: EverloreTheme.crimson,
+                  size: 24,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isDraft ? 'Unforge This World?' : 'Destroy This World?',
+                    style: const TextStyle(
+                      color: EverloreTheme.parchment,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              onDelete?.call();
-            },
-            child: const Text(
-              'Destroy Forever',
-              style: TextStyle(color: EverloreTheme.crimson),
+            content: Text(
+              deleteError ??
+                  (isDraft
+                      ? 'This draft will be permanently deleted. This action cannot be undone.'
+                      : 'This will permanently delete your world and all adventurer realms created from it. This action cannot be undone.'),
+              style: TextStyle(
+                color: deleteError == null
+                    ? EverloreTheme.ash
+                    : EverloreTheme.crimson,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: isDestroying ? null : () => Navigator.pop(ctx),
+                child: const Text(
+                  'Keep World',
+                  style: TextStyle(color: EverloreTheme.ash),
+                ),
+              ),
+              TextButton(
+                onPressed: isDestroying
+                    ? null
+                    : () async {
+                        setDialogState(() => isDestroying = true);
+                        final deleted = await onDelete?.call() ?? false;
+                        if (!ctx.mounted) return;
+                        if (deleted) {
+                          Navigator.pop(ctx);
+                        } else {
+                          setDialogState(() {
+                            isDestroying = false;
+                            deleteError =
+                                'The deletion could not be completed. This world is still here — try again.';
+                          });
+                        }
+                      },
+                child: isDestroying
+                    ? const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.8,
+                              color: EverloreTheme.crimson,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Destroying…',
+                            style: TextStyle(color: EverloreTheme.crimson),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'Destroy Forever',
+                        style: TextStyle(color: EverloreTheme.crimson),
+                      ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -468,7 +513,7 @@ class _ActionButton extends StatelessWidget {
   final String? assetIcon;
   final String label;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _ActionButton({
     this.icon,
@@ -480,26 +525,60 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (assetIcon != null)
-            EvIcon(assetIcon!, size: 16)
-          else
-            Icon(icon!, size: 14, color: color),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 160),
+      opacity: onTap == null ? 0.42 : 1,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (assetIcon != null)
+              EvIcon(assetIcon!, size: 16)
+            else
+              Icon(icon!, size: 14, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _ActionProgress extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _ActionProgress({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 15,
+          height: 15,
+          child: CircularProgressIndicator(strokeWidth: 1.6, color: color),
+        ),
+        const SizedBox(width: 7),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

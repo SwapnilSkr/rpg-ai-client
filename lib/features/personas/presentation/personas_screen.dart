@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/models/persona.dart';
 import '../../../shared/widgets/everlore_top_bar.dart';
+import '../../../shared/widgets/everlore_session_loader.dart';
+import '../../../shared/widgets/everlore_empty_state.dart';
 import '../data/persona_repository.dart';
 
 const _genderOptions = [
@@ -19,13 +23,29 @@ class PersonasScreen extends StatefulWidget {
 
 class _PersonasScreenState extends State<PersonasScreen> {
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _searchOpen = false;
   String? _error;
   List<Persona> _personas = const [];
+  int _page = 1;
+  int _total = 0;
+  final _scrollController = ScrollController();
+  final _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_maybeLoadMore);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -34,10 +54,14 @@ class _PersonasScreenState extends State<PersonasScreen> {
       _error = null;
     });
     try {
-      final rows = await PersonaRepository.list(forceRefresh: true);
+      final result = await PersonaRepository.listPage(
+        search: _searchController.text,
+      );
       if (!mounted) return;
       setState(() {
-        _personas = rows;
+        _personas = result.personas;
+        _page = result.page;
+        _total = result.total;
         _loading = false;
       });
     } catch (_) {
@@ -47,6 +71,48 @@ class _PersonasScreenState extends State<PersonasScreen> {
         _loading = false;
       });
     }
+  }
+
+  void _maybeLoadMore() {
+    if (_scrollController.position.extentAfter > 480) return;
+    if (_loading || _loadingMore || _personas.length >= _total) return;
+    _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    setState(() => _loadingMore = true);
+    try {
+      final result = await PersonaRepository.listPage(
+        page: _page + 1,
+        search: _searchController.text,
+      );
+      if (!mounted) return;
+      final known = _personas.map((p) => p.id).toSet();
+      setState(() {
+        _personas = [
+          ..._personas,
+          ...result.personas.where((persona) => known.add(persona.id)),
+        ];
+        _page = result.page;
+        _total = result.total;
+      });
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  void _setSearchOpen() {
+    setState(() => _searchOpen = !_searchOpen);
+    if (!_searchOpen && _searchController.text.isNotEmpty) {
+      _searchDebounce?.cancel();
+      _searchController.clear();
+      _load();
+    }
+  }
+
+  void _onSearchChanged(String _) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 280), _load);
   }
 
   Future<void> _openEditor([Persona? persona]) async {
@@ -76,20 +142,41 @@ class _PersonasScreenState extends State<PersonasScreen> {
         children: [
           EverloreTopBar(
             title: 'Personas',
-            subtitle: '${_personas.length} saved identities',
+            subtitle: _total == 0
+                ? 'Saved identities'
+                : '$_total saved identities',
             actions: [
+              EverloreTopBarIcon(
+                icon: _searchOpen ? Icons.close_rounded : Icons.search_rounded,
+                tooltip: _searchOpen ? 'Close search' : 'Search personas',
+                onTap: _setSearchOpen,
+              ),
               EverloreTopBarIcon(
                 icon: Icons.add_rounded,
                 tooltip: 'Create persona',
                 onTap: () => _openEditor(),
               ),
-              EverloreTopBarIcon(
-                icon: Icons.refresh_rounded,
-                tooltip: 'Refresh personas',
-                isLoading: _loading && _personas.isNotEmpty,
-                onTap: _load,
-              ),
             ],
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            child: _searchOpen
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+                    child: TextField(
+                      controller: _searchController,
+                      autofocus: true,
+                      onChanged: _onSearchChanged,
+                      textInputAction: TextInputAction.search,
+                      style: EverloreTheme.ui(
+                        size: 14,
+                        color: EverloreTheme.parchment,
+                      ),
+                      decoration: _searchDecoration('Search personas'),
+                    ),
+                  )
+                : const SizedBox.shrink(),
           ),
           Expanded(
             child: RefreshIndicator(
@@ -97,14 +184,15 @@ class _PersonasScreenState extends State<PersonasScreen> {
               color: EverloreTheme.gold,
               backgroundColor: EverloreTheme.void2,
               child: ListView(
+                controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
                 children: [
                   if (_loading)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.only(top: 80),
-                        child: CircularProgressIndicator(
-                          color: EverloreTheme.gold,
+                    const Padding(
+                      padding: EdgeInsets.only(top: 64),
+                      child: Center(
+                        child: EverloreSessionLoader(
+                          message: 'Gathering personas',
                         ),
                       ),
                     )
@@ -112,17 +200,37 @@ class _PersonasScreenState extends State<PersonasScreen> {
                     _EmptyPersonaState(text: _error!, action: _load)
                   else if (_personas.isEmpty)
                     _EmptyPersonaState(
-                      text: 'No personas yet.',
-                      action: () => _openEditor(),
-                      actionLabel: 'Create persona',
+                      text: _searchController.text.isNotEmpty
+                          ? 'No personas match that search.'
+                          : 'No personas yet.',
+                      action: _searchController.text.isNotEmpty
+                          ? () {
+                              _searchController.clear();
+                              _load();
+                            }
+                          : () => _openEditor(),
+                      actionLabel: _searchController.text.isNotEmpty
+                          ? 'Clear search'
+                          : 'Create persona',
                     )
-                  else
+                  else ...[
                     for (final p in _personas)
                       _PersonaCard(
                         persona: p,
                         onTap: () => _openEditor(p),
                         onDelete: () => _delete(p),
                       ),
+                    if (_loadingMore)
+                      const Padding(
+                        padding: EdgeInsets.all(18),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: EverloreTheme.gold,
+                          ),
+                        ),
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -132,6 +240,31 @@ class _PersonasScreenState extends State<PersonasScreen> {
     );
   }
 }
+
+InputDecoration _searchDecoration(String hint) => InputDecoration(
+  hintText: hint,
+  hintStyle: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
+  prefixIcon: const Icon(Icons.search_rounded, color: EverloreTheme.goldDim),
+  filled: true,
+  fillColor: EverloreTheme.void2,
+  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+  border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(
+      color: EverloreTheme.goldDim.withValues(alpha: 0.22),
+    ),
+  ),
+  enabledBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(
+      color: EverloreTheme.goldDim.withValues(alpha: 0.22),
+    ),
+  ),
+  focusedBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: const BorderSide(color: EverloreTheme.gold, width: 1.2),
+  ),
+);
 
 class _PersonaCard extends StatelessWidget {
   final Persona persona;
@@ -209,24 +342,23 @@ class _EmptyPersonaState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 90),
-      child: Column(
-        children: [
-          Text(
-            text,
-            style: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
-          ),
-          const SizedBox(height: 14),
-          TextButton(
-            onPressed: action,
-            child: Text(
-              actionLabel,
-              style: const TextStyle(color: EverloreTheme.gold),
-            ),
-          ),
-        ],
-      ),
+    final isInitial = actionLabel == 'Create persona';
+    return EverloreEmptyState(
+      icon: isInitial
+          ? Icons.person_add_alt_1_rounded
+          : Icons.cloud_off_rounded,
+      eyebrow: isInitial ? 'PERSONA VAULT' : 'CONNECTION LOST',
+      title: isInitial
+          ? 'Who will you become?'
+          : 'Your personas are out of reach',
+      message: isInitial
+          ? 'Create a reusable identity for your journeys. Your name, voice, and story begin here.'
+          : text,
+      actionLabel: actionLabel,
+      actionIcon: isInitial ? Icons.add_rounded : Icons.refresh_rounded,
+      accent: isInitial ? EverloreTheme.gold : EverloreTheme.crimson,
+      onAction: action,
+      compact: false,
     );
   }
 }

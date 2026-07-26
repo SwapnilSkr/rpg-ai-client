@@ -2,6 +2,21 @@ import '../../../core/auth/auth_service.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/models/persona.dart';
 
+class PersonaPage {
+  final List<Persona> personas;
+  final int total;
+  final int page;
+
+  const PersonaPage({
+    required this.personas,
+    required this.total,
+    required this.page,
+  });
+
+  bool get hasMore =>
+      personas.isNotEmpty && personas.length + (page - 1) * 20 < total;
+}
+
 class PersonaRepository {
   /// Last successfully fetched list. Personas change rarely, so we serve this
   /// instantly (e.g. when opening Scene Settings) and refresh in the background.
@@ -18,7 +33,7 @@ class PersonaRepository {
 
   static Future<List<Persona>> _fetch() async {
     _syncSessionCache();
-    final response = await ApiClient.get('/personas');
+    final response = await ApiClient.get('/personas?limit=50');
     final rows = ((response['personas'] as List?) ?? [])
         .map((e) => Persona.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
@@ -37,6 +52,29 @@ class PersonaRepository {
       return cached;
     }
     return _fetch();
+  }
+
+  /// Page the vault rather than loading an unbounded identity list. Search is
+  /// performed on the server, so it finds personas that have not been loaded yet.
+  static Future<PersonaPage> listPage({
+    int page = 1,
+    int limit = 20,
+    String search = '',
+  }) async {
+    _syncSessionCache();
+    final query = <String>['page=$page', 'limit=$limit'];
+    if (search.trim().isNotEmpty) {
+      query.add('search=${Uri.encodeQueryComponent(search.trim())}');
+    }
+    final response = await ApiClient.get('/personas?${query.join('&')}');
+    final rows = ((response['personas'] as List?) ?? [])
+        .map((e) => Persona.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    return PersonaPage(
+      personas: rows,
+      total: (response['total'] as num?)?.toInt() ?? rows.length,
+      page: (response['page'] as num?)?.toInt() ?? page,
+    );
   }
 
   static Future<Persona> create({

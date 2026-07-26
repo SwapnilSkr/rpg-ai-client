@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +12,7 @@ import '../../../shared/models/user.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/everlore_top_bar.dart';
 import '../../../shared/widgets/neu.dart';
+import '../../../shared/widgets/everlore_empty_state.dart';
 
 class MyWorldsScreen extends StatelessWidget {
   const MyWorldsScreen({super.key});
@@ -23,8 +26,53 @@ class MyWorldsScreen extends StatelessWidget {
   }
 }
 
-class _MyWorldsView extends StatelessWidget {
+class _MyWorldsView extends StatefulWidget {
   const _MyWorldsView();
+
+  @override
+  State<_MyWorldsView> createState() => _MyWorldsViewState();
+}
+
+class _MyWorldsViewState extends State<_MyWorldsView> {
+  final _scrollController = ScrollController();
+  final _searchController = TextEditingController();
+  Timer? _searchDebounce;
+  bool _searchOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_maybeLoadMore);
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _scrollController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _maybeLoadMore() {
+    if (_scrollController.position.extentAfter > 520) return;
+    context.read<MyWorldsCubit>().loadMore();
+  }
+
+  void _toggleSearch() {
+    setState(() => _searchOpen = !_searchOpen);
+    if (!_searchOpen && _searchController.text.isNotEmpty) {
+      _searchDebounce?.cancel();
+      _searchController.clear();
+      context.read<MyWorldsCubit>().load(forceRefresh: true);
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 280), () {
+      if (mounted) context.read<MyWorldsCubit>().load(search: value);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,8 +146,17 @@ class _MyWorldsView extends StatelessWidget {
             children: [
               EverloreTopBar(
                 title: 'Worlds',
-                subtitle: '${state.worlds.length} creations',
+                subtitle: state.total == 0
+                    ? 'Your creations'
+                    : '${state.total} creations',
                 actions: [
+                  EverloreTopBarIcon(
+                    icon: _searchOpen
+                        ? Icons.close_rounded
+                        : Icons.search_rounded,
+                    tooltip: _searchOpen ? 'Close search' : 'Search worlds',
+                    onTap: _toggleSearch,
+                  ),
                   EverloreTopBarIcon(
                     icon: Icons.refresh_rounded,
                     tooltip: 'Refresh worlds',
@@ -109,15 +166,42 @@ class _MyWorldsView extends StatelessWidget {
                   ),
                 ],
               ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                child: _searchOpen
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+                        child: TextField(
+                          controller: _searchController,
+                          autofocus: true,
+                          onChanged: _onSearchChanged,
+                          textInputAction: TextInputAction.search,
+                          style: EverloreTheme.ui(
+                            size: 14,
+                            color: EverloreTheme.parchment,
+                          ),
+                          decoration: _creatorSearchDecoration(),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
               Expanded(
                 child: CustomScrollView(
+                  controller: _scrollController,
                   slivers: [
                     if (state.isLoading && state.worlds.isEmpty)
                       const SliverFillRemaining(child: _LoadingView())
                     else if (!state.isLoading && state.worlds.isEmpty)
                       SliverFillRemaining(
                         child: _EmptyForgeView(
-                          onForge: () => context.push('/my-worlds/forge'),
+                          onForge: _searchController.text.isNotEmpty
+                              ? () {
+                                  _searchController.clear();
+                                  context.read<MyWorldsCubit>().load();
+                                }
+                              : () => context.push('/my-worlds/forge'),
+                          isSearchEmpty: _searchController.text.isNotEmpty,
                         ),
                       )
                     else ...[
@@ -134,6 +218,9 @@ class _MyWorldsView extends StatelessWidget {
                               (ctx, i) => MyWorldCard(
                                 template: state.drafts[i],
                                 isPublishing: state.publishingIds.contains(
+                                  state.drafts[i].id,
+                                ),
+                                isDeleting: state.deletingIds.contains(
                                   state.drafts[i].id,
                                 ),
                                 onEdit: () => context.push(
@@ -167,6 +254,9 @@ class _MyWorldsView extends StatelessWidget {
                               (ctx, i) => MyWorldCard(
                                 template: state.published[i],
                                 isPublishing: false,
+                                isDeleting: state.deletingIds.contains(
+                                  state.published[i].id,
+                                ),
                                 onEdit: () => context.push(
                                   '/my-worlds/${state.published[i].id}/forge',
                                   extra: state.published[i],
@@ -186,6 +276,18 @@ class _MyWorldsView extends StatelessWidget {
                       const SliverPadding(
                         padding: EdgeInsets.only(bottom: 120),
                       ),
+                      if (state.isLoadingMore)
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.only(bottom: 130),
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: EverloreTheme.gold,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ],
                 ),
@@ -223,50 +325,98 @@ class _MyWorldsView extends StatelessWidget {
   void _confirmPublish(BuildContext context, String id, String title) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: EverloreTheme.void2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
-        ),
-        title: const Row(
-          children: [
-            EvIcon(AppIcons.publish, size: 22),
-            SizedBox(width: 8),
-            Text(
-              'Release This World?',
-              style: TextStyle(color: EverloreTheme.parchment, fontSize: 17),
+      barrierDismissible: false,
+      builder: (ctx) {
+        var isReleasing = false;
+        String? releaseError;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            backgroundColor: EverloreTheme.void2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+              ),
             ),
-          ],
-        ),
-        content: Text(
-          '"$title" will be revealed to all adventurers across the realm. You can still edit it later from My Worlds.',
-          style: const TextStyle(
-            color: EverloreTheme.ash,
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Keep Hidden',
-              style: TextStyle(color: EverloreTheme.ash),
+            title: const Row(
+              children: [
+                EvIcon(AppIcons.publish, size: 22),
+                SizedBox(width: 8),
+                Text(
+                  'Release This World?',
+                  style: TextStyle(
+                    color: EverloreTheme.parchment,
+                    fontSize: 17,
+                  ),
+                ),
+              ],
             ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.read<MyWorldsCubit>().publish(id);
-            },
-            child: const Text(
-              'Release to the Realm',
-              style: TextStyle(color: EverloreTheme.gold),
+            content: Text(
+              releaseError ??
+                  '"$title" will be revealed to all adventurers across the realm. You can still edit it later from My Worlds.',
+              style: TextStyle(
+                color: releaseError == null
+                    ? EverloreTheme.ash
+                    : EverloreTheme.crimson,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: isReleasing ? null : () => Navigator.pop(ctx),
+                child: const Text(
+                  'Keep Hidden',
+                  style: TextStyle(color: EverloreTheme.ash),
+                ),
+              ),
+              TextButton(
+                onPressed: isReleasing
+                    ? null
+                    : () async {
+                        setDialogState(() => isReleasing = true);
+                        final released = await context
+                            .read<MyWorldsCubit>()
+                            .publish(id);
+                        if (!ctx.mounted) return;
+                        if (released) {
+                          Navigator.pop(ctx);
+                        } else {
+                          setDialogState(() {
+                            isReleasing = false;
+                            releaseError =
+                                'The release could not be completed. Nothing changed — try again.';
+                          });
+                        }
+                      },
+                child: isReleasing
+                    ? const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.8,
+                              color: EverloreTheme.gold,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Releasing…',
+                            style: TextStyle(color: EverloreTheme.gold),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'Release to the Realm',
+                        style: TextStyle(color: EverloreTheme.gold),
+                      ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -498,61 +648,25 @@ class _UpgradeFeature extends StatelessWidget {
 
 class _EmptyForgeView extends StatelessWidget {
   final VoidCallback onForge;
-  const _EmptyForgeView({required this.onForge});
+  final bool isSearchEmpty;
+
+  const _EmptyForgeView({required this.onForge, this.isSearchEmpty = false});
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 90,
-              height: 90,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    EverloreTheme.gold.withValues(alpha: 0.18),
-                    EverloreTheme.void2,
-                  ],
-                ),
-                border: Border.all(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.3),
-                ),
-              ),
-              child: const EvIcon(AppIcons.emptyForge, size: 86),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Your forge awaits',
-              style: TextStyle(
-                color: EverloreTheme.parchment,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'No worlds crafted yet. Shape the lore, define the rules, and release your creation to adventurers.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: EverloreTheme.ash,
-                fontSize: 14,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 32),
-            NeuButton(
-              label: 'Forge Your First World',
-              icon: Icons.add,
-              onTap: onForge,
-            ),
-          ],
-        ),
-      ),
+    return EverloreEmptyState(
+      icon: isSearchEmpty
+          ? Icons.search_off_rounded
+          : Icons.auto_awesome_rounded,
+      eyebrow: isSearchEmpty ? 'NO MATCHES' : 'THE FORGE',
+      title: isSearchEmpty ? 'No worlds found' : 'Your forge awaits',
+      message: isSearchEmpty
+          ? 'Try another title or clear the search to see all your creations.'
+          : 'Shape the lore, set the rules, and release a world for adventurers to discover.',
+      actionLabel: isSearchEmpty ? 'Clear search' : 'Forge your first world',
+      actionIcon: isSearchEmpty ? Icons.close_rounded : Icons.add_rounded,
+      accent: EverloreTheme.gold,
+      onAction: onForge,
     );
   }
 }
@@ -567,3 +681,28 @@ class _LoadingView extends StatelessWidget {
     );
   }
 }
+
+InputDecoration _creatorSearchDecoration() => InputDecoration(
+  hintText: 'Search your worlds',
+  hintStyle: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
+  prefixIcon: const Icon(Icons.search_rounded, color: EverloreTheme.goldDim),
+  filled: true,
+  fillColor: EverloreTheme.void2,
+  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+  border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(
+      color: EverloreTheme.goldDim.withValues(alpha: 0.22),
+    ),
+  ),
+  enabledBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(
+      color: EverloreTheme.goldDim.withValues(alpha: 0.22),
+    ),
+  ),
+  focusedBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: const BorderSide(color: EverloreTheme.gold, width: 1.2),
+  ),
+);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../shared/widgets/everlore_network_image.dart';
 
 /// Reusable avatar/background generator used in world + character creation.
 ///
@@ -39,17 +40,24 @@ class ImageForge extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('AVATAR & BACKGROUND',
-            style: EverloreTheme.ui(
-                size: 13,
-                color: EverloreTheme.parchment,
-                weight: FontWeight.w600)),
+        Text(
+          'AVATAR & BACKGROUND',
+          style: EverloreTheme.ui(
+            size: 13,
+            color: EverloreTheme.parchment,
+            weight: FontWeight.w600,
+          ),
+        ),
         const SizedBox(height: 4),
         Text(
           'A generated image — shown on the card and as the chat background. '
           'Filled by “Generate with AI”, or write your own below. Style follows '
           'the voice you chose.',
-          style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash, height: 1.4),
+          style: EverloreTheme.ui(
+            size: 12,
+            color: EverloreTheme.ash,
+            height: 1.4,
+          ),
         ),
         const SizedBox(height: 12),
 
@@ -64,19 +72,30 @@ class ImageForge extends StatelessWidget {
                   ? Stack(
                       fit: StackFit.expand,
                       children: [
-                        Image.network(imageUrl, fit: BoxFit.cover,
-                            loadingBuilder: (c, child, p) =>
-                                p == null ? child : const _Spinner(label: 'Loading…'),
-                            errorBuilder: (c, e, s) =>
-                                const _Placeholder(icon: Icons.broken_image_outlined, label: 'Image failed to load')),
-                        if (busy) const _Spinner(label: 'Conjuring a new take…', dim: true),
+                        EverloreNetworkImage(
+                          imageUrl: imageUrl,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 720,
+                          placeholder: const _Spinner(label: 'Loading…'),
+                          errorWidget: const _Placeholder(
+                            icon: Icons.broken_image_outlined,
+                            label: 'Image failed to load',
+                          ),
+                          semanticLabel: 'Generated world artwork',
+                        ),
+                        if (busy)
+                          const _Spinner(
+                            label: 'Conjuring a new take…',
+                            dim: true,
+                          ),
                       ],
                     )
                   : busy
-                      ? const _Spinner(label: 'Conjuring your image…')
-                      : const _Placeholder(
-                          icon: Icons.auto_awesome_outlined,
-                          label: 'No image yet'),
+                  ? const _Spinner(label: 'Conjuring your image…')
+                  : const _Placeholder(
+                      icon: Icons.auto_awesome_outlined,
+                      label: 'No image yet',
+                    ),
             ),
           ),
         ),
@@ -94,7 +113,10 @@ class ImageForge extends StatelessWidget {
           enabled: !busy,
           textCapitalization: TextCapitalization.sentences,
           style: EverloreTheme.ui(
-              size: 13, color: EverloreTheme.parchment, height: 1.5),
+            size: 13,
+            color: EverloreTheme.parchment,
+            height: 1.5,
+          ),
           decoration: InputDecoration(
             labelText: 'Visual prompt',
             labelStyle: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
@@ -104,30 +126,38 @@ class ImageForge extends StatelessWidget {
             counterText: '',
             filled: true,
             fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+                color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.2)),
+                color: EverloreTheme.goldDim.withValues(alpha: 0.2),
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide:
-                  const BorderSide(color: EverloreTheme.gold, width: 1.2),
+              borderSide: const BorderSide(
+                color: EverloreTheme.gold,
+                width: 1.2,
+              ),
             ),
           ),
         ),
         const SizedBox(height: 10),
 
         if (error != null) ...[
-          Text(error!,
-              style: EverloreTheme.ui(size: 12, color: EverloreTheme.crimson)),
+          Text(
+            error!,
+            style: EverloreTheme.ui(size: 12, color: EverloreTheme.crimson),
+          ),
           const SizedBox(height: 8),
         ],
 
@@ -136,13 +166,17 @@ class ImageForge extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
             onPressed: (busy || !hasPrompt) ? null : onGenerate,
-            icon: Icon(hasImage ? Icons.refresh_rounded : Icons.auto_awesome,
-                size: 18),
+            icon: Icon(
+              hasImage ? Icons.refresh_rounded : Icons.auto_awesome,
+              size: 18,
+            ),
             label: Text(hasImage ? 'Regenerate' : 'Generate image'),
             style: OutlinedButton.styleFrom(
               foregroundColor: EverloreTheme.gold,
               disabledForegroundColor: EverloreTheme.ash,
-              side: BorderSide(color: EverloreTheme.gold.withValues(alpha: 0.5)),
+              side: BorderSide(
+                color: EverloreTheme.gold.withValues(alpha: 0.5),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
           ),
@@ -168,11 +202,15 @@ class _Spinner extends StatelessWidget {
             width: 26,
             height: 26,
             child: CircularProgressIndicator(
-                strokeWidth: 2.2, color: EverloreTheme.gold),
+              strokeWidth: 2.2,
+              color: EverloreTheme.gold,
+            ),
           ),
           const SizedBox(height: 10),
-          Text(label,
-              style: EverloreTheme.ui(size: 12, color: EverloreTheme.parchment)),
+          Text(
+            label,
+            style: EverloreTheme.ui(size: 12, color: EverloreTheme.parchment),
+          ),
         ],
       ),
     );
@@ -191,7 +229,10 @@ class _Placeholder extends StatelessWidget {
         children: [
           Icon(icon, size: 34, color: EverloreTheme.ash),
           const SizedBox(height: 8),
-          Text(label, style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash)),
+          Text(
+            label,
+            style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+          ),
         ],
       ),
     );

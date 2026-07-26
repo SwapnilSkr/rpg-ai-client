@@ -5,6 +5,8 @@ import '../data/template_repository.dart';
 import '../../home/presentation/realm_entry_flow.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/mature_content_chip.dart';
+import '../../../../shared/widgets/everlore_network_image.dart';
+import '../../../../shared/widgets/everlore_session_loader.dart';
 
 class TemplateDetailScreen extends StatefulWidget {
   final String templateId;
@@ -55,14 +57,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
       backgroundColor: EverloreTheme.void1,
       body: _isLoading
           ? const Center(
-              child: SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.5,
-                  color: EverloreTheme.gold,
-                ),
-              ),
+              child: EverloreSessionLoader(message: 'Opening the realm'),
             )
           : _template == null
           ? _buildNotFound(context)
@@ -124,10 +119,12 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                     // Generated hero image (behind the gradient scrim)
                     if (t.imageUrl.isNotEmpty)
                       Positioned.fill(
-                        child: Image.network(
-                          t.imageUrl,
+                        child: EverloreNetworkImage(
+                          imageUrl: t.imageUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          memCacheWidth: 1080,
+                          errorWidget: const SizedBox.shrink(),
+                          semanticLabel: t.title,
                         ),
                       ),
                     // Gradient bg / scrim
@@ -179,15 +176,13 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                                   color: accentColor.withValues(alpha: 0.4),
                                   width: 1.5,
                                 ),
-                                image: t.imageUrl.isNotEmpty
-                                    ? DecorationImage(
-                                        image: NetworkImage(t.imageUrl),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
                               ),
                               child: t.imageUrl.isNotEmpty
-                                  ? null
+                                  ? EverloreNetworkImage(
+                                      imageUrl: t.imageUrl,
+                                      memCacheWidth: 192,
+                                      semanticLabel: t.title,
+                                    )
                                   : Icon(
                                       t.isSentient
                                           ? Icons.psychology_alt
