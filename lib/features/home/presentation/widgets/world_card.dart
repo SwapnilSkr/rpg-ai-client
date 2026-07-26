@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../../shared/models/world_instance.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
+import '../../../../../shared/widgets/everlore_network_image.dart';
 
 // Warm-obsidian bases for realm cards — pick by hash of instanceId. Subtle
 // variation only; the brand stays the forged shell, the accent is the tint.
@@ -52,24 +53,13 @@ class WorldCard extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: gradColors,
             ),
-            // The world's generated image as the card backdrop (darkened so the
-            // light title/description stay legible); falls back to the gradient.
-            image: imageUrl.isNotEmpty
-                ? DecorationImage(
-                    image: NetworkImage(imageUrl),
-                    fit: BoxFit.cover,
-                    colorFilter: ColorFilter.mode(
-                      Colors.black.withValues(alpha: 0.5),
-                      BlendMode.darken,
-                    ),
-                  )
-                : null,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: accentColor.withValues(alpha: 0.25),
@@ -89,142 +79,162 @@ class WorldCard extends StatelessWidget {
               ),
             ],
           ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(18),
-              splashColor: accentColor.withValues(alpha: 0.08),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Top row: icon + title + archive
-                    Row(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (imageUrl.isNotEmpty)
+                Positioned.fill(
+                  child: ColorFiltered(
+                    colorFilter: ColorFilter.mode(
+                      Colors.black.withValues(alpha: 0.5),
+                      BlendMode.darken,
+                    ),
+                    child: EverloreNetworkImage(
+                      imageUrl: imageUrl,
+                      memCacheWidth: 1080,
+                      errorWidget: const SizedBox.shrink(),
+                      semanticLabel: title,
+                    ),
+                  ),
+                ),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onTap,
+                  borderRadius: BorderRadius.circular(18),
+                  splashColor: accentColor.withValues(alpha: 0.08),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // World type icon
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: accentColor.withValues(alpha: 0.12),
-                            border: Border.all(
-                              color: accentColor.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Icon(
-                            isSentient
-                                ? Icons.psychology_alt
-                                : Icons.auto_stories,
-                            color: accentColor,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                style: const TextStyle(
-                                  color: EverloreTheme.parchment,
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                isSentient
-                                    ? 'Sentient World'
-                                    : 'Game Master World',
-                                style: TextStyle(
-                                  color: accentColor.withValues(alpha: 0.8),
-                                  fontSize: 11,
-                                  letterSpacing: 0.5,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (onArchive != null || onDelete != null)
-                          GestureDetector(
-                            onTap: () => _showOptions(context),
-                            child: Container(
-                              width: 32,
-                              height: 32,
+                        // Top row: icon + title + archive
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // World type icon
+                            Container(
+                              width: 42,
+                              height: 42,
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: EverloreTheme.white10,
+                                shape: BoxShape.circle,
+                                color: accentColor.withValues(alpha: 0.12),
+                                border: Border.all(
+                                  color: accentColor.withValues(alpha: 0.3),
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.more_horiz,
-                                color: EverloreTheme.ash,
-                                size: 18,
+                              child: Icon(
+                                isSentient
+                                    ? Icons.psychology_alt
+                                    : Icons.auto_stories,
+                                color: accentColor,
+                                size: 20,
                               ),
                             ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title,
+                                    style: const TextStyle(
+                                      color: EverloreTheme.parchment,
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isSentient
+                                        ? 'Sentient World'
+                                        : 'Game Master World',
+                                    style: TextStyle(
+                                      color: accentColor.withValues(alpha: 0.8),
+                                      fontSize: 11,
+                                      letterSpacing: 0.5,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (onArchive != null || onDelete != null)
+                              GestureDetector(
+                                onTap: () => _showOptions(context),
+                                child: Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    color: EverloreTheme.white10,
+                                  ),
+                                  child: const Icon(
+                                    Icons.more_horiz,
+                                    color: EverloreTheme.ash,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+
+                        if (description.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          Text(
+                            description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: EverloreTheme.ash,
+                              fontSize: 13,
+                              height: 1.5,
+                            ),
                           ),
-                      ],
-                    ),
+                        ],
 
-                    if (description.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      Text(
-                        description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: EverloreTheme.ash,
-                          fontSize: 13,
-                          height: 1.5,
+                        const SizedBox(height: 16),
+
+                        // Divider
+                        Container(
+                          height: 1,
+                          color: accentColor.withValues(alpha: 0.1),
                         ),
-                      ),
-                    ],
 
-                    const SizedBox(height: 16),
+                        const SizedBox(height: 14),
 
-                    // Divider
-                    Container(
-                      height: 1,
-                      color: accentColor.withValues(alpha: 0.1),
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // Stats row
-                    Row(
-                      children: [
-                        _Stat(
-                          icon: AppIcons.event,
-                          label: '${instance.meta.totalEvents}',
-                          tooltip: 'Events',
-                          color: accentColor,
-                        ),
-                        const SizedBox(width: 16),
-                        _Stat(
-                          icon: AppIcons.echo,
-                          label: '${instance.meta.totalMemories}',
-                          tooltip: 'Echoes',
-                          color: accentColor,
-                        ),
-                        const SizedBox(width: 12),
-                        _SceneTag(tag: sceneTag, color: accentColor),
-                        const Spacer(),
-                        _TimeAgo(
-                          dateTime: instance.meta.lastActiveAt,
-                          color: accentColor,
+                        // Stats row
+                        Row(
+                          children: [
+                            _Stat(
+                              icon: AppIcons.event,
+                              label: '${instance.meta.totalEvents}',
+                              tooltip: 'Events',
+                              color: accentColor,
+                            ),
+                            const SizedBox(width: 16),
+                            _Stat(
+                              icon: AppIcons.echo,
+                              label: '${instance.meta.totalMemories}',
+                              tooltip: 'Echoes',
+                              color: accentColor,
+                            ),
+                            const SizedBox(width: 12),
+                            _SceneTag(tag: sceneTag, color: accentColor),
+                            const Spacer(),
+                            _TimeAgo(
+                              dateTime: instance.meta.lastActiveAt,
+                              color: accentColor,
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),

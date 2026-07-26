@@ -8,6 +8,7 @@ import 'package:everlore/screens/discover_screen.dart';
 import 'package:everlore/features/home/presentation/home_screen.dart';
 import 'package:everlore/features/home/presentation/realm_playthroughs_screen.dart';
 import 'package:everlore/features/play/presentation/play_screen.dart';
+import 'package:everlore/features/play/presentation/realm_screen.dart';
 import 'package:everlore/features/chronicle/presentation/chronicle_screen.dart';
 import 'package:everlore/features/templates/presentation/browse_screen.dart';
 import 'package:everlore/features/templates/presentation/template_detail_screen.dart';
@@ -75,8 +76,18 @@ final router = GoRouter(
     GoRoute(
       path: '/chronicle/:instanceId',
       name: 'chronicle',
-      builder: (context, state) =>
-          ChronicleScreen(instanceId: state.pathParameters['instanceId']!),
+      builder: (context, state) => ChronicleScreen(
+        instanceId: state.pathParameters['instanceId']!,
+        initialSection: state.uri.queryParameters['section'],
+      ),
+    ),
+    GoRoute(
+      path: '/realm/:instanceId',
+      name: 'realm',
+      builder: (context, state) => RealmScreen(
+        instanceId: state.pathParameters['instanceId']!,
+        args: state.extra as RealmScreenArgs?,
+      ),
     ),
     GoRoute(
       path: '/characters/new',

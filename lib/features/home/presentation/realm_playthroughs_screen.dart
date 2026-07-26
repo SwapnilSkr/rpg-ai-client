@@ -7,6 +7,7 @@ import '../../../shared/app_icons.dart';
 import '../../../shared/models/realm_play_status.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/neu.dart';
+import '../../../shared/widgets/everlore_empty_state.dart';
 import '../data/home_repository.dart';
 import 'realm_entry_flow.dart';
 
@@ -145,31 +146,16 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
 
     final stories = _data?.stories ?? [];
     if (stories.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(36),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const EvIcon(AppIcons.emptyRealms, size: 100),
-              const SizedBox(height: 16),
-              const Text(
-                'No stories here yet',
-                style: TextStyle(
-                  color: EverloreTheme.parchment,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 24),
-              NeuButton(
-                label: 'Begin your first story',
-                icon: Icons.explore,
-                onTap: _beginNewStory,
-              ),
-            ],
-          ),
-        ),
+      return EverloreEmptyState(
+        icon: Icons.menu_book_rounded,
+        eyebrow: 'UNWRITTEN CHAPTER',
+        title: 'No stories in this realm yet',
+        message:
+            'Begin a fresh playthrough and this realm will keep every chapter here.',
+        actionLabel: 'Begin a story',
+        actionIcon: Icons.auto_stories_rounded,
+        accent: EverloreTheme.gold,
+        onAction: _beginNewStory,
       );
     }
 

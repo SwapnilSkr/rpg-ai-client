@@ -21,9 +21,11 @@ import '../../../shared/chat_modes.dart';
 import '../../../shared/narrative_styles.dart';
 import '../../../shared/narration_tones.dart';
 import '../../../shared/widgets/top_confirmation_toast.dart';
+import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../core/storage/local_db.dart';
 import '../../home/data/home_repository.dart';
 import '../../chronicle/data/chronicle_repository.dart';
+import 'realm_screen.dart';
 
 /// Whether [c] should be treated as in the current scene. [presence] is the set
 /// of lowercased names the latest turn reported present, or null when presence
@@ -502,60 +504,81 @@ class _PlayViewState extends State<_PlayView> {
       personas = const [];
     }
     if (!mounted || !context.mounted) return;
-    showModalBottomSheet(
+    showGeneralDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: EverloreTheme.void2,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      barrierDismissible: true,
+      barrierLabel: 'Close scene settings',
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 260),
+      pageBuilder: (dialogContext, _, __) => Align(
+        alignment: Alignment.centerRight,
+        child: _DraggableSettingsDrawer(
+          onDismiss: () => Navigator.of(dialogContext).pop(),
+          child: Material(
+            color: EverloreTheme.void2,
+            child: SizedBox(
+              width: MediaQuery.sizeOf(dialogContext).width.clamp(320.0, 430.0),
+              height: double.infinity,
+              child: _SettingsSheet(
+                initialPov: instance?.narrationPov ?? 'third',
+                initialMode: instance?.mode ?? kDefaultChatMode,
+                initialVoiceOverride: instance?.narrativeStyleOverride,
+                worldVoice: cubit.state.template?.narrativeStyle ?? '',
+                initialTone: instance?.narrationTone ?? kDefaultNarrationTone,
+                initialLength: instance?.messageLength ?? 'medium',
+                initialPersonaId: instance?.personaId,
+                // Global personas describe the player in sentient worlds. GM worlds use
+                // template-scoped protagonist cards from the first-entry sheet instead.
+                isGmWorld: !(cubit.state.template?.isSentient ?? false),
+                personas: personas,
+                onClose: () => Navigator.of(dialogContext).pop(),
+                onApply:
+                    (pov, mode, voiceOverride, tone, length, personaId) async {
+                      final saved = await cubit.updateSettings(
+                        narrationPov: pov,
+                        mode: mode,
+                        narrativeStyleOverride: voiceOverride,
+                        clearNarrativeStyleOverride: voiceOverride == null,
+                        narrationTone: tone,
+                        messageLength: length,
+                        personaId: personaId,
+                        clearPersona: personaId == null,
+                      );
+                      if (!saved || !mounted || !context.mounted) return false;
+                      _pendingRealmMenuReturn = false;
+                      Navigator.of(dialogContext).pop();
+                      _showSettingsSnack(
+                        context,
+                        pov: pov,
+                        mode: mode,
+                        voiceOverride: voiceOverride,
+                        worldVoice: cubit.state.template?.narrativeStyle ?? '',
+                        tone: tone,
+                        length: length,
+                      );
+                      return true;
+                    },
+                onReset: () {
+                  _pendingRealmMenuReturn = false;
+                  Navigator.of(dialogContext).pop();
+                  _confirmResetChat(context, cubit);
+                },
+                onDelete: () {
+                  _pendingRealmMenuReturn = false;
+                  Navigator.of(dialogContext).pop();
+                  _confirmDeleteChat(context, cubit.instanceId);
+                },
+              ),
+            ),
+          ),
+        ),
       ),
-      builder: (sheetCtx) => _SettingsSheet(
-        initialPov: instance?.narrationPov ?? 'third',
-        initialMode: instance?.mode ?? kDefaultChatMode,
-        initialVoiceOverride: instance?.narrativeStyleOverride,
-        worldVoice: cubit.state.template?.narrativeStyle ?? '',
-        initialTone: instance?.narrationTone ?? kDefaultNarrationTone,
-        initialLength: instance?.messageLength ?? 'medium',
-        initialPersonaId: instance?.personaId,
-        // Global personas describe the player in sentient worlds. GM worlds use
-        // template-scoped protagonist cards from the first-entry sheet instead.
-        isGmWorld: !(cubit.state.template?.isSentient ?? false),
-        personas: personas,
-        onApply: (pov, mode, voiceOverride, tone, length, personaId) async {
-          final saved = await cubit.updateSettings(
-            narrationPov: pov,
-            mode: mode,
-            narrativeStyleOverride: voiceOverride,
-            clearNarrativeStyleOverride: voiceOverride == null,
-            narrationTone: tone,
-            messageLength: length,
-            personaId: personaId,
-            clearPersona: personaId == null,
-          );
-          if (!saved || !mounted || !context.mounted) return false;
-          _pendingRealmMenuReturn = false;
-          Navigator.pop(sheetCtx);
-          _showSettingsSnack(
-            context,
-            pov: pov,
-            mode: mode,
-            voiceOverride: voiceOverride,
-            worldVoice: cubit.state.template?.narrativeStyle ?? '',
-            tone: tone,
-            length: length,
-          );
-          return true;
-        },
-        onReset: () {
-          _pendingRealmMenuReturn = false;
-          Navigator.pop(sheetCtx);
-          _confirmResetChat(context, cubit);
-        },
-        onDelete: () {
-          _pendingRealmMenuReturn = false;
-          Navigator.pop(sheetCtx);
-          _confirmDeleteChat(context, cubit.instanceId);
-        },
+      transitionBuilder: (_, animation, __, child) => SlideTransition(
+        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+            .animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            ),
+        child: child,
       ),
     ).then((_) {
       if (mounted && context.mounted) _maybeRestoreRealmMenu(context);
@@ -1214,11 +1237,12 @@ class _PlayViewState extends State<_PlayView> {
               // readability scrim) when present, else the scene-tinted gradient.
               if (bgUrl.isNotEmpty) ...[
                 Positioned.fill(
-                  child: Image.network(
-                    bgUrl,
+                  child: EverloreNetworkImage(
+                    imageUrl: bgUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (c, e, s) =>
-                        _AtmosphereBackground(accent: accent),
+                    memCacheWidth: 1440,
+                    errorWidget: _AtmosphereBackground(accent: accent),
+                    semanticLabel: title,
                   ),
                 ),
                 Positioned.fill(
@@ -1258,8 +1282,27 @@ class _PlayViewState extends State<_PlayView> {
                     accent: accent,
                     isConnected: state.isConnected,
                     onBack: () => context.pop(),
-                    onOpenMenu: state.instance != null
-                        ? () => _showRealmMenu(context)
+                    onOpenRealm:
+                        state.instance != null && state.template != null
+                        ? () => context.push(
+                            '/realm/${state.instance!.id}',
+                            extra: RealmScreenArgs(
+                              instance: state.instance!,
+                              template: state.template!,
+                              characters: state.characters,
+                              onReset: () => _confirmResetChat(
+                                context,
+                                context.read<PlayCubit>(),
+                              ),
+                              onDelete: () => _confirmDeleteChat(
+                                context,
+                                context.read<PlayCubit>().instanceId,
+                              ),
+                            ),
+                          )
+                        : null,
+                    onOpenSettings: state.instance != null
+                        ? () => _showChatMenu(context)
                         : null,
                   ),
 
@@ -1635,14 +1678,16 @@ class _PlayHeader extends StatelessWidget {
   final Color accent;
   final bool isConnected;
   final VoidCallback onBack;
-  final VoidCallback? onOpenMenu;
+  final VoidCallback? onOpenRealm;
+  final VoidCallback? onOpenSettings;
 
   const _PlayHeader({
     required this.title,
     required this.accent,
     required this.isConnected,
     required this.onBack,
-    this.onOpenMenu,
+    this.onOpenRealm,
+    this.onOpenSettings,
   });
 
   @override
@@ -1670,57 +1715,66 @@ class _PlayHeader extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (title.isNotEmpty)
-                      Text(
-                        title,
-                        style: EverloreTheme.serifDisplay(
-                          size: 18,
-                          color: EverloreTheme.parchment,
-                          weight: FontWeight.w600,
-                          spacing: 0.5,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    const SizedBox(height: 3),
-                    Row(
+                child: InkWell(
+                  onTap: onOpenRealm,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 220),
-                          child: EvIcon(
-                            isConnected
-                                ? AppIcons.realmActive
-                                : AppIcons.reconnecting,
-                            key: ValueKey(isConnected),
-                            size: 18,
+                        if (title.isNotEmpty)
+                          Text(
+                            title,
+                            style: EverloreTheme.serifDisplay(
+                              size: 18,
+                              color: EverloreTheme.parchment,
+                              weight: FontWeight.w600,
+                              spacing: 0.5,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          isConnected ? 'Connected' : 'Reconnecting…',
-                          style: EverloreTheme.ui(
-                            size: 11,
-                            spacing: 0.5,
-                            color: isConnected
-                                ? EverloreTheme.ash.withValues(alpha: 0.75)
-                                : EverloreTheme.crimson.withValues(alpha: 0.85),
-                          ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 220),
+                              child: EvIcon(
+                                isConnected
+                                    ? AppIcons.realmActive
+                                    : AppIcons.reconnecting,
+                                key: ValueKey(isConnected),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              isConnected ? 'Connected' : 'Reconnecting…',
+                              style: EverloreTheme.ui(
+                                size: 11,
+                                spacing: 0.5,
+                                color: isConnected
+                                    ? EverloreTheme.ash.withValues(alpha: 0.75)
+                                    : EverloreTheme.crimson.withValues(
+                                        alpha: 0.85,
+                                      ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-              if (onOpenMenu != null)
+              if (onOpenSettings != null)
                 _RuneButton(
                   icon: Icons.menu_rounded,
-                  onTap: onOpenMenu!,
+                  onTap: onOpenSettings!,
                   accent: EverloreTheme.gold,
-                  tooltip: 'Realm menu',
+                  tooltip: 'Scene settings',
                 ),
             ],
           ),
@@ -2212,7 +2266,65 @@ class _EmptyNarrative extends StatelessWidget {
   }
 }
 
-/// In-chat scene settings: narration POV, chat mode, reply length, and delete.
+/// Right-side drawer that visibly follows a horizontal gesture. A small pull
+/// left is treated as resistance; pulling/flicking right closes the sheet.
+class _DraggableSettingsDrawer extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onDismiss;
+
+  const _DraggableSettingsDrawer({
+    required this.child,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_DraggableSettingsDrawer> createState() =>
+      _DraggableSettingsDrawerState();
+}
+
+class _DraggableSettingsDrawerState extends State<_DraggableSettingsDrawer> {
+  double _offset = 0;
+  bool _settling = false;
+
+  void _update(DragUpdateDetails details) {
+    // The panel is already fully open at x=0. Let a leftward pull show only a
+    // little elastic resistance, while a rightward pull tracks the finger.
+    final next = _offset + details.delta.dx;
+    setState(() {
+      _settling = false;
+      _offset = next < 0 ? (next * 0.22).clamp(-16.0, 0.0) : next;
+    });
+  }
+
+  void _end(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (_offset > 88 || velocity > 700) {
+      widget.onDismiss();
+      return;
+    }
+    setState(() {
+      _settling = true;
+      _offset = 0;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragUpdate: _update,
+      onHorizontalDragEnd: _end,
+      child: AnimatedSlide(
+        duration: _settling ? const Duration(milliseconds: 180) : Duration.zero,
+        curve: Curves.easeOut,
+        offset: Offset(_offset / constraints.maxWidth, 0),
+        child: widget.child,
+      ),
+    ),
+  );
+}
+
+/// In-chat scene settings: narration POV, mode, voice, tone, and reply length.
 ///
 /// Changes are STAGED locally and only committed when the player taps "Apply".
 /// The button stays disabled until something actually differs from the saved
@@ -2236,6 +2348,7 @@ class _SettingsSheet extends StatefulWidget {
     String? personaId,
   )
   onApply;
+  final VoidCallback? onClose;
   final VoidCallback onReset;
   final VoidCallback onDelete;
 
@@ -2252,6 +2365,7 @@ class _SettingsSheet extends StatefulWidget {
     required this.onApply,
     required this.onReset,
     required this.onDelete,
+    this.onClose,
   });
 
   @override
@@ -2301,23 +2415,23 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: EverloreTheme.void4,
-                    borderRadius: BorderRadius.circular(2),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Scene Settings',
+                      style: EverloreTheme.serifDisplay(
+                        size: 20,
+                        color: EverloreTheme.parchment,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Scene Settings',
-                style: EverloreTheme.serifDisplay(
-                  size: 18,
-                  color: EverloreTheme.parchment,
-                ),
+                  IconButton(
+                    onPressed: widget.onClose,
+                    icon: const Icon(Icons.close, color: EverloreTheme.ash),
+                    tooltip: 'Close settings',
+                  ),
+                ],
               ),
               const SizedBox(height: 18),
 
@@ -2657,44 +2771,10 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
-              const Divider(color: EverloreTheme.white10, height: 1),
-              const SizedBox(height: 6),
-
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(
-                  Icons.restart_alt_rounded,
-                  color: EverloreTheme.gold,
-                ),
-                title: Text(
-                  'Reset this chat',
-                  style: EverloreTheme.ui(
-                    size: 15,
-                    color: EverloreTheme.parchment,
-                  ),
-                ),
-                subtitle: Text(
-                  'Start over from the opening line. Keeps the world & character.',
-                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-                ),
-                onTap: widget.onReset,
-              ),
-              const Divider(color: EverloreTheme.white10, height: 1),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(
-                  Icons.delete_outline,
-                  color: EverloreTheme.crimson,
-                ),
-                title: Text(
-                  'Delete this chat',
-                  style: EverloreTheme.ui(
-                    size: 15,
-                    color: EverloreTheme.crimson,
-                  ),
-                ),
-                onTap: widget.onDelete,
+              const SizedBox(height: 14),
+              _PlaythroughManagement(
+                onReset: widget.onReset,
+                onDelete: widget.onDelete,
               ),
             ],
           ),
@@ -2702,6 +2782,174 @@ class _SettingsSheetState extends State<_SettingsSheet> {
       ),
     );
   }
+}
+
+/// Destructive playthrough actions stay available from settings without being
+/// presented as ordinary fields. This row opens a separate decision modal.
+class _PlaythroughManagement extends StatelessWidget {
+  final VoidCallback onReset;
+  final VoidCallback onDelete;
+
+  const _PlaythroughManagement({required this.onReset, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => _openManagementModal(context),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              EverloreTheme.void4.withValues(alpha: 0.76),
+              EverloreTheme.void2.withValues(alpha: 0.92),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: EverloreTheme.goldDim.withValues(alpha: 0.22),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              offset: Offset(0, 2),
+              blurRadius: 4,
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.more_horiz_rounded, color: EverloreTheme.ash),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Manage this playthrough',
+                    style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Reset or remove this chat',
+                    style: EverloreTheme.ui(
+                      size: 11,
+                      color: EverloreTheme.ash.withValues(alpha: 0.72),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  void _openManagementModal(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (modalContext) => AlertDialog(
+        backgroundColor: EverloreTheme.void2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: EverloreTheme.goldDim.withValues(alpha: 0.32),
+          ),
+        ),
+        title: Text(
+          'Manage this playthrough',
+          style: EverloreTheme.serifDisplay(
+            size: 19,
+            color: EverloreTheme.parchment,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _managementAction(
+              modalContext,
+              Icons.restart_alt_rounded,
+              'Reset this chat',
+              'Start again from the opening line.',
+              EverloreTheme.gold,
+              onReset,
+            ),
+            const SizedBox(height: 8),
+            _managementAction(
+              modalContext,
+              Icons.delete_outline,
+              'Delete this chat',
+              'Permanently remove this playthrough.',
+              EverloreTheme.crimson,
+              onDelete,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(modalContext).pop(),
+            child: Text(
+              'Cancel',
+              style: EverloreTheme.ui(color: EverloreTheme.ash),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _managementAction(
+    BuildContext context,
+    IconData icon,
+    String title,
+    String subtitle,
+    Color color,
+    VoidCallback action,
+  ) => Material(
+    color: EverloreTheme.void3,
+    borderRadius: BorderRadius.circular(12),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        Navigator.of(context).pop();
+        action();
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: EverloreTheme.ui(
+                      size: 14,
+                      color: color,
+                      weight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: EverloreTheme.ui(size: 11, color: EverloreTheme.ash),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _SegOption extends StatelessWidget {

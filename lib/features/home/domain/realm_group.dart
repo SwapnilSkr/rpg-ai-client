@@ -5,19 +5,38 @@ class RealmGroup {
   final String templateId;
   final Map<String, dynamic>? template;
   final List<WorldInstance> stories;
+  final int? totalStoryCount;
 
   const RealmGroup({
     required this.templateId,
     required this.template,
     required this.stories,
+    this.totalStoryCount,
   });
 
   WorldInstance get latest => stories.first;
-  int get storyCount => stories.length;
+  int get storyCount => totalStoryCount ?? stories.length;
   bool get hasMultipleStories => storyCount > 1;
 
   String get title =>
-      template?['title'] as String? ?? latest.template?['title'] as String? ?? 'Untitled Realm';
+      template?['title'] as String? ??
+      latest.template?['title'] as String? ??
+      'Untitled Realm';
+}
+
+RealmGroup realmGroupFromJson(Map<String, dynamic> json) {
+  final template = json['template'] is Map
+      ? Map<String, dynamic>.from(json['template'] as Map)
+      : null;
+  final latestRaw = Map<String, dynamic>.from(json['latest'] as Map? ?? {});
+  if (template != null) latestRaw['template'] = template;
+  final latest = WorldInstance.fromJson(latestRaw);
+  return RealmGroup(
+    templateId: json['template_id']?.toString() ?? latest.templateId,
+    template: template,
+    stories: [latest],
+    totalStoryCount: (json['story_count'] as num?)?.toInt() ?? 1,
+  );
 }
 
 List<RealmGroup> groupInstancesByRealm(List<WorldInstance> instances) {

@@ -4,6 +4,22 @@ import '../../../core/auth/auth_service.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/models/realm_play_status.dart';
 import '../../../shared/models/world_instance.dart';
+import '../domain/realm_group.dart';
+
+class RealmPage {
+  final List<RealmGroup> realms;
+  final int total;
+  final int page;
+
+  const RealmPage({
+    required this.realms,
+    required this.total,
+    required this.page,
+  });
+
+  bool get hasMore =>
+      realms.isNotEmpty && realms.length + (page - 1) * 12 < total;
+}
 
 enum RealmChangeKind { created, updated, removed }
 
@@ -116,6 +132,34 @@ class HomeRepository {
       return cached;
     }
     return _fetchInstances(includeArchived: includeArchived);
+  }
+
+  /// Compact, server-grouped realm feed. Each page contains one row per world
+  /// with its latest story and total playthrough count.
+  static Future<RealmPage> getRealmPage({
+    int page = 1,
+    int limit = 12,
+    String search = '',
+  }) async {
+    _syncSessionCache();
+    final query = <String>['page=$page', 'limit=$limit'];
+    if (search.trim().isNotEmpty) {
+      query.add('search=${Uri.encodeQueryComponent(search.trim())}');
+    }
+    final response = await ApiClient.get(
+      '/instances/realms?${query.join('&')}',
+    );
+    final raw = (response['realms'] as List?) ?? const [];
+    final realms = raw
+        .map(
+          (item) => realmGroupFromJson(Map<String, dynamic>.from(item as Map)),
+        )
+        .toList();
+    return RealmPage(
+      realms: realms,
+      total: (response['total'] as num?)?.toInt() ?? realms.length,
+      page: (response['page'] as num?)?.toInt() ?? page,
+    );
   }
 
   static Future<List<WorldInstance>> _fetchInstances({

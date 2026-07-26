@@ -5,36 +5,67 @@ import 'package:equatable/equatable.dart';
 import '../../../core/storage/local_db.dart';
 import '../../../shared/models/world_instance.dart';
 import '../data/home_repository.dart';
+import '../domain/realm_group.dart';
 
 class HomeState extends Equatable {
   final List<WorldInstance> instances;
+  final List<RealmGroup> realms;
   final bool isLoading;
+  final bool isLoadingMore;
+  final bool hasMore;
+  final int total;
+  final int page;
   final String? error;
 
   const HomeState({
     this.instances = const [],
+    this.realms = const [],
     this.isLoading = false,
+    this.isLoadingMore = false,
+    this.hasMore = false,
+    this.total = 0,
+    this.page = 1,
     this.error,
   });
 
   HomeState copyWith({
     List<WorldInstance>? instances,
+    List<RealmGroup>? realms,
     bool? isLoading,
+    bool? isLoadingMore,
+    bool? hasMore,
+    int? total,
+    int? page,
     String? error,
   }) {
     return HomeState(
       instances: instances ?? this.instances,
+      realms: realms ?? this.realms,
       isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      hasMore: hasMore ?? this.hasMore,
+      total: total ?? this.total,
+      page: page ?? this.page,
       error: error,
     );
   }
 
   @override
-  List<Object?> get props => [instances, isLoading, error];
+  List<Object?> get props => [
+    instances,
+    realms,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    total,
+    page,
+    error,
+  ];
 }
 
 class HomeCubit extends Cubit<HomeState> {
   late final StreamSubscription<RealmChange> _realmChangeSub;
+  String _search = '';
 
   HomeCubit() : super(const HomeState()) {
     _realmChangeSub = HomeRepository.realmChanges.listen(_onRealmChange);
@@ -44,40 +75,13 @@ class HomeCubit extends Cubit<HomeState> {
     if (isClosed) return;
     switch (change.kind) {
       case RealmChangeKind.created:
-        final instance = change.instance;
-        if (instance == null) return;
-        final exists = state.instances.any((i) => i.id == instance.id);
-        if (exists) {
-          emit(
-            state.copyWith(
-              instances: state.instances
-                  .map((i) => i.id == instance.id ? instance : i)
-                  .toList(),
-              error: null,
-            ),
-          );
-        } else {
-          emit(
-            state.copyWith(
-              instances: [instance, ...state.instances],
-              error: null,
-            ),
-          );
-        }
         unawaited(loadInstances(silent: true));
         break;
       case RealmChangeKind.updated:
         unawaited(loadInstances(silent: true));
         break;
       case RealmChangeKind.removed:
-        emit(
-          state.copyWith(
-            instances: state.instances
-                .where((i) => i.id != change.instanceId)
-                .toList(),
-            error: null,
-          ),
-        );
+        unawaited(loadInstances(silent: true));
         break;
     }
   }
@@ -85,15 +89,49 @@ class HomeCubit extends Cubit<HomeState> {
   Future<void> loadInstances({
     bool silent = false,
     bool forceRefresh = false,
+    String? search,
   }) async {
+    _search = search ?? _search;
     if (!silent) emit(state.copyWith(isLoading: true, error: null));
     try {
-      final instances = await HomeRepository.getInstances(
-        forceRefresh: forceRefresh,
+      final result = await HomeRepository.getRealmPage(search: _search);
+      emit(
+        state.copyWith(
+          realms: result.realms,
+          isLoading: false,
+          page: result.page,
+          total: result.total,
+          hasMore: result.hasMore,
+        ),
       );
-      emit(state.copyWith(instances: instances, isLoading: false));
     } catch (e) {
       if (!silent) emit(state.copyWith(isLoading: false, error: e.toString()));
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
+    emit(state.copyWith(isLoadingMore: true));
+    try {
+      final result = await HomeRepository.getRealmPage(
+        page: state.page + 1,
+        search: _search,
+      );
+      final known = state.realms.map((realm) => realm.templateId).toSet();
+      emit(
+        state.copyWith(
+          realms: [
+            ...state.realms,
+            ...result.realms.where((realm) => known.add(realm.templateId)),
+          ],
+          isLoadingMore: false,
+          page: result.page,
+          total: result.total,
+          hasMore: result.hasMore,
+        ),
+      );
+    } catch (e) {
+      emit(state.copyWith(isLoadingMore: false, error: e.toString()));
     }
   }
 
