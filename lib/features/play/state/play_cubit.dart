@@ -18,6 +18,7 @@ import '../../../shared/models/relation_candidate.dart';
 const Object _kUnset = Object();
 const int _activeEventLimit = 100;
 const int _activeMemoryLimit = 50;
+const int _olderEventsPageSize = 20;
 
 class PlayState extends Equatable {
   final WorldInstance? instance;
@@ -50,6 +51,7 @@ class PlayState extends Equatable {
   final String? error;
   final int totalEvents;
   final bool hasOlderEvents;
+  final bool isLoadingOlder;
 
   /// The player input of a turn that failed to send (lock held, error, or
   /// offline), preserved so it can be resent with one tap instead of being
@@ -95,6 +97,7 @@ class PlayState extends Equatable {
     this.error,
     this.totalEvents = 0,
     this.hasOlderEvents = false,
+    this.isLoadingOlder = false,
     this.lastFailedInput,
     this.notice,
     this.replayingEventId,
@@ -119,6 +122,7 @@ class PlayState extends Equatable {
     String? error,
     int? totalEvents,
     bool? hasOlderEvents,
+    bool? isLoadingOlder,
     Object? lastFailedInput = _kUnset,
     Object? notice = _kUnset,
     Object? replayingEventId = _kUnset,
@@ -142,6 +146,7 @@ class PlayState extends Equatable {
       error: error,
       totalEvents: totalEvents ?? this.totalEvents,
       hasOlderEvents: hasOlderEvents ?? this.hasOlderEvents,
+      isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
       lastFailedInput: identical(lastFailedInput, _kUnset)
           ? this.lastFailedInput
           : lastFailedInput as String?,
@@ -176,6 +181,7 @@ class PlayState extends Equatable {
     error,
     totalEvents,
     hasOlderEvents,
+    isLoadingOlder,
     lastFailedInput,
     notice,
     replayingEventId,
@@ -208,6 +214,17 @@ class PlayCubit extends Cubit<PlayState> {
   /// Accumulates streamed narrative tokens for the in-progress turn.
   String _streamBuffer = '';
   String _streamTarget = '';
+  // A stale instance_loaded frame can arrive while the rewind HTTP request is
+  // still running. Only the load requested after that call resolves may unveil
+  // the rebuilt history.
+  bool _rewindRequestCompleted = false;
+  bool _loadingOlderEvents = false;
+
+  /// A failed provider attempt may have already painted a provisional fragment.
+  /// Keep that fragment visible while the worker retries, then replace it
+  /// atomically with the first token of the new attempt. This avoids the jarring
+  /// empty-bubble flash that previously happened between attempts.
+  bool _awaitingRetryReplacement = false;
   Timer? _streamRevealTimer;
   Timer? _generationWatchdog;
   Timer? _reconciliationTimer;
@@ -302,6 +319,7 @@ class PlayCubit extends Cubit<PlayState> {
           eventWindow?['hasOlder'] == true || totalEvents > events.length;
       final operation = data['operation'] as Map?;
       final operationKind = operation?['kind']?.toString();
+      final rewindSnapshotReady = state.isRewinding && _rewindRequestCompleted;
 
       emit(
         state.copyWith(
@@ -312,10 +330,17 @@ class PlayCubit extends Cubit<PlayState> {
           characters: characters,
           totalEvents: totalEvents,
           hasOlderEvents: hasOlderEvents,
+          isLoadingOlder: false,
           milestones: instance.meta.milestones,
           isLoading: false,
+          // A rewind is complete only when the load requested AFTER its HTTP
+          // rebuild completes arrives — never on an older socket snapshot.
+          isRewinding: rewindSnapshotReady ? false : state.isRewinding,
+          notice: rewindSnapshotReady ? null : state.notice,
         ),
       );
+      if (rewindSnapshotReady) _rewindRequestCompleted = false;
+      _loadingOlderEvents = false;
 
       if (_queuedMessage != null) {
         if (operationKind != null) {
@@ -363,7 +388,23 @@ class PlayCubit extends Cubit<PlayState> {
       _armGenerationWatchdog(_generationQuietTimeout);
       // Tokens are flowing again — drop any "retrying" notice.
       if (state.notice != null) emit(state.copyWith(notice: null));
-      _queueGenerationText(msg['delta']?.toString() ?? '');
+      final delta = msg['delta']?.toString() ?? '';
+      if (delta.isEmpty) return;
+
+      // A retry must never append to the discarded attempt. Do the visible
+      // hand-off only once a real replacement token exists, so the bubble is
+      // never cleared to an empty placeholder between two attempts.
+      if (_awaitingRetryReplacement) {
+        _awaitingRetryReplacement = false;
+        _streamRevealTimer?.cancel();
+        _streamRevealTimer = null;
+        _streamBuffer = delta;
+        _streamTarget = delta;
+        _proseStreamEnded = false;
+        _replaceOptimisticAiResponse(delta);
+        return;
+      }
+      _queueGenerationText(delta);
     });
 
     // The worker has accepted this turn and is assembling its context packet.
@@ -385,24 +426,29 @@ class PlayCubit extends Cubit<PlayState> {
       emit(state.copyWith(notice: 'The world stumbled — trying again…'));
     });
 
-    // Never present a truncated provider fragment as a finished story turn.
-    // The worker sends this before retrying (or before its final failure), so
-    // reset the local streaming state and retain only the player's action.
+    // A provider attempt can fail after it has painted a provisional fragment.
+    // Keep that fragment on screen while a retry is in flight; it is explicitly
+    // not playable (choices are removed and the composer remains disabled).
+    // Once replacement text arrives, [_deltaSub] swaps it atomically. This is
+    // a recovery state, not a second canonical story turn.
     _generationResetSub = _ws.onGenerationReset.listen((msg) {
       if (msg['instanceId']?.toString() != instanceId) return;
       if (!state.isGenerating || state.replayingEventId != null) return;
 
-      _streamBuffer = '';
-      _streamTarget = '';
-      _proseStreamEnded = false;
-      _clearGenerationTimers();
-
       final events = [...state.events];
       final idx = events.lastIndexWhere((event) => event.isOptimistic);
+      final visibleNarrative = idx >= 0 ? events[idx].aiResponse ?? '' : '';
+
+      _awaitingRetryReplacement = true;
+      _streamRevealTimer?.cancel();
+      _streamRevealTimer = null;
+      _streamBuffer = visibleNarrative;
+      _streamTarget = visibleNarrative;
+      _proseStreamEnded = false;
       if (idx >= 0) {
-        events[idx] = GameEvent.optimistic(
-          instanceId: instanceId,
-          playerInput: events[idx].playerInput ?? '',
+        events[idx] = events[idx].copyWith(
+          // Any chips came from the discarded attempt and must not be usable.
+          choices: const [],
         );
       }
       emit(
@@ -410,7 +456,9 @@ class PlayCubit extends Cubit<PlayState> {
           events: events,
           narrativeStreaming: true,
           choicesPreview: false,
-          notice: 'The world stumbled — trying again…',
+          notice: visibleNarrative.trim().isEmpty
+              ? 'The world stumbled — trying again…'
+              : 'Reconnecting this scene…',
         ),
       );
       _armGenerationWatchdog(_generationFirstTokenTimeout);
@@ -526,6 +574,7 @@ class PlayCubit extends Cubit<PlayState> {
       _clearGenerationTimers();
       _streamBuffer = '';
       _streamTarget = '';
+      _awaitingRetryReplacement = false;
       final trimmedEvents = _trimEvents(events);
       final nextTotalEvents = finalEvent.sequence > state.totalEvents
           ? finalEvent.sequence
@@ -707,16 +756,25 @@ class PlayCubit extends Cubit<PlayState> {
           ((optimisticEvents[optimisticIdx].aiResponse ?? '')
               .trim()
               .isNotEmpty);
+      final failedInput = optimisticIdx >= 0
+          ? optimisticEvents[optimisticIdx].playerInput
+          : null;
       if (hasVisibleOptimisticText) {
-        _finishGenerationReveal(_streamTarget);
+        // The prose remains as a visibly provisional draft rather than being
+        // erased just before the error bar appears. It was never persisted, so
+        // leave choices off and give the player one-tap retry for their action.
         _clearGenerationTimers();
-        _ws.loadInstance(instanceId);
+        _awaitingRetryReplacement = false;
         emit(
           state.copyWith(
             events: optimisticEvents,
             isGenerating: false,
+            narrativeStreaming: false,
+            choicesPreview: false,
             notice: null,
-            error: null,
+            error:
+                'This scene could not be saved. Your action is ready to retry.',
+            lastFailedInput: failedInput,
           ),
         );
         return;
@@ -724,6 +782,7 @@ class PlayCubit extends Cubit<PlayState> {
 
       _streamBuffer = '';
       _streamTarget = '';
+      _awaitingRetryReplacement = false;
       _clearGenerationTimers();
       // Drop the in-progress optimistic turn but KEEP its text so the player can
       // resend with one tap rather than re-typing the whole message.
@@ -739,7 +798,7 @@ class PlayCubit extends Cubit<PlayState> {
           events: events,
           isGenerating: false,
           notice: null,
-          error: msg['message'] ?? 'An error occurred',
+          error: 'The scene could not start. Your action is ready to retry.',
           lastFailedInput: droppedInput,
         ),
       );
@@ -749,6 +808,62 @@ class PlayCubit extends Cubit<PlayState> {
       emit(state.copyWith(isConnected: connected));
       if (connected && _queuedMessage != null) _ws.loadInstance(instanceId);
     });
+  }
+
+  /// Fetch an older page without using offsets. The cursor is the first loaded
+  /// sequence, so a concurrently-created latest turn cannot shift this page.
+  Future<void> loadOlderEvents() async {
+    if (_loadingOlderEvents ||
+        state.isLoadingOlder ||
+        !state.hasOlderEvents ||
+        state.events.isEmpty) {
+      return;
+    }
+    final beforeSequence = state.events.first.sequence;
+    if (beforeSequence <= 0) return;
+
+    _loadingOlderEvents = true;
+    emit(state.copyWith(isLoadingOlder: true));
+    try {
+      final page = await ChronicleRepository.getEvents(
+        instanceId,
+        limit: _olderEventsPageSize,
+        beforeSequence: beforeSequence,
+      );
+      final incoming =
+          (page['events'] as List<GameEvent>?) ?? const <GameEvent>[];
+      // Ids survive reconnects; sequence is a fallback for legacy seed rows.
+      final seen = <String>{
+        for (final event in state.events)
+          event.id.isNotEmpty ? 'id:${event.id}' : 'sequence:${event.sequence}',
+      };
+      final merged = <GameEvent>[
+        ...incoming.where(
+          (event) => seen.add(
+            event.id.isNotEmpty
+                ? 'id:${event.id}'
+                : 'sequence:${event.sequence}',
+          ),
+        ),
+        ...state.events,
+      ]..sort((a, b) => a.sequence.compareTo(b.sequence));
+      emit(
+        state.copyWith(
+          // Do not trim upward-paged history: a reader who deliberately loads
+          // it must be able to scroll back down through the same window.
+          events: merged,
+          totalEvents: (page['total'] as num?)?.toInt() ?? state.totalEvents,
+          hasOlderEvents: page['hasOlder'] == true && incoming.isNotEmpty,
+          isLoadingOlder: false,
+        ),
+      );
+    } catch (_) {
+      // A transient history-page failure must not surface as a story failure;
+      // leave the current window intact and allow the next upward scroll to retry.
+      emit(state.copyWith(isLoadingOlder: false));
+    } finally {
+      _loadingOlderEvents = false;
+    }
   }
 
   Future<void> _connectAndLoad() async {
@@ -798,6 +913,7 @@ class PlayCubit extends Cubit<PlayState> {
 
     _streamBuffer = '';
     _streamTarget = '';
+    _awaitingRetryReplacement = false;
     _proseStreamEnded = false;
     _clearGenerationTimers();
     final optimisticEvent = GameEvent.optimistic(
@@ -830,6 +946,11 @@ class PlayCubit extends Cubit<PlayState> {
     final pending = state.lastFailedInput;
     if (pending == null || pending.trim().isEmpty) return;
     if (state.isGenerating || state.replayingEventId != null) return;
+    // The retained prose was a recovery draft, never a persisted turn. Remove
+    // it immediately before resending so the retried turn cannot leave two
+    // copies of the same player action in the visible timeline.
+    final events = state.events.where((event) => !event.isOptimistic).toList();
+    emit(state.copyWith(events: events, error: null, lastFailedInput: null));
     sendMessage(pending);
   }
 
@@ -843,6 +964,7 @@ class PlayCubit extends Cubit<PlayState> {
 
     _streamBuffer = '';
     _streamTarget = '';
+    _awaitingRetryReplacement = false;
     _proseStreamEnded = false;
     _clearGenerationTimers();
     final optimisticEvent = GameEvent.optimistic(
@@ -887,13 +1009,13 @@ class PlayCubit extends Cubit<PlayState> {
   );
 
   /// Confirm or correct a relationship as player-authored canon.
-  Future<void> setRelationship({
+  Future<bool> setRelationship({
     required String character,
     required String relation,
     required bool correction,
     String? replacesRelation,
   }) async {
-    if (state.isGenerating) return;
+    if (state.isGenerating) return false;
     try {
       await ChronicleRepository.setKinship(
         instanceId,
@@ -902,8 +1024,10 @@ class PlayCubit extends Cubit<PlayState> {
         correction: correction,
         replacesRelation: replacesRelation,
       );
+      return true;
     } catch (_) {
       emit(state.copyWith(error: 'Could not save the relationship.'));
+      return false;
     }
   }
 
@@ -915,6 +1039,7 @@ class PlayCubit extends Cubit<PlayState> {
     await _flushPendingVariant();
     _streamBuffer = '';
     _streamTarget = '';
+    _awaitingRetryReplacement = false;
     _proseStreamEnded = false;
     _clearGenerationTimers();
     final optimisticEvent = GameEvent.optimistic(
@@ -1030,6 +1155,40 @@ class PlayCubit extends Cubit<PlayState> {
       );
     } catch (_) {
       // Best-effort: the card still seeds emergently on the next turn.
+    }
+  }
+
+  Future<List<ReusableProtagonist>> loadReusableProtagonists() =>
+      ChronicleRepository.getReusableProtagonists(instanceId);
+
+  /// Copy a protagonist from another save of this exact GM world. The server
+  /// enforces both the owner and template boundary; no mutable card is shared.
+  Future<bool> reusePlayerProtagonist(ReusableProtagonist source) async {
+    _protagonistPrompted = true;
+    final optimistic = CharacterProfile(
+      id: 'pending-protagonist',
+      canonicalName: source.name,
+      role: 'protagonist (the player)',
+      isProtagonist: true,
+    );
+    emit(state.copyWith(characters: [optimistic, ...state.characters]));
+    try {
+      await ChronicleRepository.setProtagonist(
+        instanceId,
+        reuseFromInstanceId: source.sourceInstanceId,
+      );
+      return true;
+    } catch (_) {
+      emit(
+        state.copyWith(
+          characters: state.characters
+              .where((character) => character.id != 'pending-protagonist')
+              .toList(),
+          error: 'Could not reuse that protagonist.',
+        ),
+      );
+      _protagonistPrompted = false;
+      return false;
     }
   }
 
@@ -1178,8 +1337,9 @@ class PlayCubit extends Cubit<PlayState> {
   }
 
   /// Rewind the story to [sequence]: removes that turn and everything after it.
-  /// Optimistically trims the UI, asks the server to roll back state/memories,
-  /// then reloads the authoritative state.
+  /// The existing transcript remains visible behind a blocking veil until the
+  /// authoritative post-rewind window arrives. This prevents a failed rewind
+  /// from looking as though history was already deleted.
   Future<void> rewind(int sequence) async {
     if (state.isGenerating ||
         state.isRewinding ||
@@ -1187,24 +1347,23 @@ class PlayCubit extends Cubit<PlayState> {
       return;
     }
 
-    final kept = state.events.where((e) => e.sequence < sequence).toList();
     emit(
       state.copyWith(
-        events: kept,
-        totalEvents: kept.length,
-        hasOlderEvents: false,
         error: null,
         isRewinding: true,
-        notice: 'Rewinding your story…',
+        notice: 'Rewinding to this turn…',
       ),
     );
+    _rewindRequestCompleted = false;
 
     try {
       await ChronicleRepository.rewind(instanceId, sequence);
       await LocalDb.clearInstanceCache(instanceId);
       // Pull the rolled-back state (events, stats, memories) back from the server.
+      _rewindRequestCompleted = true;
       _ws.loadInstance(instanceId);
     } catch (_) {
+      _rewindRequestCompleted = false;
       emit(
         state.copyWith(
           isRewinding: false,
@@ -1215,7 +1374,8 @@ class PlayCubit extends Cubit<PlayState> {
       _ws.loadInstance(instanceId); // resync to server truth on failure
       return;
     }
-    emit(state.copyWith(isRewinding: false, notice: null));
+    // Keep the loading veil up until _instanceSub receives the canonical
+    // post-rewind snapshot and clears isRewinding.
   }
 
   /// Edit a generated AI response and persist it to the backend. Memories
@@ -1328,13 +1488,30 @@ class PlayCubit extends Cubit<PlayState> {
           idx >= 0 && ((events[idx].aiResponse ?? '').trim().isNotEmpty);
 
       if (hasVisibleText) {
-        _ws.loadInstance(instanceId);
-        emit(state.copyWith(events: events, isGenerating: false, error: null));
+        // A dropped socket can look identical to a failed provider stream. Do
+        // not silently discard the prose the player just saw; retain it as an
+        // explicitly unsaved draft and let the existing retry affordance carry
+        // their action forward.
+        final failedInput = events[idx].playerInput;
+        _awaitingRetryReplacement = false;
+        emit(
+          state.copyWith(
+            events: events,
+            isGenerating: false,
+            narrativeStreaming: false,
+            choicesPreview: false,
+            notice: null,
+            error:
+                'We lost the connection before this scene could be saved. Your action is ready to retry.',
+            lastFailedInput: failedInput,
+          ),
+        );
         return;
       }
 
       _streamBuffer = '';
       _streamTarget = '';
+      _awaitingRetryReplacement = false;
       _ws.loadInstance(instanceId);
       emit(
         state.copyWith(

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/models/character_profile.dart';
 import '../../../../../shared/models/relation_candidate.dart';
+import '../../../../../shared/widgets/top_confirmation_toast.dart';
 
 /// A deliberate, structured alternative to asking the player to phrase state
 /// changes perfectly in prose. Time, travel, party, and kinship all originate
@@ -17,7 +18,7 @@ class WorldActionsButton extends StatelessWidget {
     String? advance,
   )
   onTravel;
-  final void Function(
+  final Future<bool> Function(
     String character,
     String relation,
     bool correction,
@@ -328,6 +329,13 @@ class WorldActionsButton extends StatelessWidget {
                   }
                   if (sheetContext.mounted) {
                     Navigator.of(sheetContext).pop();
+                  }
+                  if (context.mounted) {
+                    _showRelationshipToast(
+                      context,
+                      character: candidate.characterName,
+                      relation: relation,
+                    );
                   }
                 },
               ),
@@ -938,13 +946,22 @@ class WorldActionsButton extends StatelessWidget {
                             }
                             if (!sheetContext.mounted) return;
                           }
-                          Navigator.of(sheetContext).pop();
-                          onRelationship(
+                          final saved = await onRelationship(
                             nextName,
                             relation!,
                             correction,
                             replacesRelation,
                           );
+                          if (!saved || !sheetContext.mounted) return;
+                          Navigator.of(sheetContext).pop();
+                          if (context.mounted) {
+                            _showRelationshipToast(
+                              context,
+                              character: nextName,
+                              relation: relation!,
+                              correction: correction,
+                            );
+                          }
                         },
                       ),
                     ],
@@ -962,6 +979,24 @@ class WorldActionsButton extends StatelessWidget {
     const labels = {'fiance': 'Fiancé', 'fiancee': 'Fiancée'};
     return labels[relation] ??
         (relation[0].toUpperCase() + relation.substring(1));
+  }
+
+  /// A short, top-aligned acknowledgement that leaves the composer and its
+  /// actions unobscured. Both relationship confirmation paths use this rather
+  /// than the bottom-anchored [SnackBar].
+  void _showRelationshipToast(
+    BuildContext context, {
+    required String character,
+    required String relation,
+    bool correction = false,
+  }) {
+    final relationLabel = _relationLabel(relation).toLowerCase();
+    final action = correction ? 'updated' : 'confirmed';
+    showTopConfirmationToast(
+      context,
+      icon: Icons.account_tree_outlined,
+      message: 'Relationship $action — $character is your $relationLabel.',
+    );
   }
 
   @override

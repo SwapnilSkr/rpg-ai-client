@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/motion.dart';
+import '../../../../shared/models/world_template.dart';
 
 class WorldStateBar extends StatelessWidget {
   final Map<String, num> worldState;
+  final Map<String, StatDefinition> definitions;
   final bool expanded;
   final VoidCallback onToggle;
 
@@ -15,6 +17,7 @@ class WorldStateBar extends StatelessWidget {
   const WorldStateBar({
     super.key,
     required this.worldState,
+    this.definitions = const {},
     this.expanded = false,
     required this.onToggle,
     this.deltas,
@@ -27,9 +30,7 @@ class WorldStateBar extends StatelessWidget {
       curve: Curves.easeInOut,
       decoration: BoxDecoration(
         color: EverloreTheme.void0.withValues(alpha: 0.45),
-        border: const Border(
-          bottom: BorderSide(color: EverloreTheme.white10),
-        ),
+        border: const Border(bottom: BorderSide(color: EverloreTheme.white10)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -61,7 +62,10 @@ class WorldStateBar extends StatelessWidget {
                     Expanded(
                       child: Row(
                         children: [
-                          _MiniStatRow(worldState: worldState),
+                          _MiniStatRow(
+                            worldState: worldState,
+                            definitions: definitions,
+                          ),
                           const SizedBox(width: 8),
                           if (deltas != null && deltas!.isNotEmpty)
                             Expanded(
@@ -73,7 +77,9 @@ class WorldStateBar extends StatelessWidget {
                   ] else
                     const Spacer(),
                   Icon(
-                    expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    expanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
                     color: EverloreTheme.ash.withValues(alpha: 0.5),
                     size: 16,
                   ),
@@ -93,6 +99,7 @@ class WorldStateBar extends StatelessWidget {
                     child: _RPGStatBar(
                       label: _formatLabel(e.key),
                       value: e.value.toDouble(),
+                      definition: definitions[e.key],
                       delta: deltas?[e.key],
                     ),
                   );
@@ -108,8 +115,9 @@ class WorldStateBar extends StatelessWidget {
     return key
         .replaceAll('_', ' ')
         .split(' ')
-        .map((w) =>
-            w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
+        .map(
+          (w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '',
+        )
         .join(' ');
   }
 }
@@ -124,8 +132,9 @@ class _CollapsedDeltaTicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final entries = deltas.entries.take(2).toList();
     final text = entries
-        .map((e) =>
-            '${e.value > 0 ? '+' : ''}${e.value.round()} ${_label(e.key)}')
+        .map(
+          (e) => '${e.value > 0 ? '+' : ''}${e.value.round()} ${_label(e.key)}',
+        )
         .join('  ');
     final positive = entries.first.value > 0;
 
@@ -160,7 +169,8 @@ class _CollapsedDeltaTicker extends StatelessWidget {
 /// Small inline dots shown in collapsed state
 class _MiniStatRow extends StatelessWidget {
   final Map<String, num> worldState;
-  const _MiniStatRow({required this.worldState});
+  final Map<String, StatDefinition> definitions;
+  const _MiniStatRow({required this.worldState, required this.definitions});
 
   @override
   Widget build(BuildContext context) {
@@ -168,7 +178,11 @@ class _MiniStatRow extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: entries.map((e) {
-        final pct = (e.value / 100).clamp(0.0, 1.0).toDouble();
+        final def = definitions[e.key];
+        final span = (def?.max ?? 100) - (def?.min ?? 0);
+        final pct = span <= 0
+            ? 0.0
+            : ((e.value - (def?.min ?? 0)) / span).clamp(0.0, 1.0).toDouble();
         final color = _statColor(pct);
         return Padding(
           padding: const EdgeInsets.only(right: 6),
@@ -179,7 +193,7 @@ class _MiniStatRow extends StatelessWidget {
               shape: BoxShape.circle,
               color: color,
               boxShadow: [
-                BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 4)
+                BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 4),
               ],
             ),
           ),
@@ -200,33 +214,47 @@ class _MiniStatRow extends StatelessWidget {
 class _RPGStatBar extends StatelessWidget {
   final String label;
   final double value;
+  final StatDefinition? definition;
   final num? delta;
 
-  const _RPGStatBar({required this.label, required this.value, this.delta});
+  const _RPGStatBar({
+    required this.label,
+    required this.value,
+    this.definition,
+    this.delta,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Assume max 100 unless value > 100
-    final max = value > 100 ? value : 100.0;
+    final min = definition?.min.toDouble() ?? 0.0;
+    final max = definition?.max.toDouble() ?? 100.0;
+    final span = (max - min).clamp(1.0, double.infinity);
 
     return Row(
       children: [
         SizedBox(
           width: 90,
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: EverloreTheme.ash,
-              fontSize: 11,
-              letterSpacing: 0.3,
+          child: Tooltip(
+            message: [
+              if ((definition?.description ?? '').isNotEmpty)
+                definition!.description,
+              'Range: ${min.round()}–${max.round()}',
+            ].join('\n'),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: EverloreTheme.ash,
+                fontSize: 11,
+                letterSpacing: 0.3,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
-            overflow: TextOverflow.ellipsis,
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: TweenAnimationBuilder<double>(
-            tween: Tween(end: (value / max).clamp(0.0, 1.0)),
+            tween: Tween(end: ((value - min) / span).clamp(0.0, 1.0)),
             duration: const Duration(milliseconds: 700),
             curve: Curves.easeOutCubic,
             builder: (context, pct, _) {
@@ -278,7 +306,7 @@ class _RPGStatBar extends StatelessWidget {
             duration: const Duration(milliseconds: 700),
             curve: Curves.easeOutCubic,
             builder: (context, v, _) {
-              final color = _statColor((v / max).clamp(0.0, 1.0));
+              final color = _statColor(((v - min) / span).clamp(0.0, 1.0));
               return Text(
                 '${v.round()}',
                 textAlign: TextAlign.right,
@@ -326,7 +354,12 @@ class _FloatingDelta extends StatelessWidget {
     return chip
         .animate(key: ValueKey('$statLabel$delta'))
         .fadeIn(duration: 250.ms)
-        .slideY(begin: 0.8, end: -0.6, duration: 1400.ms, curve: Curves.easeOutCubic)
+        .slideY(
+          begin: 0.8,
+          end: -0.6,
+          duration: 1400.ms,
+          curve: Curves.easeOutCubic,
+        )
         .then(delay: 400.ms)
         .fadeOut(duration: 500.ms);
   }

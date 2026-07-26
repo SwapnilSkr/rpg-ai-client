@@ -20,6 +20,7 @@ import '../../personas/data/persona_repository.dart';
 import '../../../shared/chat_modes.dart';
 import '../../../shared/narrative_styles.dart';
 import '../../../shared/narration_tones.dart';
+import '../../../shared/widgets/top_confirmation_toast.dart';
 import '../../../core/storage/local_db.dart';
 import '../../home/data/home_repository.dart';
 import '../../chronicle/data/chronicle_repository.dart';
@@ -71,7 +72,9 @@ class _PlayViewState extends State<_PlayView> {
   int? _lastSeenEventCount;
   bool? _lastSeenLoading;
   Object? _lastSeenTemplate;
-  String? _lastSeenAiResponse;
+  bool _followLatest = true;
+  double? _olderLoadAnchorPixels;
+  double? _olderLoadAnchorExtent;
 
   /// One-shot composer prefill consumed by [PlayerInput] (bond actions).
   final _composerDraft = ValueNotifier<String?>(null);
@@ -81,7 +84,38 @@ class _PlayViewState extends State<_PlayView> {
   bool _pendingRealmMenuReturn = false;
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_updateFollowLatest);
+  }
+
+  void _updateFollowLatest() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    // Readers can inspect earlier turns without new tokens pulling them back.
+    // Reaching the tail automatically resumes follow mode.
+    _followLatest = position.maxScrollExtent - position.pixels < 96;
+    if (!_followLatest &&
+        position.maxScrollExtent > 0 &&
+        position.pixels <= position.minScrollExtent + 140) {
+      _loadOlderHistoryIfNeeded();
+    }
+  }
+
+  void _loadOlderHistoryIfNeeded() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final cubit = context.read<PlayCubit>();
+    final state = cubit.state;
+    if (!state.hasOlderEvents || state.isLoadingOlder) return;
+    final position = _scrollController.position;
+    _olderLoadAnchorPixels = position.pixels;
+    _olderLoadAnchorExtent = position.maxScrollExtent;
+    cubit.loadOlderEvents();
+  }
+
+  @override
   void dispose() {
+    _scrollController.removeListener(_updateFollowLatest);
     _composerDraft.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -122,7 +156,22 @@ class _PlayViewState extends State<_PlayView> {
               ),
               if (character.relationship != null) ...[
                 const SizedBox(height: 8),
-                BondMeters(meters: character.relationship!),
+                BondMeters(
+                  meters: character.relationship!,
+                  moments: character.relationshipMoments,
+                ),
+              ],
+              if (character.relationshipState?.summary.trim().isNotEmpty ??
+                  false) ...[
+                const SizedBox(height: 10),
+                Text(
+                  character.relationshipState!.summary,
+                  style: EverloreTheme.ui(
+                    size: 12,
+                    color: EverloreTheme.ash,
+                    height: 1.35,
+                  ),
+                ),
               ],
               // Tell the player where this character stands relative to the
               // scene, so "Seek out" vs "Approach" reads as intentional.
@@ -350,7 +399,18 @@ class _PlayViewState extends State<_PlayView> {
     });
   }
 
-  void _showProtagonistOnboarding(BuildContext context, PlayCubit cubit) {
+  Future<void> _showProtagonistOnboarding(
+    BuildContext context,
+    PlayCubit cubit,
+  ) async {
+    List<ReusableProtagonist> reusable = const [];
+    try {
+      reusable = await cubit.loadReusableProtagonists();
+    } catch (_) {
+      // A new protagonist must remain possible if this optional convenience
+      // lookup is unavailable.
+    }
+    if (!mounted || !context.mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -361,9 +421,14 @@ class _PlayViewState extends State<_PlayView> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (sheetCtx) => _ProtagonistOnboardingSheet(
+        reusable: reusable,
         onBegin: (name, identity) {
           cubit.setPlayerProtagonist(name, identity: identity);
           Navigator.pop(sheetCtx);
+        },
+        onReuse: (source) async {
+          final reused = await cubit.reusePlayerProtagonist(source);
+          if (reused && sheetCtx.mounted) Navigator.pop(sheetCtx);
         },
         onSkip: () {
           cubit.skipProtagonistOnboarding();
@@ -452,8 +517,8 @@ class _PlayViewState extends State<_PlayView> {
         initialTone: instance?.narrationTone ?? kDefaultNarrationTone,
         initialLength: instance?.messageLength ?? 'medium',
         initialPersonaId: instance?.personaId,
-        // GM (non-sentient) worlds seed the protagonist from the persona once,
-        // at selection; later persona edits don't rewrite that canon character.
+        // Global personas describe the player in sentient worlds. GM worlds use
+        // template-scoped protagonist cards from the first-entry sheet instead.
         isGmWorld: !(cubit.state.template?.isSentient ?? false),
         personas: personas,
         onApply: (pov, mode, voiceOverride, tone, length, personaId) async {
@@ -518,36 +583,14 @@ class _PlayViewState extends State<_PlayView> {
     );
   }
 
-  /// Shared floating confirmation for scene-setting changes.
+  /// Shared top confirmation for scene-setting changes; it stays clear of the
+  /// composer and uses the same presentation as relationship confirmations.
   void _showSceneSnack(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: EverloreTheme.void3,
-          duration: const Duration(seconds: 3),
-          content: Row(
-            children: [
-              const Icon(
-                Icons.auto_awesome,
-                color: EverloreTheme.gold,
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: EverloreTheme.ui(
-                    size: 13,
-                    color: EverloreTheme.parchment,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+    showTopConfirmationToast(
+      context,
+      icon: Icons.auto_awesome,
+      message: message,
+    );
   }
 
   void _showTimelineSheet(BuildContext context) {
@@ -1057,8 +1100,10 @@ class _PlayViewState extends State<_PlayView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
       final pos = _scrollController.position;
-      final isNearBottom = pos.maxScrollExtent - pos.pixels < 420;
-      if (!force && !isNearBottom) return;
+      final isNearBottom = pos.maxScrollExtent - pos.pixels < 120;
+      if (!force && !_followLatest && !isNearBottom) return;
+
+      _followLatest = true;
 
       if (animated) {
         _scrollController.animateTo(
@@ -1069,6 +1114,17 @@ class _PlayViewState extends State<_PlayView> {
       } else {
         _scrollController.jumpTo(pos.maxScrollExtent);
       }
+
+      // A choice row or the last revealed paragraph can increase the extent on
+      // the next layout frame. Settle once more so it cannot appear stranded
+      // above the composer until the reader drags the feed manually.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scrollController.hasClients || !_followLatest) return;
+        final settled = _scrollController.position;
+        if (settled.maxScrollExtent - settled.pixels > 1) {
+          _scrollController.jumpTo(settled.maxScrollExtent);
+        }
+      });
     });
   }
 
@@ -1080,13 +1136,48 @@ class _PlayViewState extends State<_PlayView> {
             curr.events.isNotEmpty &&
             (prev.events.isNotEmpty ? prev.events.last.aiResponse : null) !=
                 curr.events.last.aiResponse;
+        final previousChoices = prev.events.isEmpty
+            ? ''
+            : prev.events.last.choices
+                  .map(
+                    (choice) =>
+                        '${choice.label}\u0000${choice.kind}\u0000${choice.send}',
+                  )
+                  .join('\u0001');
+        final currentChoices = curr.events.isEmpty
+            ? ''
+            : curr.events.last.choices
+                  .map(
+                    (choice) =>
+                        '${choice.label}\u0000${choice.kind}\u0000${choice.send}',
+                  )
+                  .join('\u0001');
         return prev.events.length != curr.events.length ||
             prev.isLoading != curr.isLoading ||
+            prev.isLoadingOlder != curr.isLoadingOlder ||
             prev.template != curr.template ||
             prev.characters.length != curr.characters.length ||
+            previousChoices != currentChoices ||
             lastResponseChanged;
       },
       listener: (ctx, state) {
+        final preserveOlderAnchor =
+            _olderLoadAnchorExtent != null && !state.isLoadingOlder;
+        if (preserveOlderAnchor) {
+          final oldPixels = _olderLoadAnchorPixels!;
+          final oldExtent = _olderLoadAnchorExtent!;
+          _olderLoadAnchorPixels = null;
+          _olderLoadAnchorExtent = null;
+          // Prepending rows changes maxScrollExtent. Offset by that exact growth
+          // so the paragraph under the reader's eye remains there.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!_scrollController.hasClients) return;
+            final position = _scrollController.position;
+            final target = (oldPixels + position.maxScrollExtent - oldExtent)
+                .clamp(position.minScrollExtent, position.maxScrollExtent);
+            _scrollController.jumpTo(target);
+          });
+        }
         // This listener receives the new state from BlocConsumer, but the cubit
         // already holds it too. Track the previous values locally so entering a
         // realm or sending a message always reveals the latest beat.
@@ -1094,19 +1185,17 @@ class _PlayViewState extends State<_PlayView> {
             _lastSeenEventCount != state.events.length ||
             _lastSeenLoading != state.isLoading ||
             _lastSeenTemplate != state.template;
-        final responseChanged =
-            _lastSeenAiResponse !=
-            (state.events.isNotEmpty ? state.events.last.aiResponse : null);
-        _scrollToBottom(
-          force: structuralChange || responseChanged,
-          animated: structuralChange,
-        );
+        if (!preserveOlderAnchor) {
+          _scrollToBottom(
+            // New windows/turns belong at the tail. Token and choice updates only
+            // follow when the reader remains at that tail.
+            force: structuralChange,
+            animated: structuralChange,
+          );
+        }
         _lastSeenEventCount = state.events.length;
         _lastSeenLoading = state.isLoading;
         _lastSeenTemplate = state.template;
-        _lastSeenAiResponse = state.events.isNotEmpty
-            ? state.events.last.aiResponse
-            : null;
         _maybeShowOnboarding(ctx);
       },
       builder: (context, state) {
@@ -1178,6 +1267,8 @@ class _PlayViewState extends State<_PlayView> {
                       state.instance!.worldState.isNotEmpty)
                     WorldStateBar(
                       worldState: state.instance!.worldState,
+                      definitions:
+                          state.template?.baseStatsTemplate ?? const {},
                       expanded: _statsExpanded,
                       onToggle: () =>
                           setState(() => _statsExpanded = !_statsExpanded),
@@ -1268,11 +1359,10 @@ class _PlayViewState extends State<_PlayView> {
                                 itemCount: itemCount,
                                 itemBuilder: (context, index) {
                                   if (state.hasOlderEvents && index == 0) {
-                                    return _OlderHistoryButton(
+                                    return _OlderHistoryLoader(
                                       totalEvents: state.totalEvents,
-                                      onTap: () => context.push(
-                                        '/chronicle/${context.read<PlayCubit>().instanceId}',
-                                      ),
+                                      isLoading: state.isLoadingOlder,
+                                      onTap: _loadOlderHistoryIfNeeded,
                                     );
                                   }
                                   if (showTrailingSlot &&
@@ -1457,6 +1547,9 @@ class _PlayViewState extends State<_PlayView> {
                   ),
                 ],
               ),
+
+              if (state.isRewinding)
+                const Positioned.fill(child: _RewindVeil()),
 
               // Brass-seal milestone toast — one-shot, auto-dismissing.
               if (state.lastMilestone != null)
@@ -1695,11 +1788,16 @@ class _ChoicesPreparingHintState extends State<_ChoicesPreparingHint>
   }
 }
 
-class _OlderHistoryButton extends StatelessWidget {
+class _OlderHistoryLoader extends StatelessWidget {
   final int totalEvents;
+  final bool isLoading;
   final VoidCallback onTap;
 
-  const _OlderHistoryButton({required this.totalEvents, required this.onTap});
+  const _OlderHistoryLoader({
+    required this.totalEvents,
+    required this.isLoading,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1707,7 +1805,7 @@ class _OlderHistoryButton extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
       child: Center(
         child: InkWell(
-          onTap: onTap,
+          onTap: isLoading ? null : onTap,
           borderRadius: BorderRadius.circular(16),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -1721,12 +1819,24 @@ class _OlderHistoryButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const EvIcon(AppIcons.chronicle, size: 18),
+                if (isLoading)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: EverloreTheme.gold,
+                    ),
+                  )
+                else
+                  const EvIcon(AppIcons.chronicle, size: 18),
                 const SizedBox(width: 8),
                 Text(
-                  totalEvents > 0
-                      ? 'View older history ($totalEvents turns)'
-                      : 'View older history',
+                  isLoading
+                      ? 'Unfurling earlier chapters…'
+                      : totalEvents > 0
+                      ? 'Load earlier chapters ($totalEvents turns)'
+                      : 'Load earlier chapters',
                   style: EverloreTheme.ui(
                     size: 12,
                     weight: FontWeight.w700,
@@ -2004,6 +2114,44 @@ class _LoadingNarrative extends StatelessWidget {
   }
 }
 
+/// A rewind rebuilds several server-side projections. The old chat remains as
+/// visual context, but this opaque barrier prevents it being read as settled or
+/// interacted with until the authoritative replacement window is loaded.
+class _RewindVeil extends StatelessWidget {
+  const _RewindVeil();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: EverloreTheme.void0.withValues(alpha: 0.66),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 26,
+              height: 26,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: EverloreTheme.gold,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Rewinding to this turn…',
+              style: EverloreTheme.ui(
+                size: 14,
+                color: EverloreTheme.ash,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _EmptyNarrative extends StatelessWidget {
   const _EmptyNarrative();
 
@@ -2125,7 +2273,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
       _voiceOverride != widget.initialVoiceOverride ||
       _tone != widget.initialTone ||
       _length != widget.initialLength ||
-      _personaId != widget.initialPersonaId;
+      (!widget.isGmWorld && _personaId != widget.initialPersonaId);
 
   @override
   void initState() {
@@ -2379,56 +2527,53 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               ),
               const SizedBox(height: 20),
 
-              const _SettingsLabel(
-                icon: AppIcons.createCharacter,
-                label: 'PERSONA',
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String?>(
-                value: _personaId,
-                isExpanded: true,
-                dropdownColor: EverloreTheme.void2,
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: EverloreTheme.void3,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+              if (!widget.isGmWorld) ...[
+                const _SettingsLabel(
+                  icon: AppIcons.createCharacter,
+                  label: 'YOUR PERSONA',
                 ),
-                items: [
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text(
-                      'None',
-                      style: EverloreTheme.ui(
-                        size: 13,
-                        color: EverloreTheme.ash,
-                      ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String?>(
+                  value: _personaId,
+                  isExpanded: true,
+                  dropdownColor: EverloreTheme.void2,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: EverloreTheme.void3,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  for (final p in widget.personas)
+                  items: [
                     DropdownMenuItem<String?>(
-                      value: p.id,
+                      value: null,
                       child: Text(
-                        p.name,
-                        overflow: TextOverflow.ellipsis,
+                        'None',
                         style: EverloreTheme.ui(
                           size: 13,
-                          color: EverloreTheme.parchment,
+                          color: EverloreTheme.ash,
                         ),
                       ),
                     ),
-                ],
-                onChanged: (v) => setState(() => _personaId = v),
-              ),
-              // GM worlds seed the protagonist from the persona once; later edits
-              // to the persona won't rewrite that character. Surface this so the
-              // player isn't surprised when editing a persona has no effect here.
-              if (widget.isGmWorld && _personaId != null) ...[
+                    for (final p in widget.personas)
+                      DropdownMenuItem<String?>(
+                        value: p.id,
+                        child: Text(
+                          p.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: EverloreTheme.ui(
+                            size: 13,
+                            color: EverloreTheme.parchment,
+                          ),
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _personaId = v),
+                ),
                 const SizedBox(height: 8),
                 Text(
-                  'In Game Master worlds your protagonist is set once from this '
-                  'persona. Editing the persona later won\'t change this world.',
+                  'This is your reusable player identity. It is copied into this '
+                  'story, so later persona edits do not rewrite past turns.',
                   style: EverloreTheme.ui(
                     size: 11,
                     color: EverloreTheme.ash,
@@ -2472,7 +2617,9 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             _voiceOverride,
                             _tone,
                             _length,
-                            _personaId,
+                            widget.isGmWorld
+                                ? widget.initialPersonaId
+                                : _personaId,
                           );
                           if (mounted) setState(() => _isApplying = false);
                         }
@@ -2834,7 +2981,11 @@ class _ThoughtsSheet extends StatelessWidget {
             if (c.relationship != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: BondMeters(meters: c.relationship!, dense: true),
+                child: BondMeters(
+                  meters: c.relationship!,
+                  moments: c.relationshipMoments,
+                  dense: true,
+                ),
               ),
           ],
         ),
@@ -3042,10 +3193,14 @@ class _ErrorBar extends StatelessWidget {
 /// first entry into a Game Master world. Minimal + skippable.
 class _ProtagonistOnboardingSheet extends StatefulWidget {
   final void Function(String name, String? identity) onBegin;
+  final Future<void> Function(ReusableProtagonist source) onReuse;
+  final List<ReusableProtagonist> reusable;
   final VoidCallback onSkip;
 
   const _ProtagonistOnboardingSheet({
     required this.onBegin,
+    required this.onReuse,
+    required this.reusable,
     required this.onSkip,
   });
 
@@ -3058,6 +3213,7 @@ class _ProtagonistOnboardingSheetState
     extends State<_ProtagonistOnboardingSheet> {
   final _nameCtrl = TextEditingController();
   final _identityCtrl = TextEditingController();
+  bool _isReusing = false;
 
   @override
   void dispose() {
@@ -3108,6 +3264,79 @@ class _ProtagonistOnboardingSheetState
               height: 1.45,
             ),
           ),
+          if (widget.reusable.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            Text(
+              'RETURN AS',
+              style: EverloreTheme.ui(
+                size: 11,
+                color: EverloreTheme.gold,
+                weight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Copies a protagonist from another playthrough of this world. '
+              'Their stories stay separate.',
+              style: EverloreTheme.ui(
+                size: 12,
+                color: EverloreTheme.ash,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: widget.reusable.map((source) {
+                final label = source.identity.trim().isEmpty
+                    ? source.name
+                    : '${source.name} · ${source.identity.trim()}';
+                return GestureDetector(
+                  onTap: _isReusing
+                      ? null
+                      : () async {
+                          setState(() => _isReusing = true);
+                          await widget.onReuse(source);
+                          if (mounted) setState(() => _isReusing = false);
+                        },
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: EverloreTheme.gold.withValues(alpha: 0.09),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: EverloreTheme.gold.withValues(alpha: 0.38),
+                      ),
+                    ),
+                    child: Text(
+                      _isReusing ? 'Bringing them forward…' : label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: EverloreTheme.ui(
+                        size: 13,
+                        color: EverloreTheme.parchment,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'OR CREATE SOMEONE NEW',
+              style: EverloreTheme.ui(
+                size: 11,
+                color: EverloreTheme.gold,
+                weight: FontWeight.w700,
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           TextField(
             controller: _nameCtrl,

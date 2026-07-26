@@ -21,7 +21,7 @@ class PlayerInput extends StatefulWidget {
     String? advance,
   )?
   onTravel;
-  final void Function(
+  final Future<bool> Function(
     String character,
     String relation,
     bool correction,
