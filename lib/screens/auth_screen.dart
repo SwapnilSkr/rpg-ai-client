@@ -122,8 +122,7 @@ class _AuthScreenState extends State<AuthScreen> {
   /// After sign-in: interests onboarding for new accounts; Discover otherwise.
   Future<void> _routeAfterAuth() async {
     final user = await AuthService.getCachedUser();
-    final onboarded =
-        await InterestsStore.hasCompletedOnboarding(user: user);
+    final onboarded = await InterestsStore.hasCompletedOnboarding(user: user);
     if (!mounted) return;
     context.go(onboarded ? '/discover' : '/onboarding');
   }
@@ -157,8 +156,9 @@ class _AuthScreenState extends State<AuthScreen> {
     } on ApiException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e) {
-      setState(() => _errorMessage =
-          e.toString().replaceFirst('Exception: ', ''));
+      setState(
+        () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -170,8 +170,9 @@ class _AuthScreenState extends State<AuthScreen> {
       _clearMessages();
     });
     try {
-      final phone =
-          _normalizePhone('${_dialCode.code}${_phoneController.text}');
+      final phone = _normalizePhone(
+        '${_dialCode.code}${_phoneController.text}',
+      );
       await AuthService.sendOtp(phone);
       if (!mounted) return;
       setState(() {
@@ -181,8 +182,9 @@ class _AuthScreenState extends State<AuthScreen> {
     } on ApiException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e) {
-      setState(() => _errorMessage =
-          e.toString().replaceFirst('Exception: ', ''));
+      setState(
+        () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -204,8 +206,9 @@ class _AuthScreenState extends State<AuthScreen> {
     } on ApiException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e) {
-      setState(() => _errorMessage =
-          e.toString().replaceFirst('Exception: ', ''));
+      setState(
+        () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -348,9 +351,7 @@ class _AuthScreenState extends State<AuthScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            enabled
-                ? 'NSFW preference enabled.'
-                : 'NSFW preference disabled.',
+            enabled ? 'NSFW preference enabled.' : 'NSFW preference disabled.',
           ),
         ),
       );
@@ -387,14 +388,19 @@ class _AuthScreenState extends State<AuthScreen> {
             children: [
               // Back button — only in the sign-in flow. The profile is a nav
               // tab (no back) or pushed (OS/gesture back handles it).
-              if (_sessionReady && _currentUser == null && !_isProfileTab(context))
+              if (_sessionReady &&
+                  _currentUser == null &&
+                  !_isProfileTab(context))
                 Align(
                   alignment: Alignment.topLeft,
                   child: Padding(
                     padding: const EdgeInsets.all(8),
                     child: IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new,
-                          color: EverloreTheme.ash, size: 20),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: EverloreTheme.ash,
+                        size: 20,
+                      ),
                       onPressed: () =>
                           context.canPop() ? context.pop() : context.go('/'),
                     ),
@@ -413,9 +419,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget _buildSessionBody(BuildContext context) {
     if (!_sessionReady) {
       return EverloreSessionLoader(
-        message: _isProfileTab(context)
-            ? 'Opening your profile'
-            : 'One moment',
+        message: _isProfileTab(context) ? 'Opening your profile' : 'One moment',
       );
     }
     if (_currentUser != null) {
@@ -458,8 +462,9 @@ class _AuthScreenState extends State<AuthScreen> {
       _errorMessage = null;
     });
     try {
-      final updated =
-          await AuthService.updatePreferences({'player_name': name});
+      final updated = await AuthService.updatePreferences({
+        'player_name': name,
+      });
       if (!mounted) return;
       setState(() {
         _currentUser = updated;
@@ -469,8 +474,9 @@ class _AuthScreenState extends State<AuthScreen> {
     } on ApiException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e) {
-      setState(() => _errorMessage =
-          e.toString().replaceFirst('Exception: ', ''));
+      setState(
+        () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
+      );
     } finally {
       if (mounted) setState(() => _isSavingName = false);
     }
@@ -559,8 +565,10 @@ class _AuthScreenState extends State<AuthScreen> {
         if (user.phone != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(user.phone!,
-                style: const TextStyle(color: EverloreTheme.ash)),
+            child: Text(
+              user.phone!,
+              style: const TextStyle(color: EverloreTheme.ash),
+            ),
           ),
 
         const SizedBox(height: 8),
@@ -572,7 +580,8 @@ class _AuthScreenState extends State<AuthScreen> {
             borderRadius: BorderRadius.circular(20),
             color: _tierColor(user.tier).withValues(alpha: 0.15),
             border: Border.all(
-                color: _tierColor(user.tier).withValues(alpha: 0.4)),
+              color: _tierColor(user.tier).withValues(alpha: 0.4),
+            ),
           ),
           child: Text(
             user.tier.toUpperCase(),
@@ -587,6 +596,15 @@ class _AuthScreenState extends State<AuthScreen> {
 
         const SizedBox(height: 28),
 
+        NeuButton(
+          label: 'Membership & Ink',
+          icon: Icons.auto_awesome_rounded,
+          primary: false,
+          accent: EverloreTheme.gold,
+          onTap: () => context.push('/membership'),
+        ),
+        const SizedBox(height: 16),
+
         Container(
           decoration: EverloreTheme.cardDecoration,
           padding: const EdgeInsets.all(20),
@@ -599,8 +617,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     ? null
                     : _handleNsfwToggle,
                 activeColor: EverloreTheme.crimson,
-                activeTrackColor:
-                    EverloreTheme.crimson.withValues(alpha: 0.35),
+                activeTrackColor: EverloreTheme.crimson.withValues(alpha: 0.35),
                 title: const Text(
                   'Enable Mature Content (NSFW)',
                   style: TextStyle(
@@ -897,8 +914,7 @@ class _PhoneTabState extends State<_PhoneTab> {
         Text(
           'Speak the code we sent.',
           textAlign: TextAlign.center,
-          style: GoogleFonts.ebGaramond(
-              color: EverloreTheme.ash, fontSize: 15),
+          style: GoogleFonts.ebGaramond(color: EverloreTheme.ash, fontSize: 15),
         ),
         const SizedBox(height: 6),
         // The number, with a Change affordance back to phone entry.

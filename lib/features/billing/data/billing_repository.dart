@@ -1,0 +1,150 @@
+import 'dart:async';
+
+import 'package:in_app_purchase/in_app_purchase.dart';
+
+import '../../../core/network/api_client.dart';
+
+class BillingWallet {
+  final String tier;
+  final int balance;
+  final int monthlyInk;
+  final int dailyStorySafetyCap;
+  final bool purchasesEnabled;
+
+  const BillingWallet({
+    required this.tier,
+    required this.balance,
+    required this.monthlyInk,
+    required this.dailyStorySafetyCap,
+    required this.purchasesEnabled,
+  });
+
+  factory BillingWallet.fromJson(Map<String, dynamic> json) {
+    final profile = Map<String, dynamic>.from(json['profile'] as Map? ?? {});
+    return BillingWallet(
+      tier: json['tier']?.toString() ?? 'free',
+      balance: (json['balance'] as num?)?.toInt() ?? 0,
+      monthlyInk: (profile['monthly_ink'] as num?)?.toInt() ?? 0,
+      dailyStorySafetyCap:
+          (profile['daily_story_safety_cap'] as num?)?.toInt() ?? 0,
+      purchasesEnabled: json['purchases_enabled'] == true,
+    );
+  }
+}
+
+/// Play's identifiers are an entitlement contract, never a client-side price
+/// table. Prices and regional INR/USD equivalents always come from Play.
+const _subscriptionIds = {'everlore_premium', 'everlore_creator'};
+const _allProductIds = {
+  ..._subscriptionIds,
+  'everlore_ink_100',
+  'everlore_ink_350',
+  'everlore_ink_900',
+};
+
+class BillingRepository {
+  BillingRepository._();
+  static final BillingRepository instance = BillingRepository._();
+
+  final InAppPurchase _play = InAppPurchase.instance;
+  StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
+  final _walletChanges = StreamController<BillingWallet>.broadcast();
+  final _errors = StreamController<String>.broadcast();
+  bool _started = false;
+
+  Stream<BillingWallet> get walletChanges => _walletChanges.stream;
+  Stream<String> get errors => _errors.stream;
+
+  Future<BillingWallet> wallet() async {
+    final response = await ApiClient.get('/billing/me');
+    final catalog = await ApiClient.get('/billing/catalog');
+    final map = Map<String, dynamic>.from(response as Map);
+    map['purchases_enabled'] = catalog['purchases_enabled'] == true;
+    return BillingWallet.fromJson(map);
+  }
+
+  Future<bool> start() async {
+    if (_started) return await _play.isAvailable();
+    _started = true;
+    _purchaseSub = _play.purchaseStream.listen(
+      _handlePurchases,
+      onError: (Object error) =>
+          _errors.add('Google Play is unavailable: $error'),
+    );
+    return _play.isAvailable();
+  }
+
+  Future<List<ProductDetails>> products() async {
+    if (!await start()) {
+      return const [];
+    }
+    final result = await _play.queryProductDetails(_allProductIds);
+    if (result.error != null) {
+      throw ApiException(statusCode: 503, message: result.error!.message);
+    }
+    return result.productDetails;
+  }
+
+  Future<void> buy(ProductDetails product) async {
+    final param = PurchaseParam(productDetails: product);
+    final started = _subscriptionIds.contains(product.id)
+        ? await _play.buyNonConsumable(purchaseParam: param)
+        : await _play.buyConsumable(purchaseParam: param, autoConsume: false);
+    if (!started) {
+      throw ApiException(
+        statusCode: 503,
+        message: 'Google Play could not start this purchase.',
+      );
+    }
+  }
+
+  Future<void> _handlePurchases(List<PurchaseDetails> purchases) async {
+    for (final purchase in purchases) {
+      if (purchase.status == PurchaseStatus.pending) continue;
+      var verifiedAndGranted = false;
+      try {
+        if (purchase.status == PurchaseStatus.error) {
+          _errors.add(
+            purchase.error?.message ??
+                'Google Play could not complete the purchase.',
+          );
+        } else if (purchase.status == PurchaseStatus.purchased ||
+            purchase.status == PurchaseStatus.restored) {
+          final kind = _subscriptionIds.contains(purchase.productID)
+              ? 'subscription'
+              : 'consumable';
+          final response = await ApiClient.post(
+            '/billing/google/verify',
+            body: {
+              'product_id': purchase.productID,
+              'purchase_token':
+                  purchase.verificationData.serverVerificationData,
+              'kind': kind,
+            },
+          );
+          _walletChanges.add(
+            BillingWallet.fromJson(Map<String, dynamic>.from(response as Map)),
+          );
+          verifiedAndGranted = true;
+        }
+      } catch (error) {
+        _errors.add(
+          'We could not confirm this purchase yet. It will be restored safely when you reopen Everlore.',
+        );
+      } finally {
+        // Do not acknowledge before server-side verification. Leaving an
+        // unverified purchase pending lets Play deliver it again after a
+        // transient API failure, rather than losing the user's entitlement.
+        if (verifiedAndGranted && purchase.pendingCompletePurchase) {
+          await _play.completePurchase(purchase);
+        }
+      }
+    }
+  }
+
+  Future<void> dispose() async {
+    await _purchaseSub?.cancel();
+    _purchaseSub = null;
+    _started = false;
+  }
+}
