@@ -67,12 +67,6 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _milestoneUnlockedController =
       StreamController<Map<String, dynamic>>.broadcast();
-  final _sideChatDeltaController =
-      StreamController<Map<String, dynamic>>.broadcast();
-  final _sideChatCompleteController =
-      StreamController<Map<String, dynamic>>.broadcast();
-  final _sideChatErrorController =
-      StreamController<Map<String, dynamic>>.broadcast();
 
   /// Fired when the server reports this account was deleted (e.g. from another
   /// device). A live session must drop to the auth screen rather than keep
@@ -110,12 +104,6 @@ class WsManager {
       _worldProjectionUpdatedController.stream;
   Stream<Map<String, dynamic>> get onMilestoneUnlocked =>
       _milestoneUnlockedController.stream;
-  Stream<Map<String, dynamic>> get onSideChatDelta =>
-      _sideChatDeltaController.stream;
-  Stream<Map<String, dynamic>> get onSideChatComplete =>
-      _sideChatCompleteController.stream;
-  Stream<Map<String, dynamic>> get onSideChatError =>
-      _sideChatErrorController.stream;
 
   bool get isConnected => _isConnected;
 
@@ -294,15 +282,6 @@ class WsManager {
       case 'milestone_unlocked':
         _milestoneUnlockedController.add(msg);
         break;
-      case 'side_chat_delta':
-        _sideChatDeltaController.add(msg);
-        break;
-      case 'side_chat_complete':
-        _sideChatCompleteController.add(msg);
-        break;
-      case 'side_chat_error':
-        _sideChatErrorController.add(msg);
-        break;
       case 'account_deleted':
         _accountDeletedController.add(null);
         break;
@@ -358,7 +337,7 @@ class WsManager {
       return;
     }
     // Offline. Only actions that are SAFE to replay after a reconnect may be
-    // queued. A generation-triggering action (chat/continue/side_chat/replay)
+    // queued. A generation-triggering action (chat/continue/replay)
     // must NOT be blindly re-sent: if the pre-drop send already reached the
     // server, replaying it on reconnect double-posts the turn. Drop it and
     // surface, so the player resends once reconnected (the optimistic turn is
@@ -391,18 +370,6 @@ class WsManager {
       'action': 'chat',
       'instance_id': instanceId,
       'payload': {'message': message},
-    });
-  }
-
-  void sendSideChatMessage(
-    String instanceId,
-    String characterId,
-    String message,
-  ) {
-    send({
-      'action': 'side_chat',
-      'instance_id': instanceId,
-      'payload': {'character_id': characterId, 'message': message},
     });
   }
 
@@ -464,8 +431,5 @@ class WsManager {
     _replayCompleteController.close();
     _worldProjectionUpdatedController.close();
     _milestoneUnlockedController.close();
-    _sideChatDeltaController.close();
-    _sideChatCompleteController.close();
-    _sideChatErrorController.close();
   }
 }

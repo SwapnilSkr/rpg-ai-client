@@ -123,9 +123,9 @@ class _PlayViewState extends State<_PlayView> {
     super.dispose();
   }
 
-  /// Contextual bond actions for [character] — every action is sugar over a
-  /// normal player turn (prefilled composer) or a memory lens, never a
-  /// separate game system. "Ask about" topics are grounded in the character's
+  /// Contextual bond actions for [character] — every action becomes a normal,
+  /// canonical player turn (prefilled composer) or a memory lens. "Ask about"
+  /// topics are grounded in the character's
   /// current state so the prompts are specific, not a dangling quote. The
   /// server owns that display copy; raw current-state strings remain internal
   /// continuity data and are never rendered as action labels.
@@ -175,6 +175,15 @@ class _PlayViewState extends State<_PlayView> {
                   ),
                 ),
               ],
+              const SizedBox(height: 8),
+              Text(
+                'Your choice plays out in the story.',
+                style: EverloreTheme.ui(
+                  size: 11,
+                  color: EverloreTheme.goldDim,
+                  height: 1.35,
+                ),
+              ),
               // Tell the player where this character stands relative to the
               // scene, so "Seek out" vs "Approach" reads as intentional.
               if (presence != null) ...[

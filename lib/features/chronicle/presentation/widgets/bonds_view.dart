@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../data/relationship_ledger.dart';
 import '../character_memory_screen.dart';
-import '../side_chat_screen.dart';
 import '../../../../shared/widgets/everlore_empty_state.dart';
 
 /// Relationship Ledger: where each member of the cast stands toward the
@@ -45,17 +44,6 @@ class BondsView extends StatelessWidget {
             ),
           );
         },
-        onChat: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => SideChatScreen(
-                instanceId: instanceId,
-                characterId: entries[i].id,
-                characterName: entries[i].name,
-              ),
-            ),
-          );
-        },
       ),
     );
   }
@@ -64,13 +52,8 @@ class BondsView extends StatelessWidget {
 class _BondCard extends StatelessWidget {
   final RelationshipEntry entry;
   final VoidCallback onMemories;
-  final VoidCallback onChat;
 
-  const _BondCard({
-    required this.entry,
-    required this.onMemories,
-    required this.onChat,
-  });
+  const _BondCard({required this.entry, required this.onMemories});
 
   @override
   Widget build(BuildContext context) {
@@ -131,16 +114,6 @@ class _BondCard extends StatelessWidget {
                             ),
                           ],
                         ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Private chat',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: onChat,
-                      icon: const Icon(
-                        Icons.forum_outlined,
-                        color: EverloreTheme.gold,
-                        size: 20,
                       ),
                     ),
                     const Icon(

@@ -8,7 +8,6 @@ import 'location_journal.dart';
 import 'relationship_ledger.dart';
 import 'threads_data.dart';
 import 'recap_data.dart';
-import 'side_chat_data.dart';
 
 /// A player protagonist from another save of the same GM template. This is a
 /// copy source, never a shared mutable character card.
@@ -240,18 +239,6 @@ class ChronicleRepository {
   }
 
   /// Private one-on-one side-character thread.
-  static Future<SideChatThread> getSideChatThread(
-    String instanceId,
-    String characterId, {
-    int page = 1,
-    int limit = 30,
-  }) async {
-    final response = await ApiClient.get(
-      '/chronicle/side-chats/$instanceId/$characterId?page=$page&limit=$limit',
-    );
-    return SideChatThread.fromJson(Map<String, dynamic>.from(response as Map));
-  }
-
   /// All places with anchored events/memories + the current-location cursor.
   static Future<LocationsData> getLocations(String instanceId) async {
     final response = await ApiClient.get('/chronicle/locations/$instanceId');
