@@ -10,6 +10,7 @@ class BillingWallet {
   final int monthlyInk;
   final int dailyStorySafetyCap;
   final bool purchasesEnabled;
+  final bool simulationEnabled;
 
   const BillingWallet({
     required this.tier,
@@ -17,6 +18,7 @@ class BillingWallet {
     required this.monthlyInk,
     required this.dailyStorySafetyCap,
     required this.purchasesEnabled,
+    required this.simulationEnabled,
   });
 
   factory BillingWallet.fromJson(Map<String, dynamic> json) {
@@ -28,6 +30,7 @@ class BillingWallet {
       dailyStorySafetyCap:
           (profile['daily_story_safety_cap'] as num?)?.toInt() ?? 0,
       purchasesEnabled: json['purchases_enabled'] == true,
+      simulationEnabled: json['simulation_enabled'] == true,
     );
   }
 }
@@ -57,10 +60,28 @@ class BillingRepository {
 
   Future<BillingWallet> wallet() async {
     final response = await ApiClient.get('/billing/me');
+    return _walletWithCatalog(response);
+  }
+
+  Future<BillingWallet> _walletWithCatalog(dynamic response) async {
     final catalog = await ApiClient.get('/billing/catalog');
     final map = Map<String, dynamic>.from(response as Map);
     map['purchases_enabled'] = catalog['purchases_enabled'] == true;
+    map['simulation_enabled'] = catalog['simulation_enabled'] == true;
     return BillingWallet.fromJson(map);
+  }
+
+  Future<BillingWallet> simulatePurchase(String productId) async {
+    final response = await ApiClient.post(
+      '/billing/simulate-purchase',
+      body: {
+        'product_id': productId,
+        'idempotency_key': 'mobile-${DateTime.now().microsecondsSinceEpoch}',
+      },
+    );
+    final wallet = await _walletWithCatalog(response);
+    _walletChanges.add(wallet);
+    return wallet;
   }
 
   Future<bool> start() async {
@@ -123,7 +144,7 @@ class BillingRepository {
             },
           );
           _walletChanges.add(
-            BillingWallet.fromJson(Map<String, dynamic>.from(response as Map)),
+            await _walletWithCatalog(response),
           );
           verifiedAndGranted = true;
         }

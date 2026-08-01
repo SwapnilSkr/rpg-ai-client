@@ -20,6 +20,7 @@ class _BillingScreenState extends State<BillingScreen> {
   List<ProductDetails> _products = const [];
   String? _error;
   bool _loading = true;
+  String? _purchaseInFlight;
   StreamSubscription<BillingWallet>? _walletSub;
   StreamSubscription<String>? _errorSub;
 
@@ -70,6 +71,28 @@ class _BillingScreenState extends State<BillingScreen> {
           _loading = false;
         });
       }
+    }
+  }
+
+  Future<void> _simulatePurchase(String productId) async {
+    if (_purchaseInFlight != null) return;
+    setState(() => _purchaseInFlight = productId);
+    try {
+      final wallet = await BillingRepository.instance.simulatePurchase(productId);
+      if (mounted) {
+        setState(() => _wallet = wallet);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Test checkout complete — no charge.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Test checkout could not be completed.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _purchaseInFlight = null);
     }
   }
 
@@ -136,7 +159,17 @@ class _BillingScreenState extends State<BillingScreen> {
                 _pack('everlore_ink_100', 'Small refill'),
                 _pack('everlore_ink_350', 'Most popular'),
                 _pack('everlore_ink_900', 'Deep reserves'),
-                if (!_wallet!.purchasesEnabled) ...[
+                if (_wallet!.simulationEnabled) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    'TEST CHECKOUT · NO CHARGE\nThis internal QA mode grants Ink through the same ledger used by normal play.',
+                    style: EverloreTheme.ui(
+                      size: 13,
+                      color: EverloreTheme.gold,
+                      height: 1.45,
+                    ),
+                  ),
+                ] else if (!_wallet!.purchasesEnabled) ...[
                   const SizedBox(height: 24),
                   Text(
                     'Google Play billing will appear here once this release is connected to the verified Play product catalog.',
@@ -154,30 +187,38 @@ class _BillingScreenState extends State<BillingScreen> {
 
   Widget _plan(String id, String title, String description, Color accent) {
     final product = _products.where((item) => item.id == id).firstOrNull;
+    final simulated = _wallet!.simulationEnabled && product == null;
     return _PurchaseCard(
       title: title,
       description: description,
-      price: product?.price,
+      price: product?.price ?? (simulated ? 'Test' : null),
       accent: accent,
-      enabled: product != null,
-      onTap: product == null
-          ? null
-          : () => BillingRepository.instance.buy(product),
+      enabled: (product != null || simulated) && _purchaseInFlight == null,
+      busy: _purchaseInFlight == id,
+      onTap: product != null
+          ? () => BillingRepository.instance.buy(product)
+          : simulated
+          ? () => _simulatePurchase(id)
+          : null,
     );
   }
 
   Widget _pack(String id, String title) {
     final product = _products.where((item) => item.id == id).firstOrNull;
+    final simulated = _wallet!.simulationEnabled && product == null;
     return _PurchaseCard(
       title: title,
       description: 'A one-time Story Ink refill.',
-      price: product?.price,
+      price: product?.price ?? (simulated ? 'Test' : null),
       accent: EverloreTheme.goldDim,
-      enabled: product != null,
+      enabled: (product != null || simulated) && _purchaseInFlight == null,
       compact: true,
-      onTap: product == null
-          ? null
-          : () => BillingRepository.instance.buy(product),
+      busy: _purchaseInFlight == id,
+      onTap: product != null
+          ? () => BillingRepository.instance.buy(product)
+          : simulated
+          ? () => _simulatePurchase(id)
+          : null,
     );
   }
 }
@@ -221,7 +262,7 @@ class _PurchaseCard extends StatelessWidget {
   final String title, description;
   final String? price;
   final Color accent;
-  final bool enabled, compact;
+  final bool enabled, compact, busy;
   final VoidCallback? onTap;
   const _PurchaseCard({
     required this.title,
@@ -231,6 +272,7 @@ class _PurchaseCard extends StatelessWidget {
     required this.enabled,
     required this.onTap,
     this.compact = false,
+    this.busy = false,
   });
   @override
   Widget build(BuildContext context) => Padding(
@@ -276,14 +318,23 @@ class _PurchaseCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              Text(
-                price ?? '—',
-                style: EverloreTheme.ui(
-                  size: 14,
-                  color: enabled ? accent : EverloreTheme.ash,
-                  weight: FontWeight.w700,
-                ),
-              ),
+              busy
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: accent,
+                      ),
+                    )
+                  : Text(
+                      price ?? '—',
+                      style: EverloreTheme.ui(
+                        size: 14,
+                        color: enabled ? accent : EverloreTheme.ash,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
             ],
           ),
         ),
