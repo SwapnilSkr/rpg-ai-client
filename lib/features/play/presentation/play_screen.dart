@@ -1984,8 +1984,8 @@ class _RealmMenuSheet extends StatelessWidget {
                 const SizedBox(height: 12),
                 _RealmMenuChoice(
                   materialIcon: Icons.psychology_alt_outlined,
-                  title: 'Thoughts',
-                  subtitle: 'Who is here and who you are speaking to.',
+                  title: 'Characters & You',
+                  subtitle: 'View the cast and edit your protagonist.',
                   onTap: onThoughts,
                 ),
                 const SizedBox(height: 12),
@@ -3080,7 +3080,7 @@ class _ThoughtsSheet extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Character Thoughts',
+              'Characters & You',
               style: EverloreTheme.serifDisplay(
                 size: 18,
                 color: EverloreTheme.parchment,
@@ -3088,8 +3088,11 @@ class _ThoughtsSheet extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Private attitudes and inner thoughts inferred from the story. '
-              'These are not spoken dialogue.',
+              isSentientWorld
+                  ? 'Private attitudes and inner thoughts inferred from the story. '
+                      'These are not spoken dialogue.'
+                  : 'View the cast and edit your protagonist with the pencil icon. '
+                      'Private thoughts are inferred from the story, not spoken dialogue.',
               style: EverloreTheme.ui(
                 size: 12,
                 color: EverloreTheme.ash,
