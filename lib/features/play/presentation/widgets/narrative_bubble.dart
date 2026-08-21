@@ -916,7 +916,12 @@ class _ProseTextState extends State<_ProseText> {
       ];
     }
 
-    return SelectableText.rich(TextSpan(children: spans));
+    // Narrator turns use long-press for their action sheet (rewind, replay,
+    // copy, etc.). SelectableText claims that same gesture to begin a text
+    // selection, making the menu unreliable on touch devices. This stays a
+    // RichText so the enclosing NarrativeBubble receives the long-press while
+    // inline character and lore links retain their tap recognizers.
+    return RichText(text: TextSpan(children: spans));
   }
 }
 
