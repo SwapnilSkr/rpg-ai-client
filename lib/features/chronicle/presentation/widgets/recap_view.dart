@@ -105,8 +105,8 @@ class _SpineCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
           colors: [
-            EverloreTheme.gold.withValues(alpha: 0.1),
-            EverloreTheme.void2,
+            EverloreTheme.gold.withValues(alpha: 0.16),
+            EverloreTheme.void2.withValues(alpha: 0.56),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -275,7 +275,7 @@ class _Pill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: EverloreTheme.void2,
+        color: EverloreTheme.void2.withValues(alpha: 0.58),
         border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
       ),
       child: Row(

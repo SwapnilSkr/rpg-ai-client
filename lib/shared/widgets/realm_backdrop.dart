@@ -10,10 +10,60 @@ import '../../app/theme/nexus_theme.dart';
 class RealmBackdrop extends StatefulWidget {
   final Widget child;
   final bool showPortraits;
-  const RealmBackdrop({super.key, required this.child, this.showPortraits = true});
+  const RealmBackdrop({
+    super.key,
+    required this.child,
+    this.showPortraits = true,
+  });
 
   @override
   State<RealmBackdrop> createState() => _RealmBackdropState();
+}
+
+/// A lightweight, image-safe layer of drifting embers for full-screen cover
+/// art. Unlike [RealmBackdrop], it adds no vignette or portrait bands.
+class EmberOverlay extends StatefulWidget {
+  final double intensity;
+
+  const EmberOverlay({super.key, this.intensity = 2.2});
+
+  @override
+  State<EmberOverlay> createState() => _EmberOverlayState();
+}
+
+class _EmberOverlayState extends State<EmberOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _embers;
+
+  @override
+  void initState() {
+    super.initState();
+    _embers = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3600),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _embers.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: AnimatedBuilder(
+      animation: _embers,
+      builder: (context, _) => CustomPaint(
+        painter: _AmbientPainter(
+          _embers.value,
+          showVignette: false,
+          emberIntensity: widget.intensity,
+          warmEmbers: true,
+        ),
+      ),
+    ),
+  );
 }
 
 // Two counter-drifting bands. Top band = one set, bottom band = the other, each
@@ -21,12 +71,29 @@ class RealmBackdrop extends StatefulWidget {
 // art falls back to a faint rimmed disc, so genres without a portrait yet still
 // read as intentional silhouettes.
 const List<String> _bandKeysTop = [
-  'tsundere', 'kdrama', 'epic_fantasy', 'noir', 'dark_romance', 'cozy_comfort',
-  'litrpg', 'modern_casual', 'romcom', 'slice_of_life', 'anime',
+  'tsundere',
+  'kdrama',
+  'epic_fantasy',
+  'noir',
+  'dark_romance',
+  'cozy_comfort',
+  'litrpg',
+  'modern_casual',
+  'romcom',
+  'slice_of_life',
+  'anime',
 ];
 const List<String> _bandKeysBottom = [
-  'cyberpunk', 'shonen', 'yandere', 'dark_academia', 'horror', 'grimdark',
-  'flirty', 'regency', 'whimsical', 'chaotic_comedy',
+  'cyberpunk',
+  'shonen',
+  'yandere',
+  'dark_academia',
+  'horror',
+  'grimdark',
+  'flirty',
+  'regency',
+  'whimsical',
+  'chaotic_comedy',
 ];
 
 const double _discSize = 46;
@@ -140,8 +207,9 @@ class _DriftBand extends StatelessWidget {
             animation: drift,
             builder: (context, _) {
               // forward: 0 → -span (drifts left). reverse: -span → 0 (drifts right).
-              final dx =
-                  reverse ? (drift.value - 1) * span : -drift.value * span;
+              final dx = reverse
+                  ? (drift.value - 1) * span
+                  : -drift.value * span;
               return Transform.translate(
                 offset: Offset(dx, 0),
                 child: _PortraitBand(keys: keys),
@@ -200,9 +268,8 @@ class _BandDisc extends StatelessWidget {
           'assets/splash/$assetKey.webp',
           fit: BoxFit.cover,
           gaplessPlayback: true,
-          errorBuilder: (context, _, __) => const ColoredBox(
-            color: EverloreTheme.void3,
-          ),
+          errorBuilder: (context, _, __) =>
+              const ColoredBox(color: EverloreTheme.void3),
         ),
       ),
     );
@@ -212,7 +279,15 @@ class _BandDisc extends StatelessWidget {
 /// Background vignette + a field of slow-drifting ember motes.
 class _AmbientPainter extends CustomPainter {
   final double t;
-  _AmbientPainter(this.t);
+  final bool showVignette;
+  final double emberIntensity;
+  final bool warmEmbers;
+  _AmbientPainter(
+    this.t, {
+    this.showVignette = true,
+    this.emberIntensity = 1,
+    this.warmEmbers = false,
+  });
 
   static final List<_Ember> _embers = List.generate(16, (i) {
     final rnd = math.Random(i * 7 + 3);
@@ -228,18 +303,20 @@ class _AmbientPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(0, -0.35),
-          radius: 1.0,
-          colors: [
-            EverloreTheme.void2.withValues(alpha: 0.5),
-            EverloreTheme.void0,
-          ],
-        ).createShader(Offset.zero & size),
-    );
+    if (showVignette) {
+      canvas.drawRect(
+        Offset.zero & size,
+        Paint()
+          ..shader = RadialGradient(
+            center: const Alignment(0, -0.35),
+            radius: 1.0,
+            colors: [
+              EverloreTheme.void2.withValues(alpha: 0.5),
+              EverloreTheme.void0,
+            ],
+          ).createShader(Offset.zero & size),
+      );
+    }
 
     for (final e in _embers) {
       final prog = (t * e.speed + e.phase) % 1.0;
@@ -249,20 +326,30 @@ class _AmbientPainter extends CustomPainter {
       final dx =
           e.x * size.width + math.sin((prog + e.phase) * math.pi * 2) * 10;
       final dy = y * size.height;
-      final color =
-          e.gold ? EverloreTheme.goldGlow : EverloreTheme.violetBright;
+      final color = warmEmbers
+          ? (e.gold ? EverloreTheme.goldGlow : EverloreTheme.ember)
+          : (e.gold ? EverloreTheme.goldGlow : EverloreTheme.violetBright);
       canvas.drawCircle(
         Offset(dx, dy),
-        e.size,
+        e.size * emberIntensity,
         Paint()
-          ..color = color.withValues(alpha: 0.08 + twinkle * 0.18)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+          ..color = color.withValues(
+            alpha: (0.08 + twinkle * 0.18) * emberIntensity,
+          )
+          ..maskFilter = MaskFilter.blur(
+            BlurStyle.normal,
+            1.5 * emberIntensity,
+          ),
       );
     }
   }
 
   @override
-  bool shouldRepaint(_AmbientPainter old) => old.t != t;
+  bool shouldRepaint(_AmbientPainter old) =>
+      old.t != t ||
+      old.showVignette != showVignette ||
+      old.emberIntensity != emberIntensity ||
+      old.warmEmbers != warmEmbers;
 }
 
 class _Ember {

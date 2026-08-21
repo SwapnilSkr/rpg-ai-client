@@ -710,6 +710,10 @@ class PlayCubit extends Cubit<PlayState> {
     });
 
     _errorSub = _ws.onError.listen((msg) {
+      final serverMessage = msg['message']?.toString() ?? '';
+      final isInkDepleted =
+          serverMessage.toLowerCase().contains('story ink') ||
+          serverMessage.toLowerCase().contains('not enough ink');
       // A replay in flight takes precedence: ANY error frame (including
       // GENERATION_IN_PROGRESS) must tear the replay down so the loader can
       // never get stranded. Restore the turn's original prose.
@@ -772,8 +776,9 @@ class PlayCubit extends Cubit<PlayState> {
             narrativeStreaming: false,
             choicesPreview: false,
             notice: null,
-            error:
-                'This scene could not be saved. Your action is ready to retry.',
+            error: isInkDepleted
+                ? serverMessage
+                : 'This scene could not be saved. Your action is ready to retry.',
             lastFailedInput: failedInput,
           ),
         );
@@ -798,7 +803,9 @@ class PlayCubit extends Cubit<PlayState> {
           events: events,
           isGenerating: false,
           notice: null,
-          error: 'The scene could not start. Your action is ready to retry.',
+          error: isInkDepleted
+              ? serverMessage
+              : 'The scene could not start. Your action is ready to retry.',
           lastFailedInput: droppedInput,
         ),
       );

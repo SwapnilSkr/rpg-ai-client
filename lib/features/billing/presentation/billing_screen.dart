@@ -78,7 +78,9 @@ class _BillingScreenState extends State<BillingScreen> {
     if (_purchaseInFlight != null) return;
     setState(() => _purchaseInFlight = productId);
     try {
-      final wallet = await BillingRepository.instance.simulatePurchase(productId);
+      final wallet = await BillingRepository.instance.simulatePurchase(
+        productId,
+      );
       if (mounted) {
         setState(() => _wallet = wallet);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -88,7 +90,9 @@ class _BillingScreenState extends State<BillingScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Test checkout could not be completed.')),
+          const SnackBar(
+            content: Text('Test checkout could not be completed.'),
+          ),
         );
       }
     } finally {
@@ -100,88 +104,138 @@ class _BillingScreenState extends State<BillingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: EverloreTheme.void0,
-      appBar: AppBar(
-        backgroundColor: EverloreTheme.void0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new,
-            color: EverloreTheme.parchment,
-            size: 18,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/art/ink-muse.webp',
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
           ),
-          onPressed: () => context.pop(),
-        ),
-        title: Text(
-          'Membership & Ink',
-          style: EverloreTheme.ui(
-            size: 17,
-            color: EverloreTheme.parchment,
-            weight: FontWeight.w700,
-          ),
-        ),
-      ),
-      body: _loading
-          ? const Center(
-              child: EverloreSessionLoader(message: 'Opening the ledger'),
-            )
-          : _error != null
-          ? Center(
-              child: TextButton(
-                onPressed: _load,
-                child: Text(
-                  _error!,
-                  style: const TextStyle(color: EverloreTheme.gold),
-                ),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 40),
-              children: [
-                _InkBalance(wallet: _wallet!),
-                const SizedBox(height: 26),
-                Text('MEMBERSHIPS', style: EverloreTheme.sectionHeader),
-                const SizedBox(height: 10),
-                _plan(
-                  'everlore_premium',
-                  'Premium',
-                  '3,000 Ink each month · generous everyday play · forge access',
-                  EverloreTheme.gold,
-                ),
-                const SizedBox(height: 12),
-                _plan(
-                  'everlore_creator',
-                  'Creator',
-                  '6,000 Ink each month · larger forge allowance · publish worlds',
-                  EverloreTheme.violet,
-                ),
-                const SizedBox(height: 26),
-                Text('ADD INK', style: EverloreTheme.sectionHeader),
-                const SizedBox(height: 10),
-                _pack('everlore_ink_100', 'Small refill'),
-                _pack('everlore_ink_350', 'Most popular'),
-                _pack('everlore_ink_900', 'Deep reserves'),
-                if (_wallet!.simulationEnabled) ...[
-                  const SizedBox(height: 24),
-                  Text(
-                    'TEST CHECKOUT · NO CHARGE\nThis internal QA mode grants Ink through the same ledger used by normal play.',
-                    style: EverloreTheme.ui(
-                      size: 13,
-                      color: EverloreTheme.gold,
-                      height: 1.45,
-                    ),
-                  ),
-                ] else if (!_wallet!.purchasesEnabled) ...[
-                  const SizedBox(height: 24),
-                  Text(
-                    'Google Play billing will appear here once this release is connected to the verified Play product catalog.',
-                    style: EverloreTheme.ui(
-                      size: 13,
-                      color: EverloreTheme.ash,
-                      height: 1.45,
-                    ),
-                  ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  EverloreTheme.void0.withValues(alpha: 0.24),
+                  EverloreTheme.void0.withValues(alpha: 0.58),
+                  EverloreTheme.void0.withValues(alpha: 0.8),
                 ],
+                stops: const [0, 0.4, 1],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 16, 8),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Membership & Ink',
+                        style: EverloreTheme.ui(
+                          size: 17,
+                          color: EverloreTheme.parchment,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      Material(
+                        color: EverloreTheme.void0.withValues(alpha: 0.7),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => context.pop(),
+                          child: const SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: Icon(
+                              Icons.close_rounded,
+                              color: EverloreTheme.parchment,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: _loading
+                      ? const Center(
+                          child: EverloreSessionLoader(
+                            message: 'Opening the ledger',
+                          ),
+                        )
+                      : _error != null
+                      ? Center(
+                          child: TextButton(
+                            onPressed: _load,
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: EverloreTheme.gold),
+                            ),
+                          ),
+                        )
+                      : ListView(
+                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 40),
+                          children: [
+                            _InkBalance(wallet: _wallet!),
+                            const SizedBox(height: 26),
+                            Text(
+                              'MEMBERSHIPS',
+                              style: EverloreTheme.sectionHeader,
+                            ),
+                            const SizedBox(height: 10),
+                            _plan(
+                              'everlore_premium',
+                              'Premium',
+                              '3,000 Ink each month · generous everyday play · forge access',
+                              EverloreTheme.gold,
+                            ),
+                            const SizedBox(height: 12),
+                            _plan(
+                              'everlore_creator',
+                              'Creator',
+                              '6,000 Ink each month · larger forge allowance · publish worlds',
+                              EverloreTheme.violet,
+                            ),
+                            const SizedBox(height: 26),
+                            Text('ADD INK', style: EverloreTheme.sectionHeader),
+                            const SizedBox(height: 10),
+                            _pack('everlore_ink_100', 'Small refill'),
+                            _pack('everlore_ink_350', 'Most popular'),
+                            _pack('everlore_ink_900', 'Deep reserves'),
+                            if (_wallet!.simulationEnabled) ...[
+                              const SizedBox(height: 24),
+                              Text(
+                                'TEST CHECKOUT · NO CHARGE\nThis internal QA mode grants Ink through the same ledger used by normal play.',
+                                style: EverloreTheme.ui(
+                                  size: 13,
+                                  color: EverloreTheme.gold,
+                                  height: 1.45,
+                                ),
+                              ),
+                            ] else if (!_wallet!.purchasesEnabled) ...[
+                              const SizedBox(height: 24),
+                              Text(
+                                'Google Play billing will appear here once this release is connected to the verified Play product catalog.',
+                                style: EverloreTheme.ui(
+                                  size: 13,
+                                  color: EverloreTheme.ash,
+                                  height: 1.45,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                ),
               ],
             ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -226,36 +280,55 @@ class _BillingScreenState extends State<BillingScreen> {
 class _InkBalance extends StatelessWidget {
   final BillingWallet wallet;
   const _InkBalance({required this.wallet});
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: EverloreTheme.void2,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '${wallet.balance} Ink',
-          style: EverloreTheme.serifDisplay(
-            size: 30,
-            color: EverloreTheme.parchment,
-          ),
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(18);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: EverloreTheme.void0.withValues(alpha: 0.56),
+        borderRadius: radius,
+        border: Border.all(
+          color: EverloreTheme.goldDim.withValues(alpha: 0.42),
         ),
-        const SizedBox(height: 5),
-        Text(
-          '${wallet.tier.toUpperCase()} · Standard turns cost 1 Ink. Failed generations never consume it.',
-          style: EverloreTheme.ui(
-            size: 12,
-            color: EverloreTheme.ash,
-            height: 1.4,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'YOUR STORY INK',
+            style: EverloreTheme.ui(
+              size: 10,
+              color: EverloreTheme.gold,
+              weight: FontWeight.w700,
+              spacing: 1.7,
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(height: 6),
+          Text(
+            '${wallet.balance} Ink',
+            style: EverloreTheme.serifDisplay(
+              size: 30,
+              color: EverloreTheme.parchment,
+            ),
+          ),
+          const SizedBox(height: 5),
+          SizedBox(
+            width: 238,
+            child: Text(
+              '${wallet.tier.toUpperCase()} · Standard turns cost 1 Ink. Failed generations never consume it.',
+              style: EverloreTheme.ui(
+                size: 12,
+                color: EverloreTheme.ash,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PurchaseCard extends StatelessWidget {
@@ -285,7 +358,7 @@ class _PurchaseCard extends StatelessWidget {
         child: Ink(
           padding: EdgeInsets.all(compact ? 14 : 18),
           decoration: BoxDecoration(
-            color: EverloreTheme.void2,
+            color: EverloreTheme.void2.withValues(alpha: 0.64),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: accent.withValues(alpha: enabled ? 0.42 : 0.18),

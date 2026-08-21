@@ -17,6 +17,8 @@ class EverloreEmptyState extends StatefulWidget {
   final VoidCallback? onAction;
   final Color accent;
   final bool compact;
+  final String? artAsset;
+  final bool fullBleedArt;
 
   const EverloreEmptyState({
     super.key,
@@ -29,6 +31,8 @@ class EverloreEmptyState extends StatefulWidget {
     this.onAction,
     this.accent = EverloreTheme.gold,
     this.compact = false,
+    this.artAsset,
+    this.fullBleedArt = false,
   });
 
   @override
@@ -57,7 +61,9 @@ class _EverloreEmptyStateState extends State<EverloreEmptyState>
   @override
   Widget build(BuildContext context) {
     final emblemSize = widget.compact ? 76.0 : 104.0;
-    return Center(
+    final hasArt = widget.artAsset != null && !widget.fullBleedArt;
+    final artRadius = BorderRadius.circular(20);
+    final content = Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(32, 40, 32, 112),
         child: ConstrainedBox(
@@ -72,10 +78,11 @@ class _EverloreEmptyStateState extends State<EverloreEmptyState>
                   child: child,
                 ),
                 child: Container(
-                  width: emblemSize,
-                  height: emblemSize,
+                  width: hasArt ? double.infinity : emblemSize,
+                  height: hasArt ? (widget.compact ? 142 : 170) : emblemSize,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
+                    shape: hasArt ? BoxShape.rectangle : BoxShape.circle,
+                    borderRadius: hasArt ? artRadius : null,
                     gradient: RadialGradient(
                       colors: [
                         widget.accent.withValues(alpha: 0.20),
@@ -85,34 +92,85 @@ class _EverloreEmptyStateState extends State<EverloreEmptyState>
                       stops: const [0, 0.58, 1],
                     ),
                     border: Border.all(
-                      color: widget.accent.withValues(alpha: 0.34),
+                      color: widget.accent.withValues(
+                        alpha: hasArt ? 0.52 : 0.34,
+                      ),
                     ),
                     boxShadow: [
                       BoxShadow(
                         color: widget.accent.withValues(alpha: 0.12),
-                        blurRadius: 28,
-                        spreadRadius: 2,
+                        blurRadius: hasArt ? 22 : 28,
+                        spreadRadius: hasArt ? 0 : 2,
                       ),
                     ],
                   ),
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      Container(
-                        width: emblemSize * 0.68,
-                        height: emblemSize * 0.68,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: widget.accent.withValues(alpha: 0.20),
+                      if (hasArt)
+                        Positioned.fill(
+                          child: ClipRRect(
+                            borderRadius: hasArt
+                                ? artRadius
+                                : BorderRadius.zero,
+                            child: Image.asset(
+                              widget.artAsset!,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
+                            ),
                           ),
                         ),
-                      ),
-                      Icon(
-                        widget.icon,
-                        size: widget.compact ? 30 : 42,
-                        color: widget.accent,
-                      ),
+                      if (hasArt)
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: artRadius,
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [
+                                  EverloreTheme.void1.withValues(alpha: 0.72),
+                                  EverloreTheme.void1.withValues(alpha: 0.12),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (!hasArt)
+                        Container(
+                          width: emblemSize * 0.68,
+                          height: emblemSize * 0.68,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: widget.accent.withValues(alpha: 0.20),
+                            ),
+                          ),
+                        ),
+                      if (!hasArt)
+                        Icon(
+                          widget.icon,
+                          size: widget.compact ? 30 : 42,
+                          color: widget.accent,
+                        )
+                      else
+                        Positioned(
+                          left: 14,
+                          bottom: 12,
+                          child: Icon(
+                            widget.icon,
+                            size: widget.compact ? 20 : 24,
+                            color: widget.accent.withValues(alpha: 0.96),
+                            shadows: [
+                              Shadow(
+                                color: EverloreTheme.void0.withValues(
+                                  alpha: 0.9,
+                                ),
+                                blurRadius: 5,
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -198,6 +256,32 @@ class _EverloreEmptyStateState extends State<EverloreEmptyState>
           ),
         ),
       ),
+    );
+    if (!widget.fullBleedArt || widget.artAsset == null) return content;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.asset(
+          widget.artAsset!,
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
+        ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                EverloreTheme.void0.withValues(alpha: 0.24),
+                EverloreTheme.void0.withValues(alpha: 0.6),
+                EverloreTheme.void0.withValues(alpha: 0.84),
+              ],
+              stops: const [0, 0.46, 1],
+            ),
+          ),
+        ),
+        content,
+      ],
     );
   }
 }

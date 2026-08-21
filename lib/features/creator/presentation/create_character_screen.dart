@@ -25,6 +25,59 @@ class CreateCharacterScreen extends StatelessWidget {
 const _charStepNames = ['WHO THEY ARE', 'VOICE & STORY', 'PORTRAIT'];
 final _charStepCount = _charStepNames.length;
 
+class _CharacterMuseBanner extends StatelessWidget {
+  const _CharacterMuseBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        height: 128,
+        width: double.infinity,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/art/persona-muse.webp',
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    EverloreTheme.void1.withValues(alpha: 0.88),
+                    EverloreTheme.void1.withValues(alpha: 0.48),
+                    EverloreTheme.void1.withValues(alpha: 0.08),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'A new voice\nfor your story',
+                  style: EverloreTheme.serifDisplay(
+                    size: 21,
+                    color: EverloreTheme.parchment,
+                    weight: FontWeight.w600,
+                    height: 1.18,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _CreateCharacterView extends StatefulWidget {
   const _CreateCharacterView();
 
@@ -151,6 +204,8 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const _CharacterMuseBanner(),
+          const SizedBox(height: 18),
           Text(
             'Create someone to talk to. They\'ll remember your conversations and '
             'grow with them.',

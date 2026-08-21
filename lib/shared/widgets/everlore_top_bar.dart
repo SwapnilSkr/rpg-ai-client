@@ -10,6 +10,7 @@ class EverloreTopBar extends StatelessWidget {
   final String? subtitle;
   final List<Widget> actions;
   final bool showProfile;
+  final double backgroundOpacity;
 
   const EverloreTopBar({
     super.key,
@@ -17,6 +18,7 @@ class EverloreTopBar extends StatelessWidget {
     this.subtitle,
     this.actions = const [],
     this.showProfile = true,
+    this.backgroundOpacity = 0.98,
   });
 
   @override
@@ -25,7 +27,7 @@ class EverloreTopBar extends StatelessWidget {
     return Container(
       padding: EdgeInsets.fromLTRB(20, topInset + 10, 14, 10),
       decoration: BoxDecoration(
-        color: EverloreTheme.void0.withValues(alpha: 0.98),
+        color: EverloreTheme.void0.withValues(alpha: backgroundOpacity),
         border: Border(
           bottom: BorderSide(
             color: EverloreTheme.goldDim.withValues(alpha: 0.14),

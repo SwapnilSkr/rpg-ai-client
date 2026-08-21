@@ -8,6 +8,7 @@ import '../../../shared/models/realm_play_status.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/neu.dart';
 import '../../../shared/widgets/everlore_empty_state.dart';
+import '../../../shared/widgets/realm_backdrop.dart';
 import '../data/home_repository.dart';
 import 'realm_entry_flow.dart';
 
@@ -71,9 +72,11 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: EverloreTheme.void1,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: EverloreTheme.void0,
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
           icon: const Icon(
             Icons.arrow_back_ios_new,
@@ -91,7 +94,32 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
           ),
         ),
       ),
-      body: _buildBody(),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/art/forge-muse.webp',
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+          ),
+          const EmberOverlay(),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  EverloreTheme.void0.withValues(alpha: 0.22),
+                  EverloreTheme.void0.withValues(alpha: 0.58),
+                  EverloreTheme.void0.withValues(alpha: 0.84),
+                ],
+                stops: const [0, 0.42, 1],
+              ),
+            ),
+          ),
+          _buildBody(context),
+        ],
+      ),
       bottomNavigationBar: _isLoading || _error != null
           ? null
           : SafeArea(
@@ -107,7 +135,7 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(BuildContext context) {
     if (_isLoading) {
       return const Center(
         child: EverloreSessionLoader(message: 'Gathering your stories'),
@@ -165,7 +193,12 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
       onRefresh: _load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          MediaQuery.paddingOf(context).top + kToolbarHeight + 8,
+          20,
+          24,
+        ),
         children: [
           Text(
             'Pick up where you left off',

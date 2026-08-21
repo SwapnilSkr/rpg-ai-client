@@ -77,6 +77,7 @@ class _PlayViewState extends State<_PlayView> {
   bool _followLatest = true;
   double? _olderLoadAnchorPixels;
   double? _olderLoadAnchorExtent;
+  bool _inkModalVisible = false;
 
   /// One-shot composer prefill consumed by [PlayerInput] (bond actions).
   final _composerDraft = ValueNotifier<String?>(null);
@@ -113,6 +114,48 @@ class _PlayViewState extends State<_PlayView> {
     _olderLoadAnchorPixels = position.pixels;
     _olderLoadAnchorExtent = position.maxScrollExtent;
     cubit.loadOlderEvents();
+  }
+
+  bool _isInkLimitMessage(String? message) {
+    final normalized = message?.toLowerCase() ?? '';
+    return normalized.contains('story ink') ||
+        normalized.contains('not enough ink');
+  }
+
+  void _showInkReserve(BuildContext context) {
+    if (_inkModalVisible || !mounted) return;
+    _inkModalVisible = true;
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierLabel: 'Story Ink reserve',
+      barrierColor: Colors.black.withValues(alpha: 0.76),
+      transitionDuration: const Duration(milliseconds: 360),
+      pageBuilder: (dialogContext, _, __) => _InkReserveDialog(
+        onDismiss: () {
+          context.read<PlayCubit>().clearError();
+          Navigator.of(dialogContext).pop();
+        },
+        onRestore: () {
+          context.read<PlayCubit>().clearError();
+          Navigator.of(dialogContext).pop();
+          context.push('/membership');
+        },
+      ),
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            ),
+            child: child,
+          ),
+        );
+      },
+    ).whenComplete(() {
+      if (mounted) _inkModalVisible = false;
+    });
   }
 
   @override
@@ -520,15 +563,20 @@ class _PlayViewState extends State<_PlayView> {
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 260),
       pageBuilder: (dialogContext, _, __) => Align(
-        alignment: Alignment.centerRight,
+        alignment: MediaQuery.sizeOf(dialogContext).width < 600
+            ? Alignment.center
+            : Alignment.centerRight,
         child: _DraggableSettingsDrawer(
           onDismiss: () => Navigator.of(dialogContext).pop(),
           child: Material(
-            color: EverloreTheme.void2,
+            color: Colors.transparent,
             child: SizedBox(
-              width: MediaQuery.sizeOf(dialogContext).width.clamp(320.0, 430.0),
+              width: MediaQuery.sizeOf(dialogContext).width < 600
+                  ? MediaQuery.sizeOf(dialogContext).width
+                  : MediaQuery.sizeOf(dialogContext).width.clamp(320.0, 430.0),
               height: double.infinity,
               child: _SettingsSheet(
+                artAsset: 'assets/art/forge-muse.webp',
                 initialPov: instance?.narrationPov ?? 'third',
                 initialMode: instance?.mode ?? kDefaultChatMode,
                 initialVoiceOverride: instance?.narrativeStyleOverride,
@@ -1190,7 +1238,8 @@ class _PlayViewState extends State<_PlayView> {
             prev.template != curr.template ||
             prev.characters.length != curr.characters.length ||
             previousChoices != currentChoices ||
-            lastResponseChanged;
+            lastResponseChanged ||
+            prev.error != curr.error;
       },
       listener: (ctx, state) {
         final preserveOlderAnchor =
@@ -1228,6 +1277,7 @@ class _PlayViewState extends State<_PlayView> {
         _lastSeenEventCount = state.events.length;
         _lastSeenLoading = state.isLoading;
         _lastSeenTemplate = state.template;
+        if (_isInkLimitMessage(state.error)) _showInkReserve(ctx);
         _maybeShowOnboarding(ctx);
       },
       builder: (context, state) {
@@ -2339,6 +2389,7 @@ class _DraggableSettingsDrawerState extends State<_DraggableSettingsDrawer> {
 /// The button stays disabled until something actually differs from the saved
 /// values, so the player gets a clear, deliberate save action plus feedback.
 class _SettingsSheet extends StatefulWidget {
+  final String artAsset;
   final String initialPov;
   final String initialMode;
   final String? initialVoiceOverride;
@@ -2362,6 +2413,7 @@ class _SettingsSheet extends StatefulWidget {
   final VoidCallback onDelete;
 
   const _SettingsSheet({
+    required this.artAsset,
     required this.initialPov,
     required this.initialMode,
     required this.initialVoiceOverride,
@@ -2416,379 +2468,482 @@ class _SettingsSheetState extends State<_SettingsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Scene Settings',
-                      style: EverloreTheme.serifDisplay(
-                        size: 20,
-                        color: EverloreTheme.parchment,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: widget.onClose,
-                    icon: const Icon(Icons.close, color: EverloreTheme.ash),
-                    tooltip: 'Close settings',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-
-              // Narration POV
-              const _SettingsLabel(icon: AppIcons.pov, label: 'NARRATION'),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _SegOption(
-                    label: 'Third person',
-                    selected: _pov == 'third',
-                    onTap: () => setState(() => _pov = 'third'),
-                  ),
-                  const SizedBox(width: 8),
-                  _SegOption(
-                    label: 'First person',
-                    selected: _pov == 'first',
-                    onTap: () => setState(() => _pov = 'first'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Chat Mode — how the chat flows (pacing/intent). It does not
-              // control prose register; that is the Narration Tone below.
-              const _SettingsLabel(icon: AppIcons.voice, label: 'MODE'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: kChatModes.map((m) {
-                  final selected = _mode == m.key;
-                  return GestureDetector(
-                    onTap: () => setState(() => _mode = m.key),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        color: selected
-                            ? EverloreTheme.gold.withValues(alpha: 0.12)
-                            : EverloreTheme.void3,
-                        border: Border.all(
-                          color: selected
-                              ? EverloreTheme.gold.withValues(alpha: 0.5)
-                              : EverloreTheme.goldDim.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Text(
-                        m.label,
-                        style: EverloreTheme.ui(
-                          size: 13,
-                          color: selected
-                              ? EverloreTheme.gold
-                              : EverloreTheme.ash,
-                          weight: selected ? FontWeight.w600 : FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _mode == 'ardent'
-                    ? 'Ardent escalates intensity — explicit content only in mature worlds with NSFW enabled in your preferences.'
-                    : kChatModes
-                          .firstWhere(
-                            (m) => m.key == _mode,
-                            orElse: () => kChatModes.first,
-                          )
-                          .blurb,
-                style: EverloreTheme.ui(
-                  size: 11,
-                  color: EverloreTheme.ash,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Voice is the broad authored style; unlike Tone, it can move a
-              // save from Noir to Romance, for example. Null keeps the creator's
-              // world default without mutating that template for anyone else.
-              const _SettingsLabel(
-                icon: AppIcons.voice,
-                label: 'NARRATIVE VOICE',
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String?>(
-                value: _voiceOverride,
-                isExpanded: true,
-                dropdownColor: EverloreTheme.void2,
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: EverloreTheme.void3,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                items: [
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text(
-                      'World default — ${narrativeStyleLabel(widget.worldVoice)}',
-                      overflow: TextOverflow.ellipsis,
-                      style: EverloreTheme.ui(
-                        size: 13,
-                        color: EverloreTheme.parchment,
-                      ),
-                    ),
-                  ),
-                  for (final voice in kNarrativeStyles)
-                    DropdownMenuItem<String?>(
-                      value: voice.key,
-                      child: Text(
-                        voice.key.isEmpty
-                            ? 'Neutral / no voice preset'
-                            : voice.label,
-                        overflow: TextOverflow.ellipsis,
-                        style: EverloreTheme.ui(
-                          size: 13,
-                          color: EverloreTheme.parchment,
-                        ),
-                      ),
-                    ),
-                ],
-                onChanged: (voice) => setState(() => _voiceOverride = voice),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _voiceOverride == null
-                    ? 'Uses this world\'s authored voice. Your choice affects only this save.'
-                    : kNarrativeStyles
-                          .firstWhere(
-                            (voice) => voice.key == _voiceOverride,
-                            orElse: () => kNarrativeStyles.first,
-                          )
-                          .blurb,
-                style: EverloreTheme.ui(
-                  size: 11,
-                  color: EverloreTheme.ash,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Narration tone is intentionally independent from Mode: Mode
-              // controls pacing/initiative, while tone controls the actual
-              // wording and literary register of future turns.
-              const _SettingsLabel(
-                icon: AppIcons.voice,
-                label: 'NARRATION TONE',
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: kNarrationTones.map((tone) {
-                  final selected = _tone == tone.key;
-                  return GestureDetector(
-                    onTap: () => setState(() => _tone = tone.key),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        color: selected
-                            ? EverloreTheme.gold.withValues(alpha: 0.12)
-                            : EverloreTheme.void3,
-                        border: Border.all(
-                          color: selected
-                              ? EverloreTheme.gold.withValues(alpha: 0.5)
-                              : EverloreTheme.goldDim.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Text(
-                        tone.label,
-                        style: EverloreTheme.ui(
-                          size: 13,
-                          color: selected
-                              ? EverloreTheme.gold
-                              : EverloreTheme.ash,
-                          weight: selected ? FontWeight.w600 : FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                kNarrationTones
-                    .firstWhere(
-                      (tone) => tone.key == _tone,
-                      orElse: () => kNarrationTones.first,
-                    )
-                    .blurb,
-                style: EverloreTheme.ui(
-                  size: 11,
-                  color: EverloreTheme.ash,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              if (!widget.isGmWorld) ...[
-                const _SettingsLabel(
-                  icon: AppIcons.createCharacter,
-                  label: 'YOUR PERSONA',
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String?>(
-                  value: _personaId,
-                  isExpanded: true,
-                  dropdownColor: EverloreTheme.void2,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: EverloreTheme.void3,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  items: [
-                    DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text(
-                        'None',
-                        style: EverloreTheme.ui(
-                          size: 13,
-                          color: EverloreTheme.ash,
-                        ),
-                      ),
-                    ),
-                    for (final p in widget.personas)
-                      DropdownMenuItem<String?>(
-                        value: p.id,
-                        child: Text(
-                          p.name,
-                          overflow: TextOverflow.ellipsis,
-                          style: EverloreTheme.ui(
-                            size: 13,
-                            color: EverloreTheme.parchment,
-                          ),
-                        ),
-                      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final topInset = MediaQuery.paddingOf(context).top;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              widget.artAsset,
+              fit: BoxFit.cover,
+              alignment: const Alignment(0.2, -0.5),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    EverloreTheme.void0.withValues(alpha: 0.48),
+                    EverloreTheme.void0.withValues(alpha: 0.84),
+                    EverloreTheme.void0.withValues(alpha: 0.96),
                   ],
-                  onChanged: (v) => setState(() => _personaId = v),
+                  stops: const [0, 0.4, 1],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'This is your reusable player identity. It is copied into this '
-                  'story, so later persona edits do not rewrite past turns.',
-                  style: EverloreTheme.ui(
-                    size: 11,
-                    color: EverloreTheme.ash,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 20),
-
-              // Message length — drives both the prompt directive and max tokens.
-              const _SettingsLabel(
-                icon: AppIcons.length,
-                label: 'REPLY LENGTH',
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  for (final l in kMessageLengths) ...[
-                    _SegOption(
-                      label: l.$2,
-                      selected: _length == l.$1,
-                      onTap: () => setState(() => _length = l.$1),
-                    ),
-                    if (l != kMessageLengths.last) const SizedBox(width: 8),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 22),
+            ),
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (context, safeConstraints) => SizedBox.expand(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: safeConstraints.maxWidth,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(right: 56),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'YOUR NARRATIVE',
+                                    style: EverloreTheme.ui(
+                                      size: 10,
+                                      color: EverloreTheme.gold,
+                                      weight: FontWeight.w700,
+                                      spacing: 1.4,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Scene Settings',
+                                    style: EverloreTheme.serifDisplay(
+                                      size: 22,
+                                      color: EverloreTheme.parchment,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
 
-              // Deliberate save: disabled until a setting actually changes, so the
-              // player always knows the apply took effect (snackbar confirms when).
-              SizedBox(
-                width: double.infinity,
-                child: GestureDetector(
-                  onTap: _dirty && !_isApplying
-                      ? () async {
-                          setState(() => _isApplying = true);
-                          await widget.onApply(
-                            _pov,
-                            _mode,
-                            _voiceOverride,
-                            _tone,
-                            _length,
-                            widget.isGmWorld
-                                ? widget.initialPersonaId
-                                : _personaId,
-                          );
-                          if (mounted) setState(() => _isApplying = false);
-                        }
-                      : null,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: _dirty
-                          ? EverloreTheme.gold.withValues(alpha: 0.16)
-                          : EverloreTheme.void3,
-                      border: Border.all(
-                        color: _dirty
-                            ? EverloreTheme.gold.withValues(alpha: 0.6)
-                            : EverloreTheme.goldDim.withValues(alpha: 0.15),
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        _isApplying
-                            ? 'Saving settings…'
-                            : _dirty
-                            ? 'Apply changes'
-                            : 'No changes',
-                        style: EverloreTheme.ui(
-                          size: 14,
-                          weight: FontWeight.w600,
-                          color: _dirty
-                              ? EverloreTheme.gold
-                              : EverloreTheme.ash.withValues(alpha: 0.5),
+                            // Narration POV
+                            const _SettingsLabel(
+                              icon: AppIcons.pov,
+                              label: 'NARRATION',
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                _SegOption(
+                                  label: 'Third person',
+                                  selected: _pov == 'third',
+                                  onTap: () => setState(() => _pov = 'third'),
+                                ),
+                                const SizedBox(width: 8),
+                                _SegOption(
+                                  label: 'First person',
+                                  selected: _pov == 'first',
+                                  onTap: () => setState(() => _pov = 'first'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Chat Mode — how the chat flows (pacing/intent). It does not
+                            // control prose register; that is the Narration Tone below.
+                            const _SettingsLabel(
+                              icon: AppIcons.voice,
+                              label: 'MODE',
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: kChatModes.map((m) {
+                                final selected = _mode == m.key;
+                                return GestureDetector(
+                                  onTap: () => setState(() => _mode = m.key),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(20),
+                                      color: selected
+                                          ? EverloreTheme.gold.withValues(
+                                              alpha: 0.12,
+                                            )
+                                          : EverloreTheme.void3,
+                                      border: Border.all(
+                                        color: selected
+                                            ? EverloreTheme.gold.withValues(
+                                                alpha: 0.5,
+                                              )
+                                            : EverloreTheme.goldDim.withValues(
+                                                alpha: 0.2,
+                                              ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      m.label,
+                                      style: EverloreTheme.ui(
+                                        size: 13,
+                                        color: selected
+                                            ? EverloreTheme.gold
+                                            : EverloreTheme.ash,
+                                        weight: selected
+                                            ? FontWeight.w600
+                                            : FontWeight.w400,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _mode == 'ardent'
+                                  ? 'Ardent escalates intensity — explicit content only in mature worlds with NSFW enabled in your preferences.'
+                                  : kChatModes
+                                        .firstWhere(
+                                          (m) => m.key == _mode,
+                                          orElse: () => kChatModes.first,
+                                        )
+                                        .blurb,
+                              style: EverloreTheme.ui(
+                                size: 11,
+                                color: EverloreTheme.ash,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Voice is the broad authored style; unlike Tone, it can move a
+                            // save from Noir to Romance, for example. Null keeps the creator's
+                            // world default without mutating that template for anyone else.
+                            const _SettingsLabel(
+                              icon: AppIcons.voice,
+                              label: 'NARRATIVE VOICE',
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<String?>(
+                              value: _voiceOverride,
+                              isExpanded: true,
+                              dropdownColor: EverloreTheme.void2,
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: EverloreTheme.void3,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              items: [
+                                DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text(
+                                    'World default — ${narrativeStyleLabel(widget.worldVoice)}',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: EverloreTheme.ui(
+                                      size: 13,
+                                      color: EverloreTheme.parchment,
+                                    ),
+                                  ),
+                                ),
+                                for (final voice in kNarrativeStyles)
+                                  DropdownMenuItem<String?>(
+                                    value: voice.key,
+                                    child: Text(
+                                      voice.key.isEmpty
+                                          ? 'Neutral / no voice preset'
+                                          : voice.label,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: EverloreTheme.ui(
+                                        size: 13,
+                                        color: EverloreTheme.parchment,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                              onChanged: (voice) =>
+                                  setState(() => _voiceOverride = voice),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _voiceOverride == null
+                                  ? 'Uses this world\'s authored voice. Your choice affects only this save.'
+                                  : kNarrativeStyles
+                                        .firstWhere(
+                                          (voice) =>
+                                              voice.key == _voiceOverride,
+                                          orElse: () => kNarrativeStyles.first,
+                                        )
+                                        .blurb,
+                              style: EverloreTheme.ui(
+                                size: 11,
+                                color: EverloreTheme.ash,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Narration tone is intentionally independent from Mode: Mode
+                            // controls pacing/initiative, while tone controls the actual
+                            // wording and literary register of future turns.
+                            const _SettingsLabel(
+                              icon: AppIcons.voice,
+                              label: 'NARRATION TONE',
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: kNarrationTones.map((tone) {
+                                final selected = _tone == tone.key;
+                                return GestureDetector(
+                                  onTap: () => setState(() => _tone = tone.key),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(20),
+                                      color: selected
+                                          ? EverloreTheme.gold.withValues(
+                                              alpha: 0.12,
+                                            )
+                                          : EverloreTheme.void3,
+                                      border: Border.all(
+                                        color: selected
+                                            ? EverloreTheme.gold.withValues(
+                                                alpha: 0.5,
+                                              )
+                                            : EverloreTheme.goldDim.withValues(
+                                                alpha: 0.2,
+                                              ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      tone.label,
+                                      style: EverloreTheme.ui(
+                                        size: 13,
+                                        color: selected
+                                            ? EverloreTheme.gold
+                                            : EverloreTheme.ash,
+                                        weight: selected
+                                            ? FontWeight.w600
+                                            : FontWeight.w400,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              kNarrationTones
+                                  .firstWhere(
+                                    (tone) => tone.key == _tone,
+                                    orElse: () => kNarrationTones.first,
+                                  )
+                                  .blurb,
+                              style: EverloreTheme.ui(
+                                size: 11,
+                                color: EverloreTheme.ash,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
+                            if (!widget.isGmWorld) ...[
+                              const _SettingsLabel(
+                                icon: AppIcons.createCharacter,
+                                label: 'YOUR PERSONA',
+                              ),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String?>(
+                                value: _personaId,
+                                isExpanded: true,
+                                dropdownColor: EverloreTheme.void2,
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: EverloreTheme.void3,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                items: [
+                                  DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text(
+                                      'None',
+                                      style: EverloreTheme.ui(
+                                        size: 13,
+                                        color: EverloreTheme.ash,
+                                      ),
+                                    ),
+                                  ),
+                                  for (final p in widget.personas)
+                                    DropdownMenuItem<String?>(
+                                      value: p.id,
+                                      child: Text(
+                                        p.name,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: EverloreTheme.ui(
+                                          size: 13,
+                                          color: EverloreTheme.parchment,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (v) =>
+                                    setState(() => _personaId = v),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'This is your reusable player identity. It is copied into this '
+                                'story, so later persona edits do not rewrite past turns.',
+                                style: EverloreTheme.ui(
+                                  size: 11,
+                                  color: EverloreTheme.ash,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 20),
+
+                            // Message length — drives both the prompt directive and max tokens.
+                            const _SettingsLabel(
+                              icon: AppIcons.length,
+                              label: 'REPLY LENGTH',
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                for (final l in kMessageLengths) ...[
+                                  _SegOption(
+                                    label: l.$2,
+                                    selected: _length == l.$1,
+                                    onTap: () => setState(() => _length = l.$1),
+                                  ),
+                                  if (l != kMessageLengths.last)
+                                    const SizedBox(width: 8),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 22),
+
+                            // Deliberate save: disabled until a setting actually changes, so the
+                            // player always knows the apply took effect (snackbar confirms when).
+                            SizedBox(
+                              width: double.infinity,
+                              child: GestureDetector(
+                                onTap: _dirty && !_isApplying
+                                    ? () async {
+                                        setState(() => _isApplying = true);
+                                        await widget.onApply(
+                                          _pov,
+                                          _mode,
+                                          _voiceOverride,
+                                          _tone,
+                                          _length,
+                                          widget.isGmWorld
+                                              ? widget.initialPersonaId
+                                              : _personaId,
+                                        );
+                                        if (mounted) {
+                                          setState(() => _isApplying = false);
+                                        }
+                                      }
+                                    : null,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    color: _dirty
+                                        ? EverloreTheme.gold.withValues(
+                                            alpha: 0.16,
+                                          )
+                                        : EverloreTheme.void3,
+                                    border: Border.all(
+                                      color: _dirty
+                                          ? EverloreTheme.gold.withValues(
+                                              alpha: 0.6,
+                                            )
+                                          : EverloreTheme.goldDim.withValues(
+                                              alpha: 0.15,
+                                            ),
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      _isApplying
+                                          ? 'Saving settings…'
+                                          : _dirty
+                                          ? 'Apply changes'
+                                          : 'No changes',
+                                      style: EverloreTheme.ui(
+                                        size: 14,
+                                        weight: FontWeight.w600,
+                                        color: _dirty
+                                            ? EverloreTheme.gold
+                                            : EverloreTheme.ash.withValues(
+                                                alpha: 0.5,
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            _PlaythroughManagement(
+                              onReset: widget.onReset,
+                              onDelete: widget.onDelete,
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 14),
-              _PlaythroughManagement(
-                onReset: widget.onReset,
-                onDelete: widget.onDelete,
+            ),
+            Positioned(
+              top: topInset + 10,
+              right: 16,
+              child: Material(
+                color: EverloreTheme.void0.withValues(alpha: 0.7),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: widget.onClose,
+                  child: const SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Icon(
+                      Icons.close_rounded,
+                      color: EverloreTheme.parchment,
+                    ),
+                  ),
+                ),
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -3090,9 +3245,9 @@ class _ThoughtsSheet extends StatelessWidget {
             Text(
               isSentientWorld
                   ? 'Private attitudes and inner thoughts inferred from the story. '
-                      'These are not spoken dialogue.'
+                        'These are not spoken dialogue.'
                   : 'View the cast and edit your protagonist with the pencil icon. '
-                      'Private thoughts are inferred from the story, not spoken dialogue.',
+                        'Private thoughts are inferred from the story, not spoken dialogue.',
               style: EverloreTheme.ui(
                 size: 12,
                 color: EverloreTheme.ash,
@@ -3442,6 +3597,168 @@ class _ErrorBar extends StatelessWidget {
             onPressed: onDismiss,
             constraints: const BoxConstraints(),
             padding: const EdgeInsets.all(4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Full-screen recovery surface for the one generation failure that should not
+/// read like an error: the player has simply run out of Story Ink.
+class _InkReserveDialog extends StatelessWidget {
+  final VoidCallback onDismiss;
+  final VoidCallback onRestore;
+
+  const _InkReserveDialog({required this.onDismiss, required this.onRestore});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: EverloreTheme.void0,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              'assets/art/ink-muse.webp',
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+            ),
+          ),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    EverloreTheme.void0.withValues(alpha: 0.15),
+                    EverloreTheme.void0.withValues(alpha: 0.3),
+                    EverloreTheme.void0.withValues(alpha: 0.94),
+                    EverloreTheme.void0,
+                  ],
+                  stops: const [0, 0.32, 0.58, 1],
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(22, 12, 22, 22),
+              child: Column(
+                children: [
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: IconButton(
+                      onPressed: onDismiss,
+                      tooltip: 'Return to the story',
+                      icon: const Icon(Icons.close_rounded),
+                      color: EverloreTheme.parchment,
+                      style: IconButton.styleFrom(
+                        backgroundColor: EverloreTheme.void0.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Spacer(flex: 7),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+                    decoration: BoxDecoration(
+                      color: EverloreTheme.void2.withValues(alpha: 0.84),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: EverloreTheme.goldDim.withValues(alpha: 0.52),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.42),
+                          blurRadius: 28,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.auto_awesome_rounded,
+                          color: EverloreTheme.gold,
+                          size: 22,
+                          shadows: [
+                            Shadow(
+                              color: EverloreTheme.gold.withValues(alpha: 0.5),
+                              blurRadius: 14,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'THE INK RUNS LOW',
+                          textAlign: TextAlign.center,
+                          style: EverloreTheme.serifDisplay(
+                            size: 23,
+                            color: EverloreTheme.parchment,
+                            weight: FontWeight.w700,
+                            spacing: 0.6,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Every realm pauses between chapters. Restore your Story Ink when you are ready, and this moment will be waiting.',
+                          textAlign: TextAlign.center,
+                          style: EverloreTheme.ui(
+                            size: 13,
+                            color: EverloreTheme.ash,
+                            height: 1.48,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: onRestore,
+                            icon: const Icon(
+                              Icons.water_drop_rounded,
+                              size: 18,
+                            ),
+                            label: Text(
+                              'RESTORE STORY INK',
+                              style: EverloreTheme.ui(
+                                size: 13,
+                                color: EverloreTheme.void0,
+                                weight: FontWeight.w700,
+                                spacing: 0.7,
+                              ),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: EverloreTheme.gold,
+                              foregroundColor: EverloreTheme.void0,
+                              minimumSize: const Size.fromHeight(52),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextButton(
+                          onPressed: onDismiss,
+                          child: Text(
+                            'Return to the page',
+                            style: EverloreTheme.ui(
+                              size: 12,
+                              color: EverloreTheme.ash,
+                              weight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

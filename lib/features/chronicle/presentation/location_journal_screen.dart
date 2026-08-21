@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../app/theme/nexus_theme.dart';
+import '../../../shared/widgets/everlore_empty_state.dart';
 import '../data/chronicle_repository.dart';
 import '../data/location_journal.dart';
 
@@ -58,18 +59,14 @@ class _LocationJournalScreenState extends State<LocationJournalScreen> {
                   );
                 }
                 if (snap.hasError || !snap.hasData) {
-                  return _message(
-                    'The place keeps its silence for now.',
-                  );
+                  return _message('The place keeps its silence for now.');
                 }
                 final journal = snap.data!;
                 if (journal.events.isEmpty &&
                     journal.memories.isEmpty &&
                     journal.permanentFacts.isEmpty &&
                     journal.currentState.isEmpty) {
-                  return _message(
-                    'Nothing has been recorded here yet.',
-                  );
+                  return _message('Nothing has been recorded here yet.');
                 }
                 return _JournalBody(journal: journal);
               },
@@ -80,17 +77,15 @@ class _LocationJournalScreenState extends State<LocationJournalScreen> {
     );
   }
 
-  Widget _message(String text) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: EverloreTheme.ash, fontSize: 14, height: 1.5),
-          ),
-        ),
-      );
+  Widget _message(String text) => EverloreEmptyState(
+    icon: Icons.place_outlined,
+    eyebrow: 'PLACE MEMORY',
+    title: 'This place keeps its silence',
+    message: text,
+    accent: EverloreTheme.aether,
+    compact: true,
+    artAsset: 'assets/art/chronicle-keeper.webp',
+  );
 }
 
 class _Header extends StatelessWidget {
@@ -111,8 +106,11 @@ class _Header extends StatelessWidget {
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new,
-                    color: EverloreTheme.ash, size: 18),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: EverloreTheme.ash,
+                  size: 18,
+                ),
                 onPressed: () => Navigator.of(context).pop(),
               ),
               const Icon(Icons.place, color: EverloreTheme.gold, size: 20),
@@ -160,17 +158,28 @@ class _JournalBody extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
       children: [
         if (journal.permanentFacts.isNotEmpty) ...[
-          _SectionLabel(icon: Icons.menu_book, label: 'WHAT IS TRUE OF THIS PLACE'),
+          _SectionLabel(
+            icon: Icons.menu_book,
+            label: 'WHAT IS TRUE OF THIS PLACE',
+          ),
           const SizedBox(height: 12),
           for (final f in journal.permanentFacts)
-            _CanonTile(text: f, icon: Icons.brightness_1, accent: EverloreTheme.gold),
+            _CanonTile(
+              text: f,
+              icon: Icons.brightness_1,
+              accent: EverloreTheme.gold,
+            ),
           const SizedBox(height: 24),
         ],
         if (journal.currentState.isNotEmpty) ...[
           _SectionLabel(icon: Icons.change_history, label: 'HOW IT STANDS NOW'),
           const SizedBox(height: 12),
           for (final s in journal.currentState)
-            _CanonTile(text: s, icon: Icons.circle, accent: EverloreTheme.aether),
+            _CanonTile(
+              text: s,
+              icon: Icons.circle,
+              accent: EverloreTheme.aether,
+            ),
           const SizedBox(height: 24),
         ],
         if (journal.memories.isNotEmpty) ...[
@@ -218,7 +227,11 @@ class _CanonTile extends StatelessWidget {
   final String text;
   final IconData icon;
   final Color accent;
-  const _CanonTile({required this.text, required this.icon, required this.accent});
+  const _CanonTile({
+    required this.text,
+    required this.icon,
+    required this.accent,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -308,8 +321,9 @@ class _EventTile extends StatelessWidget {
     // Lead with what actually happened (player's beat → narration snippet →
     // milestone), and demote the generic type/time to a small caption so the
     // timeline reads with substance instead of a column of "Dialogue".
-    final mainLine =
-        isMilestone ? event.milestone! : (hasPreview ? event.preview! : kind);
+    final mainLine = isMilestone
+        ? event.milestone!
+        : (hasPreview ? event.preview! : kind);
     final captionParts = <String>[
       if (!isMilestone && hasPreview) kind,
       if (timeLabel != null && timeLabel.isNotEmpty) timeLabel,
@@ -343,8 +357,9 @@ class _EventTile extends StatelessWidget {
                         ? EverloreTheme.parchment
                         : EverloreTheme.ash,
                     fontSize: 14,
-                    fontWeight:
-                        isMilestone ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isMilestone
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                     height: 1.45,
                   ),
                 ),

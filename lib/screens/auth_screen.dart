@@ -35,7 +35,8 @@ class _AuthScreenState extends State<AuthScreen> {
   User? _currentUser;
   bool _sessionReady = false;
   bool _googleReady = false;
-  bool _isLoading = false;
+  bool _isGoogleLoading = false;
+  bool _isPhoneLoading = false;
   bool _isUpdatingPreferences = false;
   bool _isSavingName = false;
   bool _editingName = false;
@@ -137,7 +138,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _handleGoogleSignIn() async {
     setState(() {
-      _isLoading = true;
+      _isGoogleLoading = true;
       _clearMessages();
     });
     try {
@@ -160,13 +161,13 @@ class _AuthScreenState extends State<AuthScreen> {
         () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
       );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
   Future<void> _handleSendCode() async {
     setState(() {
-      _isLoading = true;
+      _isPhoneLoading = true;
       _clearMessages();
     });
     try {
@@ -186,13 +187,13 @@ class _AuthScreenState extends State<AuthScreen> {
         () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
       );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isPhoneLoading = false);
     }
   }
 
   Future<void> _handleVerifyCode() async {
     setState(() {
-      _isLoading = true;
+      _isPhoneLoading = true;
       _clearMessages();
     });
     try {
@@ -210,7 +211,7 @@ class _AuthScreenState extends State<AuthScreen> {
         () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
       );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isPhoneLoading = false);
     }
   }
 
@@ -613,7 +614,7 @@ class _AuthScreenState extends State<AuthScreen> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: user.preferences.nsfwEnabled,
-                onChanged: (_isUpdatingPreferences || _isLoading)
+                onChanged: (_isUpdatingPreferences || _isPhoneLoading)
                     ? null
                     : _handleNsfwToggle,
                 activeColor: EverloreTheme.crimson,
@@ -704,7 +705,7 @@ class _AuthScreenState extends State<AuthScreen> {
         _PhoneTab(
           phoneController: _phoneController,
           otpController: _otpController,
-          isLoading: _isLoading,
+          isLoading: _isPhoneLoading,
           codeSent: _codeSent,
           dialCode: _dialCode,
           onDialCodeChanged: (c) => setState(() => _dialCode = c),
@@ -744,11 +745,13 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
         const SizedBox(height: 28),
         NeuButton(
-          label: _isLoading ? 'Signing in…' : 'Continue with Google',
+          label: _isGoogleLoading ? 'Signing in…' : 'Continue with Google',
           icon: Icons.g_mobiledata,
           primary: false,
-          loading: _isLoading,
-          onTap: (_isLoading || !_googleReady) ? null : _handleGoogleSignIn,
+          loading: _isGoogleLoading,
+          onTap: (_isGoogleLoading || !_googleReady)
+              ? null
+              : _handleGoogleSignIn,
         ),
         if (!_googleReady)
           Padding(

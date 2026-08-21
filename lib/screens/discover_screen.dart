@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../app/theme/nexus_theme.dart';
@@ -11,6 +13,7 @@ import '../shared/widgets/everlore_empty_state.dart';
 import '../shared/widgets/everlore_top_bar.dart';
 import '../shared/widgets/mature_content_chip.dart';
 import '../shared/widgets/neu.dart';
+import '../shared/widgets/realm_backdrop.dart';
 import '../features/templates/data/template_repository.dart';
 import '../features/templates/data/interest_ranking.dart';
 
@@ -35,6 +38,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   int _total = 0;
   String? _error;
   final _scrollController = ScrollController();
+  final _searchController = TextEditingController();
+  Timer? _searchDebounce;
+  bool _searchOpen = false;
 
   @override
   void initState() {
@@ -47,7 +53,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   void dispose() {
     AuthService.sessionEpoch.removeListener(_onSessionChanged);
+    _searchDebounce?.cancel();
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -55,15 +63,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     if (mounted) _load();
   }
 
-  Future<void> _load({bool forceRefresh = false}) async {
+  Future<void> _load({bool forceRefresh = false, String? search}) async {
     setState(() {
-      _isLoading = true;
+      // Preserve the visible feed while an inline search is resolving. The
+      // initial load still uses the full-screen loader.
+      _isLoading = _templates.isEmpty;
       _error = null;
     });
     try {
       final result = await TemplateRepository.listPublished(
         page: 1,
         limit: 20,
+        search: search ?? _searchController.text.trim(),
         forceRefresh: forceRefresh,
       );
       final ranked = await orderTemplatesForFeed(
@@ -100,6 +111,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       final result = await TemplateRepository.listPublished(
         page: _page + 1,
         limit: 20,
+        search: _searchController.text.trim(),
       );
       final next = await orderTemplatesForFeed(
         List<WorldTemplate>.from(result['templates']),
@@ -117,42 +129,123 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   List<WorldTemplate> get _visible {
+    final List<WorldTemplate> byTab;
     switch (_tab) {
       case 1:
-        return _templates.where((t) => !t.isCharacter).toList();
+        byTab = _templates.where((t) => !t.isCharacter).toList();
+        break;
       case 2:
-        return _templates.where((t) => t.isCharacter).toList();
+        byTab = _templates.where((t) => t.isCharacter).toList();
+        break;
       default:
-        return _templates;
+        byTab = _templates;
     }
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return byTab;
+    return byTab
+        .where(
+          (template) =>
+              template.title.toLowerCase().contains(query) ||
+              template.description.toLowerCase().contains(query) ||
+              template.sceneTags.any(
+                (tag) => tag.toLowerCase().contains(query),
+              ),
+        )
+        .toList();
+  }
+
+  void _toggleSearch() {
+    setState(() => _searchOpen = !_searchOpen);
+    if (!_searchOpen && _searchController.text.isNotEmpty) {
+      _searchDebounce?.cancel();
+      _searchController.clear();
+      _load(search: '');
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 280),
+      () => _load(search: value.trim()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: EverloreTheme.void0,
-      body: Column(
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          EverloreTopBar(
-            title: 'Explore',
-            subtitle: 'Find worlds and characters',
-            actions: [
-              EverloreTopBarIcon(
-                icon: Icons.search_rounded,
-                tooltip: 'Search worlds',
-                onTap: () => context.push('/templates'),
+          Image.asset(
+            'assets/art/explore-vista.webp',
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+          ),
+          const EmberOverlay(),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  EverloreTheme.void0.withValues(alpha: 0.2),
+                  EverloreTheme.void0.withValues(alpha: 0.54),
+                  EverloreTheme.void0.withValues(alpha: 0.8),
+                ],
+                stops: const [0, 0.42, 1],
               ),
-              EverloreTopBarIcon(
-                icon: Icons.refresh_rounded,
-                tooltip: 'Refresh explore',
-                isLoading: _isLoading && _templates.isNotEmpty,
-                onTap: () => _load(forceRefresh: true),
+            ),
+          ),
+          Column(
+            children: [
+              EverloreTopBar(
+                title: 'Explore',
+                subtitle: 'Find worlds and characters',
+                backgroundOpacity: 0.68,
+                actions: [
+                  EverloreTopBarIcon(
+                    icon: _searchOpen
+                        ? Icons.close_rounded
+                        : Icons.search_rounded,
+                    tooltip: _searchOpen ? 'Close search' : 'Search Explore',
+                    onTap: _toggleSearch,
+                  ),
+                  EverloreTopBarIcon(
+                    icon: Icons.refresh_rounded,
+                    tooltip: 'Refresh explore',
+                    isLoading: _isLoading && _templates.isNotEmpty,
+                    onTap: () => _load(forceRefresh: true),
+                  ),
+                ],
               ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                child: _searchOpen
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+                        child: TextField(
+                          controller: _searchController,
+                          autofocus: true,
+                          onChanged: _onSearchChanged,
+                          textInputAction: TextInputAction.search,
+                          style: EverloreTheme.ui(
+                            size: 14,
+                            color: EverloreTheme.parchment,
+                          ),
+                          decoration: _exploreSearchDecoration(),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              _buildTabs(),
+              const SizedBox(height: 4),
+              Expanded(child: _buildBody()),
             ],
           ),
-          _buildTabs(),
-          const SizedBox(height: 4),
-          Expanded(child: _buildBody()),
         ],
       ),
     );
@@ -343,6 +436,31 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 }
+
+InputDecoration _exploreSearchDecoration() => InputDecoration(
+  hintText: 'Search worlds and characters',
+  hintStyle: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
+  prefixIcon: const Icon(Icons.search_rounded, color: EverloreTheme.goldDim),
+  filled: true,
+  fillColor: EverloreTheme.void2.withValues(alpha: 0.72),
+  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+  border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(
+      color: EverloreTheme.goldDim.withValues(alpha: 0.22),
+    ),
+  ),
+  enabledBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(
+      color: EverloreTheme.goldDim.withValues(alpha: 0.22),
+    ),
+  ),
+  focusedBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: const BorderSide(color: EverloreTheme.gold, width: 1.2),
+  ),
+);
 
 /// A forged, art-led world card: cover image with a champagne-rimmed extrusion,
 /// title + blurb + a genre chip. Dark neumorphism — raised off the void.

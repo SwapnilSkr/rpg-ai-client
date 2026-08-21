@@ -7,6 +7,7 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/mature_content_chip.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
+import '../../../../shared/widgets/everlore_empty_state.dart';
 
 class TemplateDetailScreen extends StatefulWidget {
   final String templateId;
@@ -80,11 +81,18 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
         ),
         title: const Text('World Not Found'),
       ),
-      body: const Center(
-        child: Text(
-          'This world could not be found.',
-          style: TextStyle(color: EverloreTheme.ash),
-        ),
+      body: EverloreEmptyState(
+        icon: Icons.auto_stories_outlined,
+        eyebrow: 'LOST REALM',
+        title: 'This world is beyond the veil',
+        message:
+            'It may have been moved or withdrawn. Return to the shelves to find another story.',
+        actionLabel: 'Explore worlds',
+        actionIcon: Icons.explore_rounded,
+        onAction: () => context.go('/discover'),
+        accent: EverloreTheme.gold,
+        artAsset: 'assets/art/forge-muse.webp',
+        fullBleedArt: true,
       ),
     );
   }
@@ -125,6 +133,16 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                           memCacheWidth: 1080,
                           errorWidget: const SizedBox.shrink(),
                           semanticLabel: t.title,
+                        ),
+                      )
+                    else
+                      Positioned.fill(
+                        child: Image.asset(
+                          t.isSentient
+                              ? 'assets/art/persona-muse.webp'
+                              : 'assets/art/forge-muse.webp',
+                          fit: BoxFit.cover,
+                          alignment: Alignment.topCenter,
                         ),
                       ),
                     // Gradient bg / scrim

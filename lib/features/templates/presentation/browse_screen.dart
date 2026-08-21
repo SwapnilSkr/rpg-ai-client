@@ -9,6 +9,7 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/widgets/everlore_empty_state.dart';
+import '../../../../shared/widgets/realm_backdrop.dart';
 import '../../../../shared/widgets/mature_content_chip.dart';
 
 class BrowseTemplatesScreen extends StatefulWidget {
@@ -136,29 +137,54 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
           ),
         ),
       ),
-      body: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          _buildHeader(context),
-          _buildSearchBar(),
-          _buildSegments(),
-          _buildContent(context),
-          if (_isLoadingMore)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.only(bottom: 24),
-                child: Center(
-                  child: SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.8,
-                      color: EverloreTheme.gold,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/art/explore-vista.webp',
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+          ),
+          const EmberOverlay(),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  EverloreTheme.void0.withValues(alpha: 0.22),
+                  EverloreTheme.void0.withValues(alpha: 0.58),
+                  EverloreTheme.void0.withValues(alpha: 0.84),
+                ],
+                stops: const [0, 0.42, 1],
+              ),
+            ),
+          ),
+          CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              _buildHeader(context),
+              _buildSearchBar(),
+              _buildSegments(),
+              _buildContent(context),
+              if (_isLoadingMore)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: 24),
+                    child: Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.8,
+                          color: EverloreTheme.gold,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
+            ],
+          ),
         ],
       ),
     );
@@ -213,7 +239,7 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
 
   SliverAppBar _buildHeader(BuildContext context) {
     return SliverAppBar(
-      backgroundColor: EverloreTheme.void0,
+      backgroundColor: Colors.transparent,
       pinned: true,
       elevation: 0,
       scrolledUnderElevation: 0,

@@ -5,6 +5,8 @@ import '../../../shared/models/character_profile.dart';
 import '../../../shared/models/world_instance.dart';
 import '../../../shared/models/world_template.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
+import '../../../shared/widgets/everlore_empty_state.dart';
+import '../../../shared/widgets/realm_backdrop.dart';
 
 /// Snapshot passed from Play. This is deliberately presentation-only: the Realm
 /// is a calm map of an already-open playthrough, not a second game state owner.
@@ -37,11 +39,15 @@ class RealmScreen extends StatelessWidget {
       return Scaffold(
         backgroundColor: EverloreTheme.void1,
         appBar: AppBar(backgroundColor: EverloreTheme.void1),
-        body: const Center(
-          child: Text(
-            'Open this realm from its story to view its details.',
-            style: TextStyle(color: EverloreTheme.ash),
-          ),
+        body: const EverloreEmptyState(
+          icon: Icons.auto_stories_outlined,
+          eyebrow: 'REALM MAP',
+          title: 'This realm is waiting',
+          message: 'Open a realm from its story to see its living details.',
+          accent: EverloreTheme.gold,
+          compact: true,
+          artAsset: 'assets/art/forge-muse.webp',
+          fullBleedArt: true,
         ),
       );
     }
@@ -52,205 +58,232 @@ class RealmScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: EverloreTheme.void1,
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 280,
-            pinned: true,
-            backgroundColor: EverloreTheme.void1,
-            leading: IconButton(
-              icon: const Icon(
-                Icons.arrow_back_ios_new,
-                color: EverloreTheme.parchment,
-              ),
-              onPressed: () => context.pop(),
-            ),
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (template.imageUrl.isNotEmpty)
-                    EverloreNetworkImage(
-                      imageUrl: template.imageUrl,
-                      fit: BoxFit.cover,
-                      memCacheWidth: 1080,
-                      errorWidget: const _RealmFallbackArt(),
-                      semanticLabel: template.title,
-                    )
-                  else
-                    const _RealmFallbackArt(),
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0x22000000), EverloreTheme.void1],
-                        stops: [0, 1],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 20,
-                    right: 20,
-                    bottom: 22,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          template.title,
-                          style: EverloreTheme.serifDisplay(
-                            size: 30,
-                            color: EverloreTheme.parchment,
-                            weight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'YOUR REALM · ${sceneLabel.toUpperCase()}',
-                          style: EverloreTheme.ui(
-                            size: 11,
-                            color: EverloreTheme.gold,
-                            weight: FontWeight.w700,
-                            spacing: 1.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (template.imageUrl.isNotEmpty)
+            EverloreNetworkImage(
+              imageUrl: template.imageUrl,
+              fit: BoxFit.cover,
+              memCacheWidth: 1080,
+              errorWidget: const _RealmFallbackArt(),
+              semanticLabel: template.title,
+            )
+          else
+            const _RealmFallbackArt(),
+          const EmberOverlay(),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  EverloreTheme.void0.withValues(alpha: 0.2),
+                  EverloreTheme.void0.withValues(alpha: 0.56),
+                  EverloreTheme.void0.withValues(alpha: 0.82),
                 ],
+                stops: const [0, 0.42, 1],
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                if (template.description.trim().isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 18),
-                    child: Text(
-                      template.description,
-                      style: EverloreTheme.ui(
-                        size: 14,
-                        color: EverloreTheme.ash,
-                        height: 1.5,
-                      ),
-                    ),
+          CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                expandedHeight: 280,
+                pinned: true,
+                backgroundColor: Colors.transparent,
+                leading: IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new,
+                    color: EverloreTheme.parchment,
                   ),
-                _RealmStatus(
-                  turns: instance.meta.totalEvents,
-                  memories: instance.meta.totalMemories,
-                  characters: characters.length,
+                  onPressed: () => context.pop(),
                 ),
-                const SizedBox(height: 24),
-                _SectionLabel('ENTER THE TOMES'),
-                const SizedBox(height: 10),
-                _RealmAction(
-                  icon: Icons.auto_stories_outlined,
-                  title: 'Chronicle overview',
-                  subtitle:
-                      'Your story so far, current place, and what matters now.',
-                  onTap: () => context.push('/chronicle/$instanceId'),
-                ),
-                _RealmAction(
-                  icon: Icons.timeline_outlined,
-                  title: 'Story timeline',
-                  subtitle:
-                      'Read, revisit, and manage the turns that led here.',
-                  onTap: () =>
-                      context.push('/chronicle/$instanceId?section=story'),
-                ),
-                _RealmAction(
-                  icon: Icons.people_alt_outlined,
-                  title: 'People & bonds',
-                  subtitle: characters.isEmpty
-                      ? 'The cast will gather here as the story unfolds.'
-                      : '${characters.length} known character${characters.length == 1 ? '' : 's'} and their evolving bonds.',
-                  onTap: () =>
-                      context.push('/chronicle/$instanceId?section=people'),
-                ),
-                _RealmAction(
-                  icon: Icons.public_outlined,
-                  title: 'World atlas',
-                  subtitle:
-                      'Places, time, and the shape of the world you have discovered.',
-                  onTap: () =>
-                      context.push('/chronicle/$instanceId?section=world'),
-                ),
-                const SizedBox(height: 22),
-                _SectionLabel('THIS PLAYTHROUGH'),
-                const SizedBox(height: 10),
-                _RealmInfo(
-                  icon: Icons.visibility_outlined,
-                  label: 'Narration',
-                  value: instance.narrationPov == 'first'
-                      ? 'First person'
-                      : 'Third person',
-                ),
-                _RealmInfo(
-                  icon: Icons.forum_outlined,
-                  label: 'Reply length',
-                  value:
-                      instance.messageLength[0].toUpperCase() +
-                      instance.messageLength.substring(1),
-                ),
-                _RealmInfo(
-                  icon: Icons.theater_comedy_outlined,
-                  label: 'Mode',
-                  value: instance.mode.replaceAll('_', ' '),
-                ),
-                if (realm.onReset != null || realm.onDelete != null) ...[
-                  const SizedBox(height: 22),
-                  _SectionLabel('MANAGE THIS PLAYTHROUGH'),
-                  const SizedBox(height: 6),
-                  if (realm.onReset != null)
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      leading: const Icon(
-                        Icons.restart_alt_rounded,
-                        color: EverloreTheme.gold,
-                      ),
-                      title: Text(
-                        'Reset this chat',
-                        style: EverloreTheme.ui(
-                          size: 14,
-                          color: EverloreTheme.parchment,
+                flexibleSpace: FlexibleSpaceBar(
+                  background: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              EverloreTheme.void0.withValues(alpha: 0.7),
+                            ],
+                            stops: [0, 1],
+                          ),
                         ),
                       ),
-                      subtitle: Text(
-                        'Return to the opening line while keeping the world.',
-                        style: EverloreTheme.ui(
-                          size: 12,
-                          color: EverloreTheme.ash,
+                      Positioned(
+                        left: 20,
+                        right: 20,
+                        bottom: 22,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              template.title,
+                              style: EverloreTheme.serifDisplay(
+                                size: 30,
+                                color: EverloreTheme.parchment,
+                                weight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'YOUR REALM · ${sceneLabel.toUpperCase()}',
+                              style: EverloreTheme.ui(
+                                size: 11,
+                                color: EverloreTheme.gold,
+                                weight: FontWeight.w700,
+                                spacing: 1.4,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      onTap: () {
-                        context.pop();
-                        realm.onReset!.call();
-                      },
+                    ],
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    if (template.description.trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 18),
+                        child: Text(
+                          template.description,
+                          style: EverloreTheme.ui(
+                            size: 14,
+                            color: EverloreTheme.ash,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    _RealmStatus(
+                      turns: instance.meta.totalEvents,
+                      memories: instance.meta.totalMemories,
+                      characters: characters.length,
                     ),
-                  if (realm.onDelete != null)
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      leading: const Icon(
-                        Icons.delete_outline,
-                        color: EverloreTheme.crimson,
-                      ),
-                      title: Text(
-                        'Delete this chat',
-                        style: EverloreTheme.ui(
-                          size: 14,
-                          color: EverloreTheme.crimson,
-                        ),
-                      ),
-                      onTap: () {
-                        context.pop();
-                        realm.onDelete!.call();
-                      },
+                    const SizedBox(height: 24),
+                    _SectionLabel('ENTER THE TOMES'),
+                    const SizedBox(height: 10),
+                    _RealmAction(
+                      icon: Icons.auto_stories_outlined,
+                      title: 'Chronicle overview',
+                      subtitle:
+                          'Your story so far, current place, and what matters now.',
+                      onTap: () => context.push('/chronicle/$instanceId'),
                     ),
-                ],
-              ]),
-            ),
+                    _RealmAction(
+                      icon: Icons.timeline_outlined,
+                      title: 'Story timeline',
+                      subtitle:
+                          'Read, revisit, and manage the turns that led here.',
+                      onTap: () =>
+                          context.push('/chronicle/$instanceId?section=story'),
+                    ),
+                    _RealmAction(
+                      icon: Icons.people_alt_outlined,
+                      title: 'People & bonds',
+                      subtitle: characters.isEmpty
+                          ? 'The cast will gather here as the story unfolds.'
+                          : '${characters.length} known character${characters.length == 1 ? '' : 's'} and their evolving bonds.',
+                      onTap: () =>
+                          context.push('/chronicle/$instanceId?section=people'),
+                    ),
+                    _RealmAction(
+                      icon: Icons.public_outlined,
+                      title: 'World atlas',
+                      subtitle:
+                          'Places, time, and the shape of the world you have discovered.',
+                      onTap: () =>
+                          context.push('/chronicle/$instanceId?section=world'),
+                    ),
+                    const SizedBox(height: 22),
+                    _SectionLabel('THIS PLAYTHROUGH'),
+                    const SizedBox(height: 10),
+                    _RealmInfo(
+                      icon: Icons.visibility_outlined,
+                      label: 'Narration',
+                      value: instance.narrationPov == 'first'
+                          ? 'First person'
+                          : 'Third person',
+                    ),
+                    _RealmInfo(
+                      icon: Icons.forum_outlined,
+                      label: 'Reply length',
+                      value:
+                          instance.messageLength[0].toUpperCase() +
+                          instance.messageLength.substring(1),
+                    ),
+                    _RealmInfo(
+                      icon: Icons.theater_comedy_outlined,
+                      label: 'Mode',
+                      value: instance.mode.replaceAll('_', ' '),
+                    ),
+                    if (realm.onReset != null || realm.onDelete != null) ...[
+                      const SizedBox(height: 22),
+                      _SectionLabel('MANAGE THIS PLAYTHROUGH'),
+                      const SizedBox(height: 6),
+                      if (realm.onReset != null)
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                          ),
+                          leading: const Icon(
+                            Icons.restart_alt_rounded,
+                            color: EverloreTheme.gold,
+                          ),
+                          title: Text(
+                            'Reset this chat',
+                            style: EverloreTheme.ui(
+                              size: 14,
+                              color: EverloreTheme.parchment,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Return to the opening line while keeping the world.',
+                            style: EverloreTheme.ui(
+                              size: 12,
+                              color: EverloreTheme.ash,
+                            ),
+                          ),
+                          onTap: () {
+                            context.pop();
+                            realm.onReset!.call();
+                          },
+                        ),
+                      if (realm.onDelete != null)
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                          ),
+                          leading: const Icon(
+                            Icons.delete_outline,
+                            color: EverloreTheme.crimson,
+                          ),
+                          title: Text(
+                            'Delete this chat',
+                            style: EverloreTheme.ui(
+                              size: 14,
+                              color: EverloreTheme.crimson,
+                            ),
+                          ),
+                          onTap: () {
+                            context.pop();
+                            realm.onDelete!.call();
+                          },
+                        ),
+                    ],
+                  ]),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -260,15 +293,26 @@ class RealmScreen extends StatelessWidget {
 
 class _RealmFallbackArt extends StatelessWidget {
   const _RealmFallbackArt();
+
   @override
-  Widget build(BuildContext context) => const DecoratedBox(
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        colors: [Color(0xFF26213A), EverloreTheme.void1],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      Image.asset(
+        'assets/art/forge-muse.webp',
+        fit: BoxFit.cover,
+        alignment: Alignment.topCenter,
       ),
-    ),
+      const DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0x3326213A), EverloreTheme.void1],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+      ),
+    ],
   );
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../app/theme/nexus_theme.dart';
+import '../../../shared/widgets/everlore_empty_state.dart';
 import '../data/chronicle_repository.dart';
 import '../data/relationship_ledger.dart';
 
@@ -79,17 +80,15 @@ class _CharacterMemoryScreenState extends State<CharacterMemoryScreen> {
     );
   }
 
-  Widget _message(String text) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: EverloreTheme.ash, fontSize: 14, height: 1.5),
-          ),
-        ),
-      );
+  Widget _message(String text) => EverloreEmptyState(
+    icon: Icons.psychology_outlined,
+    eyebrow: 'REMEMBRANCE',
+    title: 'Their memories are still quiet',
+    message: text,
+    accent: EverloreTheme.rose,
+    compact: true,
+    artAsset: 'assets/art/chronicle-keeper.webp',
+  );
 }
 
 class _Header extends StatelessWidget {
@@ -110,12 +109,18 @@ class _Header extends StatelessWidget {
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new,
-                    color: EverloreTheme.ash, size: 18),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: EverloreTheme.ash,
+                  size: 18,
+                ),
                 onPressed: () => Navigator.of(context).pop(),
               ),
-              const Icon(Icons.psychology_outlined,
-                  color: EverloreTheme.gold, size: 20),
+              const Icon(
+                Icons.psychology_outlined,
+                color: EverloreTheme.gold,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -195,11 +200,7 @@ class _MemoryTile extends StatelessWidget {
           ],
           if (_chips(memory).isNotEmpty) ...[
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: _chips(memory),
-            ),
+            Wrap(spacing: 8, runSpacing: 6, children: _chips(memory)),
           ],
         ],
       ),
@@ -209,10 +210,12 @@ class _MemoryTile extends StatelessWidget {
   List<Widget> _chips(CharacterMemoryEntry m) {
     final chips = <Widget>[];
     if (m.emotionalValence != null && m.emotionalValence!.trim().isNotEmpty) {
-      chips.add(_Chip(
-        label: m.emotionalValence!.toLowerCase(),
-        color: EverloreTheme.rose,
-      ));
+      chips.add(
+        _Chip(
+          label: m.emotionalValence!.toLowerCase(),
+          color: EverloreTheme.rose,
+        ),
+      );
     }
     if (m.unresolvedThread) {
       chips.add(const _Chip(label: 'unresolved', color: EverloreTheme.gold));

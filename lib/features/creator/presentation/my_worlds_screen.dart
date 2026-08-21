@@ -13,6 +13,7 @@ import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/everlore_top_bar.dart';
 import '../../../shared/widgets/neu.dart';
 import '../../../shared/widgets/everlore_empty_state.dart';
+import '../../../shared/widgets/realm_backdrop.dart';
 
 class MyWorldsScreen extends StatelessWidget {
   const MyWorldsScreen({super.key});
@@ -122,179 +123,210 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
   Widget _buildCreatorView(BuildContext context) {
     return Scaffold(
       backgroundColor: EverloreTheme.void1,
-      body: BlocConsumer<MyWorldsCubit, MyWorldsState>(
-        listener: (context, state) {
-          if (state.error != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  state.error!,
-                  style: const TextStyle(color: EverloreTheme.parchment),
-                ),
-                backgroundColor: EverloreTheme.crimson.withValues(alpha: 0.9),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/art/worlds-vault.webp',
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+          ),
+          const EmberOverlay(),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  EverloreTheme.void0.withValues(alpha: 0.22),
+                  EverloreTheme.void0.withValues(alpha: 0.58),
+                  EverloreTheme.void0.withValues(alpha: 0.84),
+                ],
+                stops: const [0, 0.42, 1],
               ),
-            );
-            context.read<MyWorldsCubit>().clearError();
-          }
-        },
-        builder: (context, state) {
-          return Column(
-            children: [
-              EverloreTopBar(
-                title: 'Worlds',
-                subtitle: state.total == 0
-                    ? 'Your creations'
-                    : '${state.total} creations',
-                actions: [
-                  EverloreTopBarIcon(
-                    icon: _searchOpen
-                        ? Icons.close_rounded
-                        : Icons.search_rounded,
-                    tooltip: _searchOpen ? 'Close search' : 'Search worlds',
-                    onTap: _toggleSearch,
+            ),
+          ),
+          BlocConsumer<MyWorldsCubit, MyWorldsState>(
+            listener: (context, state) {
+              if (state.error != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      state.error!,
+                      style: const TextStyle(color: EverloreTheme.parchment),
+                    ),
+                    backgroundColor: EverloreTheme.crimson.withValues(
+                      alpha: 0.9,
+                    ),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                  EverloreTopBarIcon(
-                    icon: Icons.refresh_rounded,
-                    tooltip: 'Refresh worlds',
-                    isLoading: state.isLoading && state.worlds.isNotEmpty,
-                    onTap: () =>
-                        context.read<MyWorldsCubit>().load(forceRefresh: true),
+                );
+                context.read<MyWorldsCubit>().clearError();
+              }
+            },
+            builder: (context, state) {
+              return Column(
+                children: [
+                  EverloreTopBar(
+                    title: 'Worlds',
+                    subtitle: state.total == 0
+                        ? (_searchController.text.isNotEmpty
+                              ? 'No matching worlds'
+                              : 'No worlds yet')
+                        : '${state.total} ${state.total == 1 ? 'world' : 'worlds'}',
+                    backgroundOpacity: 0.68,
+                    actions: [
+                      EverloreTopBarIcon(
+                        icon: _searchOpen
+                            ? Icons.close_rounded
+                            : Icons.search_rounded,
+                        tooltip: _searchOpen ? 'Close search' : 'Search worlds',
+                        onTap: _toggleSearch,
+                      ),
+                      EverloreTopBarIcon(
+                        icon: Icons.refresh_rounded,
+                        tooltip: 'Refresh worlds',
+                        isLoading: state.isLoading && state.worlds.isNotEmpty,
+                        onTap: () => context.read<MyWorldsCubit>().load(
+                          forceRefresh: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    child: _searchOpen
+                        ? Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+                            child: TextField(
+                              controller: _searchController,
+                              autofocus: true,
+                              onChanged: _onSearchChanged,
+                              textInputAction: TextInputAction.search,
+                              style: EverloreTheme.ui(
+                                size: 14,
+                                color: EverloreTheme.parchment,
+                              ),
+                              decoration: _creatorSearchDecoration(),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  Expanded(
+                    child: CustomScrollView(
+                      controller: _scrollController,
+                      slivers: [
+                        if (state.isLoading && state.worlds.isEmpty)
+                          const SliverFillRemaining(child: _LoadingView())
+                        else if (!state.isLoading && state.worlds.isEmpty)
+                          SliverFillRemaining(
+                            child: _EmptyForgeView(
+                              onForge: _searchController.text.isNotEmpty
+                                  ? () {
+                                      _searchController.clear();
+                                      context.read<MyWorldsCubit>().load();
+                                    }
+                                  : () => context.push('/my-worlds/forge'),
+                              isSearchEmpty: _searchController.text.isNotEmpty,
+                            ),
+                          )
+                        else ...[
+                          if (state.drafts.isNotEmpty) ...[
+                            _sectionHeader(
+                              '${state.drafts.length} DRAFTS',
+                              Icons.edit_note,
+                              EverloreTheme.ember,
+                            ),
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (ctx, i) => MyWorldCard(
+                                    template: state.drafts[i],
+                                    isPublishing: state.publishingIds.contains(
+                                      state.drafts[i].id,
+                                    ),
+                                    isDeleting: state.deletingIds.contains(
+                                      state.drafts[i].id,
+                                    ),
+                                    onEdit: () => context.push(
+                                      '/my-worlds/${state.drafts[i].id}/forge',
+                                      extra: state.drafts[i],
+                                    ),
+                                    onPublish: () => _confirmPublish(
+                                      context,
+                                      state.drafts[i].id,
+                                      state.drafts[i].title,
+                                    ),
+                                    onDelete: () => context
+                                        .read<MyWorldsCubit>()
+                                        .delete(state.drafts[i].id),
+                                  ),
+                                  childCount: state.drafts.length,
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (state.published.isNotEmpty) ...[
+                            _sectionHeader(
+                              '${state.published.length} PUBLISHED',
+                              Icons.public,
+                              EverloreTheme.verdant,
+                            ),
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (ctx, i) => MyWorldCard(
+                                    template: state.published[i],
+                                    isPublishing: false,
+                                    isDeleting: state.deletingIds.contains(
+                                      state.published[i].id,
+                                    ),
+                                    onEdit: () => context.push(
+                                      '/my-worlds/${state.published[i].id}/forge',
+                                      extra: state.published[i],
+                                    ),
+                                    onTap: () => context.push(
+                                      '/templates/${state.published[i].id}',
+                                    ),
+                                    onDelete: () => context
+                                        .read<MyWorldsCubit>()
+                                        .delete(state.published[i].id),
+                                  ),
+                                  childCount: state.published.length,
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SliverPadding(
+                            padding: EdgeInsets.only(bottom: 120),
+                          ),
+                          if (state.isLoadingMore)
+                            const SliverToBoxAdapter(
+                              child: Padding(
+                                padding: EdgeInsets.only(bottom: 130),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: EverloreTheme.gold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
                   ),
                 ],
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                child: _searchOpen
-                    ? Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
-                        child: TextField(
-                          controller: _searchController,
-                          autofocus: true,
-                          onChanged: _onSearchChanged,
-                          textInputAction: TextInputAction.search,
-                          style: EverloreTheme.ui(
-                            size: 14,
-                            color: EverloreTheme.parchment,
-                          ),
-                          decoration: _creatorSearchDecoration(),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              Expanded(
-                child: CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    if (state.isLoading && state.worlds.isEmpty)
-                      const SliverFillRemaining(child: _LoadingView())
-                    else if (!state.isLoading && state.worlds.isEmpty)
-                      SliverFillRemaining(
-                        child: _EmptyForgeView(
-                          onForge: _searchController.text.isNotEmpty
-                              ? () {
-                                  _searchController.clear();
-                                  context.read<MyWorldsCubit>().load();
-                                }
-                              : () => context.push('/my-worlds/forge'),
-                          isSearchEmpty: _searchController.text.isNotEmpty,
-                        ),
-                      )
-                    else ...[
-                      if (state.drafts.isNotEmpty) ...[
-                        _sectionHeader(
-                          '${state.drafts.length} DRAFTS',
-                          Icons.edit_note,
-                          EverloreTheme.ember,
-                        ),
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                          sliver: SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (ctx, i) => MyWorldCard(
-                                template: state.drafts[i],
-                                isPublishing: state.publishingIds.contains(
-                                  state.drafts[i].id,
-                                ),
-                                isDeleting: state.deletingIds.contains(
-                                  state.drafts[i].id,
-                                ),
-                                onEdit: () => context.push(
-                                  '/my-worlds/${state.drafts[i].id}/forge',
-                                  extra: state.drafts[i],
-                                ),
-                                onPublish: () => _confirmPublish(
-                                  context,
-                                  state.drafts[i].id,
-                                  state.drafts[i].title,
-                                ),
-                                onDelete: () => context
-                                    .read<MyWorldsCubit>()
-                                    .delete(state.drafts[i].id),
-                              ),
-                              childCount: state.drafts.length,
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (state.published.isNotEmpty) ...[
-                        _sectionHeader(
-                          '${state.published.length} PUBLISHED',
-                          Icons.public,
-                          EverloreTheme.verdant,
-                        ),
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                          sliver: SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (ctx, i) => MyWorldCard(
-                                template: state.published[i],
-                                isPublishing: false,
-                                isDeleting: state.deletingIds.contains(
-                                  state.published[i].id,
-                                ),
-                                onEdit: () => context.push(
-                                  '/my-worlds/${state.published[i].id}/forge',
-                                  extra: state.published[i],
-                                ),
-                                onTap: () => context.push(
-                                  '/templates/${state.published[i].id}',
-                                ),
-                                onDelete: () => context
-                                    .read<MyWorldsCubit>()
-                                    .delete(state.published[i].id),
-                              ),
-                              childCount: state.published.length,
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SliverPadding(
-                        padding: EdgeInsets.only(bottom: 120),
-                      ),
-                      if (state.isLoadingMore)
-                        const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.only(bottom: 130),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: EverloreTheme.gold,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
+              );
+            },
+          ),
+        ],
       ),
     );
   }
