@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 
@@ -17,6 +20,7 @@ class ImageForge extends StatelessWidget {
   final String? error;
   final ValueChanged<String> onPromptChanged;
   final VoidCallback onGenerate;
+  final Future<void> Function(Uint8List bytes, String filename) onUpload;
 
   /// A [Key] tied to the prompt's provenance — bump it (e.g. on autofill) to
   /// force the editable field to re-seed its [initialValue] from [prompt].
@@ -30,8 +34,15 @@ class ImageForge extends StatelessWidget {
     required this.error,
     required this.onPromptChanged,
     required this.onGenerate,
+    required this.onUpload,
     this.promptFieldKey,
   });
+
+  Future<void> _pickAndUpload() async {
+    final selected = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (selected == null) return;
+    await onUpload(await selected.readAsBytes(), selected.name);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,9 +61,9 @@ class ImageForge extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'A generated image — shown on the card and as the chat background. '
-          'Filled by “Generate with AI”, or write your own below. Style follows '
-          'the voice you chose.',
+          'Choose AI art or upload your own. One image appears on the card and '
+          'as the chat background; uploads are preserved and optimized for fast '
+          'loading. PNG, JPEG, WebP, and HEIC are supported.',
           style: EverloreTheme.ui(
             size: 12,
             color: EverloreTheme.ash,
@@ -81,7 +92,7 @@ class ImageForge extends StatelessWidget {
                             icon: Icons.broken_image_outlined,
                             label: 'Image failed to load',
                           ),
-                          semanticLabel: 'Generated world artwork',
+                          semanticLabel: 'World artwork',
                         ),
                         if (busy)
                           const _Spinner(
@@ -161,25 +172,48 @@ class ImageForge extends StatelessWidget {
           const SizedBox(height: 8),
         ],
 
-        // Render the image from the current prompt (disabled until there's one).
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            onPressed: (busy || !hasPrompt) ? null : onGenerate,
-            icon: Icon(
-              hasImage ? Icons.refresh_rounded : Icons.auto_awesome,
-              size: 18,
-            ),
-            label: Text(hasImage ? 'Regenerate' : 'Generate image'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: EverloreTheme.gold,
-              disabledForegroundColor: EverloreTheme.ash,
-              side: BorderSide(
-                color: EverloreTheme.gold.withValues(alpha: 0.5),
+        // Either render from the prompt or choose original artwork. Both use
+        // the same stored image URL and preview path.
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            OutlinedButton.icon(
+              onPressed: (busy || !hasPrompt) ? null : onGenerate,
+              icon: Icon(
+                hasImage ? Icons.refresh_rounded : Icons.auto_awesome,
+                size: 18,
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              label: Text(hasImage ? 'Regenerate' : 'Generate image'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: EverloreTheme.gold,
+                disabledForegroundColor: EverloreTheme.ash,
+                side: BorderSide(
+                  color: EverloreTheme.gold.withValues(alpha: 0.5),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+              ),
             ),
-          ),
+            OutlinedButton.icon(
+              onPressed: busy ? null : _pickAndUpload,
+              icon: const Icon(Icons.upload_rounded, size: 18),
+              label: Text(hasImage ? 'Replace with upload' : 'Upload your own'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: EverloreTheme.parchment,
+                disabledForegroundColor: EverloreTheme.ash,
+                side: BorderSide(
+                  color: EverloreTheme.parchment.withValues(alpha: 0.3),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

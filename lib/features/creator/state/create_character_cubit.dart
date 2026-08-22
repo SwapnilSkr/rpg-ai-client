@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/network/api_client.dart';
@@ -195,17 +197,33 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
     }
   }
 
+  /// Uses the same image slot as generation, so a creator-selected portrait
+  /// becomes the character card and in-chat background immediately.
+  Future<void> uploadImage(Uint8List bytes, String filename) async {
+    if (state.isImageBusy) return;
+    emit(state.copyWith(isImageBusy: true, clearImageError: true));
+    try {
+      final url = await CreatorRepository.uploadImage(
+        bytes,
+        filename: filename,
+      );
+      emit(state.copyWith(imageUrl: url, isImageBusy: false));
+    } catch (e) {
+      emit(state.copyWith(isImageBusy: false, imageError: _imageErr(e)));
+    }
+  }
+
   String _imageErr(Object e) {
     if (e is ApiException) {
       if (e.statusCode == 403) {
-        return 'Image generation needs Premium or Creator.';
+        return 'Image uploads and generation need Premium or Creator.';
       }
       if (e.statusCode == 429) {
-        return 'Too many image generations — try again shortly.';
+        return 'Too many image requests — try again shortly.';
       }
       return e.message;
     }
-    return 'Could not generate the image. Please try again.';
+    return 'Could not process the image. Please try again.';
   }
 
   /// Builds the character template, publishes it, spins up an instance, and

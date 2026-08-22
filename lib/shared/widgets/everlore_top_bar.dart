@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../app/theme/nexus_theme.dart';
-import 'neu.dart';
 
 class EverloreTopBar extends StatelessWidget {
   final String title;
@@ -43,23 +42,39 @@ class EverloreTopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const ForgeMark(size: 30),
-          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'EVERLORE',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.cinzel(
-                    color: EverloreTheme.gold,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.4,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'EVERLORE',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cinzel(
+                        color: EverloreTheme.gold,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.4,
+                      ),
+                    ),
+                    Transform.translate(
+                      offset: const Offset(2, -4),
+                      child: Text(
+                        'AI',
+                        style: GoogleFonts.cinzel(
+                          color: EverloreTheme.goldDim,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 1),
                 Text(

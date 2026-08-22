@@ -260,7 +260,8 @@ void showCreateChooser(BuildContext context) {
               _CreateChoice(
                 icon: AppIcons.navRealms,
                 title: 'Forge a World',
-                subtitle: 'A living realm others can step into and play.',
+                subtitle:
+                    'A full RPG setting — lore, scenes, cast, and a narrator or lead character.',
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   context.push('/my-worlds/forge');
@@ -270,7 +271,8 @@ void showCreateChooser(BuildContext context) {
               _CreateChoice(
                 icon: AppIcons.createCharacter,
                 title: 'Create a Character',
-                subtitle: 'A sentient companion to talk and adventure with.',
+                subtitle:
+                    'A character-first story — one central companion; the wider cast can emerge over time.',
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   context.push('/characters/new');

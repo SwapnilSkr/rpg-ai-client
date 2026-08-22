@@ -241,6 +241,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       )
                     : const SizedBox.shrink(),
               ),
+              const SizedBox(height: 14),
               _buildTabs(),
               const SizedBox(height: 4),
               Expanded(child: _buildBody()),

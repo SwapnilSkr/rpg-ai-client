@@ -51,6 +51,7 @@ dependencies:
   flutter_animate: ^4.5.2
   cached_network_image: ^3.4.1
   in_app_purchase: ^3.2.3
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
