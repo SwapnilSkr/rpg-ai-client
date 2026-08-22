@@ -25,59 +25,6 @@ class CreateCharacterScreen extends StatelessWidget {
 const _charStepNames = ['WHO THEY ARE', 'VOICE & STORY', 'PORTRAIT'];
 final _charStepCount = _charStepNames.length;
 
-class _CharacterMuseBanner extends StatelessWidget {
-  const _CharacterMuseBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: SizedBox(
-        height: 128,
-        width: double.infinity,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.asset(
-              'assets/art/persona-muse.webp',
-              fit: BoxFit.cover,
-              alignment: Alignment.topCenter,
-            ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    EverloreTheme.void1.withValues(alpha: 0.88),
-                    EverloreTheme.void1.withValues(alpha: 0.48),
-                    EverloreTheme.void1.withValues(alpha: 0.08),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'A new voice\nfor your story',
-                  style: EverloreTheme.serifDisplay(
-                    size: 21,
-                    color: EverloreTheme.parchment,
-                    weight: FontWeight.w600,
-                    height: 1.18,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _CreateCharacterView extends StatefulWidget {
   const _CreateCharacterView();
 
@@ -138,41 +85,64 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
         final cubit = context.read<CreateCharacterCubit>();
         return Scaffold(
           backgroundColor: EverloreTheme.void1,
-          body: SafeArea(
-            child: Column(
-              children: [
-                _Header(onBack: _step == 0 ? null : _back),
-                _CharStepProgress(step: _step),
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 260),
-                    transitionBuilder: (child, anim) =>
-                        FadeTransition(opacity: anim, child: child),
-                    child: _buildStep(context, cubit, state),
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                'assets/art/forge-character-cover.webp',
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      EverloreTheme.void1.withValues(alpha: 0.32),
+                      EverloreTheme.void1.withValues(alpha: 0.7),
+                      EverloreTheme.void0.withValues(alpha: 0.88),
+                    ],
+                    stops: const [0, 0.46, 1],
                   ),
                 ),
-                if (state.error != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                    child: _ErrorText(state.error!),
-                  ),
-                _CharNavBar(
-                  step: _step,
-                  canProceed: _step != 0 || state.canCreate,
-                  canCreate: state.canCreate,
-                  busy: state.isSubmitting,
-                  onBack: _back,
-                  onNext: _next,
-                  onCreate: () async {
-                    final personaId = await choosePersonaForNewSentientStory(
-                      context,
-                    );
-                    if (!context.mounted) return;
-                    cubit.create(personaId: personaId);
-                  },
+              ),
+              SafeArea(
+                child: Column(
+                  children: [
+                    _Header(onBack: _step == 0 ? null : _back),
+                    _CharStepProgress(step: _step),
+                    Expanded(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 260),
+                        transitionBuilder: (child, anim) =>
+                            FadeTransition(opacity: anim, child: child),
+                        child: _buildStep(context, cubit, state),
+                      ),
+                    ),
+                    if (state.error != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                        child: _ErrorText(state.error!),
+                      ),
+                    _CharNavBar(
+                      step: _step,
+                      canProceed: _step != 0 || state.canCreate,
+                      canCreate: state.canCreate,
+                      busy: state.isSubmitting,
+                      onBack: _back,
+                      onNext: _next,
+                      onCreate: () async {
+                        final personaId =
+                            await choosePersonaForNewSentientStory(context);
+                        if (!context.mounted) return;
+                        cubit.create(personaId: personaId);
+                      },
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -204,11 +174,10 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _CharacterMuseBanner(),
-          const SizedBox(height: 18),
           Text(
             'Create someone to talk to. They\'ll remember your conversations and '
-            'grow with them.',
+            'grow with them. Their backstory can bring a supporting cast into play — '
+            'no world systems are required.',
             style: EverloreTheme.ui(
               size: 13,
               color: EverloreTheme.ash,
@@ -337,6 +306,7 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
             error: state.imageError,
             onPromptChanged: cubit.setImagePrompt,
             onGenerate: cubit.generateImage,
+            onUpload: cubit.uploadImage,
             promptFieldKey: ValueKey('cimg_${state.autofillStamp}'),
           ),
         ],
@@ -408,7 +378,7 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
               hintStyle: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
               counterText: '',
               filled: true,
-              fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
+              fillColor: EverloreTheme.void4.withValues(alpha: 0.6),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 14,
                 vertical: 12,
@@ -580,7 +550,7 @@ class _MatureToggle extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           color: value
               ? EverloreTheme.crimson.withValues(alpha: 0.08)
-              : EverloreTheme.void2,
+              : EverloreTheme.void2.withValues(alpha: 0.84),
           border: Border.all(
             color: value
                 ? EverloreTheme.crimson.withValues(alpha: 0.4)
@@ -669,7 +639,7 @@ class _CharNavBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       decoration: BoxDecoration(
-        color: EverloreTheme.void0,
+        color: EverloreTheme.void0.withValues(alpha: 0.86),
         border: Border(
           top: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.15)),
         ),
@@ -684,7 +654,7 @@ class _CharNavBar extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 22),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  color: EverloreTheme.void3,
+                  color: EverloreTheme.void3.withValues(alpha: 0.86),
                   border: Border.all(
                     color: EverloreTheme.goldDim.withValues(alpha: 0.2),
                   ),

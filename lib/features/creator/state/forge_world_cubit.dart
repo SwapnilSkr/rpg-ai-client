@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/network/api_client.dart';
@@ -167,8 +169,9 @@ class ForgeWorldState extends Equatable {
     isImageBusy: isImageBusy ?? this.isImageBusy,
     imageError: clearImageError ? null : (imageError ?? this.imageError),
     isAutofilling: isAutofilling ?? this.isAutofilling,
-    autofillError:
-        clearAutofillError ? null : (autofillError ?? this.autofillError),
+    autofillError: clearAutofillError
+        ? null
+        : (autofillError ?? this.autofillError),
     autofillStamp: autofillStamp ?? this.autofillStamp,
     openingLine: openingLine ?? this.openingLine,
     sceneTags: sceneTags ?? this.sceneTags,
@@ -279,13 +282,15 @@ List<StatEntry>? _statsFromDraft(dynamic raw) {
     final m = Map<String, dynamic>.from(e as Map? ?? {});
     final name = (m['name'] ?? '').toString().trim();
     if (name.isEmpty) continue;
-    out.add(StatEntry(
-      name: name,
-      defaultValue: (m['default'] as num?) ?? 50,
-      min: (m['min'] as num?) ?? 0,
-      max: (m['max'] as num?) ?? 100,
-      description: (m['description'] ?? '').toString(),
-    ));
+    out.add(
+      StatEntry(
+        name: name,
+        defaultValue: (m['default'] as num?) ?? 50,
+        min: (m['min'] as num?) ?? 0,
+        max: (m['max'] as num?) ?? 100,
+        description: (m['description'] ?? '').toString(),
+      ),
+    );
   }
   return out;
 }
@@ -304,18 +309,21 @@ List<FlagEntry>? _flagsFromDraft(dynamic raw) {
       _ => RealmFlagKind.boolean,
     };
     final def = m['default'];
-    final Object dv = def ??
+    final Object dv =
+        def ??
         switch (kind) {
           RealmFlagKind.boolean => false,
           RealmFlagKind.integer => 0,
           RealmFlagKind.string => '',
         };
-    out.add(FlagEntry(
-      name: name,
-      kind: kind,
-      defaultValue: dv,
-      description: (m['description'] ?? '').toString(),
-    ));
+    out.add(
+      FlagEntry(
+        name: name,
+        kind: kind,
+        defaultValue: dv,
+        description: (m['description'] ?? '').toString(),
+      ),
+    );
   }
   return out;
 }
@@ -401,24 +409,28 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
         'is_nsfw_capable': state.isNsfwCapable,
         'narrative_style': state.narrativeStyle,
       });
-      emit(state.copyWith(
-        title: (d['title'] ?? state.title).toString(),
-        description: (d['description'] ?? state.description).toString(),
-        seedPrompt: (d['seed_prompt'] ?? state.seedPrompt).toString(),
-        globalLore: (d['global_lore'] ?? state.globalLore).toString(),
-        narrativeStyle:
-            (d['narrative_style'] ?? state.narrativeStyle).toString(),
-        styleNotes: (d['style_notes'] ?? state.styleNotes).toString(),
-        openingLine: (d['opening_line'] ?? state.openingLine).toString(),
-        sceneTags: _tagsFromDraft(d['scene_tags']) ?? state.sceneTags,
-        stats: _statsFromDraft(d['stats']) ?? state.stats,
-        flags: _flagsFromDraft(d['flags']) ?? state.flags,
-        imagePrompt: (d['image_prompt'] ?? state.imagePrompt).toString(),
-        isAutofilling: false,
-        autofillStamp: state.autofillStamp + 1,
-      ));
+      emit(
+        state.copyWith(
+          title: (d['title'] ?? state.title).toString(),
+          description: (d['description'] ?? state.description).toString(),
+          seedPrompt: (d['seed_prompt'] ?? state.seedPrompt).toString(),
+          globalLore: (d['global_lore'] ?? state.globalLore).toString(),
+          narrativeStyle: (d['narrative_style'] ?? state.narrativeStyle)
+              .toString(),
+          styleNotes: (d['style_notes'] ?? state.styleNotes).toString(),
+          openingLine: (d['opening_line'] ?? state.openingLine).toString(),
+          sceneTags: _tagsFromDraft(d['scene_tags']) ?? state.sceneTags,
+          stats: _statsFromDraft(d['stats']) ?? state.stats,
+          flags: _flagsFromDraft(d['flags']) ?? state.flags,
+          imagePrompt: (d['image_prompt'] ?? state.imagePrompt).toString(),
+          isAutofilling: false,
+          autofillStamp: state.autofillStamp + 1,
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(isAutofilling: false, autofillError: _autofillErr(e)));
+      emit(
+        state.copyWith(isAutofilling: false, autofillError: _autofillErr(e)),
+      );
     }
   }
 
@@ -449,14 +461,35 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
     }
   }
 
+  /// Uses the same image slot as generation, so a creator-selected cover
+  /// becomes the world card and in-chat background immediately.
+  Future<void> uploadImage(Uint8List bytes, String filename) async {
+    if (state.isImageBusy) return;
+    emit(state.copyWith(isImageBusy: true, clearImageError: true));
+    try {
+      final url = await CreatorRepository.uploadImage(
+        bytes,
+        filename: filename,
+      );
+      emit(state.copyWith(imageUrl: url, isImageBusy: false));
+    } catch (e) {
+      emit(state.copyWith(isImageBusy: false, imageError: _imageErr(e)));
+    }
+  }
+
   String _imageErr(Object e) {
     if (e is ApiException) {
-      if (e.statusCode == 403) return 'Image generation needs Premium or Creator.';
-      if (e.statusCode == 429) return 'Too many image generations — try again shortly.';
+      if (e.statusCode == 403) {
+        return 'Image uploads and generation need Premium or Creator.';
+      }
+      if (e.statusCode == 429) {
+        return 'Too many image requests — try again shortly.';
+      }
       return e.message;
     }
-    return 'Could not generate the image. Please try again.';
+    return 'Could not process the image. Please try again.';
   }
+
   void setOpeningLine(String v) => emit(state.copyWith(openingLine: v));
 
   void addTag(String tag) {

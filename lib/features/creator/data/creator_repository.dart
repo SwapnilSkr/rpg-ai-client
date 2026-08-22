@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import '../../../core/auth/auth_service.dart';
 import '../../../core/network/api_client.dart';
@@ -135,6 +136,21 @@ class CreatorRepository {
     final response = await ApiClient.post(
       '/templates/image/generate',
       body: {'prompt': prompt},
+    );
+    final map = Map<String, dynamic>.from(response as Map);
+    return (map['url'] ?? '').toString();
+  }
+
+  /// Stores a creator-selected image as an optimized, lossless WebP preview.
+  /// The returned CDN URL is persisted exactly like an AI-generated image.
+  static Future<String> uploadImage(
+    Uint8List bytes, {
+    required String filename,
+  }) async {
+    final response = await ApiClient.postImage(
+      '/templates/image/upload',
+      bytes: bytes,
+      filename: filename,
     );
     final map = Map<String, dynamic>.from(response as Map);
     return (map['url'] ?? '').toString();

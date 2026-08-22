@@ -51,14 +51,32 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
                   const ForgeMark(size: 96),
                   const SizedBox(height: 24),
-                  Text(
-                    'EVERLORE',
-                    style: GoogleFonts.cinzel(
-                      color: EverloreTheme.gold,
-                      fontSize: 34,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 6.0,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'EVERLORE',
+                        style: GoogleFonts.cinzel(
+                          color: EverloreTheme.gold,
+                          fontSize: 34,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 6.0,
+                        ),
+                      ),
+                      Transform.translate(
+                        offset: const Offset(4, -7),
+                        child: Text(
+                          'AI',
+                          style: GoogleFonts.cinzel(
+                            color: EverloreTheme.goldDim,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -144,10 +162,7 @@ class _FeatureRow extends StatelessWidget {
             shape: BoxShape.circle,
             gradient: RadialGradient(
               center: const Alignment(-0.3, -0.4),
-              colors: [
-                color.withValues(alpha: 0.18),
-                EverloreTheme.void2,
-              ],
+              colors: [color.withValues(alpha: 0.18), EverloreTheme.void2],
             ),
             border: Border.all(color: color.withValues(alpha: 0.35)),
             boxShadow: [
@@ -164,7 +179,8 @@ class _FeatureRow extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: TextStyle(fontFamily: EverloreTheme.uiFamily, 
+            style: TextStyle(
+              fontFamily: EverloreTheme.uiFamily,
               color: EverloreTheme.parchment.withValues(alpha: 0.85),
               fontSize: 14,
               height: 1.4,

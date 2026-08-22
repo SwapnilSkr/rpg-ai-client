@@ -196,10 +196,12 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                                 ),
                               ),
                               child: t.imageUrl.isNotEmpty
-                                  ? EverloreNetworkImage(
-                                      imageUrl: t.imageUrl,
-                                      memCacheWidth: 192,
-                                      semanticLabel: t.title,
+                                  ? ClipOval(
+                                      child: EverloreNetworkImage(
+                                        imageUrl: t.imageUrl,
+                                        memCacheWidth: 192,
+                                        semanticLabel: t.title,
+                                      ),
                                     )
                                   : Icon(
                                       t.isSentient
@@ -246,9 +248,11 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                                           ),
                                         ),
                                         child: Text(
-                                          t.isSentient
+                                          t.isCharacter
+                                              ? 'Character Story'
+                                              : t.isSentient
                                               ? 'Sentient World'
-                                              : 'Game Master',
+                                              : 'Game Master World',
                                           style: TextStyle(
                                             color: accentColor,
                                             fontSize: 10,
@@ -289,6 +293,68 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                       height: 1.7,
                     ),
                   ),
+
+                  const SizedBox(height: 24),
+                  _WorldDetailPanel(
+                    icon: Icons.auto_stories_outlined,
+                    label: 'WHAT AWAITS',
+                    text: _invitationFor(t),
+                    accent: accentColor,
+                  ),
+
+                  const SizedBox(height: 28),
+                  _SectionHeader(label: 'WORLD AT A GLANCE'),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _WorldFact(
+                        icon: t.isSentient
+                            ? Icons.psychology_alt_outlined
+                            : Icons.menu_book_outlined,
+                        label: t.isCharacter
+                            ? 'Character-first story'
+                            : t.isSentient
+                            ? 'Full world · lead character'
+                            : 'Full world · neutral narrator',
+                        accent: accentColor,
+                      ),
+                      _WorldFact(
+                        icon: Icons.auto_awesome_outlined,
+                        label: t.narrativeStyle.trim().isEmpty
+                            ? 'Open-ended story'
+                            : t.narrativeStyle,
+                        accent: accentColor,
+                      ),
+                      _WorldFact(
+                        icon: Icons.account_tree_outlined,
+                        label: t.sceneTags.isEmpty
+                            ? 'Choices shape the path'
+                            : '${t.sceneTags.length} story thread${t.sceneTags.length == 1 ? '' : 's'}',
+                        accent: accentColor,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _scopeDescriptionFor(t),
+                    style: const TextStyle(
+                      color: EverloreTheme.ash,
+                      fontSize: 12,
+                      height: 1.45,
+                    ),
+                  ),
+
+                  if (t.globalLore.trim().isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    _WorldDetailPanel(
+                      icon: Icons.menu_book_outlined,
+                      label: 'FROM THE WORLD GUIDE',
+                      text: t.globalLore.trim(),
+                      accent: accentColor,
+                    ),
+                  ],
 
                   // Stats section
                   if (t.baseStatsTemplate.isNotEmpty) ...[
@@ -410,6 +476,23 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
   }
 }
 
+String _invitationFor(WorldTemplate template) {
+  if (template.openingLine.trim().isNotEmpty) {
+    return template.openingLine.trim();
+  }
+  return 'Begin a realm and let your choices reveal what this world has in store.';
+}
+
+String _scopeDescriptionFor(WorldTemplate template) {
+  if (template.isCharacter) {
+    return 'A focused character-first story. Their backstory can naturally bring supporting characters and scenes into play.';
+  }
+  if (template.isSentient) {
+    return 'A complete RPG setting guided by a lead AI character, with room for lore, cast, and scene threads.';
+  }
+  return 'A complete RPG setting narrated by a neutral AI Game Master.';
+}
+
 class _SectionHeader extends StatelessWidget {
   final String label;
   const _SectionHeader({required this.label});
@@ -427,6 +510,105 @@ class _SectionHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _WorldDetailPanel extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String text;
+  final Color accent;
+
+  const _WorldDetailPanel({
+    required this.icon,
+    required this.label,
+    required this.text,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: EverloreTheme.void2,
+        border: Border.all(color: accent.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: accent),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.4,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            text,
+            style: const TextStyle(
+              color: EverloreTheme.parchment,
+              fontSize: 14,
+              height: 1.55,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorldFact extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color accent;
+
+  const _WorldFact({
+    required this.icon,
+    required this.label,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        color: EverloreTheme.void2,
+        border: Border.all(color: accent.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: accent),
+          const SizedBox(width: 7),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 190),
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: EverloreTheme.ash,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -91,44 +91,68 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
         builder: (context, state) {
           return Scaffold(
             backgroundColor: EverloreTheme.void1,
-            body: SafeArea(
-              child: Column(
-                children: [
-                  _ForgeHeader(
-                    step: state.step,
-                    isEditing: widget.existing != null,
-                    onBack: () {
-                      if (state.step == 0) {
-                        context.pop();
-                      } else {
-                        _cubit.prevStep();
-                      }
-                    },
-                  ),
-                  _StepProgress(step: state.step),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 280),
-                      transitionBuilder: (child, animation) =>
-                          FadeTransition(opacity: animation, child: child),
-                      child: _buildStep(context, state),
+            body: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  'assets/art/forge-world-cover.webp',
+                  fit: BoxFit.cover,
+                  alignment: Alignment.center,
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        EverloreTheme.void1.withValues(alpha: 0.32),
+                        EverloreTheme.void1.withValues(alpha: 0.7),
+                        EverloreTheme.void0.withValues(alpha: 0.88),
+                      ],
+                      stops: const [0, 0.46, 1],
                     ),
                   ),
-                  if (state.error != null)
-                    _ErrorBar(
-                      message: state.error!,
-                      onDismiss: () =>
-                          context.read<ForgeWorldCubit>().clearError(),
-                    ),
-                  _ForgeNavBar(
-                    step: state.step,
-                    canProceed: state.canProceed,
-                    isSubmitting: state.isSubmitting,
-                    onNext: () => _cubit.nextStep(),
-                    onForge: () => _cubit.forge(),
+                ),
+                SafeArea(
+                  child: Column(
+                    children: [
+                      _ForgeHeader(
+                        step: state.step,
+                        isEditing: widget.existing != null,
+                        onBack: () {
+                          if (state.step == 0) {
+                            context.pop();
+                          } else {
+                            _cubit.prevStep();
+                          }
+                        },
+                      ),
+                      _StepProgress(step: state.step),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 280),
+                          transitionBuilder: (child, animation) =>
+                              FadeTransition(opacity: animation, child: child),
+                          child: _buildStep(context, state),
+                        ),
+                      ),
+                      if (state.error != null)
+                        _ErrorBar(
+                          message: state.error!,
+                          onDismiss: () =>
+                              context.read<ForgeWorldCubit>().clearError(),
+                        ),
+                      _ForgeNavBar(
+                        step: state.step,
+                        canProceed: state.canProceed,
+                        isSubmitting: state.isSubmitting,
+                        onNext: () => _cubit.nextStep(),
+                        onForge: () => _cubit.forge(),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           );
         },
@@ -166,7 +190,10 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
         return _Step3Stats(key: const ValueKey(3), cubit: _cubit, state: state);
       case 4:
         return _Step4Portrait(
-            key: const ValueKey(4), cubit: _cubit, state: state);
+          key: const ValueKey(4),
+          cubit: _cubit,
+          state: state,
+        );
       default:
         return const SizedBox.shrink();
     }
@@ -318,7 +345,7 @@ class _ForgeNavBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       decoration: BoxDecoration(
-        color: EverloreTheme.void0,
+        color: EverloreTheme.void0.withValues(alpha: 0.86),
         border: Border(
           top: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.15)),
         ),
@@ -357,7 +384,7 @@ class _NavSecondaryBtn extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: EverloreTheme.void3,
+          color: EverloreTheme.void3.withValues(alpha: 0.86),
           border: Border.all(
             color: EverloreTheme.goldDim.withValues(alpha: 0.2),
           ),
@@ -627,7 +654,7 @@ InputDecoration _fieldDecoration(String placeholder) {
     hintStyle: const TextStyle(color: EverloreTheme.ash, fontSize: 14),
     counterText: '',
     filled: true,
-    fillColor: EverloreTheme.void4.withValues(alpha: 0.5),
+    fillColor: EverloreTheme.void4.withValues(alpha: 0.6),
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
@@ -792,7 +819,7 @@ class _Step0Essence extends StatelessWidget {
           _StepIntro(
             icon: Icons.auto_stories,
             text:
-                'Define what this world is. Its name and description are the first things adventurers will see.',
+                'Define a full RPG setting. You\'ll shape its lore, scene threads, cast, and systems in the steps ahead.',
           ),
           const SizedBox(height: 16),
           AutofillLauncher(
@@ -868,7 +895,7 @@ class _Step0Essence extends StatelessWidget {
             icon: Icons.psychology_alt,
             title: 'Conscious Soul',
             subtitle:
-                'The world has an AI persona — it thinks, feels, and reacts as a character within the story',
+                'A lead AI character within this full world — lore, scenes, cast, and systems still belong to the setting',
             value: state.isSentient,
             activeColor: EverloreTheme.violet,
             onChanged: cubit.setIsSentient,
@@ -941,6 +968,7 @@ class _Step4Portrait extends StatelessWidget {
             error: state.imageError,
             onPromptChanged: cubit.setImagePrompt,
             onGenerate: cubit.generateImage,
+            onUpload: cubit.uploadImage,
             promptFieldKey: ValueKey('wimg_${state.autofillStamp}'),
           ),
           const SizedBox(height: 24),
@@ -1615,7 +1643,7 @@ class _FlagRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        color: EverloreTheme.void2,
+        color: EverloreTheme.void2.withValues(alpha: 0.84),
         border: Border.all(color: EverloreTheme.violet.withValues(alpha: 0.25)),
       ),
       child: Row(
@@ -2386,7 +2414,7 @@ class _StepIntro extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        color: EverloreTheme.void2,
+        color: EverloreTheme.void2.withValues(alpha: 0.84),
         border: Border.all(
           color: EverloreTheme.goldDim.withValues(alpha: 0.18),
         ),

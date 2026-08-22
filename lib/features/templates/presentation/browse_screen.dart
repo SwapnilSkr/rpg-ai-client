@@ -475,10 +475,12 @@ class _WorldCard extends StatelessWidget {
                             ),
                           ),
                           child: template.imageUrl.isNotEmpty
-                              ? EverloreNetworkImage(
-                                  imageUrl: template.imageUrl,
-                                  memCacheWidth: 160,
-                                  semanticLabel: template.title,
+                              ? ClipOval(
+                                  child: EverloreNetworkImage(
+                                    imageUrl: template.imageUrl,
+                                    memCacheWidth: 160,
+                                    semanticLabel: template.title,
+                                  ),
                                 )
                               : Icon(
                                   template.isCharacter

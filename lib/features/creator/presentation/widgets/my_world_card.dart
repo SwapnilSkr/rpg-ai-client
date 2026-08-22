@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
@@ -12,7 +14,6 @@ class MyWorldCard extends StatelessWidget {
   final VoidCallback? onPublish;
   final VoidCallback? onTap;
   final Future<bool> Function()? onDelete;
-  final bool isDeleting;
 
   const MyWorldCard({
     super.key,
@@ -22,7 +23,6 @@ class MyWorldCard extends StatelessWidget {
     this.onPublish,
     this.onTap,
     this.onDelete,
-    this.isDeleting = false,
   });
 
   @override
@@ -31,18 +31,14 @@ class MyWorldCard extends StatelessWidget {
     final accent = template.isSentient
         ? EverloreTheme.violet
         : EverloreTheme.cyan;
-    final isWorking = isPublishing || isDeleting;
+    final isWorking = isPublishing;
     final statusColor = isPublishing
         ? EverloreTheme.gold
-        : isDeleting
-        ? EverloreTheme.crimson
         : isDraft
         ? EverloreTheme.ember
         : EverloreTheme.verdant;
     final statusLabel = isPublishing
         ? 'RELEASING'
-        : isDeleting
-        ? 'DELETING'
         : isDraft
         ? 'DRAFT'
         : 'LIVE';
@@ -58,8 +54,10 @@ class MyWorldCard extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              EverloreTheme.void2,
-              EverloreTheme.void1.withValues(alpha: 0.95),
+              // A dark smoked-glass surface preserves a hint of the cover
+              // without allowing busy artwork to compete with the card copy.
+              EverloreTheme.void1.withValues(alpha: 0.84),
+              EverloreTheme.void2.withValues(alpha: 0.78),
             ],
           ),
           border: Border.all(
@@ -70,7 +68,7 @@ class MyWorldCard extends StatelessWidget {
           // Forged 3D: deep bottom-right shadow + faint status-tinted top light.
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
+              color: Colors.black.withValues(alpha: 0.38),
               blurRadius: 14,
               offset: const Offset(3, 5),
             ),
@@ -82,281 +80,282 @@ class MyWorldCard extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Avatar thumbnail (generated image) or a type icon
-                      Container(
-                        width: 40,
-                        height: 40,
-                        clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: accent.withValues(alpha: 0.12),
-                          border: Border.all(
-                            color: accent.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: template.imageUrl.isNotEmpty
-                            ? EverloreNetworkImage(
-                                imageUrl: template.imageUrl,
-                                memCacheWidth: 160,
-                                semanticLabel: template.title,
-                              )
-                            : Icon(
-                                template.isSentient
-                                    ? Icons.psychology_alt
-                                    : Icons.auto_stories,
-                                color: accent,
-                                size: 20,
-                              ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              template.title,
-                              style: const TextStyle(
-                                color: EverloreTheme.parchment,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.2,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header row
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Avatar thumbnail (generated image) or a type icon
+                        Container(
+                          width: 40,
+                          height: 40,
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: accent.withValues(alpha: 0.12),
+                            border: Border.all(
+                              color: accent.withValues(alpha: 0.3),
                             ),
-                            const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 2,
+                          ),
+                          child: template.imageUrl.isNotEmpty
+                              ? ClipOval(
+                                  child: EverloreNetworkImage(
+                                    imageUrl: template.imageUrl,
+                                    memCacheWidth: 160,
+                                    semanticLabel: template.title,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: accent.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: accent.withValues(alpha: 0.3),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    template.isSentient
-                                        ? 'Conscious Soul'
-                                        : 'Game Master',
-                                    style: TextStyle(
-                                      color: accent,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+                                )
+                              : Icon(
+                                  template.isSentient
+                                      ? Icons.psychology_alt
+                                      : Icons.auto_stories,
+                                  color: accent,
+                                  size: 20,
                                 ),
-                                const SizedBox(width: 6),
-                                if (template.isNsfwCapable)
-                                  const MatureContentChip(
-                                    density: MatureChipDensity.compact,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                template.title,
+                                style: const TextStyle(
+                                  color: EverloreTheme.parchment,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.2,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 7,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: accent.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: accent.withValues(alpha: 0.3),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      template.isSentient
+                                          ? 'Conscious Soul'
+                                          : 'Game Master',
+                                      style: TextStyle(
+                                        color: accent,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Status badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: statusColor.withValues(alpha: 0.35),
+                                  const SizedBox(width: 6),
+                                  if (template.isNsfwCapable)
+                                    const MatureContentChip(
+                                      density: MatureChipDensity.compact,
+                                    ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (isWorking)
-                              SizedBox(
-                                width: 11,
-                                height: 11,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.4,
+                        const SizedBox(width: 8),
+                        // Status badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: statusColor.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isWorking)
+                                SizedBox(
+                                  width: 11,
+                                  height: 11,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.4,
+                                    color: statusColor,
+                                  ),
+                                )
+                              else
+                                Icon(
+                                  isDraft ? Icons.edit_note : Icons.public,
+                                  size: 11,
                                   color: statusColor,
                                 ),
-                              )
-                            else
-                              Icon(
-                                isDraft ? Icons.edit_note : Icons.public,
-                                size: 11,
-                                color: statusColor,
+                              const SizedBox(width: 4),
+                              Text(
+                                statusLabel,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8,
+                                ),
                               ),
-                            const SizedBox(width: 4),
-                            Text(
-                              statusLabel,
-                              style: TextStyle(
-                                color: statusColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.8,
-                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    // Description
+                    Text(
+                      template.description,
+                      style: const TextStyle(
+                        color: EverloreTheme.ash,
+                        fontSize: 13,
+                        height: 1.45,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    // Stats + tags row
+                    if (template.baseStatsTemplate.isNotEmpty ||
+                        template.sceneTags.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (template.baseStatsTemplate.isNotEmpty)
+                            _InfoChip(
+                              icon: Icons.bar_chart,
+                              label:
+                                  '${template.baseStatsTemplate.length} stats',
+                              color: EverloreTheme.ash,
                             ),
-                          ],
+                          ...template.sceneTags
+                              .take(3)
+                              .map(
+                                (tag) => _InfoChip(
+                                  icon: Icons.label_outline,
+                                  label: tag,
+                                  color: EverloreTheme.ash,
+                                ),
+                              ),
+                          if (template.sceneTags.length > 3)
+                            _InfoChip(
+                              icon: Icons.more_horiz,
+                              label: '+${template.sceneTags.length - 3}',
+                              color: EverloreTheme.ash,
+                            ),
+                        ],
+                      ),
+                    ],
+                    // Creation date
+                    if (template.createdAt != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Forged ${_timeAgo(template.createdAt!)}',
+                        style: const TextStyle(
+                          color: EverloreTheme.ash,
+                          fontSize: 11,
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 10),
-                  // Description
-                  Text(
-                    template.description,
-                    style: const TextStyle(
-                      color: EverloreTheme.ash,
-                      fontSize: 13,
-                      height: 1.45,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  // Stats + tags row
-                  if (template.baseStatsTemplate.isNotEmpty ||
-                      template.sceneTags.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        if (template.baseStatsTemplate.isNotEmpty)
-                          _InfoChip(
-                            icon: Icons.bar_chart,
-                            label: '${template.baseStatsTemplate.length} stats',
-                            color: EverloreTheme.ash,
-                          ),
-                        ...template.sceneTags
-                            .take(3)
-                            .map(
-                              (tag) => _InfoChip(
-                                icon: Icons.label_outline,
-                                label: tag,
-                                color: EverloreTheme.ash,
-                              ),
+                    if (isDraft) ...[
+                      const SizedBox(height: 12),
+                      const Divider(color: EverloreTheme.white10, height: 1),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          if (onEdit != null)
+                            _ActionButton(
+                              icon: Icons.edit_outlined,
+                              label: 'Edit',
+                              color: EverloreTheme.ash,
+                              onTap: isWorking ? null : onEdit!,
                             ),
-                        if (template.sceneTags.length > 3)
-                          _InfoChip(
-                            icon: Icons.more_horiz,
-                            label: '+${template.sceneTags.length - 3}',
-                            color: EverloreTheme.ash,
-                          ),
-                      ],
-                    ),
-                  ],
-                  // Creation date
-                  if (template.createdAt != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Forged ${_timeAgo(template.createdAt!)}',
-                      style: const TextStyle(
-                        color: EverloreTheme.ash,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                  if (isDraft) ...[
-                    const SizedBox(height: 12),
-                    const Divider(color: EverloreTheme.white10, height: 1),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        if (onEdit != null)
-                          _ActionButton(
-                            icon: Icons.edit_outlined,
-                            label: 'Edit',
-                            color: EverloreTheme.ash,
-                            onTap: isWorking ? null : onEdit!,
-                          ),
-                        if (onDelete != null) ...[
-                          const SizedBox(width: 16),
-                          _ActionButton(
-                            assetIcon: AppIcons.destroy,
-                            label: 'Delete',
-                            color: EverloreTheme.crimson,
-                            onTap: isWorking
-                                ? null
-                                : () => _confirmDelete(context),
-                          ),
+                          if (onDelete != null) ...[
+                            const SizedBox(width: 16),
+                            _ActionButton(
+                              assetIcon: AppIcons.destroy,
+                              label: 'Delete',
+                              color: EverloreTheme.crimson,
+                              onTap: isWorking
+                                  ? null
+                                  : () => _confirmDelete(context),
+                            ),
+                          ],
+                          const Spacer(),
+                          if (isWorking)
+                            _ActionProgress(
+                              label: 'Releasing…',
+                              color: statusColor,
+                            )
+                          else if (onPublish != null)
+                            _ActionButton(
+                              assetIcon: AppIcons.publish,
+                              label: 'Release to Realm',
+                              color: EverloreTheme.gold,
+                              onTap: onPublish!,
+                            ),
                         ],
-                        const Spacer(),
-                        if (isWorking)
-                          _ActionProgress(
-                            label: isPublishing ? 'Releasing…' : 'Deleting…',
-                            color: statusColor,
-                          )
-                        else if (onPublish != null)
-                          _ActionButton(
-                            assetIcon: AppIcons.publish,
-                            label: 'Release to Realm',
-                            color: EverloreTheme.gold,
-                            onTap: onPublish!,
-                          ),
-                      ],
-                    ),
-                  ] else if (onEdit != null ||
-                      onTap != null ||
-                      onDelete != null) ...[
-                    const SizedBox(height: 12),
-                    const Divider(color: EverloreTheme.white10, height: 1),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        if (onEdit != null)
-                          _ActionButton(
-                            icon: Icons.edit_outlined,
-                            label: 'Edit',
-                            color: EverloreTheme.ash,
-                            onTap: isWorking ? null : onEdit!,
-                          ),
-                        const Spacer(),
-                        if (isDeleting)
-                          _ActionProgress(
-                            label: 'Deleting…',
-                            color: statusColor,
-                          )
-                        else if (onDelete != null)
-                          _ActionButton(
-                            assetIcon: AppIcons.destroy,
-                            label: 'Delete',
-                            color: EverloreTheme.crimson,
-                            onTap: () => _confirmDelete(context),
-                          ),
-                        if (!isDeleting && onDelete != null && onTap != null)
-                          const SizedBox(width: 16),
-                        if (!isDeleting && onTap != null)
-                          _ActionButton(
-                            icon: Icons.visibility_outlined,
-                            label: 'Preview',
-                            color: EverloreTheme.verdant,
-                            onTap: onTap!,
-                          ),
-                      ],
-                    ),
+                      ),
+                    ] else if (onEdit != null ||
+                        onTap != null ||
+                        onDelete != null) ...[
+                      const SizedBox(height: 12),
+                      const Divider(color: EverloreTheme.white10, height: 1),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          if (onEdit != null)
+                            _ActionButton(
+                              icon: Icons.edit_outlined,
+                              label: 'Edit',
+                              color: EverloreTheme.ash,
+                              onTap: isWorking ? null : onEdit!,
+                            ),
+                          const Spacer(),
+                          if (onDelete != null)
+                            _ActionButton(
+                              assetIcon: AppIcons.destroy,
+                              label: 'Delete',
+                              color: EverloreTheme.crimson,
+                              onTap: () => _confirmDelete(context),
+                            ),
+                          if (onDelete != null && onTap != null)
+                            const SizedBox(width: 16),
+                          if (onTap != null)
+                            _ActionButton(
+                              icon: Icons.visibility_outlined,
+                              label: 'Preview',
+                              color: EverloreTheme.verdant,
+                              onTap: onTap!,
+                            ),
+                        ],
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -493,7 +492,7 @@ class _InfoChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: EverloreTheme.void4.withValues(alpha: 0.5),
+        color: EverloreTheme.void4.withValues(alpha: 0.34),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(

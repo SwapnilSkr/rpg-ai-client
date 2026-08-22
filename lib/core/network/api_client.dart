@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../config/env.dart';
 import '../storage/secure_storage.dart';
@@ -6,10 +7,10 @@ import '../storage/secure_storage.dart';
 class ApiClient {
   static final _client = http.Client();
 
-  static Future<Map<String, String>> _headers() async {
+  static Future<Map<String, String>> _headers({bool json = true}) async {
     final token = await SecureStore.getToken();
     return {
-      'Content-Type': 'application/json',
+      if (json) 'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
     };
   }
@@ -31,6 +32,26 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  /// Uploads a selected image without forcing a lossy client-side re-encode.
+  /// The API validates and losslessly normalizes the bytes before returning its
+  /// CDN URL, so every caller renders it through the normal image cache.
+  static Future<dynamic> postImage(
+    String path, {
+    required Uint8List bytes,
+    required String filename,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${AppConfig.apiBaseUrl}$path'),
+    );
+    request.headers.addAll(await _headers(json: false));
+    request.files.add(
+      http.MultipartFile.fromBytes('image', bytes, filename: filename),
+    );
+    final response = await http.Response.fromStream(await request.send());
+    return _handleResponse(response);
+  }
+
   static Future<dynamic> put(String path, {Map<String, dynamic>? body}) async {
     final response = await _client.put(
       Uri.parse('${AppConfig.apiBaseUrl}$path'),
@@ -40,7 +61,10 @@ class ApiClient {
     return _handleResponse(response);
   }
 
-  static Future<dynamic> patch(String path, {Map<String, dynamic>? body}) async {
+  static Future<dynamic> patch(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
     final response = await _client.patch(
       Uri.parse('${AppConfig.apiBaseUrl}$path'),
       headers: await _headers(),

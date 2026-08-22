@@ -923,8 +923,7 @@ class EngravedBanner extends StatelessWidget {
   }
 }
 
-/// Static forged-sigil brand mark for screen headers — the same engraved rune
-/// as the splash, sized to [size], rendered on a neumorphic disc.
+/// Everlore AI's shared app mark for headers and branded entry points.
 class ForgeMark extends StatelessWidget {
   final double size;
   const ForgeMark({super.key, this.size = 84});
@@ -934,13 +933,9 @@ class ForgeMark extends StatelessWidget {
     return Container(
       width: size,
       height: size,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const RadialGradient(
-          center: Alignment(-0.3, -0.4),
-          radius: 1.1,
-          colors: [EverloreTheme.void3, EverloreTheme.void0],
-        ),
+        borderRadius: BorderRadius.circular(size * 0.22),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.6),
@@ -959,9 +954,10 @@ class ForgeMark extends StatelessWidget {
           ),
         ],
       ),
-      child: Padding(
-        padding: EdgeInsets.all(size * 0.16),
-        child: EvIcon(AppIcons.forgeSigil, size: size * 0.68),
+      child: Image.asset(
+        AppIcons.appIcon,
+        fit: BoxFit.cover,
+        semanticLabel: 'Everlore AI',
       ),
     );
   }

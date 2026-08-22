@@ -250,9 +250,6 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                                     isPublishing: state.publishingIds.contains(
                                       state.drafts[i].id,
                                     ),
-                                    isDeleting: state.deletingIds.contains(
-                                      state.drafts[i].id,
-                                    ),
                                     onEdit: () => context.push(
                                       '/my-worlds/${state.drafts[i].id}/forge',
                                       extra: state.drafts[i],
@@ -284,9 +281,6 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                                   (ctx, i) => MyWorldCard(
                                     template: state.published[i],
                                     isPublishing: false,
-                                    isDeleting: state.deletingIds.contains(
-                                      state.published[i].id,
-                                    ),
                                     onEdit: () => context.push(
                                       '/my-worlds/${state.published[i].id}/forge',
                                       extra: state.published[i],

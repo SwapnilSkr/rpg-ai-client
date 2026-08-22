@@ -114,8 +114,7 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
     if (user != null) {
       // Discover unless this account still needs interests onboarding.
-      final onboarded =
-          await InterestsStore.hasCompletedOnboarding(user: user);
+      final onboarded = await InterestsStore.hasCompletedOnboarding(user: user);
       if (!mounted) return;
       context.go(onboarded ? '/discover' : '/onboarding');
     } else {
@@ -413,8 +412,7 @@ class _AvatarDisc extends StatelessWidget {
   }
 }
 
-/// The centerpiece: a neumorphic disc with a skeuomorphic gold sigil engraved
-/// into it and a specular highlight that sweeps across the metal.
+/// The centerpiece: the Everlore AI app mark with a subtle moving highlight.
 class _ForgedSigil extends StatelessWidget {
   final double sweep; // 0..1 ambient phase
   const _ForgedSigil({required this.sweep});
@@ -427,13 +425,9 @@ class _ForgedSigil extends StatelessWidget {
     return Container(
       width: _size,
       height: _size,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const RadialGradient(
-          center: Alignment(-0.3, -0.4),
-          radius: 1.1,
-          colors: [EverloreTheme.void3, EverloreTheme.void0],
-        ),
+        borderRadius: BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.6),
@@ -455,7 +449,9 @@ class _ForgedSigil extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          EvIcon(AppIcons.forgeSigil, size: _size * 0.72),
+          Positioned.fill(
+            child: Image.asset(AppIcons.appIcon, fit: BoxFit.cover),
+          ),
           IgnorePointer(
             child: Opacity(
               opacity: 0.22,
@@ -712,32 +708,48 @@ class _EngravedWordmark extends StatelessWidget {
       ).createShader(rect),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: List.generate(_letters.length, (i) {
-          // Each letter reveals across its own slice of the timeline.
-          final start = i / _letters.length * 0.7;
-          final p = ((reveal - start) / 0.3).clamp(0.0, 1.0);
-          final eased = Curves.easeOut.transform(p);
-          return Opacity(
-            opacity: eased,
-            child: Transform.translate(
-              offset: Offset(0, (1 - eased) * 6),
-              child: Stack(
-                children: [
-                  Transform.translate(
-                    offset: const Offset(0, 1.6),
-                    child: Text(
-                      _letters[i],
-                      style: base.copyWith(
-                        color: Colors.black.withValues(alpha: 0.6),
+        children:
+            List.generate(_letters.length, (i) {
+              // Each letter reveals across its own slice of the timeline.
+              final start = i / _letters.length * 0.7;
+              final p = ((reveal - start) / 0.3).clamp(0.0, 1.0);
+              final eased = Curves.easeOut.transform(p);
+              return Opacity(
+                opacity: eased,
+                child: Transform.translate(
+                  offset: Offset(0, (1 - eased) * 6),
+                  child: Stack(
+                    children: [
+                      Transform.translate(
+                        offset: const Offset(0, 1.6),
+                        child: Text(
+                          _letters[i],
+                          style: base.copyWith(
+                            color: Colors.black.withValues(alpha: 0.6),
+                          ),
+                        ),
                       ),
-                    ),
+                      Text(
+                        _letters[i],
+                        style: base.copyWith(color: Colors.white),
+                      ),
+                    ],
                   ),
-                  Text(_letters[i], style: base.copyWith(color: Colors.white)),
-                ],
+                ),
+              );
+            })..add(
+              Transform.translate(
+                offset: const Offset(3, -8),
+                child: Text(
+                  'AI',
+                  style: base.copyWith(
+                    color: Colors.white,
+                    fontSize: 13,
+                    letterSpacing: 0.5,
+                  ),
+                ),
               ),
             ),
-          );
-        }),
       ),
     );
   }
