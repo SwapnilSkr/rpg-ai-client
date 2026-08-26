@@ -80,7 +80,8 @@ class AutofillLauncher extends StatelessWidget {
                 ],
               ),
               border: Border.all(
-                  color: EverloreTheme.violetBright.withValues(alpha: 0.35)),
+                color: EverloreTheme.violetBright.withValues(alpha: 0.35),
+              ),
             ),
             child: Row(
               children: [
@@ -97,45 +98,59 @@ class AutofillLauncher extends StatelessWidget {
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: EverloreTheme.violetBright),
+                            strokeWidth: 2,
+                            color: EverloreTheme.violetBright,
+                          ),
                         )
-                      : const Icon(Icons.auto_awesome,
-                          size: 18, color: EverloreTheme.violetBright),
+                      : const Icon(
+                          Icons.auto_awesome,
+                          size: 18,
+                          color: EverloreTheme.violetBright,
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(busy ? 'Drafting…' : 'Generate with AI',
-                          style: EverloreTheme.ui(
-                              size: 14,
-                              color: EverloreTheme.parchment,
-                              weight: FontWeight.w700)),
+                      Text(
+                        busy ? 'Drafting…' : 'Generate with AI',
+                        style: EverloreTheme.ui(
+                          size: 14,
+                          color: EverloreTheme.parchment,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
                       const SizedBox(height: 2),
                       Text(
-                          busy
-                              ? 'Conjuring your $subject — one moment.'
-                              : 'Tell the AI your idea and set the tone — it drafts everything for you to edit.',
-                          style: EverloreTheme.ui(
-                              size: 12,
-                              color: EverloreTheme.ash,
-                              height: 1.35)),
+                        busy
+                            ? 'Conjuring your $subject — one moment.'
+                            : 'Tell the AI your idea and set the tone — it drafts everything for you to edit.',
+                        style: EverloreTheme.ui(
+                          size: 12,
+                          color: EverloreTheme.ash,
+                          height: 1.35,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 if (!busy)
-                  const Icon(Icons.chevron_right,
-                      size: 20, color: EverloreTheme.violetBright),
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: EverloreTheme.violetBright,
+                  ),
               ],
             ),
           ),
         ),
         if (error != null) ...[
           const SizedBox(height: 8),
-          Text(error!,
-              style: EverloreTheme.ui(size: 12, color: EverloreTheme.crimson)),
+          Text(
+            error!,
+            style: EverloreTheme.ui(size: 12, color: EverloreTheme.crimson),
+          ),
         ],
       ],
     );
@@ -240,15 +255,21 @@ class _AutofillSheetState extends State<_AutofillSheet> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.auto_awesome,
-                            size: 18, color: EverloreTheme.violetBright),
+                        const Icon(
+                          Icons.auto_awesome,
+                          size: 18,
+                          color: EverloreTheme.violetBright,
+                        ),
                         const SizedBox(width: 8),
-                        Text('GENERATE WITH AI',
-                            style: EverloreTheme.ui(
-                                size: 13,
-                                color: EverloreTheme.violetBright,
-                                weight: FontWeight.w800,
-                                spacing: 1.5)),
+                        Text(
+                          'GENERATE WITH AI',
+                          style: EverloreTheme.ui(
+                            size: 13,
+                            color: EverloreTheme.violetBright,
+                            weight: FontWeight.w800,
+                            spacing: 1.5,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -257,12 +278,16 @@ class _AutofillSheetState extends State<_AutofillSheet> {
                       'words is plenty. The AI fills in every detail (including the image '
                       'prompt), and you can edit all of it afterward.',
                       style: EverloreTheme.ui(
-                          size: 13, color: EverloreTheme.ash, height: 1.45),
+                        size: 13,
+                        color: EverloreTheme.ash,
+                        height: 1.45,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     _SteerControls(
                       isChar: widget.isChar,
-                      showWorldType: !widget.isChar && widget.isSentient != null,
+                      showWorldType:
+                          !widget.isChar && widget.isSentient != null,
                       sentient: _sentient,
                       nsfw: _nsfw,
                       onSentient: _setSentient,
@@ -277,34 +302,45 @@ class _AutofillSheetState extends State<_AutofillSheet> {
                       maxLength: 1000,
                       textCapitalization: TextCapitalization.sentences,
                       style: EverloreTheme.ui(
-                          size: 14,
-                          color: EverloreTheme.parchment,
-                          height: 1.5),
+                        size: 14,
+                        color: EverloreTheme.parchment,
+                        height: 1.5,
+                      ),
                       decoration: InputDecoration(
                         hintText: hint,
                         hintStyle: EverloreTheme.ui(
-                            size: 13, color: EverloreTheme.ash),
+                          size: 13,
+                          color: EverloreTheme.ash,
+                        ),
                         counterText: '',
                         filled: true,
                         fillColor: EverloreTheme.void0.withValues(alpha: 0.6),
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide(
-                              color: EverloreTheme.violetBright
-                                  .withValues(alpha: 0.25)),
+                            color: EverloreTheme.violetBright.withValues(
+                              alpha: 0.25,
+                            ),
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide(
-                              color: EverloreTheme.violetBright
-                                  .withValues(alpha: 0.25)),
+                            color: EverloreTheme.violetBright.withValues(
+                              alpha: 0.25,
+                            ),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: const BorderSide(
-                              color: EverloreTheme.violetBright, width: 1.2),
+                            color: EverloreTheme.violetBright,
+                            width: 1.2,
+                          ),
                         ),
                       ),
                     ),
@@ -321,7 +357,8 @@ class _AutofillSheetState extends State<_AutofillSheet> {
                           foregroundColor: EverloreTheme.parchment,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                     ),
@@ -329,9 +366,13 @@ class _AutofillSheetState extends State<_AutofillSheet> {
                     Center(
                       child: TextButton(
                         onPressed: () => Navigator.of(context).pop(''),
-                        child: Text('Surprise me',
-                            style: EverloreTheme.ui(
-                                size: 13, color: EverloreTheme.ash)),
+                        child: Text(
+                          'Surprise me',
+                          style: EverloreTheme.ui(
+                            size: 13,
+                            color: EverloreTheme.ash,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -372,7 +413,9 @@ class _SteerControls extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         color: EverloreTheme.void0.withValues(alpha: 0.5),
-        border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.18)),
+        border: Border.all(
+          color: EverloreTheme.goldDim.withValues(alpha: 0.18),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -381,12 +424,15 @@ class _SteerControls extends StatelessWidget {
             children: [
               const Icon(Icons.tune, size: 14, color: EverloreTheme.gold),
               const SizedBox(width: 6),
-              Text('STEERS THIS DRAFT',
-                  style: EverloreTheme.ui(
-                      size: 10.5,
-                      color: EverloreTheme.gold,
-                      weight: FontWeight.w700,
-                      spacing: 1.2)),
+              Text(
+                'STEERS THIS DRAFT',
+                style: EverloreTheme.ui(
+                  size: 10.5,
+                  color: EverloreTheme.gold,
+                  weight: FontWeight.w700,
+                  spacing: 1.2,
+                ),
+              ),
             ],
           ),
           if (showWorldType) ...[
@@ -442,22 +488,36 @@ class _Segmented extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label.toUpperCase(),
-            style: EverloreTheme.ui(
-                size: 10.5,
-                color: EverloreTheme.ash,
-                weight: FontWeight.w700,
-                spacing: 1.0)),
+        Text(
+          label.toUpperCase(),
+          style: EverloreTheme.ui(
+            size: 10.5,
+            color: EverloreTheme.ash,
+            weight: FontWeight.w700,
+            spacing: 1.0,
+          ),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
-              child: _segBtn(leftIcon, leftLabel, leftColor, valueIsLeft, onLeft),
+              child: _segBtn(
+                leftIcon,
+                leftLabel,
+                leftColor,
+                valueIsLeft,
+                onLeft,
+              ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _segBtn(
-                  rightIcon, rightLabel, rightColor, !valueIsLeft, onRight),
+                rightIcon,
+                rightLabel,
+                rightColor,
+                !valueIsLeft,
+                onRight,
+              ),
             ),
           ],
         ),
@@ -466,7 +526,12 @@ class _Segmented extends StatelessWidget {
   }
 
   Widget _segBtn(
-      IconData icon, String label, Color color, bool active, VoidCallback onTap) {
+    IconData icon,
+    String label,
+    Color color,
+    bool active,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -487,18 +552,18 @@ class _Segmented extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon,
-                size: 15,
-                color: active ? color : EverloreTheme.ash),
+            Icon(icon, size: 15, color: active ? color : EverloreTheme.ash),
             const SizedBox(width: 6),
             Flexible(
-              child: Text(label,
-                  overflow: TextOverflow.ellipsis,
-                  style: EverloreTheme.ui(
-                      size: 12.5,
-                      color:
-                          active ? EverloreTheme.parchment : EverloreTheme.ash,
-                      weight: active ? FontWeight.w700 : FontWeight.w500)),
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: EverloreTheme.ui(
+                  size: 12.5,
+                  color: active ? EverloreTheme.parchment : EverloreTheme.ash,
+                  weight: active ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
             ),
           ],
         ),
@@ -512,34 +577,46 @@ class _MatureRow extends StatelessWidget {
   final bool value;
   final void Function(bool) onChanged;
   final bool isChar;
-  const _MatureRow(
-      {required this.value, required this.onChanged, required this.isChar});
+  const _MatureRow({
+    required this.value,
+    required this.onChanged,
+    required this.isChar,
+  });
 
   @override
   Widget build(BuildContext context) {
     final subject = isChar ? 'character' : 'world';
     return Row(
       children: [
-        Icon(Icons.shield_outlined,
-            size: 16,
-            color: value ? EverloreTheme.crimson : EverloreTheme.ash),
+        Icon(
+          Icons.shield_outlined,
+          size: 16,
+          color: value ? EverloreTheme.crimson : EverloreTheme.ash,
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Mature',
-                  style: EverloreTheme.ui(
-                      size: 13,
-                      color: EverloreTheme.parchment,
-                      weight: FontWeight.w600)),
+              Text(
+                'Mature',
+                style: EverloreTheme.ui(
+                  size: 13,
+                  color: EverloreTheme.parchment,
+                  weight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(height: 2),
               Text(
-                  value
-                      ? 'The draft may explore mature, NSFW-capable themes for this $subject.'
-                      : 'The draft stays within safe-for-all themes.',
-                  style: EverloreTheme.ui(
-                      size: 11.5, color: EverloreTheme.ash, height: 1.35)),
+                value
+                    ? 'The draft may explore mature, NSFW-capable themes for this $subject.'
+                    : 'The draft stays within safe-for-all themes.',
+                style: EverloreTheme.ui(
+                  size: 11.5,
+                  color: EverloreTheme.ash,
+                  height: 1.35,
+                ),
+              ),
             ],
           ),
         ),

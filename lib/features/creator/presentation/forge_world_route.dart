@@ -12,11 +12,7 @@ class ForgeWorldRoute extends StatelessWidget {
   final WorldTemplate? existing;
   final String? templateId;
 
-  const ForgeWorldRoute({
-    super.key,
-    this.existing,
-    this.templateId,
-  });
+  const ForgeWorldRoute({super.key, this.existing, this.templateId});
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +39,7 @@ class ForgeWorldRoute extends StatelessWidget {
           return _gateScaffold(
             context,
             title: 'Sign in to forge',
-            body:
-                'You need an account to use the arcane forge.',
+            body: 'You need an account to use the arcane forge.',
             buttonLabel: 'Sign In',
             onPressed: () => context.push('/auth'),
           );
@@ -90,7 +85,10 @@ class ForgeWorldRoute extends StatelessWidget {
                       SizedBox(height: 14),
                       Text(
                         'Loading world…',
-                        style: TextStyle(color: EverloreTheme.ash, fontSize: 14),
+                        style: TextStyle(
+                          color: EverloreTheme.ash,
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -133,8 +131,11 @@ class ForgeWorldRoute extends StatelessWidget {
                 onTap: () => context.pop(),
                 child: const Padding(
                   padding: EdgeInsets.only(top: 8, bottom: 16),
-                  child: Icon(Icons.arrow_back_ios_new,
-                      size: 18, color: EverloreTheme.ash),
+                  child: Icon(
+                    Icons.arrow_back_ios_new,
+                    size: 18,
+                    color: EverloreTheme.ash,
+                  ),
                 ),
               ),
               Text(
