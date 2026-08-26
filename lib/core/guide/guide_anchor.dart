@@ -316,8 +316,7 @@ class GuideAnchorRegistry {
       // is round. Leaving that to traversal order means the vaguest answer
       // usually wins, because the vaguest widget is usually the outermost.
       final better =
-          area < tightest ||
-          (area == tightest && specificity > tightestShape);
+          area < tightest || (area == tightest && specificity > tightestShape);
       if (better) {
         tightest = area;
         tightestShape = specificity;
@@ -395,6 +394,12 @@ class GuideAnchorRegistry {
         return elevation > 0 || (color != null && color.a > 0);
       case DecoratedBox(:final decoration):
         return _decorationPaints(decoration);
+      // `Ink` paints its decoration into the enclosing Material's ink layer
+      // rather than through a DecoratedBox, so nothing below it reports the
+      // box that is actually on screen. Without this the union stopped at the
+      // label inside and the opening floated loose around the control.
+      case Ink(:final decoration):
+        return decoration != null && _decorationPaints(decoration);
       default:
         return false;
     }
@@ -474,6 +479,15 @@ class GuideAnchorRegistry {
         if (customBorder != null) return fromBorder(customBorder);
         if (borderRadius != null) return (resolve(borderRadius), false);
         return null;
+      case Ink(:final decoration):
+        if (decoration is BoxDecoration) {
+          if (decoration.shape == BoxShape.circle) return (null, true);
+          final radius = resolve(decoration.borderRadius);
+          if (radius != null) return (radius, false);
+          return (BorderRadius.zero, false);
+        }
+        if (decoration is ShapeDecoration) return fromBorder(decoration.shape);
+        return null;
       case DecoratedBox(:final decoration):
         if (decoration is BoxDecoration) {
           if (decoration.shape == BoxShape.circle) return (null, true);
@@ -529,6 +543,23 @@ class GuideAnchorRegistry {
     return route != null && !route.isCurrent;
   }
 
+  /// Whether [id] resolves but runs off the top or bottom of the screen.
+  ///
+  /// A target can be three-quarters visible — enough to resolve — and still be
+  /// taller than the room left for it, which is what made the realm's four
+  /// tomes read as a box running off the bottom rather than as a lit group.
+  /// Answering true sends it through [ensureVisible] first.
+  bool overflowsViewport(String id) {
+    final rect = resolve(id);
+    if (rect == null) return false;
+    final context = _anchors[id]?.currentContext;
+    if (context == null) return false;
+    final view = View.maybeOf(context);
+    if (view == null) return false;
+    final screen = Offset.zero & (view.physicalSize / view.devicePixelRatio);
+    return rect.top < screen.top || rect.bottom > screen.bottom;
+  }
+
   /// Bring [id] into view when it sits inside a scrollable.
   ///
   /// Without this, an arc through a long sheet — Scene Settings, the Chronicle,
@@ -542,9 +573,23 @@ class GuideAnchorRegistry {
     // spotlight with it. Vertical sheets keep the target high so the card has
     // somewhere to sit underneath.
     final horizontal = scrollable.position.axis == Axis.horizontal;
+    // A target that fills most of the screen has to start at the top or it
+    // cannot fit at all; 0.35 would push its tail straight back off the
+    // bottom. Shorter targets keep the third-down placement, which leaves the
+    // card somewhere to sit underneath.
+    final box = context.findRenderObject();
+    final tall =
+        !horizontal &&
+        box is RenderBox &&
+        box.hasSize &&
+        box.size.height > scrollable.position.viewportDimension * 0.5;
     await Scrollable.ensureVisible(
       context,
-      alignment: horizontal ? 0.5 : 0.35,
+      alignment: horizontal
+          ? 0.5
+          : tall
+          ? 0.02
+          : 0.35,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOutCubic,
     );
