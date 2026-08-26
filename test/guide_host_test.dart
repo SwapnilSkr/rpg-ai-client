@@ -64,6 +64,15 @@ Future<void> _arrive(WidgetTester tester) async {
 void main() {
   setUp(() async {
     await guide.onSignedOut();
+    // The quiet gap between arcs is a real-time timer; these tests drive arcs
+    // back to back on purpose, so it is off unless a test asks for it.
+    GuideController.arcGap = Duration.zero;
+  });
+
+  // Cancels the gap timer an arc leaves behind, so it cannot outlive the tree.
+  tearDown(() async {
+    await guide.onSignedOut();
+    GuideController.arcGap = Duration.zero;
   });
 
   testWidgets('spotlights a beat, advances, and ends', (tester) async {
@@ -1296,24 +1305,132 @@ void main() {
     await _depart(tester);
   });
 
+  testWidgets('an Ink-painted control is measured by its own decoration', (
+    tester,
+  ) async {
+    const flow = GuideFlow(
+      id: 'test.ink',
+      label: 'Ink arc',
+      beats: [GuideBeat(anchor: 'test.ink', title: 'Ink', body: 'One.')],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideHost(
+          child: Scaffold(
+            body: Center(
+              child: GuideAnchor(
+                id: 'test.ink',
+                // `Ink` paints into the Material's ink layer rather than
+                // through a DecoratedBox, so nothing below it reports the box
+                // actually on screen. Without it the union stops at the label.
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {},
+                    child: Ink(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0x22FFD479),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0x66FFD479)),
+                      ),
+                      child: const Text('Create persona'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.runAsync(() => guide.replay(flow));
+    await _arrive(tester);
+
+    final hole = tester.widget<GuideCutout>(find.byType(GuideCutout)).hole!;
+    final painted = tester.getRect(find.byType(Ink));
+    const gap = 3.0;
+    // The padded box, not the label inside it.
+    expect(hole.width, closeTo(painted.width + gap * 2, 0.01));
+    expect(hole.height, closeTo(painted.height + gap * 2, 0.01));
+    expect(hole.tlRadiusX, closeTo(14 + gap, 0.01));
+
+    guide.skip();
+    await _depart(tester);
+  });
+
+  testWidgets('a second arc waits out the quiet gap instead of piling on', (
+    tester,
+  ) async {
+    const first = GuideFlow(
+      id: 'test.gap.first',
+      label: 'First arc',
+      route: '/',
+      beats: [GuideBeat(anchor: 'test.target', title: 'First', body: 'A.')],
+    );
+    const second = GuideFlow(
+      id: 'test.gap.second',
+      label: 'Second arc',
+      route: '/',
+      beats: [GuideBeat(anchor: 'test.target', title: 'Second', body: 'B.')],
+    );
+    // Comfortably longer than the departure pump, or the gap would expire
+    // while the first arc is still fading out.
+    GuideController.arcGap = const Duration(seconds: 2);
+    addTearDown(() => GuideController.arcGap = Duration.zero);
+
+    await tester.pumpWidget(_app());
+    guide.onLocationChanged('/');
+    await tester.runAsync(() => guide.replay(first));
+    await _arrive(tester);
+    expect(find.text('FIRST'), findsOneWidget);
+
+    // Ending the first arc opens the gap.
+    guide.next();
+    await _depart(tester);
+
+    unawaited(guide.maybeStart(second, delay: Duration.zero));
+    await _arrive(tester);
+    expect(
+      find.text('SECOND'),
+      findsNothing,
+      reason: 'the second arc must not land on the heels of the first',
+    );
+    // Held, not spent: nothing was recorded, so it is still owed.
+    expect(guide.canAutoStart(second), isTrue);
+
+    // ...and it arrives on its own once the gap expires.
+    await tester.pump(const Duration(milliseconds: 2100));
+    await _arrive(tester);
+    expect(find.text('SECOND'), findsOneWidget);
+
+    // Close the gap first, or ending this arc leaves a live timer behind for
+    // the framework to trip over once the tree is torn down.
+    GuideController.arcGap = Duration.zero;
+    guide.skip();
+    await _depart(tester);
+  });
+
   testWidgets('the silence offer puts its actions where every card does', (
     tester,
   ) async {
-    // Two *different* arcs waved off is what earns the offer — the count is
-    // over flows with a skipped record, so skipping one arc twice is one skip.
-    const second = GuideFlow(
-      id: 'test.flow.other',
-      label: 'Other arc',
-      beats: [GuideBeat(anchor: 'test.target', title: 'Other', body: 'X.')],
+    // The count is over flows with a skipped record, so waving the same arc
+    // off repeatedly is one skip. It takes four *different* arcs.
+    GuideFlow other(int n) => GuideFlow(
+      id: 'test.flow.$n',
+      label: 'Arc $n',
+      beats: [GuideBeat(anchor: 'test.target', title: 'Arc $n', body: 'X.')],
     );
     await tester.pumpWidget(_app());
-    await tester.runAsync(() => guide.replay(_flow));
-    await _arrive(tester);
-    await tester.runAsync(() => guide.skip());
-    await _depart(tester);
-    await tester.runAsync(() => guide.replay(second));
-    await _arrive(tester);
-    await tester.runAsync(() => guide.skip());
+    for (var n = 0; n < 4; n++) {
+      await tester.runAsync(() => guide.replay(other(n)));
+      await _arrive(tester);
+      await tester.runAsync(() => guide.skip());
+      await _depart(tester);
+    }
     await _arrive(tester);
 
     expect(find.text('Stay quiet'), findsOneWidget);

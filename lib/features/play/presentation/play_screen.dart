@@ -102,6 +102,15 @@ class _PlayViewState extends State<_PlayView> {
   void initState() {
     super.initState();
     _scrollController.addListener(_updateFollowLatest);
+    // The arcs are otherwise driven entirely by state *changes*, and a
+    // listener never sees the state it was mounted with. A story whose turns
+    // are already loaded when the screen opens therefore produced no change
+    // to react to and no walkthrough at all. Evaluating once after the first
+    // frame closes that hole; `maybeStart` still decides eligibility, so this
+    // only ever offers.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _maybeGuide(context.read<PlayCubit>().state);
+    });
   }
 
   void _updateFollowLatest() {
@@ -2688,65 +2697,76 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             const SizedBox(height: 8),
                             GuideAnchor(
                               id: GuideIds.settingsModeControl,
-                              child: Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: kChatModes.map((m) {
-                                  final selected = _mode == m.key;
-                                  return GestureDetector(
-                                    onTap: () => setState(() => _mode = m.key),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(20),
-                                        color: selected
-                                            ? EverloreTheme.gold.withValues(
-                                                alpha: 0.12,
+                              // The blurb belongs to the control: the span that lights this beat
+                              // runs from the heading to whatever this anchor covers, so leaving
+                              // the sentence outside it left the sentence half-lit.
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: kChatModes.map((m) {
+                                      final selected = _mode == m.key;
+                                      return GestureDetector(
+                                        onTap: () =>
+                                            setState(() => _mode = m.key),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                            color: selected
+                                                ? EverloreTheme.gold.withValues(
+                                                    alpha: 0.12,
+                                                  )
+                                                : EverloreTheme.void3,
+                                            border: Border.all(
+                                              color: selected
+                                                  ? EverloreTheme.gold
+                                                        .withValues(alpha: 0.5)
+                                                  : EverloreTheme.goldDim
+                                                        .withValues(alpha: 0.2),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            m.label,
+                                            style: EverloreTheme.ui(
+                                              size: 13,
+                                              color: selected
+                                                  ? EverloreTheme.gold
+                                                  : EverloreTheme.ash,
+                                              weight: selected
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w400,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _mode == 'ardent'
+                                        ? 'Ardent escalates intensity — explicit content only in mature worlds with NSFW enabled in your preferences.'
+                                        : kChatModes
+                                              .firstWhere(
+                                                (m) => m.key == _mode,
+                                                orElse: () => kChatModes.first,
                                               )
-                                            : EverloreTheme.void3,
-                                        border: Border.all(
-                                          color: selected
-                                              ? EverloreTheme.gold.withValues(
-                                                  alpha: 0.5,
-                                                )
-                                              : EverloreTheme.goldDim
-                                                    .withValues(alpha: 0.2),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        m.label,
-                                        style: EverloreTheme.ui(
-                                          size: 13,
-                                          color: selected
-                                              ? EverloreTheme.gold
-                                              : EverloreTheme.ash,
-                                          weight: selected
-                                              ? FontWeight.w600
-                                              : FontWeight.w400,
-                                        ),
-                                      ),
+                                              .blurb,
+                                    style: EverloreTheme.ui(
+                                      size: 11,
+                                      color: EverloreTheme.ash,
+                                      height: 1.4,
                                     ),
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _mode == 'ardent'
-                                  ? 'Ardent escalates intensity — explicit content only in mature worlds with NSFW enabled in your preferences.'
-                                  : kChatModes
-                                        .firstWhere(
-                                          (m) => m.key == _mode,
-                                          orElse: () => kChatModes.first,
-                                        )
-                                        .blurb,
-                              style: EverloreTheme.ui(
-                                size: 11,
-                                color: EverloreTheme.ash,
-                                height: 1.4,
+                                  ),
+                                ],
                               ),
                             ),
                             const SizedBox(height: 20),
@@ -2764,63 +2784,73 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             const SizedBox(height: 8),
                             GuideAnchor(
                               id: GuideIds.settingsVoiceControl,
-                              child: DropdownButtonFormField<String?>(
-                                value: _voiceOverride,
-                                isExpanded: true,
-                                dropdownColor: EverloreTheme.void2,
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: EverloreTheme.void3,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                items: [
-                                  DropdownMenuItem<String?>(
-                                    value: null,
-                                    child: Text(
-                                      'World default — ${narrativeStyleLabel(widget.worldVoice)}',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: EverloreTheme.ui(
-                                        size: 13,
-                                        color: EverloreTheme.parchment,
+                              // The blurb belongs to the control: the span that lights this beat
+                              // runs from the heading to whatever this anchor covers, so leaving
+                              // the sentence outside it left the sentence half-lit.
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  DropdownButtonFormField<String?>(
+                                    value: _voiceOverride,
+                                    isExpanded: true,
+                                    dropdownColor: EverloreTheme.void2,
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: EverloreTheme.void3,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
                                     ),
-                                  ),
-                                  for (final voice in kNarrativeStyles)
-                                    DropdownMenuItem<String?>(
-                                      value: voice.key,
-                                      child: Text(
-                                        voice.key.isEmpty
-                                            ? 'Neutral / no voice preset'
-                                            : voice.label,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: EverloreTheme.ui(
-                                          size: 13,
-                                          color: EverloreTheme.parchment,
+                                    items: [
+                                      DropdownMenuItem<String?>(
+                                        value: null,
+                                        child: Text(
+                                          'World default — ${narrativeStyleLabel(widget.worldVoice)}',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: EverloreTheme.ui(
+                                            size: 13,
+                                            color: EverloreTheme.parchment,
+                                          ),
                                         ),
                                       ),
+                                      for (final voice in kNarrativeStyles)
+                                        DropdownMenuItem<String?>(
+                                          value: voice.key,
+                                          child: Text(
+                                            voice.key.isEmpty
+                                                ? 'Neutral / no voice preset'
+                                                : voice.label,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: EverloreTheme.ui(
+                                              size: 13,
+                                              color: EverloreTheme.parchment,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                    onChanged: (voice) =>
+                                        setState(() => _voiceOverride = voice),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _voiceOverride == null
+                                        ? 'Uses this world\'s authored voice. Your choice affects only this save.'
+                                        : kNarrativeStyles
+                                              .firstWhere(
+                                                (voice) =>
+                                                    voice.key == _voiceOverride,
+                                                orElse: () =>
+                                                    kNarrativeStyles.first,
+                                              )
+                                              .blurb,
+                                    style: EverloreTheme.ui(
+                                      size: 11,
+                                      color: EverloreTheme.ash,
+                                      height: 1.4,
                                     ),
+                                  ),
                                 ],
-                                onChanged: (voice) =>
-                                    setState(() => _voiceOverride = voice),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _voiceOverride == null
-                                  ? 'Uses this world\'s authored voice. Your choice affects only this save.'
-                                  : kNarrativeStyles
-                                        .firstWhere(
-                                          (voice) =>
-                                              voice.key == _voiceOverride,
-                                          orElse: () => kNarrativeStyles.first,
-                                        )
-                                        .blurb,
-                              style: EverloreTheme.ui(
-                                size: 11,
-                                color: EverloreTheme.ash,
-                                height: 1.4,
                               ),
                             ),
                             const SizedBox(height: 20),
@@ -2838,64 +2868,74 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             const SizedBox(height: 8),
                             GuideAnchor(
                               id: GuideIds.settingsToneControl,
-                              child: Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: kNarrationTones.map((tone) {
-                                  final selected = _tone == tone.key;
-                                  return GestureDetector(
-                                    onTap: () =>
-                                        setState(() => _tone = tone.key),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(20),
-                                        color: selected
-                                            ? EverloreTheme.gold.withValues(
-                                                alpha: 0.12,
-                                              )
-                                            : EverloreTheme.void3,
-                                        border: Border.all(
-                                          color: selected
-                                              ? EverloreTheme.gold.withValues(
-                                                  alpha: 0.5,
-                                                )
-                                              : EverloreTheme.goldDim
-                                                    .withValues(alpha: 0.2),
+                              // The blurb belongs to the control: the span that lights this beat
+                              // runs from the heading to whatever this anchor covers, so leaving
+                              // the sentence outside it left the sentence half-lit.
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: kNarrationTones.map((tone) {
+                                      final selected = _tone == tone.key;
+                                      return GestureDetector(
+                                        onTap: () =>
+                                            setState(() => _tone = tone.key),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                            color: selected
+                                                ? EverloreTheme.gold.withValues(
+                                                    alpha: 0.12,
+                                                  )
+                                                : EverloreTheme.void3,
+                                            border: Border.all(
+                                              color: selected
+                                                  ? EverloreTheme.gold
+                                                        .withValues(alpha: 0.5)
+                                                  : EverloreTheme.goldDim
+                                                        .withValues(alpha: 0.2),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            tone.label,
+                                            style: EverloreTheme.ui(
+                                              size: 13,
+                                              color: selected
+                                                  ? EverloreTheme.gold
+                                                  : EverloreTheme.ash,
+                                              weight: selected
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w400,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      child: Text(
-                                        tone.label,
-                                        style: EverloreTheme.ui(
-                                          size: 13,
-                                          color: selected
-                                              ? EverloreTheme.gold
-                                              : EverloreTheme.ash,
-                                          weight: selected
-                                              ? FontWeight.w600
-                                              : FontWeight.w400,
-                                        ),
-                                      ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    kNarrationTones
+                                        .firstWhere(
+                                          (tone) => tone.key == _tone,
+                                          orElse: () => kNarrationTones.first,
+                                        )
+                                        .blurb,
+                                    style: EverloreTheme.ui(
+                                      size: 11,
+                                      color: EverloreTheme.ash,
+                                      height: 1.4,
                                     ),
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              kNarrationTones
-                                  .firstWhere(
-                                    (tone) => tone.key == _tone,
-                                    orElse: () => kNarrationTones.first,
-                                  )
-                                  .blurb,
-                              style: EverloreTheme.ui(
-                                size: 11,
-                                color: EverloreTheme.ash,
-                                height: 1.4,
+                                  ),
+                                ],
                               ),
                             ),
                             const SizedBox(height: 20),

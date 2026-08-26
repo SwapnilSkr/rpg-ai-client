@@ -31,7 +31,24 @@ class GuideController extends ChangeNotifier {
   static const _skipPromptId = 'system.skip_prompt';
 
   /// Arcs waved off before the app offers to silence the guide entirely.
-  static const _skipsBeforeOffer = 2;
+  ///
+  /// Two was a hair trigger: waving off a couple of arcs on the way to your
+  /// story is ordinary impatience, not a verdict on the guide, and the offer
+  /// it raised silences *everything* — the play and chronicle arcs included —
+  /// behind a button that never says so. Four is a third of the arcs there
+  /// are, which is a real signal.
+  static const _skipsBeforeOffer = 4;
+
+  /// Quiet gap between one arc ending and the next being allowed to open.
+  ///
+  /// Each surface still explains itself exactly once; this only stops the
+  /// explanations landing back to back. Crossing play, realm and chronicle to
+  /// reach a story used to hand over three arcs inside a minute, which is
+  /// where the fatigue lives — not in any single arc's length.
+  /// Mutable only so the widget tests can shrink it; nothing in the app
+  /// writes to it.
+  @visibleForTesting
+  static Duration arcGap = const Duration(seconds: 8);
 
   GuideProgress _progress = GuideProgress.empty;
   bool _ready = false;
@@ -68,8 +85,24 @@ class GuideController extends ChangeNotifier {
   /// "6 of 6" after five. See [beatStep] and [beatTotal].
   final Set<int> _dropped = {};
 
+  /// Whether rehearsal mode still owes this process a wipe.
+  ///
+  /// Rehearsal is meant to replay the walkthrough on a cold start and on a
+  /// genuine sign-in — not on every `/auth/me`. The account is re-fetched on
+  /// resume and on token refresh, and wiping there tore down whatever arc was
+  /// on screen mid-beat and re-ran arcs at arbitrary moments, which is exactly
+  /// what makes the guide look broken to someone testing with the flag on.
+  /// Cleared after a wipe, re-armed by [onSignedOut].
+  bool _rehearsalArmed = true;
+
   /// Live `GuideOnEnter` widgets, keyed by their state object.
   final Map<Object, ({GuideFlow flow, VoidCallback start})> _triggers = {};
+
+  /// True while the quiet gap after an arc is still running. See [arcGap].
+  bool _inArcGap = false;
+
+  /// Ends the gap and re-offers whatever it held back.
+  Timer? _gapTimer;
 
   /// Arcs whose surface was covered when they came due, waiting for whatever
   /// is over it to go away. Held rather than recorded, so nothing is spent.
@@ -120,6 +153,7 @@ class GuideController extends ChangeNotifier {
     if (AppConfig.guideRehearsal) {
       _progress = await GuideStore.reset();
       _ready = true;
+      _rehearsalArmed = false;
       _startedThisSession.clear();
       _pending.clear();
       debugPrint('[guide] rehearsal mode: cold-start record cleared.');
@@ -141,6 +175,12 @@ class GuideController extends ChangeNotifier {
     // so the whole guide can be watched end to end as often as it takes.
     // `GUIDE_REHEARSAL=true` in `.env`, debug builds only.
     if (AppConfig.guideRehearsal) {
+      // Already rehearsed this process: this is a refresh, not a sign-in.
+      // Leave the record — and anything on screen — exactly as it is.
+      if (!_rehearsalArmed) {
+        _ready = true;
+        return;
+      }
       _cancelBeatWatch();
       _flow = null;
       _index = 0;
@@ -149,6 +189,7 @@ class GuideController extends ChangeNotifier {
       _pending.clear();
       _progress = await GuideStore.reset();
       _ready = true;
+      _rehearsalArmed = false;
       debugPrint(
         '[guide] rehearsal mode: record cleared, every arc will run again.',
       );
@@ -205,6 +246,13 @@ class GuideController extends ChangeNotifier {
     // a first play, a dialog, a menu. Hold the arc rather than talking across
     // it; `_onSurfaceChanged` brings it back when the way is clear.
     if (GuideAnchorRegistry.instance.isCovered(flow.anchorIds)) {
+      _held[flow.id] = flow;
+      return;
+    }
+
+    // Too soon after the last arc. Held rather than recorded — exactly like a
+    // covered surface — so the arc is still owed and opens when the gap ends.
+    if (_inArcGap) {
       _held[flow.id] = flow;
       return;
     }
@@ -318,6 +366,7 @@ class GuideController extends ChangeNotifier {
   /// Retry anything held back once the surface over it clears.
   void _onSurfaceChanged() {
     if (_held.isEmpty || _flow != null) return;
+    if (_inArcGap) return;
     final waiting = _held.values.toList();
     for (final flow in waiting) {
       if (GuideAnchorRegistry.instance.isCovered(flow.anchorIds)) continue;
@@ -398,8 +447,14 @@ class GuideController extends ChangeNotifier {
     _askingSkipAll = false;
     _startedThisSession.clear();
     _pending.clear();
+    _held.clear();
+    _gapTimer?.cancel();
+    _gapTimer = null;
+    _inArcGap = false;
     _progress = GuideProgress.empty;
     _ready = false;
+    // Signing back in is a fresh rehearsal, which is what the flag promises.
+    _rehearsalArmed = true;
     await GuideStore.clear();
     notifyListeners();
   }
@@ -450,12 +505,16 @@ class GuideController extends ChangeNotifier {
   /// Commit to showing beat [index] and start watching its target.
   void _showBeat(GuideFlow flow, int index) {
     _index = index;
-    _beatResolved =
-        GuideAnchorRegistry.instance.firstResolvable(
-          flow.beats[index].anchors,
-        ) !=
-        null;
+    final registry = GuideAnchorRegistry.instance;
+    final anchor = registry.firstResolvable(flow.beats[index].anchors);
+    _beatResolved = anchor != null;
     notifyListeners();
+    // Resolvable but running off an edge: bring it properly into view rather
+    // than cutting the opening at the screen edge. The same reveal the
+    // scrolled-past case uses, so the opening tracks it on the way.
+    if (anchor != null && registry.overflowsViewport(anchor)) {
+      unawaited(_revealAnchor(anchor));
+    }
     _record(flow, step: index, status: GuideStatus.seen, flush: false);
     _startBeatWatch(flow.beats[index]);
   }
@@ -556,6 +615,22 @@ class GuideController extends ChangeNotifier {
     });
   }
 
+  /// Start the quiet gap that keeps the next arc off the heels of this one.
+  void _openArcGap() {
+    _gapTimer?.cancel();
+    _gapTimer = null;
+    _inArcGap = false;
+    // A zero gap is not a zero-length timer — it is no timer at all, so
+    // nothing is left pending for a test to trip over.
+    if (arcGap <= Duration.zero) return;
+    _inArcGap = true;
+    _gapTimer = Timer(arcGap, () {
+      _gapTimer = null;
+      _inArcGap = false;
+      _onSurfaceChanged();
+    });
+  }
+
   void _cancelBeatWatch() {
     _beatWatch?.cancel();
     _beatWatch = null;
@@ -564,6 +639,7 @@ class GuideController extends ChangeNotifier {
   void _end(GuideStatus status) {
     final flow = _flow;
     final step = _index;
+    _openArcGap();
     _cancelBeatWatch();
     _beatResolved = false;
     _revealing = false;
