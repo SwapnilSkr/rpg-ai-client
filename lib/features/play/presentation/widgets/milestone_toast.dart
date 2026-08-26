@@ -107,7 +107,12 @@ class _MilestoneToastState extends State<MilestoneToast> {
         child: _card()
             .animate(key: ValueKey('milestone${widget.stamp}'))
             .fadeIn(duration: 300.ms)
-            .scaleXY(begin: 0.88, end: 1, duration: 380.ms, curve: Curves.easeOutBack)
+            .scaleXY(
+              begin: 0.88,
+              end: 1,
+              duration: 380.ms,
+              curve: Curves.easeOutBack,
+            )
             .then(delay: 2800.ms)
             .fadeOut(duration: 450.ms)
             .then()

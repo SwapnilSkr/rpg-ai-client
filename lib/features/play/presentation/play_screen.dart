@@ -20,6 +20,11 @@ import '../../personas/data/persona_repository.dart';
 import '../../../shared/chat_modes.dart';
 import '../../../shared/narrative_styles.dart';
 import '../../../shared/narration_tones.dart';
+import '../../../core/guide/guide_anchor.dart';
+import '../../../core/guide/guide_trigger.dart';
+import '../../../core/guide/guide_controller.dart';
+import '../../../core/guide/guide_flows.dart';
+import '../../../core/guide/guide_ids.dart';
 import '../../../shared/widgets/top_confirmation_toast.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../core/storage/local_db.dart';
@@ -71,6 +76,13 @@ class _PlayViewState extends State<_PlayView> {
   final _scrollController = ScrollController();
   bool _statsExpanded = false;
   bool _onboardingShown = false;
+
+  /// True while the protagonist sheet is up.
+  ///
+  /// It arrives a beat after the screen does — its reusable-protagonist lookup
+  /// is a round trip — and an arc that starts in that gap is buried by it and
+  /// spent without ever having been read.
+  bool _onboardingOpen = false;
   int? _lastSeenEventCount;
   bool? _lastSeenLoading;
   Object? _lastSeenTemplate;
@@ -443,6 +455,34 @@ class _PlayViewState extends State<_PlayView> {
     );
   }
 
+  /// Stagger the play-screen arcs against the story's own progress.
+  ///
+  /// Nothing fires while prose is streaming — a spotlight over a moving target
+  /// is worse than no spotlight. The essentials come at the first told turn;
+  /// Ink is explained only once some has actually been spent, which is the
+  /// moment it means anything; the wider toolset waits until the player has
+  /// settled in.
+  void _maybeGuide(PlayState state) {
+    if (state.isGenerating || state.isRewinding || state.isLoading) return;
+    // Never while the player is still being asked who they are.
+    if (_onboardingOpen) return;
+    final turns = state.events.length;
+    if (turns == 0) return;
+
+    if (guide.canAutoStart(GuideFlows.playFirst)) {
+      guide.maybeStart(
+        GuideFlows.playFirst,
+        delay: const Duration(milliseconds: 900),
+      );
+      return;
+    }
+    if (turns >= 3 && guide.canAutoStart(GuideFlows.ink)) {
+      guide.maybeStart(GuideFlows.ink);
+      return;
+    }
+    if (turns >= 5) guide.maybeStart(GuideFlows.playTools);
+  }
+
   void _maybeShowOnboarding(BuildContext context) {
     final cubit = context.read<PlayCubit>();
     if (_onboardingShown || !cubit.shouldOnboardProtagonist) return;
@@ -465,7 +505,8 @@ class _PlayViewState extends State<_PlayView> {
       // lookup is unavailable.
     }
     if (!mounted || !context.mounted) return;
-    showModalBottomSheet(
+    _onboardingOpen = true;
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       isDismissible: false,
@@ -490,6 +531,10 @@ class _PlayViewState extends State<_PlayView> {
         },
       ),
     );
+    _onboardingOpen = false;
+    // The way is clear: offer the arc that was held back, rather than leaving
+    // it to whenever the next turn happens to change the state.
+    if (mounted) _maybeGuide(cubit.state);
   }
 
   void _showRealmMenu(BuildContext context) {
@@ -575,56 +620,71 @@ class _PlayViewState extends State<_PlayView> {
                   ? MediaQuery.sizeOf(dialogContext).width
                   : MediaQuery.sizeOf(dialogContext).width.clamp(320.0, 430.0),
               height: double.infinity,
-              child: _SettingsSheet(
-                artAsset: 'assets/art/forge-muse.webp',
-                initialPov: instance?.narrationPov ?? 'third',
-                initialMode: instance?.mode ?? kDefaultChatMode,
-                initialVoiceOverride: instance?.narrativeStyleOverride,
-                worldVoice: cubit.state.template?.narrativeStyle ?? '',
-                initialTone: instance?.narrationTone ?? kDefaultNarrationTone,
-                initialLength: instance?.messageLength ?? 'medium',
-                initialPersonaId: instance?.personaId,
-                // Global personas describe the player in sentient worlds. GM worlds use
-                // template-scoped protagonist cards from the first-entry sheet instead.
-                isGmWorld: !(cubit.state.template?.isSentient ?? false),
-                personas: personas,
-                onClose: () => Navigator.of(dialogContext).pop(),
-                onApply:
-                    (pov, mode, voiceOverride, tone, length, personaId) async {
-                      final saved = await cubit.updateSettings(
-                        narrationPov: pov,
-                        mode: mode,
-                        narrativeStyleOverride: voiceOverride,
-                        clearNarrativeStyleOverride: voiceOverride == null,
-                        narrationTone: tone,
-                        messageLength: length,
-                        personaId: personaId,
-                        clearPersona: personaId == null,
-                      );
-                      if (!saved || !mounted || !context.mounted) return false;
-                      _pendingRealmMenuReturn = false;
-                      Navigator.of(dialogContext).pop();
-                      _showSettingsSnack(
-                        context,
-                        pov: pov,
-                        mode: mode,
-                        voiceOverride: voiceOverride,
-                        worldVoice: cubit.state.template?.narrativeStyle ?? '',
-                        tone: tone,
-                        length: length,
-                      );
-                      return true;
-                    },
-                onReset: () {
-                  _pendingRealmMenuReturn = false;
-                  Navigator.of(dialogContext).pop();
-                  _confirmResetChat(context, cubit);
-                },
-                onDelete: () {
-                  _pendingRealmMenuReturn = false;
-                  Navigator.of(dialogContext).pop();
-                  _confirmDeleteChat(context, cubit.instanceId);
-                },
+              // Every knob in this sheet gets named the first time it is
+              // opened — the player asked to be here, so the arc is welcome.
+              child: GuideOnEnter(
+                flow: GuideFlows.sceneSettings,
+                child: _SettingsSheet(
+                  artAsset: 'assets/art/forge-muse.webp',
+                  initialPov: instance?.narrationPov ?? 'third',
+                  initialMode: instance?.mode ?? kDefaultChatMode,
+                  initialVoiceOverride: instance?.narrativeStyleOverride,
+                  worldVoice: cubit.state.template?.narrativeStyle ?? '',
+                  initialTone: instance?.narrationTone ?? kDefaultNarrationTone,
+                  initialLength: instance?.messageLength ?? 'medium',
+                  initialPersonaId: instance?.personaId,
+                  // Global personas describe the player in sentient worlds. GM worlds use
+                  // template-scoped protagonist cards from the first-entry sheet instead.
+                  isGmWorld: !(cubit.state.template?.isSentient ?? false),
+                  personas: personas,
+                  onClose: () => Navigator.of(dialogContext).pop(),
+                  onApply:
+                      (
+                        pov,
+                        mode,
+                        voiceOverride,
+                        tone,
+                        length,
+                        personaId,
+                      ) async {
+                        final saved = await cubit.updateSettings(
+                          narrationPov: pov,
+                          mode: mode,
+                          narrativeStyleOverride: voiceOverride,
+                          clearNarrativeStyleOverride: voiceOverride == null,
+                          narrationTone: tone,
+                          messageLength: length,
+                          personaId: personaId,
+                          clearPersona: personaId == null,
+                        );
+                        if (!saved || !mounted || !context.mounted) {
+                          return false;
+                        }
+                        _pendingRealmMenuReturn = false;
+                        Navigator.of(dialogContext).pop();
+                        _showSettingsSnack(
+                          context,
+                          pov: pov,
+                          mode: mode,
+                          voiceOverride: voiceOverride,
+                          worldVoice:
+                              cubit.state.template?.narrativeStyle ?? '',
+                          tone: tone,
+                          length: length,
+                        );
+                        return true;
+                      },
+                  onReset: () {
+                    _pendingRealmMenuReturn = false;
+                    Navigator.of(dialogContext).pop();
+                    _confirmResetChat(context, cubit);
+                  },
+                  onDelete: () {
+                    _pendingRealmMenuReturn = false;
+                    Navigator.of(dialogContext).pop();
+                    _confirmDeleteChat(context, cubit.instanceId);
+                  },
+                ),
               ),
             ),
           ),
@@ -1195,16 +1255,26 @@ class _PlayViewState extends State<_PlayView> {
         _scrollController.jumpTo(pos.maxScrollExtent);
       }
 
-      // A choice row or the last revealed paragraph can increase the extent on
-      // the next layout frame. Settle once more so it cannot appear stranded
-      // above the composer until the reader drags the feed manually.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_scrollController.hasClients || !_followLatest) return;
-        final settled = _scrollController.position;
-        if (settled.maxScrollExtent - settled.pixels > 1) {
-          _scrollController.jumpTo(settled.maxScrollExtent);
-        }
-      });
+      _settleAtBottom();
+    });
+  }
+
+  /// Chase the true bottom across however many frames it takes to find it.
+  ///
+  /// `maxScrollExtent` is an *estimate* while a `ListView.builder` is lazy: it
+  /// is derived from the children built so far. Jumping to it builds more of
+  /// them, which grows the extent again. One correcting pass was not enough —
+  /// opening a long story landed a couple of turns above the newest and left
+  /// the reader to drag down for the passage they came back for. Each pass
+  /// builds another screenful, so the count is bounded and small.
+  void _settleAtBottom({int remaining = 8}) {
+    if (remaining <= 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients || !_followLatest) return;
+      final position = _scrollController.position;
+      if (position.maxScrollExtent - position.pixels <= 1) return;
+      _scrollController.jumpTo(position.maxScrollExtent);
+      _settleAtBottom(remaining: remaining - 1);
     });
   }
 
@@ -1234,6 +1304,12 @@ class _PlayViewState extends State<_PlayView> {
                   .join('\u0001');
         return prev.events.length != curr.events.length ||
             prev.isLoading != curr.isLoading ||
+            // The moment the telling stops is the one the guide waits for:
+            // nothing fires while prose is streaming, and every other signal
+            // here — the new event, its choices, its text — lands *during*
+            // the stream. Without this the arcs after the first were left to
+            // a race, firing a turn or three late, or not at all.
+            prev.isGenerating != curr.isGenerating ||
             prev.isLoadingOlder != curr.isLoadingOlder ||
             prev.template != curr.template ||
             prev.characters.length != curr.characters.length ||
@@ -1279,6 +1355,7 @@ class _PlayViewState extends State<_PlayView> {
         _lastSeenTemplate = state.template;
         if (_isInkLimitMessage(state.error)) _showInkReserve(ctx);
         _maybeShowOnboarding(ctx);
+        _maybeGuide(state);
       },
       builder: (context, state) {
         final title = state.template?.title ?? '';
@@ -1367,22 +1444,28 @@ class _PlayViewState extends State<_PlayView> {
 
                   if (state.instance != null &&
                       state.instance!.worldState.isNotEmpty)
-                    WorldStateBar(
-                      worldState: state.instance!.worldState,
-                      definitions:
-                          state.template?.baseStatsTemplate ?? const {},
-                      expanded: _statsExpanded,
-                      onToggle: () =>
-                          setState(() => _statsExpanded = !_statsExpanded),
-                      deltas: state.lastStatDeltas,
+                    GuideAnchor(
+                      id: GuideIds.playWorldState,
+                      child: WorldStateBar(
+                        worldState: state.instance!.worldState,
+                        definitions:
+                            state.template?.baseStatsTemplate ?? const {},
+                        expanded: _statsExpanded,
+                        onToggle: () =>
+                            setState(() => _statsExpanded = !_statsExpanded),
+                        deltas: state.lastStatDeltas,
+                      ),
                     ),
 
                   // Always-on relationship presence — the active cast with live
                   // bond rings. Renders nothing until a bond actually exists.
-                  BondRail(
-                    characters: state.characters,
-                    presentNames: _presentNames(state),
-                    onTapCharacter: (c) => _showBondActions(context, c),
+                  GuideAnchor(
+                    id: GuideIds.playBondRail,
+                    child: BondRail(
+                      characters: state.characters,
+                      presentNames: _presentNames(state),
+                      onTapCharacter: (c) => _showBondActions(context, c),
+                    ),
                   ),
 
                   if (state.error != null)
@@ -1396,202 +1479,224 @@ class _PlayViewState extends State<_PlayView> {
                     ),
 
                   Expanded(
-                    child: state.isLoading && state.events.isEmpty
-                        ? const _LoadingNarrative()
-                        : state.events.isEmpty
-                        ? const _EmptyNarrative()
-                        : Builder(
-                            builder: (context) {
-                              // Tap-to-play chips bloom under the latest settled
-                              // turn — a list row so they scroll with the story.
-                              final latest = state.events.isNotEmpty
-                                  ? state.events.last
-                                  : null;
-                              // Settled turn: the finalized event carries choices.
-                              final settledChoices =
-                                  latest != null &&
-                                  !latest.isOptimistic &&
-                                  latest.choices.isNotEmpty &&
-                                  !state.isGenerating;
-                              // Early path: the narrator's choices arrived ahead of
-                              // generation_complete (choices_ready) and are attached
-                              // to the still-in-flight optimistic turn — show them
-                              // with the settled prose. Guards on isGenerating +
-                              // isOptimistic so a stale flag can never misfire.
-                              final previewChoices =
-                                  latest != null &&
-                                  latest.isOptimistic &&
-                                  state.isGenerating &&
-                                  state.choicesPreview &&
-                                  latest.choices.isNotEmpty;
-                              final showChoices =
-                                  (settledChoices || previewChoices) &&
-                                  state.replayingEventId == null &&
-                                  state.isConnected;
-                              // Fallback window: prose has settled but no choices yet
-                              // (narrator emitted none → they come with the metadata
-                              // pass at generation_complete). Show a quiet "preparing
-                              // options" hint so the wait reads as intentional, not a
-                              // frozen finished bubble.
-                              final showChoicesLoading =
-                                  !showChoices &&
-                                  latest != null &&
-                                  latest.isOptimistic &&
-                                  state.isGenerating &&
-                                  !state.narrativeStreaming &&
-                                  state.replayingEventId == null &&
-                                  state.isConnected;
-                              final showTrailingSlot =
-                                  showChoices || showChoicesLoading;
-                              final itemCount =
-                                  state.events.length +
-                                  (state.hasOlderEvents ? 1 : 0) +
-                                  (showTrailingSlot ? 1 : 0);
-                              // World entities (places/things) harvested from
-                              // memory atoms — computed once for all bubbles.
-                              final loreEntities = _loreEntities(state);
-                              return ListView.builder(
-                                controller: _scrollController,
-                                padding: const EdgeInsets.fromLTRB(
-                                  2,
-                                  16,
-                                  2,
-                                  20,
-                                ),
-                                itemCount: itemCount,
-                                itemBuilder: (context, index) {
-                                  if (state.hasOlderEvents && index == 0) {
-                                    return _OlderHistoryLoader(
-                                      totalEvents: state.totalEvents,
-                                      isLoading: state.isLoadingOlder,
-                                      onTap: _loadOlderHistoryIfNeeded,
-                                    );
-                                  }
-                                  if (showTrailingSlot &&
-                                      index == itemCount - 1) {
-                                    if (showChoices) {
-                                      return ChoiceChips(
-                                        choices: latest.choices,
-                                        enabled: true,
-                                        // Drop the pre-formatted move into the composer
-                                        // (fills + focuses) so the player can edit the
-                                        // narration/dialogue before sending it.
-                                        onChoose: (choice) =>
-                                            _composerDraft.value = choice,
+                    // The story column is the guide's fallback target for the
+                    // narrator beat: the newest passage lives inside a lazy
+                    // list and is not built until the reader reaches it, but
+                    // the column it scrolls in always exists.
+                    child: GuideAnchor(
+                      id: GuideIds.playNarrativeArea,
+                      child: state.isLoading && state.events.isEmpty
+                          ? const _LoadingNarrative()
+                          : state.events.isEmpty
+                          ? const _EmptyNarrative()
+                          : Builder(
+                              builder: (context) {
+                                // Tap-to-play chips bloom under the latest settled
+                                // turn — a list row so they scroll with the story.
+                                final latest = state.events.isNotEmpty
+                                    ? state.events.last
+                                    : null;
+                                // Settled turn: the finalized event carries choices.
+                                final settledChoices =
+                                    latest != null &&
+                                    !latest.isOptimistic &&
+                                    latest.choices.isNotEmpty &&
+                                    !state.isGenerating;
+                                // Early path: the narrator's choices arrived ahead of
+                                // generation_complete (choices_ready) and are attached
+                                // to the still-in-flight optimistic turn — show them
+                                // with the settled prose. Guards on isGenerating +
+                                // isOptimistic so a stale flag can never misfire.
+                                final previewChoices =
+                                    latest != null &&
+                                    latest.isOptimistic &&
+                                    state.isGenerating &&
+                                    state.choicesPreview &&
+                                    latest.choices.isNotEmpty;
+                                final showChoices =
+                                    (settledChoices || previewChoices) &&
+                                    state.replayingEventId == null &&
+                                    state.isConnected;
+                                // Fallback window: prose has settled but no choices yet
+                                // (narrator emitted none → they come with the metadata
+                                // pass at generation_complete). Show a quiet "preparing
+                                // options" hint so the wait reads as intentional, not a
+                                // frozen finished bubble.
+                                final showChoicesLoading =
+                                    !showChoices &&
+                                    latest != null &&
+                                    latest.isOptimistic &&
+                                    state.isGenerating &&
+                                    !state.narrativeStreaming &&
+                                    state.replayingEventId == null &&
+                                    state.isConnected;
+                                final showTrailingSlot =
+                                    showChoices || showChoicesLoading;
+                                final itemCount =
+                                    state.events.length +
+                                    (state.hasOlderEvents ? 1 : 0) +
+                                    (showTrailingSlot ? 1 : 0);
+                                // World entities (places/things) harvested from
+                                // memory atoms — computed once for all bubbles.
+                                final loreEntities = _loreEntities(state);
+                                return ListView.builder(
+                                  controller: _scrollController,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    2,
+                                    16,
+                                    2,
+                                    20,
+                                  ),
+                                  itemCount: itemCount,
+                                  itemBuilder: (context, index) {
+                                    if (state.hasOlderEvents && index == 0) {
+                                      return _OlderHistoryLoader(
+                                        totalEvents: state.totalEvents,
+                                        isLoading: state.isLoadingOlder,
+                                        onTap: _loadOlderHistoryIfNeeded,
                                       );
                                     }
-                                    return const _ChoicesPreparingHint();
-                                  }
-
-                                  final eventIndex = state.hasOlderEvents
-                                      ? index - 1
-                                      : index;
-                                  final event = state.events[eventIndex];
-                                  // Replay is valid for the latest generated AI
-                                  // turn, including Continue turns. The seed
-                                  // greeting is not generated, so keep it excluded.
-                                  final isLatest =
-                                      eventIndex == state.events.length - 1;
-                                  final isReplaying =
-                                      state.replayingEventId == event.id;
-                                  // Tie the in-bubble "writing" treatment to the
-                                  // PROSE stream, not the whole turn: it clears the
-                                  // moment the narrative is fully revealed, even
-                                  // while post-prose bookkeeping (choices, codex)
-                                  // still runs under isGenerating.
-                                  final isStreaming =
-                                      isReplaying ||
-                                      (event.isOptimistic &&
-                                          state.narrativeStreaming);
-                                  final hasAiResponse = (event.aiResponse ?? '')
-                                      .trim()
-                                      .isNotEmpty;
-                                  final isSeedGreeting =
-                                      event.modelUsed == 'seed' ||
-                                      (event.modelUsed.isEmpty &&
-                                          event.sequence == 1 &&
-                                          (event.playerInput?.trim().isEmpty ??
-                                              true));
-                                  final canReplay =
-                                      !event.isOptimistic &&
-                                      isLatest &&
-                                      state.replayingEventId == null &&
-                                      !state.isGenerating &&
-                                      hasAiResponse &&
-                                      !isSeedGreeting;
-                                  final canContinue =
-                                      !event.isOptimistic &&
-                                      isLatest &&
-                                      state.replayingEventId == null &&
-                                      !state.isGenerating &&
-                                      state.isConnected &&
-                                      ((event.aiResponse ?? '')
-                                          .trim()
-                                          .isNotEmpty);
-                                  return NarrativeBubble(
-                                    event: event,
-                                    isReplaying: isReplaying,
-                                    isStreaming: isStreaming,
-                                    characterNames: [
-                                      for (final c in state.characters)
-                                        if (!(c.isProtagonist &&
-                                            !(state.template?.isSentient ??
-                                                false)))
-                                          c.canonicalName,
-                                    ],
-                                    onCharacterTap: (name) {
-                                      final lower = name.toLowerCase();
-                                      for (final c in state.characters) {
-                                        if (c.canonicalName.toLowerCase() ==
-                                            lower) {
-                                          _showBondActions(context, c);
-                                          return;
-                                        }
+                                    if (showTrailingSlot &&
+                                        index == itemCount - 1) {
+                                      if (showChoices) {
+                                        return GuideAnchor(
+                                          id: GuideIds.playChoices,
+                                          child: ChoiceChips(
+                                            choices: latest.choices,
+                                            enabled: true,
+                                            // Drop the pre-formatted move into the composer
+                                            // (fills + focuses) so the player can edit the
+                                            // narration/dialogue before sending it.
+                                            onChoose: (choice) =>
+                                                _composerDraft.value = choice,
+                                          ),
+                                        );
                                       }
-                                    },
-                                    loreEntities: loreEntities,
-                                    onEntityTap: (name) => _showEntityMemories(
-                                      context,
-                                      context.read<PlayCubit>(),
-                                      name,
-                                      title: name,
-                                      emptyText:
-                                          'The story has not marked $name yet.',
-                                    ),
-                                    // Tracking unnamed people, naming them later, and
-                                    // resolving their kinship is now done ENTIRELY in
-                                    // the backend (stubs + presence tiers + the kinship
-                                    // graph) — the player no longer taps prose names to
-                                    // "track" them. The inline affordance is removed;
-                                    // correction still lives behind the turn long-press.
-                                    onLongPress:
-                                        (!event.isOptimistic &&
-                                            event.sequence > 0 &&
-                                            state.replayingEventId == null)
-                                        ? () => _showTurnMenu(
-                                            context,
-                                            event,
-                                            canReplay,
+                                      return const _ChoicesPreparingHint();
+                                    }
+
+                                    final eventIndex = state.hasOlderEvents
+                                        ? index - 1
+                                        : index;
+                                    final event = state.events[eventIndex];
+                                    // Replay is valid for the latest generated AI
+                                    // turn, including Continue turns. The seed
+                                    // greeting is not generated, so keep it excluded.
+                                    final isLatest =
+                                        eventIndex == state.events.length - 1;
+                                    final isReplaying =
+                                        state.replayingEventId == event.id;
+                                    // Tie the in-bubble "writing" treatment to the
+                                    // PROSE stream, not the whole turn: it clears the
+                                    // moment the narrative is fully revealed, even
+                                    // while post-prose bookkeeping (choices, codex)
+                                    // still runs under isGenerating.
+                                    final isStreaming =
+                                        isReplaying ||
+                                        (event.isOptimistic &&
+                                            state.narrativeStreaming);
+                                    final hasAiResponse =
+                                        (event.aiResponse ?? '')
+                                            .trim()
+                                            .isNotEmpty;
+                                    final isSeedGreeting =
+                                        event.modelUsed == 'seed' ||
+                                        (event.modelUsed.isEmpty &&
+                                            event.sequence == 1 &&
+                                            (event.playerInput
+                                                    ?.trim()
+                                                    .isEmpty ??
+                                                true));
+                                    final canReplay =
+                                        !event.isOptimistic &&
+                                        isLatest &&
+                                        state.replayingEventId == null &&
+                                        !state.isGenerating &&
+                                        hasAiResponse &&
+                                        !isSeedGreeting;
+                                    final canContinue =
+                                        !event.isOptimistic &&
+                                        isLatest &&
+                                        state.replayingEventId == null &&
+                                        !state.isGenerating &&
+                                        state.isConnected &&
+                                        ((event.aiResponse ?? '')
+                                            .trim()
+                                            .isNotEmpty);
+                                    final bubble = NarrativeBubble(
+                                      event: event,
+                                      isReplaying: isReplaying,
+                                      isStreaming: isStreaming,
+                                      characterNames: [
+                                        for (final c in state.characters)
+                                          if (!(c.isProtagonist &&
+                                              !(state.template?.isSentient ??
+                                                  false)))
+                                            c.canonicalName,
+                                      ],
+                                      onCharacterTap: (name) {
+                                        final lower = name.toLowerCase();
+                                        for (final c in state.characters) {
+                                          if (c.canonicalName.toLowerCase() ==
+                                              lower) {
+                                            _showBondActions(context, c);
+                                            return;
+                                          }
+                                        }
+                                      },
+                                      loreEntities: loreEntities,
+                                      onEntityTap: (name) => _showEntityMemories(
+                                        context,
+                                        context.read<PlayCubit>(),
+                                        name,
+                                        title: name,
+                                        emptyText:
+                                            'The story has not marked $name yet.',
+                                      ),
+                                      // Tracking unnamed people, naming them later, and
+                                      // resolving their kinship is now done ENTIRELY in
+                                      // the backend (stubs + presence tiers + the kinship
+                                      // graph) — the player no longer taps prose names to
+                                      // "track" them. The inline affordance is removed;
+                                      // correction still lives behind the turn long-press.
+                                      onLongPress:
+                                          (!event.isOptimistic &&
+                                              event.sequence > 0 &&
+                                              state.replayingEventId == null)
+                                          ? () => _showTurnMenu(
+                                              context,
+                                              event,
+                                              canReplay,
+                                            )
+                                          : null,
+                                      onReplay: canReplay
+                                          ? () => context
+                                                .read<PlayCubit>()
+                                                .replayAiResponse(event)
+                                          : null,
+                                      onContinue: canContinue
+                                          ? () => context
+                                                .read<PlayCubit>()
+                                                .continueStory()
+                                          : null,
+                                      onSelectReplayVariant: (index) => context
+                                          .read<PlayCubit>()
+                                          .selectReplayVariant(event, index),
+                                    );
+                                    // Only the newest passage is a guide target —
+                                    // spotlighting the whole scroll would say
+                                    // nothing about where the story is now.
+                                    return isLatest
+                                        ? GuideAnchor(
+                                            id: GuideIds.playNarrative,
+                                            child: bubble,
                                           )
-                                        : null,
-                                    onReplay: canReplay
-                                        ? () => context
-                                              .read<PlayCubit>()
-                                              .replayAiResponse(event)
-                                        : null,
-                                    onContinue: canContinue
-                                        ? () => context
-                                              .read<PlayCubit>()
-                                              .continueStory()
-                                        : null,
-                                    onSelectReplayVariant: (index) => context
-                                        .read<PlayCubit>()
-                                        .selectReplayVariant(event, index),
-                                  );
-                                },
-                              );
-                            },
-                          ),
+                                        : bubble;
+                                  },
+                                );
+                              },
+                            ),
+                    ),
                   ),
 
                   PlayerInput(
@@ -1774,66 +1879,74 @@ class _PlayHeader extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Expanded(
-                child: InkWell(
-                  onTap: onOpenRealm,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (title.isNotEmpty)
-                          Text(
-                            title,
-                            style: EverloreTheme.serifDisplay(
-                              size: 18,
-                              color: EverloreTheme.parchment,
-                              weight: FontWeight.w600,
-                              spacing: 0.5,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        const SizedBox(height: 3),
-                        Row(
-                          children: [
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 220),
-                              child: EvIcon(
-                                isConnected
-                                    ? AppIcons.realmActive
-                                    : AppIcons.reconnecting,
-                                key: ValueKey(isConnected),
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
+                child: GuideAnchor(
+                  id: GuideIds.playRealm,
+                  child: InkWell(
+                    onTap: onOpenRealm,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (title.isNotEmpty)
                             Text(
-                              isConnected ? 'Connected' : 'Reconnecting…',
-                              style: EverloreTheme.ui(
-                                size: 11,
+                              title,
+                              style: EverloreTheme.serifDisplay(
+                                size: 18,
+                                color: EverloreTheme.parchment,
+                                weight: FontWeight.w600,
                                 spacing: 0.5,
-                                color: isConnected
-                                    ? EverloreTheme.ash.withValues(alpha: 0.75)
-                                    : EverloreTheme.crimson.withValues(
-                                        alpha: 0.85,
-                                      ),
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ],
-                        ),
-                      ],
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                child: EvIcon(
+                                  isConnected
+                                      ? AppIcons.realmActive
+                                      : AppIcons.reconnecting,
+                                  key: ValueKey(isConnected),
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                isConnected ? 'Connected' : 'Reconnecting…',
+                                style: EverloreTheme.ui(
+                                  size: 11,
+                                  spacing: 0.5,
+                                  color: isConnected
+                                      ? EverloreTheme.ash.withValues(
+                                          alpha: 0.75,
+                                        )
+                                      : EverloreTheme.crimson.withValues(
+                                          alpha: 0.85,
+                                        ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
               if (onOpenSettings != null)
-                _RuneButton(
-                  icon: Icons.menu_rounded,
-                  onTap: onOpenSettings!,
-                  accent: EverloreTheme.gold,
-                  tooltip: 'Scene settings',
+                GuideAnchor(
+                  id: GuideIds.playMenu,
+                  child: _RuneButton(
+                    icon: Icons.menu_rounded,
+                    onTap: onOpenSettings!,
+                    accent: EverloreTheme.gold,
+                    tooltip: 'Scene settings',
+                  ),
                 ),
             ],
           ),
@@ -2535,79 +2648,90 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             const SizedBox(height: 14),
 
                             // Narration POV
-                            const _SettingsLabel(
-                              icon: AppIcons.pov,
-                              label: 'NARRATION',
+                            GuideAnchor(
+                              id: GuideIds.settingsNarration,
+                              child: const _SettingsLabel(
+                                icon: AppIcons.pov,
+                                label: 'NARRATION',
+                              ),
                             ),
                             const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                _SegOption(
-                                  label: 'Third person',
-                                  selected: _pov == 'third',
-                                  onTap: () => setState(() => _pov = 'third'),
-                                ),
-                                const SizedBox(width: 8),
-                                _SegOption(
-                                  label: 'First person',
-                                  selected: _pov == 'first',
-                                  onTap: () => setState(() => _pov = 'first'),
-                                ),
-                              ],
+                            GuideAnchor(
+                              id: GuideIds.settingsNarrationControl,
+                              child: Row(
+                                children: [
+                                  _SegOption(
+                                    label: 'Third person',
+                                    selected: _pov == 'third',
+                                    onTap: () => setState(() => _pov = 'third'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _SegOption(
+                                    label: 'First person',
+                                    selected: _pov == 'first',
+                                    onTap: () => setState(() => _pov = 'first'),
+                                  ),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 20),
 
                             // Chat Mode — how the chat flows (pacing/intent). It does not
                             // control prose register; that is the Narration Tone below.
-                            const _SettingsLabel(
-                              icon: AppIcons.voice,
-                              label: 'MODE',
+                            GuideAnchor(
+                              id: GuideIds.settingsMode,
+                              child: const _SettingsLabel(
+                                icon: AppIcons.voice,
+                                label: 'MODE',
+                              ),
                             ),
                             const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: kChatModes.map((m) {
-                                final selected = _mode == m.key;
-                                return GestureDetector(
-                                  onTap: () => setState(() => _mode = m.key),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(20),
-                                      color: selected
-                                          ? EverloreTheme.gold.withValues(
-                                              alpha: 0.12,
-                                            )
-                                          : EverloreTheme.void3,
-                                      border: Border.all(
+                            GuideAnchor(
+                              id: GuideIds.settingsModeControl,
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: kChatModes.map((m) {
+                                  final selected = _mode == m.key;
+                                  return GestureDetector(
+                                    onTap: () => setState(() => _mode = m.key),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(20),
                                         color: selected
                                             ? EverloreTheme.gold.withValues(
-                                                alpha: 0.5,
+                                                alpha: 0.12,
                                               )
-                                            : EverloreTheme.goldDim.withValues(
-                                                alpha: 0.2,
-                                              ),
+                                            : EverloreTheme.void3,
+                                        border: Border.all(
+                                          color: selected
+                                              ? EverloreTheme.gold.withValues(
+                                                  alpha: 0.5,
+                                                )
+                                              : EverloreTheme.goldDim
+                                                    .withValues(alpha: 0.2),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        m.label,
+                                        style: EverloreTheme.ui(
+                                          size: 13,
+                                          color: selected
+                                              ? EverloreTheme.gold
+                                              : EverloreTheme.ash,
+                                          weight: selected
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                        ),
                                       ),
                                     ),
-                                    child: Text(
-                                      m.label,
-                                      style: EverloreTheme.ui(
-                                        size: 13,
-                                        color: selected
-                                            ? EverloreTheme.gold
-                                            : EverloreTheme.ash,
-                                        weight: selected
-                                            ? FontWeight.w600
-                                            : FontWeight.w400,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
+                                  );
+                                }).toList(),
+                              ),
                             ),
                             const SizedBox(height: 8),
                             Text(
@@ -2630,41 +2754,32 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             // Voice is the broad authored style; unlike Tone, it can move a
                             // save from Noir to Romance, for example. Null keeps the creator's
                             // world default without mutating that template for anyone else.
-                            const _SettingsLabel(
-                              icon: AppIcons.voice,
-                              label: 'NARRATIVE VOICE',
+                            GuideAnchor(
+                              id: GuideIds.settingsVoice,
+                              child: const _SettingsLabel(
+                                icon: AppIcons.voice,
+                                label: 'NARRATIVE VOICE',
+                              ),
                             ),
                             const SizedBox(height: 8),
-                            DropdownButtonFormField<String?>(
-                              value: _voiceOverride,
-                              isExpanded: true,
-                              dropdownColor: EverloreTheme.void2,
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: EverloreTheme.void3,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              items: [
-                                DropdownMenuItem<String?>(
-                                  value: null,
-                                  child: Text(
-                                    'World default — ${narrativeStyleLabel(widget.worldVoice)}',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: EverloreTheme.ui(
-                                      size: 13,
-                                      color: EverloreTheme.parchment,
-                                    ),
+                            GuideAnchor(
+                              id: GuideIds.settingsVoiceControl,
+                              child: DropdownButtonFormField<String?>(
+                                value: _voiceOverride,
+                                isExpanded: true,
+                                dropdownColor: EverloreTheme.void2,
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: EverloreTheme.void3,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
-                                for (final voice in kNarrativeStyles)
+                                items: [
                                   DropdownMenuItem<String?>(
-                                    value: voice.key,
+                                    value: null,
                                     child: Text(
-                                      voice.key.isEmpty
-                                          ? 'Neutral / no voice preset'
-                                          : voice.label,
+                                      'World default — ${narrativeStyleLabel(widget.worldVoice)}',
                                       overflow: TextOverflow.ellipsis,
                                       style: EverloreTheme.ui(
                                         size: 13,
@@ -2672,9 +2787,24 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                                       ),
                                     ),
                                   ),
-                              ],
-                              onChanged: (voice) =>
-                                  setState(() => _voiceOverride = voice),
+                                  for (final voice in kNarrativeStyles)
+                                    DropdownMenuItem<String?>(
+                                      value: voice.key,
+                                      child: Text(
+                                        voice.key.isEmpty
+                                            ? 'Neutral / no voice preset'
+                                            : voice.label,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: EverloreTheme.ui(
+                                          size: 13,
+                                          color: EverloreTheme.parchment,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (voice) =>
+                                    setState(() => _voiceOverride = voice),
+                              ),
                             ),
                             const SizedBox(height: 8),
                             Text(
@@ -2698,55 +2828,61 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             // Narration tone is intentionally independent from Mode: Mode
                             // controls pacing/initiative, while tone controls the actual
                             // wording and literary register of future turns.
-                            const _SettingsLabel(
-                              icon: AppIcons.voice,
-                              label: 'NARRATION TONE',
+                            GuideAnchor(
+                              id: GuideIds.settingsTone,
+                              child: const _SettingsLabel(
+                                icon: AppIcons.voice,
+                                label: 'NARRATION TONE',
+                              ),
                             ),
                             const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: kNarrationTones.map((tone) {
-                                final selected = _tone == tone.key;
-                                return GestureDetector(
-                                  onTap: () => setState(() => _tone = tone.key),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(20),
-                                      color: selected
-                                          ? EverloreTheme.gold.withValues(
-                                              alpha: 0.12,
-                                            )
-                                          : EverloreTheme.void3,
-                                      border: Border.all(
+                            GuideAnchor(
+                              id: GuideIds.settingsToneControl,
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: kNarrationTones.map((tone) {
+                                  final selected = _tone == tone.key;
+                                  return GestureDetector(
+                                    onTap: () =>
+                                        setState(() => _tone = tone.key),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(20),
                                         color: selected
                                             ? EverloreTheme.gold.withValues(
-                                                alpha: 0.5,
+                                                alpha: 0.12,
                                               )
-                                            : EverloreTheme.goldDim.withValues(
-                                                alpha: 0.2,
-                                              ),
+                                            : EverloreTheme.void3,
+                                        border: Border.all(
+                                          color: selected
+                                              ? EverloreTheme.gold.withValues(
+                                                  alpha: 0.5,
+                                                )
+                                              : EverloreTheme.goldDim
+                                                    .withValues(alpha: 0.2),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        tone.label,
+                                        style: EverloreTheme.ui(
+                                          size: 13,
+                                          color: selected
+                                              ? EverloreTheme.gold
+                                              : EverloreTheme.ash,
+                                          weight: selected
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                        ),
                                       ),
                                     ),
-                                    child: Text(
-                                      tone.label,
-                                      style: EverloreTheme.ui(
-                                        size: 13,
-                                        color: selected
-                                            ? EverloreTheme.gold
-                                            : EverloreTheme.ash,
-                                        weight: selected
-                                            ? FontWeight.w600
-                                            : FontWeight.w400,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
+                                  );
+                                }).toList(),
+                              ),
                             ),
                             const SizedBox(height: 8),
                             Text(
@@ -2765,48 +2901,54 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             const SizedBox(height: 20),
 
                             if (!widget.isGmWorld) ...[
-                              const _SettingsLabel(
-                                icon: AppIcons.createCharacter,
-                                label: 'YOUR PERSONA',
+                              GuideAnchor(
+                                id: GuideIds.settingsPersona,
+                                child: const _SettingsLabel(
+                                  icon: AppIcons.createCharacter,
+                                  label: 'YOUR PERSONA',
+                                ),
                               ),
                               const SizedBox(height: 8),
-                              DropdownButtonFormField<String?>(
-                                value: _personaId,
-                                isExpanded: true,
-                                dropdownColor: EverloreTheme.void2,
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: EverloreTheme.void3,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                items: [
-                                  DropdownMenuItem<String?>(
-                                    value: null,
-                                    child: Text(
-                                      'None',
-                                      style: EverloreTheme.ui(
-                                        size: 13,
-                                        color: EverloreTheme.ash,
-                                      ),
+                              GuideAnchor(
+                                id: GuideIds.settingsPersonaControl,
+                                child: DropdownButtonFormField<String?>(
+                                  value: _personaId,
+                                  isExpanded: true,
+                                  dropdownColor: EverloreTheme.void2,
+                                  decoration: InputDecoration(
+                                    filled: true,
+                                    fillColor: EverloreTheme.void3,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                  for (final p in widget.personas)
+                                  items: [
                                     DropdownMenuItem<String?>(
-                                      value: p.id,
+                                      value: null,
                                       child: Text(
-                                        p.name,
-                                        overflow: TextOverflow.ellipsis,
+                                        'None',
                                         style: EverloreTheme.ui(
                                           size: 13,
-                                          color: EverloreTheme.parchment,
+                                          color: EverloreTheme.ash,
                                         ),
                                       ),
                                     ),
-                                ],
-                                onChanged: (v) =>
-                                    setState(() => _personaId = v),
+                                    for (final p in widget.personas)
+                                      DropdownMenuItem<String?>(
+                                        value: p.id,
+                                        child: Text(
+                                          p.name,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: EverloreTheme.ui(
+                                            size: 13,
+                                            color: EverloreTheme.parchment,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: (v) =>
+                                      setState(() => _personaId = v),
+                                ),
                               ),
                               const SizedBox(height: 8),
                               Text(
@@ -2822,23 +2964,30 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             const SizedBox(height: 20),
 
                             // Message length — drives both the prompt directive and max tokens.
-                            const _SettingsLabel(
-                              icon: AppIcons.length,
-                              label: 'REPLY LENGTH',
+                            GuideAnchor(
+                              id: GuideIds.settingsLength,
+                              child: const _SettingsLabel(
+                                icon: AppIcons.length,
+                                label: 'REPLY LENGTH',
+                              ),
                             ),
                             const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                for (final l in kMessageLengths) ...[
-                                  _SegOption(
-                                    label: l.$2,
-                                    selected: _length == l.$1,
-                                    onTap: () => setState(() => _length = l.$1),
-                                  ),
-                                  if (l != kMessageLengths.last)
-                                    const SizedBox(width: 8),
+                            GuideAnchor(
+                              id: GuideIds.settingsLengthControl,
+                              child: Row(
+                                children: [
+                                  for (final l in kMessageLengths) ...[
+                                    _SegOption(
+                                      label: l.$2,
+                                      selected: _length == l.$1,
+                                      onTap: () =>
+                                          setState(() => _length = l.$1),
+                                    ),
+                                    if (l != kMessageLengths.last)
+                                      const SizedBox(width: 8),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                             const SizedBox(height: 22),
 
@@ -3235,7 +3384,7 @@ class _ThoughtsSheet extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Characters & You',
+              'You & the Cast',
               style: EverloreTheme.serifDisplay(
                 size: 18,
                 color: EverloreTheme.parchment,
@@ -3246,7 +3395,8 @@ class _ThoughtsSheet extends StatelessWidget {
               isSentientWorld
                   ? 'Private attitudes and inner thoughts inferred from the story. '
                         'These are not spoken dialogue.'
-                  : 'View the cast and edit your protagonist with the pencil icon. '
+                  : 'Your protagonist is kept separate from the people you meet. '
+                        'Edit your own card with the pencil icon. '
                         'Private thoughts are inferred from the story, not spoken dialogue.',
               style: EverloreTheme.ui(
                 size: 12,
@@ -3296,8 +3446,9 @@ class _ThoughtsSheet extends StatelessWidget {
     );
   }
 
-  /// Roster body: a flat list when presence is unknown, otherwise split into
-  /// "Here now" / "Elsewhere" (the protagonist always counts as present).
+  /// The player protagonist is a continuity card, not a member of the NPC
+  /// roster. Keep it visibly separate so a GM world's "People" never counts
+  /// or presents the player as someone they met.
   List<Widget> _rosterChildren() {
     const divider = Divider(color: EverloreTheme.white10, height: 1);
     Widget header(String label) => Padding(
@@ -3321,18 +3472,38 @@ class _ThoughtsSheet extends StatelessWidget {
       return out;
     }
 
-    if (presentNames == null) return section(characters);
-    final here = characters.where(_isPresent).toList(growable: false);
-    final away = characters
-        .where((c) => !_isPresent(c))
+    final protagonists = characters
+        .where((c) => c.isProtagonist)
         .toList(growable: false);
+    final cast = characters
+        .where((c) => !c.isProtagonist)
+        .toList(growable: false);
+    final selfLabel = isSentientWorld ? 'Main character' : 'Your protagonist';
+
+    if (presentNames == null) {
+      return [
+        if (protagonists.isNotEmpty) ...[
+          header(selfLabel),
+          ...section(protagonists),
+        ],
+        if (cast.isNotEmpty) ...[header('People'), ...section(cast)],
+      ];
+    }
+
+    final here = cast.where(_isPresent).toList(growable: false);
+    final away = cast.where((c) => !_isPresent(c)).toList(growable: false);
     return [
+      if (protagonists.isNotEmpty) ...[
+        header(selfLabel),
+        ...section(protagonists),
+      ],
       if (here.isNotEmpty) ...[header('Here now'), ...section(here)],
       if (away.isNotEmpty) ...[header('Elsewhere'), ...section(away)],
     ];
   }
 
   Widget _characterTile(CharacterProfile c, bool isFocused) {
+    final isPlayerProtagonist = c.isProtagonist && !isSentientWorld;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Row(
@@ -3359,7 +3530,7 @@ class _ThoughtsSheet extends StatelessWidget {
                 ),
               ),
               child: Text(
-                'PROTAGONIST',
+                isSentientWorld ? 'MAIN CHARACTER' : 'YOU',
                 style: EverloreTheme.ui(
                   size: 9,
                   color: EverloreTheme.gold,
@@ -3376,12 +3547,12 @@ class _ThoughtsSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (c.dispositionToPlayer.trim().isNotEmpty)
+            if (!isPlayerProtagonist && c.dispositionToPlayer.trim().isNotEmpty)
               Text(
                 'Disposition: ${c.dispositionToPlayer}',
                 style: EverloreTheme.ui(size: 12, color: EverloreTheme.goldDim),
               ),
-            if (c.hiddenThought.trim().isNotEmpty)
+            if (!isPlayerProtagonist && c.hiddenThought.trim().isNotEmpty)
               Text(
                 '"${c.hiddenThought}"',
                 style: EverloreTheme.ui(
@@ -3393,7 +3564,7 @@ class _ThoughtsSheet extends StatelessWidget {
               ),
             // The bond ledger: how this character stands with
             // the player, made inspectable and playable.
-            if (c.relationship != null)
+            if (!isPlayerProtagonist && c.relationship != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: BondMeters(
@@ -3408,16 +3579,17 @@ class _ThoughtsSheet extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            onPressed: () => onAct(c),
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(
-              Icons.handshake_outlined,
-              size: 17,
-              color: EverloreTheme.gold,
+          if (!isPlayerProtagonist)
+            IconButton(
+              onPressed: () => onAct(c),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(
+                Icons.handshake_outlined,
+                size: 17,
+                color: EverloreTheme.gold,
+              ),
+              tooltip: 'Act',
             ),
-            tooltip: 'Act',
-          ),
           // The creator's locked protagonist (sentient/character
           // worlds) can't be edited; everything else can.
           if (!(c.isProtagonist && isSentientWorld))

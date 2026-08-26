@@ -27,8 +27,11 @@ class StoryTimelineSheet extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.timeline_outlined,
-                    size: 18, color: EverloreTheme.gold),
+                const Icon(
+                  Icons.timeline_outlined,
+                  size: 18,
+                  color: EverloreTheme.gold,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'Story Timeline',
@@ -97,7 +100,9 @@ class StoryTimelineSheet extends StatelessWidget {
                   'Open full Chronicle',
                   style: EverloreTheme.ui(size: 13, color: EverloreTheme.gold),
                 ),
-                style: TextButton.styleFrom(foregroundColor: EverloreTheme.gold),
+                style: TextButton.styleFrom(
+                  foregroundColor: EverloreTheme.gold,
+                ),
               ),
             ),
           ],
@@ -144,8 +149,11 @@ class _MilestoneRow extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const Icon(Icons.workspace_premium,
-                      size: 16, color: EverloreTheme.gold),
+                  const Icon(
+                    Icons.workspace_premium,
+                    size: 16,
+                    color: EverloreTheme.gold,
+                  ),
                   Expanded(
                     child: Center(
                       child: Container(
@@ -188,8 +196,11 @@ class _MilestoneRow extends StatelessWidget {
             ),
             const Padding(
               padding: EdgeInsets.only(right: 2),
-              child: Icon(Icons.chevron_right,
-                  size: 16, color: EverloreTheme.goldDim),
+              child: Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: EverloreTheme.goldDim,
+              ),
             ),
           ],
         ),

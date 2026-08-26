@@ -23,7 +23,11 @@ class AdvanceTimeButton extends StatelessWidget {
   static const _spans = [
     (key: 'hours', label: 'Hours slip by', icon: Icons.wb_twilight),
     (key: 'day', label: 'A day passes', icon: Icons.wb_sunny_outlined),
-    (key: 'days', label: 'Days drift past', icon: Icons.calendar_today_outlined),
+    (
+      key: 'days',
+      label: 'Days drift past',
+      icon: Icons.calendar_today_outlined,
+    ),
     (key: 'season', label: 'A season turns', icon: Icons.ac_unit),
   ];
 
@@ -162,7 +166,11 @@ class _TimeSpanTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: EverloreTheme.gold.withValues(alpha: 0.75)),
+            Icon(
+              icon,
+              size: 18,
+              color: EverloreTheme.gold.withValues(alpha: 0.75),
+            ),
             const SizedBox(width: 14),
             Text(
               label,

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/guide/guide_anchor.dart';
+import '../../../../core/guide/guide_ids.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/models/character_profile.dart';
 import '../../../../../shared/models/relation_candidate.dart';
@@ -204,54 +207,62 @@ class _PlayerInputState extends State<PlayerInput> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
-                    child: ValueListenableBuilder<bool>(
-                      valueListenable: _focusedNotifier,
-                      builder: (context, focused, child) {
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            color: EverloreTheme.void2.withValues(alpha: 0.85),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: focused
-                                  ? EverloreTheme.gold.withValues(alpha: 0.55)
-                                  : EverloreTheme.goldDim.withValues(
-                                      alpha: 0.22,
-                                    ),
-                              width: focused ? 1.4 : 1,
+                    child: GuideAnchor(
+                      id: GuideIds.playComposer,
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: _focusedNotifier,
+                        builder: (context, focused, child) {
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            decoration: BoxDecoration(
+                              color: EverloreTheme.void2.withValues(
+                                alpha: 0.85,
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: focused
+                                    ? EverloreTheme.gold.withValues(alpha: 0.55)
+                                    : EverloreTheme.goldDim.withValues(
+                                        alpha: 0.22,
+                                      ),
+                                width: focused ? 1.4 : 1,
+                              ),
+                              boxShadow: focused
+                                  ? EverloreTheme.glow(
+                                      EverloreTheme.gold,
+                                      blur: 14,
+                                      alpha: 0.12,
+                                    )
+                                  : null,
                             ),
-                            boxShadow: focused
-                                ? EverloreTheme.glow(
-                                    EverloreTheme.gold,
-                                    blur: 14,
-                                    alpha: 0.12,
-                                  )
-                                : null,
-                          ),
-                          padding: const EdgeInsets.only(left: 2),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              _NarrationMarkerButton(
-                                enabled: enabled,
-                                focused: focused,
-                                onTap: _insertNarrationMarkers,
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 11),
-                                child: _InputPrefixDivider(focused: focused),
-                              ),
-                              Expanded(child: child!),
-                            ],
-                          ),
-                        );
-                      },
-                      child: _ComposerTextField(
-                        controller: _controller,
-                        focusNode: _focusNode,
-                        enabled: enabled,
-                        hintText: _hintText(),
-                        onSubmit: enabled ? _submit : null,
+                            padding: const EdgeInsets.only(left: 2),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                GuideAnchor(
+                                  id: GuideIds.playNarrationMarker,
+                                  child: _NarrationMarkerButton(
+                                    enabled: enabled,
+                                    focused: focused,
+                                    onTap: _insertNarrationMarkers,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 11),
+                                  child: _InputPrefixDivider(focused: focused),
+                                ),
+                                Expanded(child: child!),
+                              ],
+                            ),
+                          );
+                        },
+                        child: _ComposerTextField(
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          enabled: enabled,
+                          hintText: _hintText(),
+                          onSubmit: enabled ? _submit : null,
+                        ),
                       ),
                     ),
                   ),
@@ -263,24 +274,33 @@ class _PlayerInputState extends State<PlayerInput> {
                       widget.onTravel != null &&
                       widget.onRelationship != null) ...[
                     const SizedBox(width: 10),
-                    WorldActionsButton(
-                      enabled: enabled,
-                      onContinue: widget.onContinue!,
-                      onAdvance: widget.onAdvance!,
-                      onTravel: widget.onTravel!,
-                      onRelationship: widget.onRelationship!,
-                      characters: widget.characters,
-                      presentCharacters: widget.presentCharacters,
-                      loadKnownDestinations: widget.loadKnownDestinations,
-                      onRenameCharacter: widget.onRenameCharacter,
-                      loadRelationCandidates: widget.loadRelationCandidates,
-                      loadConfirmedKinship: widget.loadConfirmedKinship,
-                      onResolveRelationCandidate:
-                          widget.onResolveRelationCandidate,
+                    GuideAnchor(
+                      id: GuideIds.playWorldActions,
+                      child: WorldActionsButton(
+                        enabled: enabled,
+                        onContinue: widget.onContinue!,
+                        onAdvance: widget.onAdvance!,
+                        onTravel: widget.onTravel!,
+                        onRelationship: widget.onRelationship!,
+                        characters: widget.characters,
+                        presentCharacters: widget.presentCharacters,
+                        loadKnownDestinations: widget.loadKnownDestinations,
+                        onRenameCharacter: widget.onRenameCharacter,
+                        loadRelationCandidates: widget.loadRelationCandidates,
+                        loadConfirmedKinship: widget.loadConfirmedKinship,
+                        onResolveRelationCandidate:
+                            widget.onResolveRelationCandidate,
+                      ),
                     ),
                   ],
                   const SizedBox(width: 10),
-                  _SendOrb(canSend: canSend, onTap: canSend ? _submit : null),
+                  GuideAnchor(
+                    id: GuideIds.playSend,
+                    child: _SendOrb(
+                      canSend: canSend,
+                      onTap: canSend ? _submit : null,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
