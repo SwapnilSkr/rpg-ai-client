@@ -1,4 +1,6 @@
 import 'dart:ui';
+import '../../core/guide/guide_anchor.dart';
+import '../../core/guide/guide_ids.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/nexus_theme.dart';
@@ -190,40 +192,43 @@ class _CreateAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: const RadialGradient(
-            center: Alignment(-0.3, -0.4),
-            colors: [
-              EverloreTheme.goldGlow,
-              EverloreTheme.gold,
-              EverloreTheme.goldDeep,
+    return GuideAnchor(
+      id: GuideIds.navCreate,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const RadialGradient(
+              center: Alignment(-0.3, -0.4),
+              colors: [
+                EverloreTheme.goldGlow,
+                EverloreTheme.gold,
+                EverloreTheme.goldDeep,
+              ],
+              stops: [0.0, 0.55, 1.0],
+            ),
+            border: Border.all(
+              color: EverloreTheme.goldHot.withValues(alpha: 0.5),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+              BoxShadow(
+                color: EverloreTheme.gold.withValues(alpha: 0.3),
+                blurRadius: 14,
+                spreadRadius: 1,
+              ),
             ],
-            stops: [0.0, 0.55, 1.0],
           ),
-          border: Border.all(
-            color: EverloreTheme.goldHot.withValues(alpha: 0.5),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.5),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-            BoxShadow(
-              color: EverloreTheme.gold.withValues(alpha: 0.3),
-              blurRadius: 14,
-              spreadRadius: 1,
-            ),
-          ],
+          child: const Icon(Icons.add, color: EverloreTheme.void0, size: 30),
         ),
-        child: const Icon(Icons.add, color: EverloreTheme.void0, size: 30),
       ),
     );
   }

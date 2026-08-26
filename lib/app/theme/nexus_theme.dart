@@ -60,59 +60,43 @@ class EverloreTheme {
 
   // ──────────────── Typography ────────────────
   static TextStyle get displayTitle => GoogleFonts.cinzel(
-        color: gold,
-        fontSize: 30,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.5,
-        height: 1.15,
-      );
+    color: gold,
+    fontSize: 30,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 1.5,
+    height: 1.15,
+  );
 
   static TextStyle get screenTitle => GoogleFonts.cinzel(
-        color: parchment,
-        fontSize: 19,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.8,
-      );
+    color: parchment,
+    fontSize: 19,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.8,
+  );
 
-  static TextStyle get sectionHeader => ui(
-        color: gold,
-        size: 11,
-        weight: FontWeight.w700,
-        spacing: 2.5,
-      );
+  static TextStyle get sectionHeader =>
+      ui(color: gold, size: 11, weight: FontWeight.w700, spacing: 2.5);
 
   static TextStyle get cardTitle => GoogleFonts.cinzel(
-        color: parchment,
-        fontSize: 17,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.4,
-      );
+    color: parchment,
+    fontSize: 17,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.4,
+  );
 
-  static TextStyle get body => ui(
-        color: parchment,
-        size: 15,
-        height: 1.6,
-      );
+  static TextStyle get body => ui(color: parchment, size: 15, height: 1.6);
 
-  static TextStyle get bodyDim => ui(
-        color: ash,
-        size: 13,
-        height: 1.5,
-      );
+  static TextStyle get bodyDim => ui(color: ash, size: 13, height: 1.5);
 
-  static TextStyle get caption => ui(
-        color: ash,
-        size: 11,
-        spacing: 0.5,
-      );
+  static TextStyle get caption => ui(color: ash, size: 11, spacing: 0.5);
 
   /// Serif narrative prose used for AI story text.
   static TextStyle get aiText => GoogleFonts.ebGaramond(
-        color: const Color(0xFFEADFC9),
-        fontSize: 18,
-        height: 1.72,
-        letterSpacing: 0.15,
-      );
+    color: const Color(0xFFEADFC9),
+    fontSize: 18,
+    height: 1.72,
+    letterSpacing: 0.15,
+  );
 
   /// General Sans helper for arbitrary UI text (keeps font usage centralized).
   static TextStyle ui({
@@ -122,16 +106,15 @@ class EverloreTheme {
     double spacing = 0,
     double? height,
     FontStyle? fontStyle,
-  }) =>
-      TextStyle(
-        fontFamily: uiFamily,
-        color: color,
-        fontSize: size,
-        fontWeight: weight,
-        letterSpacing: spacing,
-        height: height,
-        fontStyle: fontStyle,
-      );
+  }) => TextStyle(
+    fontFamily: uiFamily,
+    color: color,
+    fontSize: size,
+    fontWeight: weight,
+    letterSpacing: spacing,
+    height: height,
+    fontStyle: fontStyle,
+  );
 
   /// Cinzel helper for ceremonial labels.
   static TextStyle serifDisplay({
@@ -140,14 +123,13 @@ class EverloreTheme {
     FontWeight weight = FontWeight.w600,
     double spacing = 0.5,
     double? height,
-  }) =>
-      GoogleFonts.cinzel(
-        color: color,
-        fontSize: size,
-        fontWeight: weight,
-        letterSpacing: spacing,
-        height: height,
-      );
+  }) => GoogleFonts.cinzel(
+    color: color,
+    fontSize: size,
+    fontWeight: weight,
+    letterSpacing: spacing,
+    height: height,
+  );
 
   // ──────────────── Scene accents ────────────────
   /// Accent colour for a given scene tag — drives the immersive backdrop,
@@ -166,37 +148,50 @@ class EverloreTheme {
   }
 
   // ──────────────── Decorations ────────────────
-  static List<BoxShadow> glow(Color color, {double blur = 20, double alpha = 0.25}) =>
-      [BoxShadow(color: color.withValues(alpha: alpha), blurRadius: blur, spreadRadius: 0)];
+  static List<BoxShadow> glow(
+    Color color, {
+    double blur = 20,
+    double alpha = 0.25,
+  }) => [
+    BoxShadow(
+      color: color.withValues(alpha: alpha),
+      blurRadius: blur,
+      spreadRadius: 0,
+    ),
+  ];
 
   static BoxDecoration get cardDecoration => BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: goldDim.withValues(alpha: 0.3), width: 1),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1C160F), Color(0xFF100C09)],
-        ),
-      );
+    borderRadius: BorderRadius.circular(18),
+    border: Border.all(color: goldDim.withValues(alpha: 0.3), width: 1),
+    gradient: const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [Color(0xFF1C160F), Color(0xFF100C09)],
+    ),
+  );
 
   static BoxDecoration get cardDecorationGlow => BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: gold.withValues(alpha: 0.5), width: 1),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF231B12), Color(0xFF130E0A)],
-        ),
-        boxShadow: [
-          BoxShadow(color: gold.withValues(alpha: 0.12), blurRadius: 24, spreadRadius: 0),
-        ],
-      );
+    borderRadius: BorderRadius.circular(18),
+    border: Border.all(color: gold.withValues(alpha: 0.5), width: 1),
+    gradient: const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [Color(0xFF231B12), Color(0xFF130E0A)],
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: gold.withValues(alpha: 0.12),
+        blurRadius: 24,
+        spreadRadius: 0,
+      ),
+    ],
+  );
 
   static BoxDecoration get inputDecoration => BoxDecoration(
-        color: void4,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: goldDim.withValues(alpha: 0.3), width: 1),
-      );
+    color: void4,
+    borderRadius: BorderRadius.circular(14),
+    border: Border.all(color: goldDim.withValues(alpha: 0.3), width: 1),
+  );
 
   // ──────────────── ThemeData ────────────────
   static const PageTransitionsTheme _pageTransitions = PageTransitionsTheme(
@@ -216,13 +211,15 @@ class EverloreTheme {
       pageTransitionsTheme: _pageTransitions,
       scaffoldBackgroundColor: void1,
       primaryColor: gold,
-      textTheme: ThemeData.dark().textTheme.apply(fontFamily: uiFamily).copyWith(
-        displayLarge: displayTitle,
-        titleLarge: cardTitle,
-        bodyLarge: body,
-        bodyMedium: bodyDim,
-        bodySmall: caption,
-      ),
+      textTheme: ThemeData.dark().textTheme
+          .apply(fontFamily: uiFamily)
+          .copyWith(
+            displayLarge: displayTitle,
+            titleLarge: cardTitle,
+            bodyLarge: body,
+            bodyMedium: bodyDim,
+            bodySmall: caption,
+          ),
       colorScheme: const ColorScheme.dark(
         primary: gold,
         secondary: violet,
@@ -250,7 +247,9 @@ class EverloreTheme {
           backgroundColor: gold,
           foregroundColor: void0,
           textStyle: ui(weight: FontWeight.w700, spacing: 0.8, size: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
         ),
       ),
@@ -259,7 +258,9 @@ class EverloreTheme {
           foregroundColor: gold,
           side: const BorderSide(color: goldDim, width: 1),
           textStyle: ui(weight: FontWeight.w600, spacing: 0.5, size: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
         ),
       ),
@@ -280,7 +281,10 @@ class EverloreTheme {
         ),
         hintStyle: ui(color: const Color(0xFF6B5E4D), size: 14),
         labelStyle: ui(color: ash),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
       dividerColor: white10,
       dialogTheme: DialogThemeData(

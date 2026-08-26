@@ -5,11 +5,7 @@ class ErrorBanner extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
 
-  const ErrorBanner({
-    super.key,
-    required this.message,
-    this.onRetry,
-  });
+  const ErrorBanner({super.key, required this.message, this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -19,19 +15,23 @@ class ErrorBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: EverloreTheme.crimson.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: EverloreTheme.crimson.withValues(alpha: 0.3)),
+        border: Border.all(color: EverloreTheme.crimson.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline,
-              color: EverloreTheme.crimson, size: 16),
+          const Icon(
+            Icons.error_outline,
+            color: EverloreTheme.crimson,
+            size: 16,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
               style: const TextStyle(
-                  color: EverloreTheme.crimson, fontSize: 13),
+                color: EverloreTheme.crimson,
+                fontSize: 13,
+              ),
             ),
           ),
           if (onRetry != null)
@@ -39,13 +39,11 @@ class ErrorBanner extends StatelessWidget {
               onPressed: onRetry,
               style: TextButton.styleFrom(
                 foregroundColor: EverloreTheme.crimson,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text('Retry',
-                  style: TextStyle(fontSize: 12)),
+              child: const Text('Retry', style: TextStyle(fontSize: 12)),
             ),
         ],
       ),

@@ -78,10 +78,7 @@ class _EverloreSessionLoaderState extends State<EverloreSessionLoader>
               width: 168,
               height: 168,
               child: CustomPaint(
-                painter: _SessionOrbitPainter(
-                  orbit: _orbit.value,
-                  glow: glow,
-                ),
+                painter: _SessionOrbitPainter(orbit: _orbit.value, glow: glow),
                 child: Center(
                   child: Opacity(
                     opacity: 0.88 + 0.12 * _pulse.value,
@@ -126,7 +123,14 @@ class _SessionOrbitPainter extends CustomPainter {
       ..color = EverloreTheme.goldDim.withValues(alpha: 0.22 + glow * 0.2);
 
     _ellipse(canvas, center, 72, 28, ringPaint);
-    _ellipse(canvas, center, 48, 18, ringPaint..color = EverloreTheme.violet.withValues(alpha: 0.18 + glow * 0.15));
+    _ellipse(
+      canvas,
+      center,
+      48,
+      18,
+      ringPaint
+        ..color = EverloreTheme.violet.withValues(alpha: 0.18 + glow * 0.15),
+    );
 
     const beadCount = 8;
     for (var i = 0; i < beadCount; i++) {
@@ -165,7 +169,13 @@ class _SessionOrbitPainter extends CustomPainter {
     canvas.drawCircle(center, 42, sweep);
   }
 
-  void _ellipse(Canvas canvas, Offset center, double rx, double ry, Paint paint) {
+  void _ellipse(
+    Canvas canvas,
+    Offset center,
+    double rx,
+    double ry,
+    Paint paint,
+  ) {
     canvas.save();
     canvas.translate(center.dx, center.dy);
     canvas.scale(1, ry / rx);

@@ -30,17 +30,15 @@ void scrollIntoViewAboveKeyboard(
   var target = viewport.getOffsetToReveal(groupBox, 1.0).offset;
 
   final visibleBottom = mq.size.height - keyboard - bottomMargin;
-  final groupBottom =
-      groupBox.localToGlobal(Offset(0, groupBox.size.height)).dy;
+  final groupBottom = groupBox
+      .localToGlobal(Offset(0, groupBox.size.height))
+      .dy;
   final overflow = groupBottom - visibleBottom;
   if (overflow > 0) {
     target = position.pixels + overflow;
   }
 
-  target = target.clamp(
-    position.minScrollExtent,
-    position.maxScrollExtent,
-  );
+  target = target.clamp(position.minScrollExtent, position.maxScrollExtent);
   if ((position.pixels - target).abs() < 2) return;
   position.jumpTo(target);
 }
@@ -122,7 +120,8 @@ class KeyboardAwareInputGroup extends StatefulWidget {
   final double bottomMargin;
 
   @override
-  State<KeyboardAwareInputGroup> createState() => KeyboardAwareInputGroupState();
+  State<KeyboardAwareInputGroup> createState() =>
+      KeyboardAwareInputGroupState();
 }
 
 class KeyboardAwareInputGroupState extends State<KeyboardAwareInputGroup>
@@ -200,9 +199,6 @@ class KeyboardAwareInputGroupState extends State<KeyboardAwareInputGroup>
 
   @override
   Widget build(BuildContext context) {
-    return KeyedSubtree(
-      key: _anchorKey,
-      child: widget.child,
-    );
+    return KeyedSubtree(key: _anchorKey, child: widget.child);
   }
 }

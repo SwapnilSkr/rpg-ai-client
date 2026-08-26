@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/nexus_theme.dart';
+import '../../core/guide/guide_anchor.dart';
 
 /// A calm, actionable empty state for the primary app surfaces.
 ///
@@ -20,6 +21,11 @@ class EverloreEmptyState extends StatefulWidget {
   final String? artAsset;
   final bool fullBleedArt;
 
+  /// When set, the guide may use the action button itself as a spotlight
+  /// target (see [GuideAnchor]) — e.g. pointing the personas walkthrough at
+  /// "Create persona" rather than at the whole empty state.
+  final String? anchorId;
+
   const EverloreEmptyState({
     super.key,
     required this.icon,
@@ -33,6 +39,7 @@ class EverloreEmptyState extends StatefulWidget {
     this.compact = false,
     this.artAsset,
     this.fullBleedArt = false,
+    this.anchorId,
   });
 
   @override
@@ -56,6 +63,41 @@ class _EverloreEmptyStateState extends State<EverloreEmptyState>
   void dispose() {
     _pulse.dispose();
     super.dispose();
+  }
+
+  Widget _actionButton() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: widget.onAction,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          decoration: BoxDecoration(
+            color: widget.accent.withValues(alpha: 0.13),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: widget.accent.withValues(alpha: 0.48)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.actionIcon != null) ...[
+                Icon(widget.actionIcon, size: 17, color: widget.accent),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                widget.actionLabel!,
+                style: EverloreTheme.ui(
+                  size: 13,
+                  color: widget.accent,
+                  weight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -210,47 +252,10 @@ class _EverloreEmptyStateState extends State<EverloreEmptyState>
               ),
               if (widget.onAction != null && widget.actionLabel != null) ...[
                 SizedBox(height: widget.compact ? 20 : 28),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: widget.onAction,
-                    borderRadius: BorderRadius.circular(14),
-                    child: Ink(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: widget.accent.withValues(alpha: 0.13),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: widget.accent.withValues(alpha: 0.48),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (widget.actionIcon != null) ...[
-                            Icon(
-                              widget.actionIcon,
-                              size: 17,
-                              color: widget.accent,
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          Text(
-                            widget.actionLabel!,
-                            style: EverloreTheme.ui(
-                              size: 13,
-                              color: widget.accent,
-                              weight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+                if (widget.anchorId == null)
+                  _actionButton()
+                else
+                  GuideAnchor(id: widget.anchorId!, child: _actionButton()),
               ],
             ],
           ),

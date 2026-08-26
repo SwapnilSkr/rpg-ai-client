@@ -30,8 +30,7 @@ class StatBar extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(
-                    color: EverloreTheme.ash, fontSize: 12),
+                style: const TextStyle(color: EverloreTheme.ash, fontSize: 12),
               ),
               Text(
                 '${value.toInt()} / ${max.toInt()}',
@@ -60,10 +59,7 @@ class StatBar extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(3),
                     gradient: LinearGradient(
-                      colors: [
-                        barColor.withValues(alpha: 0.7),
-                        barColor,
-                      ],
+                      colors: [barColor.withValues(alpha: 0.7), barColor],
                     ),
                     boxShadow: [
                       BoxShadow(
