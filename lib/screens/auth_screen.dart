@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../core/guide/guide_controller.dart';
+import '../core/config/env.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -606,6 +608,11 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
         const SizedBox(height: 16),
 
+        // Skipping is only consequence-free if it can be undone; without this
+        // the guide's Skip is a one-way door and players hesitate over it.
+        const _GuideControls(),
+        const SizedBox(height: 16),
+
         Container(
           decoration: EverloreTheme.cardDecoration,
           padding: const EdgeInsets.all(20),
@@ -1003,6 +1010,95 @@ class _PhoneTabState extends State<_PhoneTab> {
                 ),
         ),
       ],
+    );
+  }
+}
+
+/// The one guide control a player gets: silence.
+///
+/// There is deliberately no "walk me through it again". Each surface explains
+/// itself the first time it is opened and never again, which is what lets the
+/// arcs stay short and unasked-for — an explanation you can summon at will has
+/// to be exhaustive, and an exhaustive one is a help system.
+class _GuideControls extends StatefulWidget {
+  const _GuideControls();
+
+  @override
+  State<_GuideControls> createState() => _GuideControlsState();
+}
+
+class _GuideControlsState extends State<_GuideControls> {
+  @override
+  void initState() {
+    super.initState();
+    guide.addListener(_onChanged);
+  }
+
+  @override
+  void dispose() {
+    guide.removeListener(_onChanged);
+    super.dispose();
+  }
+
+  void _onChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: EverloreTheme.cardDecoration,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: !guide.progress.optOut,
+            onChanged: (value) => guide.setOptOut(!value),
+            activeColor: EverloreTheme.gold,
+            activeTrackColor: EverloreTheme.gold.withValues(alpha: 0.35),
+            title: const Text(
+              'The Chronicler\u2019s guidance',
+              style: TextStyle(
+                color: EverloreTheme.parchment,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              guide.progress.optOut
+                  ? 'Silenced. Nothing will be explained unasked.'
+                  : 'Points things out the first time you meet them.',
+              style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+            ),
+          ),
+          // Debug builds only: the tell that sign-in is handing you a blank
+          // record rather than your own. Without it, "why is the tour running
+          // again?" is a genuinely confusing half hour.
+          if (AppConfig.guideRehearsal) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  Icons.science_outlined,
+                  size: 15,
+                  color: EverloreTheme.gold.withValues(alpha: 0.8),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Rehearsal mode (GUIDE_REHEARSAL) — every sign-in '
+                    'replays the whole guide.',
+                    style: EverloreTheme.ui(
+                      size: 12,
+                      color: EverloreTheme.gold.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

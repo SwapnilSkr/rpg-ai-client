@@ -1,17 +1,23 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'app_routes.dart';
 import 'app/theme/nexus_theme.dart';
 import 'shared/widgets/dismiss_keyboard.dart';
 import 'core/network/ws_manager.dart';
 import 'core/auth/auth_service.dart';
+import 'core/guide/guide_controller.dart';
+import 'core/guide/widgets/guide_host.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await dotenv.load();
   } catch (_) {}
+  // Warm the device-cached guide record before the first frame so an arc can
+  // never flash in a beat late; the account's copy folds in at splash.
+  await guide.init();
   runApp(const EverloreApp());
 }
 
@@ -25,6 +31,9 @@ class EverloreApp extends StatefulWidget {
 class _EverloreAppState extends State<EverloreApp> {
   StreamSubscription<void>? _accountDeletedSub;
 
+  /// Lets the guide answer system back before the router does.
+  ChildBackButtonDispatcher? _guideBack;
+
   @override
   void initState() {
     super.initState();
@@ -35,11 +44,56 @@ class _EverloreAppState extends State<EverloreApp> {
       await AuthService.logout();
       router.go('/auth');
     });
+    // Guide arcs are screen-scoped: leaving the surface ends the running arc
+    // rather than trailing a tip onto the next one. Modal sheets do not change
+    // location, so sheet-bound arcs (the Realm Menu) survive.
+    router.routerDelegate.addListener(_onRouteChanged);
+    // Seed it: the delegate only notifies on *changes*, so without this the
+    // guide has no idea where the player is until they navigate once.
+    _onRouteChanged();
+    // System back clears a coachmark before it navigates.
+    //
+    // A child dispatcher rather than a second callback on the root: the root
+    // holds exactly one callback — the Router's — and adding a second makes it
+    // throw and fall through to the default, which is a silent no-op. Children
+    // are asked first, and ours declines whenever the guide is not showing, so
+    // an ordinary back press reaches the Router untouched.
+    //
+    // Deferred a frame because `takePriority` asserts the parent already has a
+    // callback, and the `Router` registers its own during this widget's build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _guideBack = ChildBackButtonDispatcher(router.backButtonDispatcher)
+        ..addCallback(guide.handleSystemBack)
+        ..takePriority();
+    });
+  }
+
+  void _onRouteChanged() => guide.onLocationChanged(_currentLocation());
+
+  /// Where the player actually is, pushed routes included.
+  ///
+  /// `currentConfiguration.uri` answers with the *shell branch*. A route
+  /// pushed on top of the tabs — play, chronicle, realm — leaves it reporting
+  /// the tab underneath, so every arc declared on one of those routes decided
+  /// it was on the wrong surface and declined to start. That is six of the
+  /// twelve arcs, and the six that matter most.
+  ///
+  /// GoRouter wraps an imperative push in an `ImperativeRouteMatch` whose own
+  /// `matches` carry the pushed location, so the honest answer is the last
+  /// match's, falling back to the configuration for ordinary navigation.
+  String _currentLocation() {
+    final config = router.routerDelegate.currentConfiguration;
+    final last = config.matches.isEmpty ? null : config.matches.last;
+    if (last is ImperativeRouteMatch) return last.matches.uri.path;
+    return config.uri.path;
   }
 
   @override
   void dispose() {
     _accountDeletedSub?.cancel();
+    _guideBack?.removeCallback(guide.handleSystemBack);
+    router.routerDelegate.removeListener(_onRouteChanged);
     super.dispose();
   }
 
@@ -50,8 +104,11 @@ class _EverloreAppState extends State<EverloreApp> {
       debugShowCheckedModeBanner: false,
       theme: NexusTheme.dark,
       routerConfig: router,
-      builder: (context, child) =>
-          DismissKeyboard(child: child ?? const SizedBox.shrink()),
+      // GuideHost sits above the Navigator so the Chronicler can point at
+      // controls inside modal sheets and dialogs, not just plain routes.
+      builder: (context, child) => GuideHost(
+        child: DismissKeyboard(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

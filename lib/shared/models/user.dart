@@ -25,12 +25,23 @@ class UserPreferences {
   final String theme;
   final String narrationLength;
   final bool autoMemoryCuration;
+
   /// Display name chosen during post-auth onboarding.
   final String playerName;
+
   /// Optional gender from onboarding; unset when skipped.
   final PlayerGender? gender;
+
   /// Genre taste from onboarding (`narrative_style` keys); persisted on server.
   final List<String> interests;
+
+  /// Guide arcs this account has already been shown, keyed by flow id. The
+  /// account is the source of truth (see `GuideStore`); the device cache only
+  /// keeps the first frame from waiting on the network.
+  final Map<String, dynamic>? guideProgress;
+
+  /// Player asked to be left alone by the guide, on any device.
+  final bool guideOptOut;
 
   const UserPreferences({
     this.nsfwEnabled = false,
@@ -41,6 +52,8 @@ class UserPreferences {
     this.playerName = '',
     this.gender,
     this.interests = const [],
+    this.guideProgress,
+    this.guideOptOut = false,
   });
 
   factory UserPreferences.fromJson(Map<String, dynamic> json) {
@@ -57,6 +70,12 @@ class UserPreferences {
       playerName: (json['player_name'] as String?)?.trim() ?? '',
       gender: playerGenderFromJson(json['gender'] as String?),
       interests: interests,
+      guideProgress: json['guide_progress'] is Map
+          ? (json['guide_progress'] as Map).map(
+              (key, value) => MapEntry(key.toString(), value),
+            )
+          : null,
+      guideOptOut: json['guide_opt_out'] == true,
     );
   }
 
@@ -69,6 +88,8 @@ class UserPreferences {
     if (playerName.isNotEmpty) 'player_name': playerName,
     if (gender != null) 'gender': playerGenderToJson(gender),
     if (interests.isNotEmpty) 'interests': interests,
+    if (guideProgress != null) 'guide_progress': guideProgress,
+    if (guideOptOut) 'guide_opt_out': guideOptOut,
   };
 }
 

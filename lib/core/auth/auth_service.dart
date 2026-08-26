@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../network/api_client.dart';
 import '../network/ws_manager.dart';
+import '../guide/guide_controller.dart';
 import '../onboarding/interests_store.dart';
 import '../storage/secure_storage.dart';
 import '../../shared/models/user.dart';
@@ -20,6 +21,7 @@ class AuthService {
     await _wsManager.connect(response['token']);
     final user = User.fromJson(response['user']);
     await InterestsStore.syncFromUser(user);
+    await _hydrateGuide(user);
     _bumpSessionEpoch();
   }
 
@@ -108,6 +110,7 @@ class AuthService {
     final user = User.fromJson(response);
     await SecureStore.saveUserData(jsonEncode(user.toJson()));
     await InterestsStore.syncFromUser(user);
+    await _hydrateGuide(user);
     return user;
   }
 
@@ -132,6 +135,7 @@ class AuthService {
     if (fresh != null) {
       await SecureStore.saveUserData(jsonEncode(fresh.toJson()));
       await InterestsStore.syncFromUser(fresh);
+      await _hydrateGuide(fresh);
       return fresh;
     }
     return getCachedUser();
@@ -149,7 +153,19 @@ class AuthService {
   static Future<void> logout() async {
     await _wsManager.disconnect(clearToken: true);
     await SecureStore.clearAll();
+    // Device guide state goes with the session; the account keeps its record,
+    // so signing back in restores it rather than re-touring.
+    await guide.onSignedOut();
     _bumpSessionEpoch();
+  }
+
+  /// Fold the account's guide record into the device cache. Union semantics —
+  /// a second device inherits everything already seen.
+  static Future<void> _hydrateGuide(User user) async {
+    await guide.hydrateFromAccount(
+      user.preferences.guideProgress,
+      remoteOptOut: user.preferences.guideOptOut,
+    );
   }
 
   static Future<bool> isLoggedIn() async {
