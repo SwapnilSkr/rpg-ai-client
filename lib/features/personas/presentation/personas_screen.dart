@@ -1,4 +1,7 @@
 import 'dart:async';
+import '../../../core/guide/guide_flows.dart';
+import '../../../core/guide/guide_ids.dart';
+import '../../../core/guide/guide_trigger.dart';
 
 import 'package:flutter/material.dart';
 import '../../../app/theme/nexus_theme.dart';
@@ -162,107 +165,180 @@ class _PersonasScreenState extends State<PersonasScreen> {
               ),
             ),
           ),
-          Column(
-            children: [
-              EverloreTopBar(
-                title: 'Personas',
-                subtitle: _total == 0
-                    ? 'Saved identities'
-                    : '$_total saved identities',
-                backgroundOpacity: 0.68,
-                actions: [
-                  EverloreTopBarIcon(
-                    icon: _searchOpen
-                        ? Icons.close_rounded
-                        : Icons.search_rounded,
-                    tooltip: _searchOpen ? 'Close search' : 'Search personas',
-                    onTap: _setSearchOpen,
-                  ),
-                  EverloreTopBarIcon(
-                    icon: Icons.add_rounded,
-                    tooltip: 'Create persona',
-                    onTap: () => _openEditor(),
-                  ),
-                ],
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                child: _searchOpen
-                    ? Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
-                        child: TextField(
-                          controller: _searchController,
-                          autofocus: true,
-                          onChanged: _onSearchChanged,
-                          textInputAction: TextInputAction.search,
-                          style: EverloreTheme.ui(
-                            size: 14,
-                            color: EverloreTheme.parchment,
-                          ),
-                          decoration: _searchDecoration('Search personas'),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _load,
-                  color: EverloreTheme.gold,
-                  backgroundColor: EverloreTheme.void2,
-                  child: ListView(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
-                    children: [
-                      if (_loading)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 64),
-                          child: Center(
-                            child: EverloreSessionLoader(
-                              message: 'Gathering personas',
+          GuideOnEnter(
+            flow: GuideFlows.personas,
+            child: Column(
+              children: [
+                EverloreTopBar(
+                  title: 'Personas',
+                  subtitle: _total == 0
+                      ? 'Saved identities'
+                      : '$_total saved identities',
+                  backgroundOpacity: 0.68,
+                  actions: [
+                    EverloreTopBarIcon(
+                      icon: _searchOpen
+                          ? Icons.close_rounded
+                          : Icons.search_rounded,
+                      tooltip: _searchOpen ? 'Close search' : 'Search personas',
+                      onTap: _setSearchOpen,
+                    ),
+                  ],
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  child: _searchOpen
+                      ? Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+                          child: TextField(
+                            controller: _searchController,
+                            autofocus: true,
+                            onChanged: _onSearchChanged,
+                            textInputAction: TextInputAction.search,
+                            style: EverloreTheme.ui(
+                              size: 14,
+                              color: EverloreTheme.parchment,
                             ),
+                            decoration: _searchDecoration('Search personas'),
                           ),
                         )
-                      else if (_error != null)
-                        _EmptyPersonaState(text: _error!, action: _load)
-                      else if (_personas.isEmpty)
-                        _EmptyPersonaState(
-                          text: _searchController.text.isNotEmpty
-                              ? 'No personas match that search.'
-                              : 'No personas yet.',
-                          action: _searchController.text.isNotEmpty
-                              ? () {
-                                  _searchController.clear();
-                                  _load();
-                                }
-                              : () => _openEditor(),
-                          actionLabel: _searchController.text.isNotEmpty
-                              ? 'Clear search'
-                              : 'Create persona',
-                        )
-                      else ...[
-                        for (final p in _personas)
-                          _PersonaCard(
-                            persona: p,
-                            onTap: () => _openEditor(p),
-                            onDelete: () => _delete(p),
-                          ),
-                        if (_loadingMore)
-                          const Padding(
-                            padding: EdgeInsets.all(18),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: EverloreTheme.gold,
+                      : const SizedBox.shrink(),
+                ),
+                // Creation lives here only once the vault has entries — the
+                // empty state's central "Create persona" button owns first-run.
+                if (!_loading && _error == null && _personas.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: Row(
+                      children: [
+                        Text(
+                          'YOUR PERSONAS',
+                          style: EverloreTheme.sectionHeader,
+                        ),
+                        const Spacer(),
+                        Semantics(
+                          button: true,
+                          child: GestureDetector(
+                            onTap: () => _openEditor(),
+                            behavior: HitTestBehavior.opaque,
+                            child: Container(
+                              // 14pt vertical padding keeps the pill at the
+                              // 48pt minimum tap target.
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    EverloreTheme.goldGlow,
+                                    EverloreTheme.gold,
+                                  ],
+                                ),
+                                border: Border.all(
+                                  color: EverloreTheme.goldHot.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: EverloreTheme.gold.withValues(
+                                      alpha: 0.25,
+                                    ),
+                                    blurRadius: 12,
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.add_rounded,
+                                    size: 16,
+                                    color: EverloreTheme.void0,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    'New persona',
+                                    style: TextStyle(
+                                      fontFamily: EverloreTheme.uiFamily,
+                                      color: EverloreTheme.void0,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
+                        ),
                       ],
-                    ],
+                    ),
+                  ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _load,
+                    color: EverloreTheme.gold,
+                    backgroundColor: EverloreTheme.void2,
+                    child: ListView(
+                      controller: _scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
+                      children: [
+                        if (_loading)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 64),
+                            child: Center(
+                              child: EverloreSessionLoader(
+                                message: 'Gathering personas',
+                              ),
+                            ),
+                          )
+                        else if (_error != null)
+                          _EmptyPersonaState(text: _error!, action: _load)
+                        else if (_personas.isEmpty)
+                          _EmptyPersonaState(
+                            text: _searchController.text.isNotEmpty
+                                ? 'No personas match that search.'
+                                : 'No personas yet.',
+                            action: _searchController.text.isNotEmpty
+                                ? () {
+                                    _searchController.clear();
+                                    _load();
+                                  }
+                                : () => _openEditor(),
+                            actionLabel: _searchController.text.isNotEmpty
+                                ? 'Clear search'
+                                : 'Create persona',
+                          )
+                        else ...[
+                          for (final p in _personas)
+                            _PersonaCard(
+                              persona: p,
+                              onTap: () => _openEditor(p),
+                              onDelete: () => _delete(p),
+                            ),
+                          if (_loadingMore)
+                            const Padding(
+                              padding: EdgeInsets.all(18),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: EverloreTheme.gold,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -386,6 +462,10 @@ class _EmptyPersonaState extends StatelessWidget {
       actionLabel: actionLabel,
       actionIcon: isInitial ? Icons.add_rounded : Icons.refresh_rounded,
       accent: isInitial ? EverloreTheme.gold : EverloreTheme.crimson,
+      // The walkthrough's "Masks" beat targets the Create persona button
+      // itself. It only exists while the vault is empty, so the beat degrades
+      // to a floating card once the player has personas — by design.
+      anchorId: isInitial ? GuideIds.personasCreate : null,
       onAction: action,
       compact: false,
       artAsset: null,

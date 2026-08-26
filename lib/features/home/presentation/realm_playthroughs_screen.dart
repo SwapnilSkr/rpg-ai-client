@@ -25,12 +25,61 @@ class RealmPlaythroughsScreen extends StatefulWidget {
 class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
   RealmTemplateStories? _data;
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   String? _error;
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_maybeLoadMore);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_maybeLoadMore);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _maybeLoadMore() {
+    if (!_scrollController.hasClients ||
+        _scrollController.position.extentAfter > 520) {
+      return;
+    }
+    _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    final data = _data;
+    if (data == null || _isLoading || _isLoadingMore || !data.hasMore) {
+      return;
+    }
+    setState(() => _isLoadingMore = true);
+    try {
+      final next = await HomeRepository.getStoriesByTemplate(
+        widget.templateId,
+        page: data.page + 1,
+      );
+      if (!mounted) return;
+      final known = data.stories.map((s) => s.summary.id).toSet();
+      final merged = [
+        ...data.stories,
+        ...next.stories.where((s) => known.add(s.summary.id)),
+      ];
+      setState(() {
+        _data = data.copyWith(
+          stories: merged,
+          total: next.total,
+          page: next.page,
+        );
+      });
+    } catch (_) {
+      // Keep current list; next scroll can retry.
+    } finally {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
   }
 
   Future<void> _load() async {
@@ -42,6 +91,7 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
       final data = await HomeRepository.getStoriesByTemplate(
         widget.templateId,
         forceRefresh: true,
+        page: 1,
       );
       if (!mounted) return;
       setState(() {
@@ -187,41 +237,79 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
       );
     }
 
+    final totalLabel = _data?.total ?? stories.length;
     return RefreshIndicator(
       color: EverloreTheme.gold,
       backgroundColor: EverloreTheme.void2,
       onRefresh: _load,
-      child: ListView(
+      child: CustomScrollView(
+        controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(
-          20,
-          MediaQuery.paddingOf(context).top + kToolbarHeight + 8,
-          20,
-          24,
-        ),
-        children: [
-          Text(
-            'Pick up where you left off',
-            style: EverloreTheme.sectionHeader,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${stories.length} ${stories.length == 1 ? 'story' : 'stories'} in progress',
-            style: const TextStyle(color: EverloreTheme.ash, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          for (final story in stories) ...[
-            _StoryCard(
-              story: story,
-              onTap: () async {
-                await context.push('/play/${story.summary.id}');
-                if (mounted) unawaited(_load());
-              },
-              onArchive: () => _archive(story.summary.id),
-              onDelete: () => _delete(story.summary.id),
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              MediaQuery.paddingOf(context).top + kToolbarHeight + 8,
+              20,
+              0,
             ),
-            const SizedBox(height: 12),
-          ],
+            sliver: SliverList.list(
+              children: [
+                Text(
+                  'Pick up where you left off',
+                  style: EverloreTheme.sectionHeader,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '$totalLabel ${totalLabel == 1 ? 'story' : 'stories'} in progress',
+                  style: const TextStyle(
+                    color: EverloreTheme.ash,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            sliver: SliverList.builder(
+              itemCount: stories.length,
+              itemBuilder: (context, index) {
+                final story = stories[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _StoryCard(
+                    story: story,
+                    onTap: () async {
+                      await context.push('/play/${story.summary.id}');
+                      if (mounted) unawaited(_load());
+                    },
+                    onArchive: () => _archive(story.summary.id),
+                    onDelete: () => _delete(story.summary.id),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_isLoadingMore)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 24),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: EverloreTheme.gold,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
         ],
       ),
     );

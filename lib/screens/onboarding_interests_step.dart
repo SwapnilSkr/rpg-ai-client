@@ -131,10 +131,7 @@ class _OnboardingInterestsStepState extends State<OnboardingInterestsStep> {
                 ),
                 const SizedBox(height: 28),
                 for (final family in kStyleFamilies) ...[
-                  _FamilyHeader(
-                    label: family.label,
-                    familyKey: family.key,
-                  ),
+                  _FamilyHeader(label: family.label, familyKey: family.key),
                   const SizedBox(height: 12),
                   _chipGrid(stylesInFamily(family.key), family.key),
                   const SizedBox(height: 24),

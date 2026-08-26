@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/auth/auth_service.dart';
+import '../core/guide/guide_controller.dart';
 import '../core/onboarding/interests_store.dart';
 import '../app/theme/nexus_theme.dart';
 import '../shared/app_icons.dart';
@@ -113,6 +114,13 @@ class _SplashScreenState extends State<SplashScreen>
     final user = await AuthService.getCachedUser();
     if (!mounted) return;
     if (user != null) {
+      // Fold the account's guide record into the device cache before any
+      // surface can trigger an arc.
+      await guide.hydrateFromAccount(
+        user.preferences.guideProgress,
+        remoteOptOut: user.preferences.guideOptOut,
+      );
+      if (!mounted) return;
       // Discover unless this account still needs interests onboarding.
       final onboarded = await InterestsStore.hasCompletedOnboarding(user: user);
       if (!mounted) return;
@@ -681,7 +689,8 @@ class _Ember {
 }
 
 /// "EVERLORE" engraving in letter by letter, each with a letterpress depth
-/// (dark drop behind a gold-gradient face).
+/// (dark drop behind a gold-gradient face). The "AI" postfix fades in only
+/// after the main wordmark has finished engraving.
 class _EngravedWordmark extends StatelessWidget {
   final double reveal; // 0..1
   const _EngravedWordmark({required this.reveal});
@@ -695,6 +704,10 @@ class _EngravedWordmark extends StatelessWidget {
       fontWeight: FontWeight.w700,
       letterSpacing: 8.0,
     );
+    // AI appears strictly after the last letter has engraved.
+    // Last letter finishes around reveal ~0.91, so start AI at 0.92.
+    final aiProgress = ((reveal - 0.92) / 0.08).clamp(0.0, 1.0);
+    final aiEased = Curves.easeOut.transform(aiProgress);
     return ShaderMask(
       shaderCallback: (rect) => const LinearGradient(
         begin: Alignment.topCenter,
@@ -708,6 +721,7 @@ class _EngravedWordmark extends StatelessWidget {
       ).createShader(rect),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children:
             List.generate(_letters.length, (i) {
               // Each letter reveals across its own slice of the timeline.
@@ -738,14 +752,17 @@ class _EngravedWordmark extends StatelessWidget {
                 ),
               );
             })..add(
-              Transform.translate(
-                offset: const Offset(3, -8),
-                child: Text(
-                  'AI',
-                  style: base.copyWith(
-                    color: Colors.white,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
+              Opacity(
+                opacity: aiEased,
+                child: Transform.translate(
+                  offset: Offset(3 + (1 - aiEased) * 6, -8),
+                  child: Text(
+                    'AI',
+                    style: base.copyWith(
+                      color: Colors.white,
+                      fontSize: 13,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
               ),

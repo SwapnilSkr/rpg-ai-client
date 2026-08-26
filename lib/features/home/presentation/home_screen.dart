@@ -1,4 +1,8 @@
 import 'dart:async';
+import '../../../core/guide/guide_anchor.dart';
+import '../../../core/guide/guide_flows.dart';
+import '../../../core/guide/guide_ids.dart';
+import '../../../core/guide/guide_trigger.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -100,93 +104,105 @@ class _HomeViewState extends State<_HomeView> {
               ),
             ),
           ),
-          Column(
-            children: [
-              BlocBuilder<HomeCubit, HomeState>(
-                buildWhen: (previous, current) =>
-                    previous.isLoading != current.isLoading ||
-                    previous.realms.length != current.realms.length ||
-                    previous.total != current.total,
-                builder: (context, state) {
-                  return EverloreTopBar(
-                    title: 'Your Realms',
-                    subtitle: state.realms.isEmpty
-                        ? (_searchController.text.isNotEmpty
-                              ? 'No matching realms'
-                              : 'No realms yet')
-                        : '${state.total} ${state.total == 1 ? 'realm' : 'realms'}',
-                    backgroundOpacity: 0.68,
-                    actions: [
-                      EverloreTopBarIcon(
-                        icon: _searchOpen
-                            ? Icons.close_rounded
-                            : Icons.search_rounded,
-                        tooltip: _searchOpen ? 'Close search' : 'Search realms',
-                        onTap: _toggleSearch,
-                      ),
-                      EverloreTopBarIcon(
-                        icon: Icons.refresh_rounded,
-                        tooltip: 'Refresh realms',
-                        isLoading:
-                            state.isLoading && state.instances.isNotEmpty,
-                        onTap: () => context.read<HomeCubit>().loadInstances(
-                          forceRefresh: true,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                child: _searchOpen
-                    ? Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
-                        child: TextField(
-                          controller: _searchController,
-                          autofocus: true,
-                          onChanged: _onSearchChanged,
-                          textInputAction: TextInputAction.search,
-                          style: EverloreTheme.ui(
-                            size: 14,
-                            color: EverloreTheme.parchment,
+          BlocBuilder<HomeCubit, HomeState>(
+            buildWhen: (previous, current) =>
+                previous.realms.isEmpty != current.realms.isEmpty,
+            // Waits for a story to exist before explaining where stories live.
+            builder: (context, state) => GuideOnEnter(
+              flow: GuideFlows.home,
+              enabled: state.realms.isNotEmpty,
+              child: Column(
+                children: [
+                  BlocBuilder<HomeCubit, HomeState>(
+                    buildWhen: (previous, current) =>
+                        previous.isLoading != current.isLoading ||
+                        previous.realms.length != current.realms.length ||
+                        previous.total != current.total,
+                    builder: (context, state) {
+                      return EverloreTopBar(
+                        title: 'Your Realms',
+                        subtitle: state.realms.isEmpty
+                            ? (_searchController.text.isNotEmpty
+                                  ? 'No matching realms'
+                                  : 'No realms yet')
+                            : '${state.total} ${state.total == 1 ? 'realm' : 'realms'}',
+                        backgroundOpacity: 0.68,
+                        actions: [
+                          EverloreTopBarIcon(
+                            icon: _searchOpen
+                                ? Icons.close_rounded
+                                : Icons.search_rounded,
+                            tooltip: _searchOpen
+                                ? 'Close search'
+                                : 'Search realms',
+                            onTap: _toggleSearch,
                           ),
-                          decoration: _realmSearchDecoration(),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              Expanded(
-                child: BlocBuilder<HomeCubit, HomeState>(
-                  builder: (context, state) {
-                    return CustomScrollView(
-                      controller: _scrollController,
-                      slivers: [
-                        if (state.isLoading && state.realms.isEmpty)
-                          const SliverFillRemaining(child: _LoadingView())
-                        else if (state.error != null &&
-                            state.error!.contains('Unauthorized') &&
-                            state.realms.isEmpty)
-                          const SliverFillRemaining(child: _UnauthView())
-                        else if (state.error != null && state.realms.isEmpty)
-                          SliverFillRemaining(
-                            child: _ErrorView(message: state.error!),
-                          )
-                        else if (state.realms.isEmpty)
-                          SliverFillRemaining(
-                            child: _EmptyView(
-                              isSearchEmpty: _searchController.text.isNotEmpty,
+                        ],
+                      );
+                    },
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    child: _searchOpen
+                        ? Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+                            child: TextField(
+                              controller: _searchController,
+                              autofocus: true,
+                              onChanged: _onSearchChanged,
+                              textInputAction: TextInputAction.search,
+                              style: EverloreTheme.ui(
+                                size: 14,
+                                color: EverloreTheme.parchment,
+                              ),
+                              decoration: _realmSearchDecoration(),
                             ),
                           )
-                        else
-                          _buildRealmList(context, state),
-                      ],
-                    );
-                  },
-                ),
+                        : const SizedBox.shrink(),
+                  ),
+                  Expanded(
+                    child: BlocBuilder<HomeCubit, HomeState>(
+                      builder: (context, state) {
+                        return RefreshIndicator(
+                          color: EverloreTheme.gold,
+                          backgroundColor: EverloreTheme.void2,
+                          onRefresh: () => context
+                              .read<HomeCubit>()
+                              .loadInstances(forceRefresh: true),
+                          child: CustomScrollView(
+                            controller: _scrollController,
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            slivers: [
+                              if (state.isLoading && state.realms.isEmpty)
+                                const SliverFillRemaining(child: _LoadingView())
+                              else if (state.error != null &&
+                                  state.error!.contains('Unauthorized') &&
+                                  state.realms.isEmpty)
+                                const SliverFillRemaining(child: _UnauthView())
+                              else if (state.error != null &&
+                                  state.realms.isEmpty)
+                                SliverFillRemaining(
+                                  child: _ErrorView(message: state.error!),
+                                )
+                              else if (state.realms.isEmpty)
+                                SliverFillRemaining(
+                                  child: _EmptyView(
+                                    isSearchEmpty:
+                                        _searchController.text.isNotEmpty,
+                                  ),
+                                )
+                              else
+                                _buildRealmList(context, state),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -203,23 +219,12 @@ class _HomeViewState extends State<_HomeView> {
           if (index == 0) {
             return Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-              child: Row(
-                children: [
-                  Text(
-                    '${groups.length} ${groups.length == 1 ? 'REALM' : 'REALMS'}',
-                    style: EverloreTheme.sectionHeader,
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => context.read<HomeCubit>().loadInstances(
-                      forceRefresh: true,
-                    ),
-                    child: const Text(
-                      'Refresh',
-                      style: TextStyle(color: EverloreTheme.gold, fontSize: 12),
-                    ),
-                  ),
-                ],
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${groups.length} ${groups.length == 1 ? 'REALM' : 'REALMS'}',
+                  style: EverloreTheme.sectionHeader,
+                ),
               ),
             );
           }
@@ -236,24 +241,29 @@ class _HomeViewState extends State<_HomeView> {
           }
           if (index > groups.length) return null;
           final group = groups[index - 1];
-          return RealmGroupCard(
-            group: group,
-            onContinue: (story) async {
-              await context.push('/play/${story.id}');
-              if (context.mounted) {
-                unawaited(
-                  context.read<HomeCubit>().loadInstances(silent: true),
-                );
-              }
-            },
-            onViewStories: () async {
-              await context.push('/realms/${group.templateId}');
-              if (context.mounted) {
-                unawaited(
-                  context.read<HomeCubit>().loadInstances(silent: true),
-                );
-              }
-            },
+          // The newest story stands for all of them.
+          return guideAnchorIf(
+            index == 1,
+            GuideIds.homeCard,
+            RealmGroupCard(
+              group: group,
+              onContinue: (story) async {
+                await context.push('/play/${story.id}');
+                if (context.mounted) {
+                  unawaited(
+                    context.read<HomeCubit>().loadInstances(silent: true),
+                  );
+                }
+              },
+              onViewStories: () async {
+                await context.push('/realms/${group.templateId}');
+                if (context.mounted) {
+                  unawaited(
+                    context.read<HomeCubit>().loadInstances(silent: true),
+                  );
+                }
+              },
+            ),
           );
         }, childCount: groups.length + 1 + (state.isLoadingMore ? 1 : 0)),
       ),

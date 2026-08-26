@@ -1,4 +1,8 @@
 import 'dart:async';
+import '../core/guide/guide_anchor.dart';
+import '../core/guide/guide_flows.dart';
+import '../core/guide/guide_ids.dart';
+import '../core/guide/guide_trigger.dart';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -199,53 +203,58 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ),
             ),
           ),
-          Column(
-            children: [
-              EverloreTopBar(
-                title: 'Explore',
-                subtitle: 'Find worlds and characters',
-                backgroundOpacity: 0.68,
-                actions: [
-                  EverloreTopBarIcon(
-                    icon: _searchOpen
-                        ? Icons.close_rounded
-                        : Icons.search_rounded,
-                    tooltip: _searchOpen ? 'Close search' : 'Search Explore',
-                    onTap: _toggleSearch,
-                  ),
-                  EverloreTopBarIcon(
-                    icon: Icons.refresh_rounded,
-                    tooltip: 'Refresh explore',
-                    isLoading: _isLoading && _templates.isNotEmpty,
-                    onTap: () => _load(forceRefresh: true),
-                  ),
-                ],
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                child: _searchOpen
-                    ? Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
-                        child: TextField(
-                          controller: _searchController,
-                          autofocus: true,
-                          onChanged: _onSearchChanged,
-                          textInputAction: TextInputAction.search,
-                          style: EverloreTheme.ui(
-                            size: 14,
-                            color: EverloreTheme.parchment,
+          GuideOnEnter(
+            // The arrival arc waits for the shelves to fill — pointing at an
+            // empty grid would explain nothing.
+            flow: GuideFlows.arrival,
+            enabled: _templates.isNotEmpty,
+            child: Column(
+              children: [
+                EverloreTopBar(
+                  title: 'Explore',
+                  subtitle: 'Find worlds and characters',
+                  backgroundOpacity: 0.68,
+                  actions: [
+                    GuideAnchor(
+                      id: GuideIds.discoverSearch,
+                      child: EverloreTopBarIcon(
+                        icon: _searchOpen
+                            ? Icons.close_rounded
+                            : Icons.search_rounded,
+                        tooltip: _searchOpen
+                            ? 'Close search'
+                            : 'Search Explore',
+                        onTap: _toggleSearch,
+                      ),
+                    ),
+                  ],
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  child: _searchOpen
+                      ? Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+                          child: TextField(
+                            controller: _searchController,
+                            autofocus: true,
+                            onChanged: _onSearchChanged,
+                            textInputAction: TextInputAction.search,
+                            style: EverloreTheme.ui(
+                              size: 14,
+                              color: EverloreTheme.parchment,
+                            ),
+                            decoration: _exploreSearchDecoration(),
                           ),
-                          decoration: _exploreSearchDecoration(),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              const SizedBox(height: 14),
-              _buildTabs(),
-              const SizedBox(height: 4),
-              Expanded(child: _buildBody()),
-            ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 14),
+                GuideAnchor(id: GuideIds.discoverTabs, child: _buildTabs()),
+                const SizedBox(height: 4),
+                Expanded(child: _buildBody()),
+              ],
+            ),
           ),
         ],
       ),
@@ -399,7 +408,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: _column(left)),
+                Expanded(child: _column(left, anchorFirst: true)),
                 const SizedBox(width: 12),
                 Expanded(child: _column(right)),
               ],
@@ -422,15 +431,25 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
-  Widget _column(List<WorldTemplate> items) {
+  /// One masonry column. [anchorFirst] belongs to the left column only: an
+  /// anchor id may be claimed by exactly one widget, and anchoring the head of
+  /// both columns left the guide pointing at whichever registered last — the
+  /// right-hand card, for no reason a player could see.
+  Widget _column(List<WorldTemplate> items, {bool anchorFirst = false}) {
     return Column(
       children: [
-        for (final t in items)
+        for (final (index, t) in items.indexed)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: _DiscoverCard(
-              template: t,
-              onTap: () => context.push('/templates/${t.id}'),
+            // Only the first card is a target — the arc points at "a world",
+            // not at one particular world.
+            child: guideAnchorIf(
+              anchorFirst && index == 0,
+              GuideIds.discoverCard,
+              _DiscoverCard(
+                template: t,
+                onTap: () => context.push('/templates/${t.id}'),
+              ),
             ),
           ),
       ],
