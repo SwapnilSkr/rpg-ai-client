@@ -25,10 +25,7 @@ class MemoryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: EverloreTheme.void2,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: typeColor.withValues(alpha: 0.2),
-          width: 1,
-        ),
+        border: Border.all(color: typeColor.withValues(alpha: 0.2), width: 1),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -41,12 +38,15 @@ class MemoryCard extends StatelessWidget {
                 // Type badge
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
                     color: typeColor.withValues(alpha: 0.1),
                     border: Border.all(
-                        color: typeColor.withValues(alpha: 0.35)),
+                      color: typeColor.withValues(alpha: 0.35),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -71,7 +71,9 @@ class MemoryCard extends StatelessWidget {
                 ...List.generate(
                   5,
                   (i) => Icon(
-                    i < memory.importance ? Icons.star_rounded : Icons.star_outline_rounded,
+                    i < memory.importance
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
                     size: 12,
                     color: i < memory.importance
                         ? EverloreTheme.gold

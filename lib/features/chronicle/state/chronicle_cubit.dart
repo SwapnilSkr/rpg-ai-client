@@ -35,10 +35,15 @@ class ChronicleState extends Equatable {
   final bool memoryUnresolved;
   final bool memoryHighImportance;
   final bool isLoading;
+  final bool isLoadingMore;
   final String? error;
   final ChronicleTab activeTab;
   final int totalEvents;
   final int currentPage;
+  final int memoryTotal;
+  final int memoryPage;
+  final bool memoryHasMore;
+  final bool isLoadingMoreMemories;
 
   /// Tabs whose backing projection changed server-side since they were last
   /// loaded. A dirty tab is re-fetched the next time it becomes active.
@@ -57,12 +62,19 @@ class ChronicleState extends Equatable {
     this.memoryUnresolved = false,
     this.memoryHighImportance = false,
     this.isLoading = false,
+    this.isLoadingMore = false,
     this.error,
     this.activeTab = ChronicleTab.recap,
     this.totalEvents = 0,
     this.currentPage = 1,
+    this.memoryTotal = 0,
+    this.memoryPage = 1,
+    this.memoryHasMore = false,
+    this.isLoadingMoreMemories = false,
     this.dirtyTabs = const {},
   });
+
+  bool get eventsHasMore => events.isNotEmpty && events.length < totalEvents;
 
   ChronicleState copyWith({
     List<GameEvent>? events,
@@ -77,10 +89,15 @@ class ChronicleState extends Equatable {
     bool? memoryUnresolved,
     bool? memoryHighImportance,
     bool? isLoading,
+    bool? isLoadingMore,
     String? error,
     ChronicleTab? activeTab,
     int? totalEvents,
     int? currentPage,
+    int? memoryTotal,
+    int? memoryPage,
+    bool? memoryHasMore,
+    bool? isLoadingMoreMemories,
     Set<ChronicleTab>? dirtyTabs,
   }) {
     return ChronicleState(
@@ -96,10 +113,16 @@ class ChronicleState extends Equatable {
       memoryUnresolved: memoryUnresolved ?? this.memoryUnresolved,
       memoryHighImportance: memoryHighImportance ?? this.memoryHighImportance,
       isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       error: error,
       activeTab: activeTab ?? this.activeTab,
       totalEvents: totalEvents ?? this.totalEvents,
       currentPage: currentPage ?? this.currentPage,
+      memoryTotal: memoryTotal ?? this.memoryTotal,
+      memoryPage: memoryPage ?? this.memoryPage,
+      memoryHasMore: memoryHasMore ?? this.memoryHasMore,
+      isLoadingMoreMemories:
+          isLoadingMoreMemories ?? this.isLoadingMoreMemories,
       dirtyTabs: dirtyTabs ?? this.dirtyTabs,
     );
   }
@@ -118,10 +141,15 @@ class ChronicleState extends Equatable {
     memoryUnresolved,
     memoryHighImportance,
     isLoading,
+    isLoadingMore,
     error,
     activeTab,
     totalEvents,
     currentPage,
+    memoryTotal,
+    memoryPage,
+    memoryHasMore,
+    isLoadingMoreMemories,
     dirtyTabs,
   ];
 }
@@ -227,42 +255,127 @@ class ChronicleCubit extends Cubit<ChronicleState> {
     emit(state.copyWith(dirtyTabs: {...state.dirtyTabs}..remove(tab)));
   }
 
-  Future<void> loadEvents({int page = 1}) async {
-    emit(state.copyWith(isLoading: true, error: null));
+  Future<void> loadEvents({int page = 1, bool append = false}) async {
+    if (append) {
+      if (state.isLoadingMore || !state.eventsHasMore) return;
+      emit(state.copyWith(isLoadingMore: true));
+    } else {
+      emit(state.copyWith(isLoading: true, error: null));
+    }
     try {
       final result = await ChronicleRepository.getEvents(
         instanceId,
         page: page,
+        limit: 20,
       );
+      final newEvents = (result['events'] as List<GameEvent>);
+      final total = (result['total'] as num?)?.toInt() ?? newEvents.length;
+      if (append) {
+        final known = state.events.map((e) => e.id).toSet();
+        final merged = [
+          ...state.events,
+          ...newEvents.where((e) => known.add(e.id)),
+        ];
+        emit(
+          state.copyWith(
+            events: merged,
+            totalEvents: total,
+            currentPage: page,
+            isLoadingMore: false,
+          ),
+        );
+      } else {
+        emit(
+          state.copyWith(
+            events: newEvents,
+            totalEvents: total,
+            currentPage: page,
+            isLoading: false,
+            isLoadingMore: false,
+          ),
+        );
+      }
+    } catch (e) {
       emit(
         state.copyWith(
-          events: result['events'],
-          totalEvents: result['total'],
-          currentPage: page,
           isLoading: false,
+          isLoadingMore: false,
+          error: e.toString(),
         ),
       );
-    } catch (e) {
-      emit(state.copyWith(isLoading: false, error: e.toString()));
     }
   }
 
-  Future<void> loadMemories({bool includeArchived = false}) async {
-    emit(state.copyWith(isLoading: true, error: null));
+  Future<void> loadMoreEvents() =>
+      loadEvents(page: state.currentPage + 1, append: true);
+
+  Future<void> loadMemories({
+    bool includeArchived = false,
+    int page = 1,
+    bool append = false,
+  }) async {
+    if (append) {
+      if (state.isLoadingMoreMemories || !state.memoryHasMore) return;
+      emit(state.copyWith(isLoadingMoreMemories: true));
+    } else {
+      emit(state.copyWith(isLoading: true, error: null));
+    }
     try {
-      final memories = await ChronicleRepository.getMemories(
+      final result = await ChronicleRepository.getMemoriesPage(
         instanceId,
         includeArchived: includeArchived,
         query: state.memoryQuery,
         type: state.memoryType,
         minImportance: state.memoryHighImportance ? 4 : null,
         unresolvedOnly: state.memoryUnresolved,
+        page: page,
+        limit: 20,
       );
-      emit(state.copyWith(memories: memories, isLoading: false));
+      final newMems = (result['memories'] as List<Memory>);
+      final total = (result['total'] as num?)?.toInt() ?? newMems.length;
+      final hasMore =
+          result['hasMore'] as bool? ??
+          (newMems.length + (page - 1) * 20 < total);
+      if (append) {
+        final known = state.memories.map((m) => m.id).toSet();
+        final merged = [
+          ...state.memories,
+          ...newMems.where((m) => known.add(m.id)),
+        ];
+        emit(
+          state.copyWith(
+            memories: merged,
+            memoryTotal: total,
+            memoryPage: page,
+            memoryHasMore: hasMore,
+            isLoadingMoreMemories: false,
+          ),
+        );
+      } else {
+        emit(
+          state.copyWith(
+            memories: newMems,
+            memoryTotal: total,
+            memoryPage: page,
+            memoryHasMore: hasMore,
+            isLoading: false,
+            isLoadingMoreMemories: false,
+          ),
+        );
+      }
     } catch (e) {
-      emit(state.copyWith(isLoading: false, error: e.toString()));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          isLoadingMoreMemories: false,
+          error: e.toString(),
+        ),
+      );
     }
   }
+
+  Future<void> loadMoreMemories() =>
+      loadMemories(page: state.memoryPage + 1, append: true);
 
   /// Update the Echoes search/filters and reload. Only the provided fields
   /// change; pass an empty string to clear the query or type.
@@ -280,7 +393,7 @@ class ChronicleCubit extends Cubit<ChronicleState> {
         memoryHighImportance: highImportance,
       ),
     );
-    await loadMemories();
+    await loadMemories(page: 1);
   }
 
   Future<void> editMemory(

@@ -59,20 +59,30 @@ class _EchoesFilterBarState extends State<EchoesFilterBar> {
               TextField(
                 controller: _controller,
                 style: const TextStyle(
-                    color: EverloreTheme.parchment, fontSize: 14),
+                  color: EverloreTheme.parchment,
+                  fontSize: 14,
+                ),
                 textInputAction: TextInputAction.search,
                 onSubmitted: (v) => cubit.setMemoryFilters(query: v),
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: 'Search echoes…',
                   hintStyle: const TextStyle(
-                      color: EverloreTheme.ash, fontSize: 14),
-                  prefixIcon: const Icon(Icons.search,
-                      color: EverloreTheme.ash, size: 18),
+                    color: EverloreTheme.ash,
+                    fontSize: 14,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: EverloreTheme.ash,
+                    size: 18,
+                  ),
                   suffixIcon: state.memoryQuery.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.close,
-                              color: EverloreTheme.ash, size: 16),
+                          icon: const Icon(
+                            Icons.close,
+                            color: EverloreTheme.ash,
+                            size: 16,
+                          ),
                           onPressed: () {
                             _controller.clear();
                             cubit.setMemoryFilters(query: '');
@@ -81,8 +91,10 @@ class _EchoesFilterBarState extends State<EchoesFilterBar> {
                       : null,
                   filled: true,
                   fillColor: EverloreTheme.void2,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: const BorderSide(color: EverloreTheme.white10),
@@ -90,7 +102,8 @@ class _EchoesFilterBarState extends State<EchoesFilterBar> {
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(
-                        color: EverloreTheme.goldDim.withValues(alpha: 0.6)),
+                      color: EverloreTheme.goldDim.withValues(alpha: 0.6),
+                    ),
                   ),
                 ),
               ),
@@ -104,14 +117,16 @@ class _EchoesFilterBarState extends State<EchoesFilterBar> {
                       label: 'Unresolved',
                       active: state.memoryUnresolved,
                       onTap: () => cubit.setMemoryFilters(
-                          unresolved: !state.memoryUnresolved),
+                        unresolved: !state.memoryUnresolved,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     _Chip(
                       label: 'Important',
                       active: state.memoryHighImportance,
                       onTap: () => cubit.setMemoryFilters(
-                          highImportance: !state.memoryHighImportance),
+                        highImportance: !state.memoryHighImportance,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Container(

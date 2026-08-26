@@ -74,8 +74,11 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
             // Header
             Row(
               children: [
-                const Icon(Icons.bookmark_outline,
-                    color: EverloreTheme.gold, size: 20),
+                const Icon(
+                  Icons.bookmark_outline,
+                  color: EverloreTheme.gold,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 const Text(
                   'Edit Echo',
@@ -91,8 +94,11 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
                   borderRadius: BorderRadius.circular(6),
                   child: const Padding(
                     padding: EdgeInsets.all(4),
-                    child: Icon(Icons.close,
-                        color: EverloreTheme.ash, size: 18),
+                    child: Icon(
+                      Icons.close,
+                      color: EverloreTheme.ash,
+                      size: 18,
+                    ),
                   ),
                 ),
               ],
@@ -117,12 +123,14 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
-                      color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
+                    color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
-                      color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
+                    color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -148,7 +156,9 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 7),
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(20),
                       color: selected
@@ -163,9 +173,11 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(icon,
-                            size: 12,
-                            color: selected ? color : EverloreTheme.ash),
+                        Icon(
+                          icon,
+                          size: 12,
+                          color: selected ? color : EverloreTheme.ash,
+                        ),
                         const SizedBox(width: 5),
                         Text(
                           label,
@@ -222,11 +234,11 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: EverloreTheme.ash,
-                      side: BorderSide(
-                          color: EverloreTheme.white20),
+                      side: BorderSide(color: EverloreTheme.white20),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                     child: const Text('Cancel'),
                   ),
@@ -244,7 +256,8 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
                       foregroundColor: EverloreTheme.void0,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                     child: const Text('Save Echo'),
                   ),
