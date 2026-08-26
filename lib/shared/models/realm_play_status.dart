@@ -41,8 +41,11 @@ class RealmPlayStatus {
       latestInstanceId: json['latest_instance_id']?.toString(),
       stories: rawStories is List
           ? rawStories
-              .map((e) => RealmStorySummary.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .map(
+                  (e) =>
+                      RealmStorySummary.fromJson(Map<String, dynamic>.from(e)),
+                )
+                .toList()
           : const [],
     );
   }
@@ -65,39 +68,63 @@ class RealmStoryDetail {
 class RealmTemplateStories {
   final Map<String, dynamic>? template;
   final List<RealmStoryDetail> stories;
+  final int total;
+  final int page;
 
   const RealmTemplateStories({
     this.template,
     this.stories = const [],
+    this.total = 0,
+    this.page = 1,
   });
+
+  /// Server sends `total` + `page` when paginated; fallback to list length
+  /// so old cached / non-paged responses still render.
+  bool get hasMore =>
+      stories.isNotEmpty && stories.length + (page - 1) * 12 < total;
 
   factory RealmTemplateStories.fromJson(Map<String, dynamic> json) {
     final rawStories = json['stories'];
     final list = rawStories is List ? rawStories : const [];
+    final parsed = list.map((raw) {
+      final item = Map<String, dynamic>.from(raw);
+      final meta = item['meta'] is Map
+          ? Map<String, dynamic>.from(item['meta'])
+          : <String, dynamic>{};
+      return RealmStoryDetail(
+        summary: RealmStorySummary(
+          id: item['_id']?.toString() ?? item['id']?.toString() ?? '',
+          lastActiveAt: meta['last_active_at'] != null
+              ? DateTime.tryParse(meta['last_active_at'].toString())
+              : null,
+          totalEvents: meta['total_events'] ?? 0,
+        ),
+        preview: item['preview']?.toString() ?? '',
+        storyIndex: item['story_index'] ?? 1,
+        template: item['template'] is Map
+            ? Map<String, dynamic>.from(item['template'])
+            : null,
+      );
+    }).toList();
     return RealmTemplateStories(
       template: json['template'] is Map
           ? Map<String, dynamic>.from(json['template'])
           : null,
-      stories: list.map((raw) {
-        final item = Map<String, dynamic>.from(raw);
-        final meta = item['meta'] is Map
-            ? Map<String, dynamic>.from(item['meta'])
-            : <String, dynamic>{};
-        return RealmStoryDetail(
-          summary: RealmStorySummary(
-            id: item['_id']?.toString() ?? item['id']?.toString() ?? '',
-            lastActiveAt: meta['last_active_at'] != null
-                ? DateTime.tryParse(meta['last_active_at'].toString())
-                : null,
-            totalEvents: meta['total_events'] ?? 0,
-          ),
-          preview: item['preview']?.toString() ?? '',
-          storyIndex: item['story_index'] ?? 1,
-          template: item['template'] is Map
-              ? Map<String, dynamic>.from(item['template'])
-              : null,
-        );
-      }).toList(),
+      stories: parsed,
+      total: (json['total'] as num?)?.toInt() ?? parsed.length,
+      page: (json['page'] as num?)?.toInt() ?? 1,
     );
   }
+
+  RealmTemplateStories copyWith({
+    Map<String, dynamic>? template,
+    List<RealmStoryDetail>? stories,
+    int? total,
+    int? page,
+  }) => RealmTemplateStories(
+    template: template ?? this.template,
+    stories: stories ?? this.stories,
+    total: total ?? this.total,
+    page: page ?? this.page,
+  );
 }

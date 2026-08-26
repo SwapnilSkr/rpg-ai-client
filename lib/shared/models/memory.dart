@@ -70,11 +70,7 @@ class Memory {
     );
   }
 
-  Memory copyWith({
-    String? text,
-    String? type,
-    int? importance,
-  }) {
+  Memory copyWith({String? text, String? type, int? importance}) {
     return Memory(
       id: id,
       instanceId: instanceId,

@@ -44,6 +44,7 @@ class WsManager {
   /// coming. Lets the UI keep the loader up (with a hint) instead of a dead end.
   final _generationRetryingController =
       StreamController<Map<String, dynamic>>.broadcast();
+
   /// The server discarded a partial narrator stream. The next retry must start
   /// with a fresh optimistic bubble rather than append to a cut-off fragment.
   final _generationResetController =

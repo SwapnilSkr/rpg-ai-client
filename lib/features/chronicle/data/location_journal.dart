@@ -31,29 +31,29 @@ class LocationPlace extends Equatable {
   });
 
   factory LocationPlace.fromJson(Map<String, dynamic> json) => LocationPlace(
-        entityId: json['entity_id'] as String? ?? '',
-        name: json['name'] as String? ?? 'An unnamed place',
-        eventCount: (json['event_count'] as num?)?.toInt() ?? 0,
-        memoryCount: (json['memory_count'] as num?)?.toInt() ?? 0,
-        firstSeenSequence: (json['first_seen_sequence'] as num?)?.toInt(),
-        lastSeenSequence: (json['last_seen_sequence'] as num?)?.toInt(),
-        parentId: json['parent_id'] as String?,
-        worldRootId: json['world_root_id'] as String?,
-        placeKind: json['place_kind'] as String?,
-      );
+    entityId: json['entity_id'] as String? ?? '',
+    name: json['name'] as String? ?? 'An unnamed place',
+    eventCount: (json['event_count'] as num?)?.toInt() ?? 0,
+    memoryCount: (json['memory_count'] as num?)?.toInt() ?? 0,
+    firstSeenSequence: (json['first_seen_sequence'] as num?)?.toInt(),
+    lastSeenSequence: (json['last_seen_sequence'] as num?)?.toInt(),
+    parentId: json['parent_id'] as String?,
+    worldRootId: json['world_root_id'] as String?,
+    placeKind: json['place_kind'] as String?,
+  );
 
   @override
   List<Object?> get props => [
-        entityId,
-        name,
-        eventCount,
-        memoryCount,
-        firstSeenSequence,
-        lastSeenSequence,
-        parentId,
-        worldRootId,
-        placeKind,
-      ];
+    entityId,
+    name,
+    eventCount,
+    memoryCount,
+    firstSeenSequence,
+    lastSeenSequence,
+    parentId,
+    worldRootId,
+    placeKind,
+  ];
 }
 
 class LocationCursor extends Equatable {
@@ -63,9 +63,9 @@ class LocationCursor extends Equatable {
   const LocationCursor({this.entityId, required this.name});
 
   factory LocationCursor.fromJson(Map<String, dynamic> json) => LocationCursor(
-        entityId: json['entity_id'] as String?,
-        name: json['name'] as String? ?? '',
-      );
+    entityId: json['entity_id'] as String?,
+    name: json['name'] as String? ?? '',
+  );
 
   @override
   List<Object?> get props => [entityId, name];
@@ -78,15 +78,17 @@ class LocationsData extends Equatable {
   const LocationsData({this.currentLocation, this.places = const []});
 
   factory LocationsData.fromJson(Map<String, dynamic> json) => LocationsData(
-        currentLocation: json['current_location'] != null
-            ? LocationCursor.fromJson(
-                Map<String, dynamic>.from(json['current_location']))
-            : null,
-        places: (json['places'] as List?)
-                ?.map((p) => LocationPlace.fromJson(Map<String, dynamic>.from(p)))
-                .toList() ??
-            const [],
-      );
+    currentLocation: json['current_location'] != null
+        ? LocationCursor.fromJson(
+            Map<String, dynamic>.from(json['current_location']),
+          )
+        : null,
+    places:
+        (json['places'] as List?)
+            ?.map((p) => LocationPlace.fromJson(Map<String, dynamic>.from(p)))
+            .toList() ??
+        const [],
+  );
 
   @override
   List<Object?> get props => [currentLocation, places];
@@ -122,7 +124,9 @@ class LocationEventEntry extends Equatable {
         type: json['type'] as String? ?? 'event',
         sceneTag: json['scene_tag'] as String?,
         anchor: json['time_anchor'] != null
-            ? TimeAnchor.fromJson(Map<String, dynamic>.from(json['time_anchor']))
+            ? TimeAnchor.fromJson(
+                Map<String, dynamic>.from(json['time_anchor']),
+              )
             : null,
         milestone: json['milestone'] as String?,
         preview: json['preview'] as String?,
@@ -157,7 +161,9 @@ class LocationMemoryEntry extends Equatable {
         importance: (json['importance'] as num?)?.toInt() ?? 0,
         emotionalValence: json['emotional_valence'] as String?,
         anchor: json['time_anchor'] != null
-            ? TimeAnchor.fromJson(Map<String, dynamic>.from(json['time_anchor']))
+            ? TimeAnchor.fromJson(
+                Map<String, dynamic>.from(json['time_anchor']),
+              )
             : null,
       );
 
@@ -197,19 +203,32 @@ class LocationJournal extends Equatable {
       name: loc['name'] as String? ?? 'This place',
       permanentFacts: strList(loc['permanent_facts']),
       currentState: strList(loc['current_state']),
-      events: (json['events'] as List?)
-              ?.map((e) => LocationEventEntry.fromJson(Map<String, dynamic>.from(e)))
+      events:
+          (json['events'] as List?)
+              ?.map(
+                (e) =>
+                    LocationEventEntry.fromJson(Map<String, dynamic>.from(e)),
+              )
               .toList() ??
           const [],
-      memories: (json['memories'] as List?)
-              ?.map((m) =>
-                  LocationMemoryEntry.fromJson(Map<String, dynamic>.from(m)))
+      memories:
+          (json['memories'] as List?)
+              ?.map(
+                (m) =>
+                    LocationMemoryEntry.fromJson(Map<String, dynamic>.from(m)),
+              )
               .toList() ??
           const [],
     );
   }
 
   @override
-  List<Object?> get props =>
-      [entityId, name, permanentFacts, currentState, events, memories];
+  List<Object?> get props => [
+    entityId,
+    name,
+    permanentFacts,
+    currentState,
+    events,
+    memories,
+  ];
 }

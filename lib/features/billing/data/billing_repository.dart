@@ -143,9 +143,7 @@ class BillingRepository {
               'kind': kind,
             },
           );
-          _walletChanges.add(
-            await _walletWithCatalog(response),
-          );
+          _walletChanges.add(await _walletWithCatalog(response));
           verifiedAndGranted = true;
         }
       } catch (error) {

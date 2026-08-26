@@ -96,28 +96,40 @@ class HomeRepository {
   }
 
   /// All in-progress stories for one world, with a one-line preview each.
+  /// Paginated - page 1 by default, append via page>1 for infinite scroll.
   static Future<RealmTemplateStories> getStoriesByTemplate(
     String templateId, {
     bool forceRefresh = false,
+    int page = 1,
+    int limit = 12,
   }) async {
     _syncSessionCache();
-    final cached = _storiesByTemplateCache[templateId];
-    if (!forceRefresh && cached != null) {
-      _fetchStoriesByTemplate(templateId).ignore();
-      return cached;
+    // Only cache the first page; paginated appends are not cached as
+    // the single cached value to avoid stale hasMore merging.
+    if (page == 1 && !forceRefresh) {
+      final cached = _storiesByTemplateCache[templateId];
+      if (cached != null) {
+        _fetchStoriesByTemplate(templateId, page: 1, limit: limit).ignore();
+        return cached;
+      }
     }
-    return _fetchStoriesByTemplate(templateId);
+    return _fetchStoriesByTemplate(templateId, page: page, limit: limit);
   }
 
   static Future<RealmTemplateStories> _fetchStoriesByTemplate(
-    String templateId,
-  ) async {
+    String templateId, {
+    int page = 1,
+    int limit = 12,
+  }) async {
     _syncSessionCache();
-    final response = await ApiClient.get('/instances/by-template/$templateId');
+    final response = await ApiClient.get(
+      '/instances/by-template/$templateId?page=$page&limit=$limit',
+    );
     final stories = RealmTemplateStories.fromJson(
       Map<String, dynamic>.from(response),
     );
-    _storiesByTemplateCache[templateId] = stories;
+    // Cache only page 1 as the canonical entry; higher pages are transient.
+    if (page == 1) _storiesByTemplateCache[templateId] = stories;
     return stories;
   }
 

@@ -57,15 +57,21 @@ class ChronicleRepository {
     };
   }
 
-  static Future<List<Memory>> getMemories(
+  static Future<Map<String, dynamic>> getMemoriesPage(
     String instanceId, {
     bool includeArchived = false,
     String? query,
     String? type,
     int? minImportance,
     bool unresolvedOnly = false,
+    int page = 1,
+    int limit = 20,
   }) async {
-    final params = <String, String>{'include_archived': '$includeArchived'};
+    final params = <String, String>{
+      'include_archived': '$includeArchived',
+      'page': '$page',
+      'limit': '$limit',
+    };
     if (query != null && query.trim().isNotEmpty) params['q'] = query.trim();
     if (type != null && type.isNotEmpty) params['type'] = type;
     if (minImportance != null) params['min_importance'] = '$minImportance';
@@ -74,7 +80,51 @@ class ChronicleRepository {
         .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
         .join('&');
     final response = await ApiClient.get('/chronicle/memories/$instanceId?$qs');
-    return (response as List).map((e) => Memory.fromJson(e)).toList();
+    // Backend may still return a bare list; normalize to paged shape.
+    if (response is List) {
+      final list = response.map((e) => Memory.fromJson(e)).toList();
+      return {
+        'memories': list,
+        'total': list.length,
+        'page': page,
+        'hasMore': false,
+      };
+    }
+    final map = Map<String, dynamic>.from(response as Map);
+    final raw =
+        (map['memories'] as List?) ?? (map['items'] as List?) ?? const [];
+    final list = raw.map((e) => Memory.fromJson(e)).toList();
+    return {
+      'memories': list,
+      'total': (map['total'] as num?)?.toInt() ?? list.length,
+      'page': (map['page'] as num?)?.toInt() ?? page,
+      'hasMore':
+          map['hasMore'] == true ||
+          (map['has_more'] == true) ||
+          ((map['total'] as num?)?.toInt() ?? list.length) >
+              list.length + (page - 1) * limit,
+    };
+  }
+
+  static Future<List<Memory>> getMemories(
+    String instanceId, {
+    bool includeArchived = false,
+    String? query,
+    String? type,
+    int? minImportance,
+    bool unresolvedOnly = false,
+  }) async {
+    final page = await getMemoriesPage(
+      instanceId,
+      includeArchived: includeArchived,
+      query: query,
+      type: type,
+      minImportance: minImportance,
+      unresolvedOnly: unresolvedOnly,
+      page: 1,
+      limit: 200,
+    );
+    return page['memories'] as List<Memory>;
   }
 
   static Future<void> editMemory(

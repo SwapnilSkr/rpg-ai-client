@@ -21,11 +21,11 @@ class StatDefinition {
   }
 
   Map<String, dynamic> toJson() => {
-        'default': defaultValue,
-        'min': min,
-        'max': max,
-        'description': description,
-      };
+    'default': defaultValue,
+    'min': min,
+    'max': max,
+    'description': description,
+  };
 }
 
 class WorldTemplate {
@@ -110,9 +110,13 @@ class WorldTemplate {
       imagePrompt: json['image_prompt'] ?? '',
       openingLine: json['opening_line'] ?? '',
       baseStatsTemplate: statsMap,
-      flagDefinitions: Map<String, dynamic>.from(json['flag_definitions'] ?? {}),
+      flagDefinitions: Map<String, dynamic>.from(
+        json['flag_definitions'] ?? {},
+      ),
       sceneTags: List<String>.from(json['scene_tags'] ?? []),
-      modelPreferences: Map<String, String>.from(json['model_preferences'] ?? {}),
+      modelPreferences: Map<String, String>.from(
+        json['model_preferences'] ?? {},
+      ),
       maxContextMemories: json['max_context_memories'] ?? 25,
       maxLoreResults: json['max_lore_results'] ?? 10,
       createdAt: json['created_at'] != null

@@ -9,13 +9,17 @@ class RecapThread extends Equatable {
   final String text;
   final int importance;
 
-  const RecapThread({required this.id, required this.text, required this.importance});
+  const RecapThread({
+    required this.id,
+    required this.text,
+    required this.importance,
+  });
 
   factory RecapThread.fromJson(Map<String, dynamic> json) => RecapThread(
-        id: json['id'] as String? ?? '',
-        text: json['text'] as String? ?? '',
-        importance: (json['importance'] as num?)?.toInt() ?? 0,
-      );
+    id: json['id'] as String? ?? '',
+    text: json['text'] as String? ?? '',
+    importance: (json['importance'] as num?)?.toInt() ?? 0,
+  );
 
   @override
   List<Object?> get props => [id, text, importance];
@@ -35,13 +39,13 @@ class RecapBond extends Equatable {
   });
 
   factory RecapBond.fromJson(Map<String, dynamic> json) => RecapBond(
-        id: json['id'] as String? ?? '',
-        name: json['name'] as String? ?? 'Someone',
-        disposition: json['disposition'] as String?,
-        meters: json['meters'] != null
-            ? RelationshipMeters.fromJson(Map<String, dynamic>.from(json['meters']))
-            : null,
-      );
+    id: json['id'] as String? ?? '',
+    name: json['name'] as String? ?? 'Someone',
+    disposition: json['disposition'] as String?,
+    meters: json['meters'] != null
+        ? RelationshipMeters.fromJson(Map<String, dynamic>.from(json['meters']))
+        : null,
+  );
 
   @override
   List<Object?> get props => [id, name, disposition, meters];
@@ -70,18 +74,20 @@ class RecapData extends Equatable {
       when == null;
 
   factory RecapData.fromJson(Map<String, dynamic> json) => RecapData(
-        spine: json['spine'] as String?,
-        where: json['where'] as String?,
-        when: json['when'] as String?,
-        openThreads: (json['open_threads'] as List?)
-                ?.map((t) => RecapThread.fromJson(Map<String, dynamic>.from(t)))
-                .toList() ??
-            const [],
-        bonds: (json['bonds'] as List?)
-                ?.map((b) => RecapBond.fromJson(Map<String, dynamic>.from(b)))
-                .toList() ??
-            const [],
-      );
+    spine: json['spine'] as String?,
+    where: json['where'] as String?,
+    when: json['when'] as String?,
+    openThreads:
+        (json['open_threads'] as List?)
+            ?.map((t) => RecapThread.fromJson(Map<String, dynamic>.from(t)))
+            .toList() ??
+        const [],
+    bonds:
+        (json['bonds'] as List?)
+            ?.map((b) => RecapBond.fromJson(Map<String, dynamic>.from(b)))
+            .toList() ??
+        const [],
+  );
 
   @override
   List<Object?> get props => [spine, where, when, openThreads, bonds];
