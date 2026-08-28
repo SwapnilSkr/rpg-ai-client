@@ -1474,10 +1474,31 @@ void main() {
     final card = tester.getRect(find.text('SHALL I LEAVE YOU TO IT?'));
     final quiet = tester.getRect(find.text('Stay quiet'));
     final keep = tester.getRect(find.text('Keep them'));
-    // Right-aligned: the primary action ends where the prose does, and Keep
-    // them sits to its left rather than both hugging the left edge.
-    expect(quiet.right, closeTo(card.right, 20));
-    expect(keep.left, greaterThan(card.left));
+    // Right-aligned: the primary action ends where the prose does, and the
+    // other sits to its left rather than both hugging the left edge.
+    expect(keep.right, closeTo(card.right, 20));
+    expect(quiet.left, greaterThan(card.left));
+    // And the primary — the gold pill on the right, where every beat card
+    // puts Next and Done, and where a thumb lands without reading — must be
+    // the answer that changes nothing. Silencing the guide is irreversible
+    // from here (it hides the arcs the player has not met yet) and belongs on
+    // the low-emphasis text button.
+    expect(
+      find.ancestor(
+        of: find.text('Stay quiet'),
+        matching: find.byType(TextButton),
+      ),
+      findsOneWidget,
+      reason: 'silencing must be the quiet action',
+    );
+    expect(
+      find.ancestor(
+        of: find.text('Keep them'),
+        matching: find.byType(TextButton),
+      ),
+      findsNothing,
+      reason: 'keeping the guide must be the emphasised action',
+    );
 
     await tester.runAsync(() => guide.resolveSkipAll(silence: false));
     await _depart(tester);

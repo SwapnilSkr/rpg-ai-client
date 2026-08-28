@@ -631,8 +631,9 @@ class _SkipEverythingPrompt extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          'You seem to know your way. I can stay quiet from here — and you '
-          'may restore my voice from your profile.',
+          'You seem to know your way. Silence me and I will say nothing more '
+          'anywhere — not on your stories, not in the tomes. You may restore '
+          'my voice from your profile at any time.',
           style: EverloreTheme.ui(
             size: 14,
             color: EverloreTheme.parchment.withValues(alpha: 0.86),
@@ -656,16 +657,26 @@ class _SkipEverythingPrompt extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 8,
             runSpacing: 8,
+            // Order and weight, both deliberate. This used to put "Stay
+            // quiet" in the gold pill on the right — the position every beat
+            // card uses for Next and Done, and the one a player taps without
+            // reading. So the thumb's default answer was the irreversible
+            // one: it sets `optOut`, which silences the play, chronicle and
+            // realm arcs the player has not met yet, and nothing on the way
+            // out said so. Waving off a few tips is ordinary impatience and
+            // must not be able to end the walkthrough by muscle memory. The
+            // reversible answer is now the emphasised one; silence is still
+            // one tap away, it just has to be aimed at.
             children: [
               TextButton(
-                onPressed: () => guide.resolveSkipAll(silence: false),
+                onPressed: () => guide.resolveSkipAll(silence: true),
                 child: Text(
-                  'Keep them',
+                  'Stay quiet',
                   style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
                 ),
               ),
               GestureDetector(
-                onTap: () => guide.resolveSkipAll(silence: true),
+                onTap: () => guide.resolveSkipAll(silence: false),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 18,
@@ -676,7 +687,7 @@ class _SkipEverythingPrompt extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    'Stay quiet',
+                    'Keep them',
                     style: EverloreTheme.ui(
                       size: 13,
                       color: EverloreTheme.void0,
