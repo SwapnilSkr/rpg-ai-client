@@ -166,6 +166,55 @@ void main() {
     expect(GuideAnchorRegistry.instance.overflowsViewport('row.wide'), isFalse);
   });
 
+  testWidgets('a rail that holds a sideways list is not scrolled sideways', (
+    tester,
+  ) async {
+    // The bond rail is the Chronicle's tab strip inverted: there the anchor
+    // sat on one tab *inside* the scrollable, here it wraps the whole list
+    // from outside. The overflow check reads the anchor's own scrollable
+    // ancestor, so the list underneath must not make the rail look like
+    // something that can be scrolled into view — the rail already is in view,
+    // and its own trailing token is clipped by the rail exactly as the player
+    // sees it.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideHost(
+          child: Scaffold(
+            body: Column(
+              children: [
+                GuideAnchor(
+                  id: 'play.rail',
+                  child: SizedBox(
+                    height: 78,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        for (var i = 0; i < 8; i++)
+                          Container(
+                            width: 200,
+                            margin: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF333333),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(
+      GuideAnchorRegistry.instance.overflowsViewport('play.rail'),
+      isFalse,
+    );
+  });
+
   testWidgets('the lit control answers the first tap, not the second', (
     tester,
   ) async {
