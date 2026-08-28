@@ -75,6 +75,49 @@ void main() {
     GuideController.arcGap = Duration.zero;
   });
 
+  testWidgets('the lit control answers the first tap, not the second', (
+    tester,
+  ) async {
+    // Lighting a control and then eating the tap it invites is the
+    // walkthrough working against itself: the player aims at the thing being
+    // explained, the scrim swallows it, and the control only responds once
+    // they have worked out that they must tap it again.
+    var fired = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideHost(
+          child: Scaffold(
+            body: Center(
+              child: GuideAnchor(
+                id: 'test.target',
+                child: GestureDetector(
+                  onTap: () => fired++,
+                  behavior: HitTestBehavior.opaque,
+                  child: const SizedBox(
+                    width: 160,
+                    height: 60,
+                    child: Text('Target'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.runAsync(() => guide.replay(_flow));
+    await _arrive(tester);
+    expect(find.text('FIRST BEAT'), findsOneWidget);
+
+    // Straight at the middle of the opening, with the guide still up.
+    await tester.tapAt(tester.getCenter(find.text('Target')));
+    await tester.pump();
+    expect(fired, 1, reason: 'the control underneath must receive the tap');
+
+    guide.skip();
+    await _depart(tester);
+  });
+
   testWidgets('an arc that finds nothing to point at stays owed', (
     tester,
   ) async {

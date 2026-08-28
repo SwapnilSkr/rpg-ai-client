@@ -72,9 +72,19 @@ class GuideBeat {
   /// (an empty bond rail, a world with no stats).
   final bool requiresAnchor;
 
-  /// Let the highlighted widget be tapped through the scrim, which also
-  /// advances the flow. Off by default: the player should never be forced to
-  /// fire a real action to escape a tip.
+  /// Whether a tap inside the opening reaches the control underneath.
+  ///
+  /// On by default, and the default is the point. Lighting a control and then
+  /// swallowing the tap it invites is the walkthrough working against itself:
+  /// the player aims at the thing being explained, the scrim eats the touch,
+  /// the guide vanishes, and the control only responds to a second tap they
+  /// have to work out for themselves.
+  ///
+  /// Nothing is forced by this — the card's own Skip and Next still dismiss,
+  /// and a tap anywhere outside the opening still advances — so the only
+  /// change is that the lit control behaves like a lit control. The opening
+  /// stays sealed until the overlay has finished arriving (see `GuideCutout`),
+  /// so a control cannot be fired before it has been shown.
   final bool tapThrough;
 
   /// Anchors to try in order: the precise target, then the surface it sits on.
@@ -94,7 +104,7 @@ class GuideBeat {
     this.placement = GuidePlacement.auto,
     this.inflate = 3,
     this.requiresAnchor = false,
-    this.tapThrough = false,
+    this.tapThrough = true,
   });
 
   /// Convenience for an unanchored, scrim-free arrival beat.
@@ -107,6 +117,7 @@ class GuideBeat {
       placement = GuidePlacement.auto,
       inflate = 0,
       requiresAnchor = false,
+      // Nothing is lit, so there is no opening to tap through.
       tapThrough = false;
 }
 

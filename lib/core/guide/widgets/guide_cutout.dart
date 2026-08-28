@@ -135,7 +135,9 @@ class GuideCutout extends StatelessWidget {
   final VoidCallback onTapOutside;
 
   /// When false the hole is painted but sealed, so the highlighted control
-  /// cannot be fired mid-explanation.
+  /// cannot be fired mid-explanation. Beats turn this on (see
+  /// `GuideBeat.tapThrough`, which defaults to true) so the control a beat is
+  /// pointing at answers the first tap rather than the second.
   final bool tapThrough;
 
   const GuideCutout({
