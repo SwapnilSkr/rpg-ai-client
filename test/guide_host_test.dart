@@ -75,6 +75,97 @@ void main() {
     GuideController.arcGap = Duration.zero;
   });
 
+  testWidgets('a tab hanging off a sideways strip is scrolled fully in', (
+    tester,
+  ) async {
+    // The Chronicle's tab strip scrolls horizontally, and a tab at the far
+    // end can be visible enough to resolve while still running past the
+    // bezel. The overflow check only ever looked at top and bottom, so the
+    // strip never scrolled and the opening was clipped flat against the edge
+    // instead of lighting the whole tab.
+    const flow = GuideFlow(
+      id: 'test.strip',
+      label: 'Strip arc',
+      beats: [GuideBeat(anchor: 'tab.last', title: 'Last Tab', body: 'X.')],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideHost(
+          child: Scaffold(
+            body: SizedBox(
+              height: 60,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  // Leaves the tab overhanging the 800pt test surface by 10pt
+                  // — comfortably past `_minVisible`, so it resolves and the
+                  // old code opened on it exactly where it stood.
+                  const SizedBox(width: 690),
+                  GuideAnchor(
+                    id: 'tab.last',
+                    child: Container(
+                      width: 120,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF333333),
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.runAsync(() => guide.replay(flow));
+    await _arrive(tester);
+    // The reveal is a 300ms scroll; let it land.
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final hole = _openingOf(tester);
+    expect(hole, isNotNull);
+    expect(
+      hole!.width,
+      greaterThanOrEqualTo(120),
+      reason: 'the whole tab must be lit, not the sliver of it that fitted',
+    );
+    expect(hole.right, lessThanOrEqualTo(800));
+
+    guide.skip();
+    await _depart(tester);
+  });
+
+  testWidgets('a wide row in a vertical list is not treated as overflowing', (
+    tester,
+  ) async {
+    // The other half of the same rule. A card that spans the width of a
+    // vertical list overhangs nothing it can be scrolled away from, and
+    // answering true here would scroll the page for no reason a reader could
+    // see.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideHost(
+          child: Scaffold(
+            body: ListView(
+              children: [
+                GuideAnchor(
+                  id: 'row.wide',
+                  child: Container(height: 80, color: const Color(0xFF333333)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(GuideAnchorRegistry.instance.overflowsViewport('row.wide'), isFalse);
+  });
+
   testWidgets('the lit control answers the first tap, not the second', (
     tester,
   ) async {

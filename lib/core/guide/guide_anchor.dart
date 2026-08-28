@@ -543,12 +543,21 @@ class GuideAnchorRegistry {
     return route != null && !route.isCurrent;
   }
 
-  /// Whether [id] resolves but runs off the top or bottom of the screen.
+  /// Whether [id] resolves but still runs off an edge of the screen.
   ///
   /// A target can be three-quarters visible — enough to resolve — and still be
-  /// taller than the room left for it, which is what made the realm's four
+  /// larger than the room left for it, which is what made the realm's four
   /// tomes read as a box running off the bottom rather than as a lit group.
   /// Answering true sends it through [ensureVisible] first.
+  ///
+  /// Measured on the axis the target can actually be moved along. This only
+  /// looked at top and bottom, so the Chronicle's tab strip — which scrolls
+  /// sideways — never scrolled at all: a tab hanging off the right edge was
+  /// visible enough to resolve, so the beat opened on it as it stood and the
+  /// opening was clipped flat against the bezel. Checking the horizontal edges
+  /// unconditionally would be worse, though: a full-width card in a vertical
+  /// list overhangs by design, and "fixing" that would scroll the page
+  /// sideways-or-worse for no reason a reader could see.
   bool overflowsViewport(String id) {
     final rect = resolve(id);
     if (rect == null) return false;
@@ -557,6 +566,9 @@ class GuideAnchorRegistry {
     final view = View.maybeOf(context);
     if (view == null) return false;
     final screen = Offset.zero & (view.physicalSize / view.devicePixelRatio);
+    if (Scrollable.maybeOf(context)?.position.axis == Axis.horizontal) {
+      return rect.left < screen.left || rect.right > screen.right;
+    }
     return rect.top < screen.top || rect.bottom > screen.bottom;
   }
 
