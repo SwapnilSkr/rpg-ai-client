@@ -9,6 +9,7 @@ import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
 import '../../../../shared/widgets/everlore_empty_state.dart';
 import '../../../../shared/widgets/story_prose.dart';
+import '../../../../shared/widgets/realm_backdrop.dart';
 import '../../../core/guide/guide_anchor.dart';
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_ids.dart';
@@ -114,176 +115,139 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
         : EverloreTheme.cyanBright;
 
     return Stack(
+      fit: StackFit.expand,
       children: [
+        // The world's own art, full bleed behind everything — the same
+        // backdrop Explore, Realms and a realm's own page are built on. This
+        // was a 180pt banner with a circular portrait pinned to its lower
+        // edge, which is the grammar of a social profile: a header you look
+        // at, with a face on it. A place you are about to walk into should be
+        // the ground the page stands on.
+        if (t.imageUrl.isNotEmpty)
+          EverloreNetworkImage(
+            imageUrl: t.imageUrl,
+            fit: BoxFit.cover,
+            memCacheWidth: 1080,
+            errorWidget: const _DetailFallbackArt(),
+            semanticLabel: t.title,
+          )
+        else
+          const _DetailFallbackArt(),
+        const EmberOverlay(),
+        // The scrim is shaped to where the reading starts, not spread evenly
+        // down the screen. It stays light over the hero so the art is
+        // actually visible, then darkens hard just below it — the description
+        // is dim ash on a busy painting otherwise, which is a legibility cost
+        // the old flat panel did not have. Four stops so it *holds* at near
+        // solid for the whole scroll instead of easing there only at the very
+        // bottom of the viewport.
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                EverloreTheme.void0.withValues(alpha: 0.12),
+                EverloreTheme.void0.withValues(alpha: 0.4),
+                EverloreTheme.void0.withValues(alpha: 0.9),
+                EverloreTheme.void0.withValues(alpha: 0.95),
+              ],
+              stops: const [0, 0.2, 0.52, 1],
+            ),
+          ),
+        ),
         CustomScrollView(
           slivers: [
-            // App bar with hero header
             SliverAppBar(
-              backgroundColor: EverloreTheme.void0,
-              expandedHeight: 180,
+              backgroundColor: Colors.transparent,
+              expandedHeight: 280,
               pinned: true,
               leading: IconButton(
                 icon: const Icon(
                   Icons.arrow_back_ios_new,
-                  color: EverloreTheme.ash,
+                  color: EverloreTheme.parchment,
                   size: 18,
                 ),
                 onPressed: () =>
                     context.canPop() ? context.pop() : context.go('/templates'),
               ),
               flexibleSpace: FlexibleSpaceBar(
+                // No second gradient inside the bar. One layered on top of the
+                // page-wide scrim ends where the bar ends, and the step
+                // between the two drew a visible horizontal seam straight
+                // across the artwork. The scrim below is continuous, and the
+                // title carries its own shadow instead.
                 background: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Generated hero image (behind the gradient scrim)
-                    if (t.imageUrl.isNotEmpty)
-                      Positioned.fill(
-                        child: EverloreNetworkImage(
-                          imageUrl: t.imageUrl,
-                          fit: BoxFit.cover,
-                          memCacheWidth: 1080,
-                          errorWidget: const SizedBox.shrink(),
-                          semanticLabel: t.title,
-                        ),
-                      )
-                    else
-                      Positioned.fill(
-                        child: Image.asset(
-                          t.isSentient
-                              ? 'assets/art/persona-muse.webp'
-                              : 'assets/art/forge-muse.webp',
-                          fit: BoxFit.cover,
-                          alignment: Alignment.topCenter,
-                        ),
-                      ),
-                    // Gradient bg / scrim
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            accentColor.withValues(alpha: 0.12),
-                            EverloreTheme.void0,
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Ambient circle
                     Positioned(
-                      top: -40,
-                      right: -40,
-                      child: Container(
-                        width: 200,
-                        height: 200,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              accentColor.withValues(alpha: 0.1),
-                              Colors.transparent,
-                            ],
+                      left: 20,
+                      right: 20,
+                      bottom: 22,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            t.title,
+                            style:
+                                EverloreTheme.serifDisplay(
+                                  size: 30,
+                                  color: EverloreTheme.parchment,
+                                  weight: FontWeight.w600,
+                                ).copyWith(
+                                  // Local contrast where it is needed and
+                                  // nowhere else: a world's cover can be
+                                  // bright directly behind its own name, and a
+                                  // shadow holds the letters without dimming
+                                  // the painting.
+                                  shadows: const [
+                                    Shadow(
+                                      color: Color(0xCC0A0807),
+                                      blurRadius: 18,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
                           ),
-                        ),
-                      ),
-                    ),
-                    // Content
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 50, 20, 16),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Container(
-                              width: 64,
-                              height: 64,
-                              clipBehavior: Clip.antiAlias,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: accentColor.withValues(alpha: 0.12),
-                                border: Border.all(
-                                  color: accentColor.withValues(alpha: 0.4),
-                                  width: 1.5,
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(20),
+                                  color: accentColor.withValues(alpha: 0.14),
+                                  border: Border.all(
+                                    color: accentColor.withValues(alpha: 0.34),
+                                  ),
+                                ),
+                                child: Text(
+                                  t.isCharacter
+                                      ? 'Character Story'
+                                      : t.isSentient
+                                      ? 'Sentient World'
+                                      : 'Game Master World',
+                                  style: TextStyle(
+                                    color: accentColor,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                              child: t.imageUrl.isNotEmpty
-                                  ? ClipOval(
-                                      child: EverloreNetworkImage(
-                                        imageUrl: t.imageUrl,
-                                        memCacheWidth: 192,
-                                        semanticLabel: t.title,
-                                      ),
-                                    )
-                                  : Icon(
-                                      t.isSentient
-                                          ? Icons.psychology_alt
-                                          : Icons.auto_stories,
-                                      color: accentColor,
-                                      size: 28,
-                                    ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    t.title,
-                                    style: const TextStyle(
-                                      color: EverloreTheme.parchment,
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                          color: accentColor.withValues(
-                                            alpha: 0.1,
-                                          ),
-                                          border: Border.all(
-                                            color: accentColor.withValues(
-                                              alpha: 0.3,
-                                            ),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          t.isCharacter
-                                              ? 'Character Story'
-                                              : t.isSentient
-                                              ? 'Sentient World'
-                                              : 'Game Master World',
-                                          style: TextStyle(
-                                            color: accentColor,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                      if (t.isNsfwCapable) ...[
-                                        const SizedBox(width: 6),
-                                        const MatureContentChip(
-                                          density: MatureChipDensity.compact,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                              if (t.isNsfwCapable)
+                                const MatureContentChip(
+                                  density: MatureChipDensity.compact,
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -769,4 +733,31 @@ class _StatPreview extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Stand-in art when a world has no cover of its own, matching the realm
+/// screen's fallback so the two surfaces degrade the same way.
+class _DetailFallbackArt extends StatelessWidget {
+  const _DetailFallbackArt();
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      Image.asset(
+        'assets/art/forge-muse.webp',
+        fit: BoxFit.cover,
+        alignment: Alignment.topCenter,
+      ),
+      const DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0x3326213A), EverloreTheme.void1],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+      ),
+    ],
+  );
 }
