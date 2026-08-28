@@ -521,13 +521,22 @@ class GuideAnchorRegistry {
     return null;
   }
 
-  /// Whether [id] is in the tree and laid out, regardless of whether it is
-  /// currently on screen. Distinguishes "scrolled away" (worth scrolling to)
-  /// from "not there at all" (worth dropping the beat).
+  /// Whether [id] is in the tree, laid out, and occupies room, regardless of
+  /// whether it is currently on screen. Distinguishes "scrolled away" (worth
+  /// scrolling to) from "not there at all" (worth dropping the beat).
+  ///
+  /// A box with no size counts as the latter. Several targets stay mounted and
+  /// collapse to nothing when they have nothing to show — the play screen's
+  /// bond rail is `SizedBox.shrink()` until the story has bonded the player to
+  /// somebody. Reading "laid out" as present made a collapsed rail look
+  /// scrolled-past, so the beat was shown and sent to the reveal and
+  /// `requiresAnchor` was never reached: on a fresh playthrough the player got
+  /// "Those Who Stand With You" as a card floating over a screen with no rail
+  /// on it. Same definition of usable the measurer already applies.
   bool isMounted(String id) {
     if (_isBuried(id)) return false;
     final object = _anchors[id]?.currentContext?.findRenderObject();
-    return object is RenderBox && object.attached && object.hasSize;
+    return object is RenderBox && _Measured._usable(object);
   }
 
   /// Whether something has been pushed over the anchor's route.

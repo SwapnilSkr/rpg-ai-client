@@ -246,6 +246,61 @@ void main() {
     );
   });
 
+  testWidgets('a beat whose target collapsed to nothing is dropped, not shown', (
+    tester,
+  ) async {
+    // The play screen's bond rail is the case: it renders `SizedBox.shrink()`
+    // until the story has actually bonded the player to somebody, so on a
+    // fresh playthrough its anchor is *mounted at zero size* rather than
+    // absent. `firstMounted` only asked whether the box was laid out, so a
+    // collapsed rail read as "present but scrolled past", the beat was shown
+    // and handed to the reveal — and `requiresAnchor` was never reached. The
+    // player got "Those Who Stand With You" as a card floating over a screen
+    // with no rail on it.
+    const flow = GuideFlow(
+      id: 'test.collapsed',
+      label: 'Collapsed arc',
+      beats: [
+        GuideBeat(
+          anchor: 'test.rail',
+          title: 'Those Who Stand With You',
+          body: 'Nobody yet.',
+          requiresAnchor: true,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideHost(
+          child: Scaffold(
+            body: Column(
+              children: const [
+                GuideAnchor(id: 'test.rail', child: SizedBox.shrink()),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(
+      GuideAnchorRegistry.instance.isMounted('test.rail'),
+      isFalse,
+      reason: 'a box with no size is collapsed, not merely scrolled away',
+    );
+
+    await tester.runAsync(() => guide.maybeStart(flow, delay: Duration.zero));
+    await _arrive(tester);
+
+    expect(find.text('THOSE WHO STAND WITH YOU'), findsNothing);
+    expect(
+      guide.progress[flow.id],
+      isNull,
+      reason: 'and the arc is still owed for the day the rail has somebody on it',
+    );
+  });
+
   testWidgets('spotlights a beat, advances, and ends', (tester) async {
     await tester.pumpWidget(_app());
     await tester.runAsync(() => guide.replay(_flow));
