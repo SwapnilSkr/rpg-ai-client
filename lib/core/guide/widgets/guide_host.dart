@@ -203,6 +203,20 @@ class _GuideHostState extends State<GuideHost>
         );
       }
     }
+    // A target the guide is *bringing* into view is not an absent one. Between
+    // two Chronicle tabs the next tab is mounted but still scrolling in, so it
+    // resolves to nothing for a few frames — and dropping the opening there
+    // collapses the card into the floating band at the foot of the screen and
+    // throws it back up when the tab lands. That drop and rebound is the flash
+    // between beats. Holding the last opening keeps the card still until the
+    // new target arrives.
+    //
+    // Only while the guide is doing the scrolling. Holding whenever the anchor
+    // merely remains mounted would also hold it while the *reader* scrolls the
+    // target away, which leaves the opening pinned over whatever content has
+    // slid under it — the older bug, and the one the "scrolled most of the way
+    // out" test exists to catch.
+    if (next == null && _target != null && guide.isRevealing) next = _target;
     if (anchor != _anchor) {
       _anchor = anchor;
       _anchorAt = elapsed;
