@@ -41,14 +41,23 @@ class GuideController extends ChangeNotifier {
 
   /// Quiet gap between one arc ending and the next being allowed to open.
   ///
-  /// Each surface still explains itself exactly once; this only stops the
-  /// explanations landing back to back. Crossing play, realm and chronicle to
-  /// reach a story used to hand over three arcs inside a minute, which is
-  /// where the fatigue lives — not in any single arc's length.
+  /// Just long enough that finishing one arc and landing on another surface
+  /// does not read as two cards fighting for the same frame. It is deliberately
+  /// below the threshold where a person would call it a wait.
+  ///
+  /// It used to be eight seconds, on the theory that spacing arcs out was what
+  /// cured fatigue. It is not, and the cost was severe: crossing to Personas
+  /// straight after the arrival arc left the screen inert for eight seconds and
+  /// then dimmed it — measured at 8.5s on device. A walkthrough that arrives
+  /// after the player has already moved on is not a calmer walkthrough, it is a
+  /// broken one, and it is the whole reason the play and chronicle arcs looked
+  /// like they never fired. Fatigue is fixed by having fewer, better-placed
+  /// arcs (see `guide_flows.dart`), not by making each one late.
+  ///
   /// Mutable only so the widget tests can shrink it; nothing in the app
   /// writes to it.
   @visibleForTesting
-  static Duration arcGap = const Duration(seconds: 8);
+  static Duration arcGap = const Duration(milliseconds: 900);
 
   GuideProgress _progress = GuideProgress.empty;
   bool _ready = false;
@@ -84,6 +93,18 @@ class GuideController extends ChangeNotifier {
   /// that never appeared left the dots jumping a place and finishing on
   /// "6 of 6" after five. See [beatStep] and [beatTotal].
   final Set<int> _dropped = {};
+
+  /// Whether the running arc has put a single beat on screen.
+  ///
+  /// An arc used to be recorded spent the instant it *started*, before any
+  /// beat had been resolved. That is right for an arc that shows something and
+  /// is then abandoned; it is badly wrong for one that shows nothing at all.
+  /// A first-run player opening Realms before they have played anything, or
+  /// the Chronicle before the world remembers anything, has every beat dropped
+  /// for want of a target — and the arc was marked seen and never offered
+  /// again, so the walkthrough for that surface was spent on the one visit
+  /// where it had nothing to say. An arc that delivered nothing stays owed.
+  bool _delivered = false;
 
   /// Whether rehearsal mode still owes this process a wipe.
   ///
@@ -219,15 +240,18 @@ class GuideController extends ChangeNotifier {
   ///
   /// [delay] lets a surface settle — routes, sheets, and streamed narration all
   /// need a beat before there is anything stable to point at.
-  Future<void> maybeStart(
+  /// Returns whether the arc actually opened. Callers that are holding the
+  /// flow on its behalf — see [_retryHeld] — need to know the difference
+  /// between "started" and "still owed"; everything else ignores it.
+  Future<bool> maybeStart(
     GuideFlow flow, {
     Duration delay = const Duration(milliseconds: 400),
   }) async {
     if (!_ready) await init();
-    if (!canAutoStart(flow)) return;
+    if (!canAutoStart(flow)) return false;
     // Never talk over a running arc; the later trigger will come round again
     // on the next visit, and its record is still untouched.
-    if (_flow != null || _pending.contains(flow.id)) return;
+    if (_flow != null || _pending.contains(flow.id)) return false;
 
     final from = _location;
     _pending.add(flow.id);
@@ -238,23 +262,23 @@ class GuideController extends ChangeNotifier {
     // long enough for the player to have moved on. Starting anyway is what put
     // an arc for one surface on top of another — and recorded it spent, so the
     // surface it belonged to never got its walkthrough at all.
-    if (_flow != null) return;
-    if (!_stillHere(flow, from)) return;
-    if (!canAutoStart(flow)) return;
+    if (_flow != null) return false;
+    if (!_stillHere(flow, from)) return false;
+    if (!canAutoStart(flow)) return false;
 
     // The surface is there but something is over it — the protagonist sheet on
     // a first play, a dialog, a menu. Hold the arc rather than talking across
     // it; `_onSurfaceChanged` brings it back when the way is clear.
     if (GuideAnchorRegistry.instance.isCovered(flow.anchorIds)) {
       _held[flow.id] = flow;
-      return;
+      return false;
     }
 
     // Too soon after the last arc. Held rather than recorded — exactly like a
     // covered surface — so the arc is still owed and opens when the gap ends.
     if (_inArcGap) {
       _held[flow.id] = flow;
-      return;
+      return false;
     }
     _held.remove(flow.id);
 
@@ -262,10 +286,9 @@ class GuideController extends ChangeNotifier {
     _flow = flow;
     _index = -1;
     _dropped.clear();
-    // Written before the first beat paints: from here on, this arc is spent
-    // whatever happens next.
-    _record(flow, step: 0, status: GuideStatus.seen, flush: false);
+    _delivered = false;
     _advanceToResolvableBeat(1);
+    return true;
   }
 
   /// Whether [flow] still belongs where the player is standing.
@@ -296,6 +319,7 @@ class GuideController extends ChangeNotifier {
     _flow = flow;
     _index = -1;
     _dropped.clear();
+    _delivered = false;
     _startedThisSession.add(flow.id);
     _advanceToResolvableBeat(1);
   }
@@ -362,19 +386,35 @@ class GuideController extends ChangeNotifier {
     await GuideStore.save(_progress, flush: true);
   }
 
-  /// Register a live `GuideOnEnter`. See [_offerTriggersFor].
   /// Retry anything held back once the surface over it clears.
-  void _onSurfaceChanged() {
-    if (_held.isEmpty || _flow != null) return;
-    if (_inArcGap) return;
-    final waiting = _held.values.toList();
-    for (final flow in waiting) {
+  void _onSurfaceChanged() => _retryHeld();
+
+  /// Re-offer every arc that came due at a bad moment.
+  ///
+  /// A held arc is one that was owed and could not open — the surface was
+  /// covered, or the previous arc had only just closed. It is deliberately
+  /// *not* recorded, so it must eventually be offered again or the surface
+  /// silently loses its walkthrough for the rest of the session. That is the
+  /// shape of the "the play screen never shows anything" report: the arc came
+  /// due while the gap was open, was held, and the only thing that would have
+  /// re-offered it was a play-state change that never came.
+  ///
+  /// Held arcs are dropped only when they actually open. One that is still in
+  /// the wrong place stays owed and gets another chance on the next surface or
+  /// route change.
+  void _retryHeld() {
+    if (_held.isEmpty || _flow != null || _inArcGap) return;
+    for (final flow in _held.values.toList()) {
       if (GuideAnchorRegistry.instance.isCovered(flow.anchorIds)) continue;
-      _held.remove(flow.id);
-      unawaited(maybeStart(flow));
+      unawaited(
+        maybeStart(flow).then((started) {
+          if (started) _held.remove(flow.id);
+        }),
+      );
     }
   }
 
+  /// Register a live `GuideOnEnter`. See [_offerTriggersFor].
   void registerTrigger(Object token, GuideFlow flow, VoidCallback start) {
     _triggers[token] = (flow: flow, start: start);
   }
@@ -418,6 +458,10 @@ class GuideController extends ChangeNotifier {
       }
     }
     _offerTriggersFor(location);
+    // A surface whose arc has no `GuideOnEnter` — the play screen drives its
+    // three arcs from story state — has nothing else that would come back for
+    // a held arc. Arriving somewhere is as good a moment as any to re-offer.
+    _retryHeld();
   }
 
   /// System back, while the guide is up.
@@ -505,6 +549,7 @@ class GuideController extends ChangeNotifier {
   /// Commit to showing beat [index] and start watching its target.
   void _showBeat(GuideFlow flow, int index) {
     _index = index;
+    _delivered = true;
     final registry = GuideAnchorRegistry.instance;
     final anchor = registry.firstResolvable(flow.beats[index].anchors);
     _beatResolved = anchor != null;
@@ -639,12 +684,24 @@ class GuideController extends ChangeNotifier {
   void _end(GuideStatus status) {
     final flow = _flow;
     final step = _index;
-    _openArcGap();
+    final delivered = _delivered;
     _cancelBeatWatch();
     _beatResolved = false;
     _revealing = false;
     _flow = null;
     _index = 0;
+    _delivered = false;
+    // Nothing was ever shown — every beat wanted a target this surface does
+    // not have yet. Leave no record and forget that it was tried, so the arc
+    // is offered again the next time the player stands here with something to
+    // point at. No gap either: nothing was said, so there is nothing to space
+    // the next arc away from.
+    if (flow != null && !delivered) {
+      _startedThisSession.remove(flow.id);
+      notifyListeners();
+      return;
+    }
+    _openArcGap();
     // The overlay closes on this frame. Persistence follows; nothing the
     // player sees should ever wait on a keychain or a socket.
     notifyListeners();

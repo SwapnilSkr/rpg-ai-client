@@ -75,6 +75,43 @@ void main() {
     GuideController.arcGap = Duration.zero;
   });
 
+  testWidgets('an arc that finds nothing to point at stays owed', (
+    tester,
+  ) async {
+    // The first-run case this exists for: a player opens Realms before they
+    // have played anything, so the card the arc is built around does not
+    // exist. Recording the arc there spent the one walkthrough that surface
+    // ever gets on the day it had nothing to say.
+    const flow = GuideFlow(
+      id: 'test.empty_surface',
+      label: 'Empty surface arc',
+      beats: [
+        GuideBeat(
+          anchor: 'test.absent',
+          title: 'Needs A Target',
+          body: 'Nothing here yet.',
+          requiresAnchor: true,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(_app());
+    await tester.runAsync(() => guide.maybeStart(flow, delay: Duration.zero));
+    await _arrive(tester);
+
+    expect(find.text('Needs A Target'), findsNothing);
+    expect(
+      guide.progress[flow.id],
+      isNull,
+      reason: 'an arc that showed nothing must leave no record',
+    );
+    expect(
+      guide.canAutoStart(flow),
+      isTrue,
+      reason: 'and must still be offered the next time the surface has content',
+    );
+  });
+
   testWidgets('spotlights a beat, advances, and ends', (tester) async {
     await tester.pumpWidget(_app());
     await tester.runAsync(() => guide.replay(_flow));
