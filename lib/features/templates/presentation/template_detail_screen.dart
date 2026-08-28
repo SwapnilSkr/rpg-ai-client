@@ -8,6 +8,10 @@ import '../../../../shared/widgets/mature_content_chip.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
 import '../../../../shared/widgets/everlore_empty_state.dart';
+import '../../../core/guide/guide_anchor.dart';
+import '../../../core/guide/guide_flows.dart';
+import '../../../core/guide/guide_ids.dart';
+import '../../../core/guide/guide_trigger.dart';
 
 class TemplateDetailScreen extends StatefulWidget {
   final String templateId;
@@ -62,7 +66,13 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
             )
           : _template == null
           ? _buildNotFound(context)
-          : _buildContent(context, _template!),
+          // The threshold arc waits for the world itself. Firing it against a
+          // loading spinner would spend the one visit it gets on an empty
+          // screen.
+          : GuideOnEnter(
+              flow: GuideFlows.worldDetail,
+              child: _buildContent(context, _template!),
+            ),
     );
   }
 
@@ -295,11 +305,14 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                   ),
 
                   const SizedBox(height: 24),
-                  _WorldDetailPanel(
-                    icon: Icons.auto_stories_outlined,
-                    label: 'WHAT AWAITS',
-                    text: _invitationFor(t),
-                    accent: accentColor,
+                  GuideAnchor(
+                    id: GuideIds.worldInvitation,
+                    child: _WorldDetailPanel(
+                      icon: Icons.auto_stories_outlined,
+                      label: 'WHAT AWAITS',
+                      text: _invitationFor(t),
+                      accent: accentColor,
+                    ),
                   ),
 
                   const SizedBox(height: 28),
@@ -440,31 +453,34 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                child: ElevatedButton(
-                  onPressed: _enterWorld,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: EverloreTheme.gold,
-                    foregroundColor: EverloreTheme.void0,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.explore, size: 18),
-                      SizedBox(width: 10),
-                      Text(
-                        'ENTER THIS WORLD',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.5,
-                        ),
+                child: GuideAnchor(
+                  id: GuideIds.worldEnter,
+                  child: ElevatedButton(
+                    onPressed: _enterWorld,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: EverloreTheme.gold,
+                      foregroundColor: EverloreTheme.void0,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                    ],
+                      elevation: 0,
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.explore, size: 18),
+                        SizedBox(width: 10),
+                        Text(
+                          'ENTER THIS WORLD',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -49,9 +49,15 @@ abstract final class GuideIds {
   static const discoverSearch = 'discover.search';
   static const discoverCard = 'discover.card';
 
+  // ── World detail (the threshold between browsing and playing) ──
+  static const worldInvitation = 'world.invitation';
+  static const worldEnter = 'world.enter';
+
   // ── Home / My Worlds / Personas ──
   static const homeCard = 'home.card';
+  static const homeEmpty = 'home.empty';
   static const personasCreate = 'personas.create';
+  static const personasAdd = 'personas.add';
 
   // ── Shell ──
   static const navCreate = 'nav.create';

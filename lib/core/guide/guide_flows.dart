@@ -39,11 +39,37 @@ abstract final class GuideFlows {
             'Open any of these and the world begins where you stand. Nothing '
             'here is a rehearsal — the first thing you say becomes canon.',
       ),
+      // There was a fourth beat here, pointing at the search icon. It went,
+      // and the arc is better for it. This is the first thing a new player
+      // ever sees, before they have done anything at all, and a magnifying
+      // glass is the one control on the surface that needs no introduction —
+      // so it was pure length on the beat where length costs the most.
+    ],
+  );
+
+  /// The threshold itself. Opening a world is the one step between browsing
+  /// and playing, and it was the only step on that path with no guidance at
+  /// all — the arrival arc says "open any of these", and then the surface it
+  /// opens says nothing.
+  static const worldDetail = GuideFlow(
+    id: 'world_detail',
+    label: 'The Threshold',
+    route: '/templates',
+    beats: [
       GuideBeat(
-        anchor: GuideIds.discoverSearch,
-        title: 'Seeking',
-        body: 'Or name what you are hungry for, and I will search the archive.',
+        anchor: GuideIds.worldInvitation,
+        title: 'What Waits Here',
+        body:
+            'How this world begins, and who tells it — a narrator holding the '
+            'whole realm, or one soul at the centre of it.',
         requiresAnchor: true,
+      ),
+      GuideBeat(
+        anchor: GuideIds.worldEnter,
+        title: 'Crossing the Threshold',
+        body:
+            'Step through and the world makes a story that is yours alone. You '
+            'may keep more than one here, and none of them touch each other.',
       ),
     ],
   );
@@ -328,6 +354,30 @@ abstract final class GuideFlows {
     ],
   );
 
+  /// The same shelf before anything stands on it.
+  ///
+  /// Every arc but this one was written for an app with content in it, which
+  /// is not the app anybody meets first. A player who has signed up and gone
+  /// looking for their stories finds an empty shelf, and the arc that explains
+  /// the shelf is waiting for a card that cannot exist until they have played.
+  /// This is what that surface has to say on the day it is empty.
+  static const homeEmpty = GuideFlow(
+    id: 'home.empty',
+    label: 'An Empty Shelf',
+    route: '/',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.homeEmpty,
+        title: 'Nothing Yet',
+        body:
+            'Your stories will gather here — each one holding its own hour, '
+            'its own company, its own unfinished sentence. You have not begun '
+            'one. The shelves are through Explore.',
+        requiresAnchor: true,
+      ),
+    ],
+  );
+
   static const myWorlds = GuideFlow(
     id: 'my_worlds',
     label: 'The Forge',
@@ -350,6 +400,11 @@ abstract final class GuideFlows {
     beats: [
       GuideBeat(
         anchor: GuideIds.personasCreate,
+        // The empty vault's central button and the header pill that replaces
+        // it are the same affordance wearing two hats. Naming both means the
+        // beat lights a real control whether or not the player already keeps
+        // personas, instead of degrading to a card pointing at nothing.
+        fallbackAnchor: GuideIds.personasAdd,
         title: 'Masks',
         body:
             'A persona is who you are when you cross over — a name, a history, '
@@ -362,6 +417,7 @@ abstract final class GuideFlows {
   /// a player would meet them.
   static const all = <GuideFlow>[
     arrival,
+    worldDetail,
     playFirst,
     playTools,
     realm,
@@ -371,6 +427,7 @@ abstract final class GuideFlows {
     chronicleWorld,
     ink,
     home,
+    homeEmpty,
     myWorlds,
     personas,
   ];

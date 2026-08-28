@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../core/guide/guide_anchor.dart';
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_ids.dart';
 import '../../../core/guide/guide_trigger.dart';
@@ -217,61 +218,64 @@ class _PersonasScreenState extends State<PersonasScreen> {
                           style: EverloreTheme.sectionHeader,
                         ),
                         const Spacer(),
-                        Semantics(
-                          button: true,
-                          child: GestureDetector(
-                            onTap: () => _openEditor(),
-                            behavior: HitTestBehavior.opaque,
-                            child: Container(
-                              // 14pt vertical padding keeps the pill at the
-                              // 48pt minimum tap target.
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(20),
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    EverloreTheme.goldGlow,
-                                    EverloreTheme.gold,
+                        GuideAnchor(
+                          id: GuideIds.personasAdd,
+                          child: Semantics(
+                            button: true,
+                            child: GestureDetector(
+                              onTap: () => _openEditor(),
+                              behavior: HitTestBehavior.opaque,
+                              child: Container(
+                                // 14pt vertical padding keeps the pill at the
+                                // 48pt minimum tap target.
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(20),
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      EverloreTheme.goldGlow,
+                                      EverloreTheme.gold,
+                                    ],
+                                  ),
+                                  border: Border.all(
+                                    color: EverloreTheme.goldHot.withValues(
+                                      alpha: 0.5,
+                                    ),
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: EverloreTheme.gold.withValues(
+                                        alpha: 0.25,
+                                      ),
+                                      blurRadius: 12,
+                                    ),
                                   ],
                                 ),
-                                border: Border.all(
-                                  color: EverloreTheme.goldHot.withValues(
-                                    alpha: 0.5,
-                                  ),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: EverloreTheme.gold.withValues(
-                                      alpha: 0.25,
-                                    ),
-                                    blurRadius: 12,
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.add_rounded,
-                                    size: 16,
-                                    color: EverloreTheme.void0,
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    'New persona',
-                                    style: TextStyle(
-                                      fontFamily: EverloreTheme.uiFamily,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.add_rounded,
+                                      size: 16,
                                       color: EverloreTheme.void0,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      'New persona',
+                                      style: TextStyle(
+                                        fontFamily: EverloreTheme.uiFamily,
+                                        color: EverloreTheme.void0,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),

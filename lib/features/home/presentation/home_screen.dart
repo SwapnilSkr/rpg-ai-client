@@ -106,11 +106,17 @@ class _HomeViewState extends State<_HomeView> {
           ),
           BlocBuilder<HomeCubit, HomeState>(
             buildWhen: (previous, current) =>
-                previous.realms.isEmpty != current.realms.isEmpty,
-            // Waits for a story to exist before explaining where stories live.
+                previous.realms.isEmpty != current.realms.isEmpty ||
+                previous.isLoading != current.isLoading,
+            // Two arcs, one surface. A shelf with stories on it explains the
+            // stories; a shelf with none explains the shelf. Which one is
+            // owed is not knowable until the first load has answered, so
+            // neither runs before it has.
             builder: (context, state) => GuideOnEnter(
-              flow: GuideFlows.home,
-              enabled: state.realms.isNotEmpty,
+              flow: state.realms.isEmpty
+                  ? GuideFlows.homeEmpty
+                  : GuideFlows.home,
+              enabled: !state.isLoading,
               child: Column(
                 children: [
                   BlocBuilder<HomeCubit, HomeState>(
@@ -364,6 +370,10 @@ class _EmptyView extends StatelessWidget {
       actionLabel: isSearchEmpty ? 'Clear search' : 'Explore worlds',
       actionIcon: isSearchEmpty ? Icons.close_rounded : Icons.explore_rounded,
       accent: EverloreTheme.gold,
+      // Only the genuinely-empty shelf is a first-run moment. A search that
+      // matched nothing is a dead end the player made themselves, and the
+      // Chronicler has nothing useful to say about it.
+      anchorId: isSearchEmpty ? null : GuideIds.homeEmpty,
       onAction: () => isSearchEmpty
           ? context.read<HomeCubit>().loadInstances(search: '')
           : context.go('/discover'),
