@@ -8,6 +8,7 @@ import '../../../../shared/widgets/mature_content_chip.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
 import '../../../../shared/widgets/everlore_empty_state.dart';
+import '../../../../shared/widgets/story_prose.dart';
 import '../../../core/guide/guide_anchor.dart';
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_ids.dart';
@@ -294,9 +295,13 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  // Description
-                  Text(
-                    t.description,
+                  // Description. The pitch, and the one thing on the screen
+                  // that is read before anything else — so it is cut later
+                  // than the panels below it.
+                  ExpandableProse(
+                    text: t.description,
+                    accent: accentColor,
+                    collapsedLines: 8,
                     style: const TextStyle(
                       color: EverloreTheme.ash,
                       fontSize: 15,
@@ -312,6 +317,11 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                       label: 'WHAT AWAITS',
                       text: _invitationFor(t),
                       accent: accentColor,
+                      // The world's opening line, written the way the narrator
+                      // writes. It is the hook, so it gets more room before it
+                      // is cut than the reference material below.
+                      prose: true,
+                      collapsedLines: 9,
                     ),
                   ),
 
@@ -366,6 +376,10 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                       label: 'FROM THE WORLD GUIDE',
                       text: t.globalLore.trim(),
                       accent: accentColor,
+                      // Background an author may write at any length. Six lines
+                      // is enough to judge a world by and short enough that the
+                      // stats and the way in stay on the same screen.
+                      collapsedLines: 6,
                     ),
                   ],
 
@@ -536,11 +550,23 @@ class _WorldDetailPanel extends StatelessWidget {
   final String text;
   final Color accent;
 
+  /// Render [text] as the world's own voice — `*action*` in italics, spoken
+  /// lines upright — rather than as literal characters. True for a passage
+  /// written by the narrator (a world's opening line); false for editorial
+  /// copy such as a lore entry, which is prose about the world rather than
+  /// prose from inside it.
+  final bool prose;
+
+  /// Lines shown before the reader asks for the rest.
+  final int collapsedLines;
+
   const _WorldDetailPanel({
     required this.icon,
     required this.label,
     required this.text,
     required this.accent,
+    this.prose = false,
+    this.collapsedLines = 6,
   });
 
   @override
@@ -572,18 +598,40 @@ class _WorldDetailPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(
-            text,
-            style: const TextStyle(
-              color: EverloreTheme.parchment,
-              fontSize: 14,
-              height: 1.55,
-            ),
+          ExpandableProse(
+            style: bodyStyle,
+            accent: accent,
+            collapsedLines: collapsedLines,
+            text: prose ? null : text,
+            spans: prose
+                ? storyProseSpans(
+                    text,
+                    // The panel's own measure, not the play surface's: this
+                    // sits inside a bordered card on a browsing screen, so the
+                    // two voices are separated by weight and slant while both
+                    // stay at the card's own size and rhythm.
+                    narrationStyle: bodyStyle.copyWith(
+                      fontStyle: FontStyle.italic,
+                      color: EverloreTheme.parchment.withValues(
+                        alpha: kNarrationMutedAlpha,
+                      ),
+                    ),
+                    dialogueStyle: bodyStyle.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  )
+                : null,
           ),
         ],
       ),
     );
   }
+
+  static const bodyStyle = TextStyle(
+    color: EverloreTheme.parchment,
+    fontSize: 14,
+    height: 1.55,
+  );
 }
 
 class _WorldFact extends StatelessWidget {
