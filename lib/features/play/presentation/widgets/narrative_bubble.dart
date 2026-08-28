@@ -5,8 +5,9 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../../shared/models/event.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
+import '../../../../../shared/widgets/story_prose.dart';
 
-const _kNarrationMutedAlpha = 0.6;
+const _kNarrationMutedAlpha = kNarrationMutedAlpha;
 
 class NarrativeBubble extends StatelessWidget {
   final GameEvent event;
@@ -925,79 +926,20 @@ class _ProseTextState extends State<_ProseText> {
   }
 }
 
+/// The world's own voice, rendered the one way it is rendered anywhere.
+///
+/// The implementation now lives in `shared/widgets/story_prose.dart` so the
+/// world detail screen can show a world's opening line as prose rather than as
+/// raw asterisks. Kept as a named local so the call sites below read the same.
 List<InlineSpan> _narrativeSpans(
   String text, {
   TextStyle? dialogueStyle,
   TextStyle? narrationStyle,
-}) {
-  final base = EverloreTheme.aiText;
-  final narration =
-      narrationStyle ??
-      base.copyWith(
-        fontStyle: FontStyle.italic,
-        fontWeight: FontWeight.w400,
-        color: EverloreTheme.parchment.withValues(alpha: _kNarrationMutedAlpha),
-      );
-  final dialogue =
-      dialogueStyle ??
-      base.copyWith(
-        fontStyle: FontStyle.normal,
-        fontWeight: FontWeight.w600,
-        color: EverloreTheme.parchment,
-      );
-
-  final spans = <InlineSpan>[];
-  final buf = StringBuffer();
-  var inNarration = false;
-  var inQuote = false;
-
-  TextStyle styleNow() {
-    if (inQuote) return dialogue;
-    if (inNarration) return narration;
-    return narration;
-  }
-
-  void flush() {
-    if (buf.isEmpty) return;
-    spans.add(TextSpan(text: buf.toString(), style: styleNow()));
-    buf.clear();
-  }
-
-  for (var i = 0; i < text.length; i++) {
-    final c = text[i];
-
-    // Quotes are semantic dialogue boundaries, even inside `*narration*`.
-    // Keeping narration mode active underneath lets us resume italic prose after
-    // the closing quote while rendering every spoken span upright and bold.
-    if (c == '"' || c == '“' || c == '”') {
-      if (!inQuote) {
-        flush();
-        inQuote = true;
-        buf.write(c == '“' || c == '”' ? '"' : c);
-      } else {
-        buf.write(c == '“' || c == '”' ? '"' : c);
-        flush();
-        inQuote = false;
-      }
-      continue;
-    }
-
-    if (c == '*' && !inQuote) {
-      flush();
-      inNarration = !inNarration;
-      if (i + 1 < text.length && text[i + 1] == '*') i++;
-      continue;
-    }
-
-    buf.write(c);
-  }
-  flush();
-
-  if (spans.isEmpty) {
-    spans.add(TextSpan(text: text, style: narration));
-  }
-  return spans;
-}
+}) => storyProseSpans(
+  text,
+  dialogueStyle: dialogueStyle,
+  narrationStyle: narrationStyle,
+);
 
 class _GeneratingIndicator extends StatefulWidget {
   final String label;
