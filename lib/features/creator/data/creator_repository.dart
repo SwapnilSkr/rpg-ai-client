@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import '../../../core/auth/auth_service.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/models/world_template.dart';
+import '../../billing/data/billing_repository.dart';
 import '../../templates/data/template_repository.dart';
 
 class CreatorWorldPage {
@@ -127,6 +128,7 @@ class CreatorRepository {
   ) async {
     final response = await ApiClient.post('/templates/autofill', body: body);
     final map = Map<String, dynamic>.from(response as Map);
+    unawaited(BillingRepository.instance.refreshInBackground());
     return Map<String, dynamic>.from(map['draft'] as Map? ?? {});
   }
 
@@ -138,6 +140,7 @@ class CreatorRepository {
       body: {'prompt': prompt},
     );
     final map = Map<String, dynamic>.from(response as Map);
+    unawaited(BillingRepository.instance.refreshInBackground());
     return (map['url'] ?? '').toString();
   }
 

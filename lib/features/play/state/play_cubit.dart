@@ -12,6 +12,7 @@ import '../../../shared/models/world_template.dart';
 import '../../../shared/models/memory.dart';
 import '../../../shared/models/character_profile.dart';
 import '../../../shared/models/relation_candidate.dart';
+import '../../billing/data/billing_repository.dart';
 
 /// Sentinel so [PlayState.copyWith] can distinguish "leave unchanged" from
 /// "set to null" for nullable fields like [replayingEventId].
@@ -271,6 +272,15 @@ class PlayCubit extends Cubit<PlayState> {
     _init();
   }
 
+  Future<void> _refreshInk() async {
+    try {
+      await BillingRepository.instance.refreshWallet();
+    } catch (_) {
+      // Story playback remains usable when a background balance refresh is
+      // temporarily unavailable; the next header resume/open retries it.
+    }
+  }
+
   List<GameEvent> _trimEvents(List<GameEvent> events) {
     if (events.length <= _activeEventLimit) return events;
     return events.sublist(events.length - _activeEventLimit);
@@ -339,6 +349,7 @@ class PlayCubit extends Cubit<PlayState> {
           notice: rewindSnapshotReady ? null : state.notice,
         ),
       );
+      unawaited(_refreshInk());
       if (rewindSnapshotReady) _rewindRequestCompleted = false;
       _loadingOlderEvents = false;
 
@@ -594,6 +605,7 @@ class PlayCubit extends Cubit<PlayState> {
           lastStatDeltas: statDeltas,
         ),
       );
+      unawaited(_refreshInk());
     });
 
     _milestoneSub = _ws.onMilestoneUnlocked.listen((msg) {
@@ -711,6 +723,9 @@ class PlayCubit extends Cubit<PlayState> {
 
     _errorSub = _ws.onError.listen((msg) {
       final serverMessage = msg['message']?.toString() ?? '';
+      // Reservations are released on failed turns; refresh the header so it
+      // reflects the settled/refunded ledger immediately.
+      unawaited(_refreshInk());
       final isInkDepleted =
           serverMessage.toLowerCase().contains('story ink') ||
           serverMessage.toLowerCase().contains('not enough ink');

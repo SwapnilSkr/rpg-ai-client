@@ -53,7 +53,11 @@ class _BillingScreenState extends State<BillingScreen> {
       _error = null;
     });
     try {
-      final wallet = await BillingRepository.instance.wallet();
+      // Always reconcile on entry so admin grants, another device, and a
+      // completed Play purchase are reflected before showing the balance.
+      final wallet = await BillingRepository.instance.wallet(
+        forceRefresh: true,
+      );
       final products = wallet.purchasesEnabled
           ? await BillingRepository.instance.products()
           : const <ProductDetails>[];

@@ -54,13 +54,39 @@ class BillingRepository {
   final _walletChanges = StreamController<BillingWallet>.broadcast();
   final _errors = StreamController<String>.broadcast();
   bool _started = false;
+  BillingWallet? _cachedWallet;
+  Future<BillingWallet>? _refreshInFlight;
 
   Stream<BillingWallet> get walletChanges => _walletChanges.stream;
   Stream<String> get errors => _errors.stream;
 
-  Future<BillingWallet> wallet() async {
-    final response = await ApiClient.get('/billing/me');
-    return _walletWithCatalog(response);
+  Future<BillingWallet> wallet({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedWallet != null) return _cachedWallet!;
+    return refreshWallet();
+  }
+
+  /// Pull the authoritative ledger balance and notify every header/surface.
+  /// Concurrent callers share one request so multiple mounted top bars do not
+  /// stampede the billing endpoint.
+  Future<BillingWallet> refreshWallet() {
+    final current = _refreshInFlight;
+    if (current != null) return current;
+    final future = () async {
+      final response = await ApiClient.get('/billing/me');
+      final wallet = await _walletWithCatalog(response);
+      _walletChanges.add(wallet);
+      return wallet;
+    }();
+    _refreshInFlight = future;
+    return future.whenComplete(() => _refreshInFlight = null);
+  }
+
+  Future<void> refreshInBackground() async {
+    try {
+      await refreshWallet();
+    } catch (_) {
+      // A background refresh must never surface as an uncaught async error.
+    }
   }
 
   Future<BillingWallet> _walletWithCatalog(dynamic response) async {
@@ -68,7 +94,9 @@ class BillingRepository {
     final map = Map<String, dynamic>.from(response as Map);
     map['purchases_enabled'] = catalog['purchases_enabled'] == true;
     map['simulation_enabled'] = catalog['simulation_enabled'] == true;
-    return BillingWallet.fromJson(map);
+    final wallet = BillingWallet.fromJson(map);
+    _cachedWallet = wallet;
+    return wallet;
   }
 
   Future<BillingWallet> simulatePurchase(String productId) async {
