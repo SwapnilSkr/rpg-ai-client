@@ -1947,6 +1947,11 @@ class _PlayHeader extends StatelessWidget {
                   ),
                 ),
               ),
+              // No Ink readout here on purpose. The play header is the one
+              // surface the player is meant to be inside rather than looking
+              // at, and a live balance ticking down beside the story is the
+              // wrong thing to draw the eye. It stays on the shell's top bar,
+              // one tap away on every other tab.
               if (onOpenSettings != null)
                 GuideAnchor(
                   id: GuideIds.playMenu,
