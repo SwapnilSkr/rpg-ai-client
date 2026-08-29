@@ -6,6 +6,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 
 import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
+import '../../../shared/widgets/ink_mark.dart';
 import '../data/billing_repository.dart';
 
 class BillingScreen extends StatefulWidget {
@@ -281,6 +282,20 @@ class _BillingScreenState extends State<BillingScreen> {
   }
 }
 
+/// Thousands separators, without pulling in `intl` for one label.
+///
+/// A granted reserve runs to eight digits, and `100000000 Ink` is a figure no
+/// one can read at a glance on the one screen that exists to state it exactly.
+String _grouped(int value) {
+  final digits = value.abs().toString();
+  final buffer = StringBuffer(value < 0 ? '-' : '');
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(digits[i]);
+  }
+  return buffer.toString();
+}
+
 class _InkBalance extends StatelessWidget {
   final BillingWallet wallet;
   const _InkBalance({required this.wallet});
@@ -297,37 +312,61 @@ class _InkBalance extends StatelessWidget {
           color: EverloreTheme.goldDim.withValues(alpha: 0.42),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            'YOUR STORY INK',
-            style: EverloreTheme.ui(
-              size: 10,
-              color: EverloreTheme.gold,
-              weight: FontWeight.w700,
-              spacing: 1.7,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'YOUR STORY INK',
+                  style: EverloreTheme.ui(
+                    size: 10,
+                    color: EverloreTheme.gold,
+                    weight: FontWeight.w700,
+                    spacing: 1.7,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // The one screen whose job is the exact figure, so it is not
+                // abbreviated the way the top bar's is — grouped instead, and
+                // scaled down rather than clipped when a grant runs long.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${_grouped(wallet.balance)} Ink',
+                    maxLines: 1,
+                    style: EverloreTheme.serifDisplay(
+                      size: 30,
+                      color: EverloreTheme.parchment,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  '${wallet.tier.toUpperCase()} · Standard turns cost 1 Ink. Failed generations never consume it.',
+                  style: EverloreTheme.ui(
+                    size: 12,
+                    color: EverloreTheme.ash,
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            '${wallet.balance} Ink',
-            style: EverloreTheme.serifDisplay(
-              size: 30,
-              color: EverloreTheme.parchment,
-            ),
-          ),
-          const SizedBox(height: 5),
-          SizedBox(
-            width: 238,
-            child: Text(
-              '${wallet.tier.toUpperCase()} · Standard turns cost 1 Ink. Failed generations never consume it.',
-              style: EverloreTheme.ui(
-                size: 12,
-                color: EverloreTheme.ash,
-                height: 1.4,
-              ),
-            ),
+          const SizedBox(width: 14),
+          // The mark's one home at full size. Everywhere else it is drawn flat
+          // in brass because the render cannot hold together at icon scale;
+          // here there is room for the real thing, over art dark enough to
+          // carry it.
+          Image.asset(
+            'assets/icons/ink-logo.png',
+            width: 78,
+            height: 78,
+            filterQuality: FilterQuality.high,
+            errorBuilder: (_, __, ___) =>
+                const InkMark(size: 64, color: EverloreTheme.gold),
           ),
         ],
       ),
