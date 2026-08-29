@@ -58,6 +58,11 @@ class BillingRepository {
   Future<BillingWallet>? _refreshInFlight;
   Map<String, dynamic>? _cachedCatalog;
 
+  /// Last known wallet, or null before the first read. Synchronous on purpose:
+  /// a surface that only wants to *mention* the balance should not be able to
+  /// start a request to do it.
+  BillingWallet? get cachedWallet => _cachedWallet;
+
   Stream<BillingWallet> get walletChanges => _walletChanges.stream;
   Stream<String> get errors => _errors.stream;
 

@@ -28,6 +28,7 @@ import '../../../core/guide/guide_ids.dart';
 import '../../../shared/widgets/top_confirmation_toast.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../shared/widgets/ink_mark.dart';
+import '../../billing/data/billing_repository.dart';
 import '../../../core/storage/local_db.dart';
 import '../../home/data/home_repository.dart';
 import '../../chronicle/data/chronicle_repository.dart';
@@ -3830,158 +3831,187 @@ class _InkReserveDialog extends StatelessWidget {
 
   const _InkReserveDialog({required this.onDismiss, required this.onRestore});
 
+  /// What is actually left, when it is already known.
+  ///
+  /// Read from the cache only — this screen appears the moment a reservation
+  /// fails, so the balance was refreshed on the way here, and a paywall must
+  /// never make the player wait on a request to tell them where they stand.
+  String? get _reserveLine {
+    final balance = BillingRepository.instance.cachedWallet?.balance;
+    // Only ever states that the reserve is spent, never a count. This screen
+    // exists *because* the reserve could not cover a turn, so a positive
+    // balance here means the cache had not caught up with the failure yet —
+    // and "179 measures remain" under "The Ink Runs Low" reads as a bug.
+    // Saying nothing is the honest answer when the number cannot be trusted.
+    if (balance == null || balance > 0) return null;
+    return 'Your reserve is empty';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final reserve = _reserveLine;
     return Material(
       color: EverloreTheme.void0,
       child: Stack(
+        fit: StackFit.expand,
         children: [
-          Positioned.fill(
-            child: Image.asset(
-              'assets/art/ink-muse.webp',
-              fit: BoxFit.cover,
-              alignment: Alignment.topCenter,
-            ),
+          Image.asset(
+            'assets/art/ink-muse.webp',
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
           ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    EverloreTheme.void0.withValues(alpha: 0.15),
-                    EverloreTheme.void0.withValues(alpha: 0.3),
-                    EverloreTheme.void0.withValues(alpha: 0.94),
-                    EverloreTheme.void0,
-                  ],
-                  stops: const [0, 0.32, 0.58, 1],
-                ),
+          // One continuous fall from the art into the ground the words sit on.
+          // The old scrim reached near-black by 58% and the panel began at 72%,
+          // so the middle of the screen was a dead band with the art already
+          // smothered and nothing yet to read.
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  EverloreTheme.void0.withValues(alpha: 0.06),
+                  EverloreTheme.void0.withValues(alpha: 0.18),
+                  EverloreTheme.void0.withValues(alpha: 0.68),
+                  EverloreTheme.void0.withValues(alpha: 0.96),
+                  EverloreTheme.void0,
+                ],
+                stops: const [0, 0.34, 0.6, 0.78, 1],
               ),
             ),
           ),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(22, 12, 22, 22),
+              padding: const EdgeInsets.fromLTRB(28, 16, 28, 20),
               child: Column(
                 children: [
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: IconButton(
-                      onPressed: onDismiss,
-                      tooltip: 'Return to the story',
-                      icon: const Icon(Icons.close_rounded),
+                  // Every spare pixel goes to the art, so the words and the
+                  // controls stay one block. Splitting the slack above and
+                  // below the copy left a dead band across the middle of the
+                  // screen with the art already faded out and the buttons not
+                  // yet begun.
+                  const Spacer(),
+                  // The mark, lit. A paywall is the one place the thing being
+                  // sold should be visible as an object rather than announced
+                  // by a stock sparkle.
+                  Container(
+                    width: 108,
+                    height: 108,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          EverloreTheme.gold.withValues(alpha: 0.20),
+                          EverloreTheme.gold.withValues(alpha: 0.05),
+                          Colors.transparent,
+                        ],
+                        stops: const [0, 0.45, 1],
+                      ),
+                    ),
+                    child: const InkMark(size: 50, color: EverloreTheme.gold),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'The Ink Runs Low',
+                    textAlign: TextAlign.center,
+                    style: EverloreTheme.serifDisplay(
+                      size: 30,
                       color: EverloreTheme.parchment,
-                      style: IconButton.styleFrom(
-                        backgroundColor: EverloreTheme.void0.withValues(
-                          alpha: 0.5,
+                      weight: FontWeight.w600,
+                      spacing: 0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // A drawn rule instead of a border: the panel is gone, so
+                  // this is what separates the title from what follows.
+                  Container(
+                    width: 54,
+                    height: 1,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          EverloreTheme.goldDim.withValues(alpha: 0.85),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 330),
+                    child: Text(
+                      'Every realm pauses between chapters. Restore your Story '
+                      'Ink when you are ready, and this moment will be waiting.',
+                      textAlign: TextAlign.center,
+                      style: EverloreTheme.ui(
+                        size: 13.5,
+                        color: EverloreTheme.ash,
+                        height: 1.55,
+                      ),
+                    ),
+                  ),
+                  if (reserve != null) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      reserve.toUpperCase(),
+                      style: EverloreTheme.ui(
+                        size: 10.5,
+                        color: EverloreTheme.goldDim,
+                        weight: FontWeight.w700,
+                        spacing: 1.6,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 34),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: onRestore,
+                      icon: const InkMark(
+                        size: 19,
+                        color: EverloreTheme.void0,
+                      ),
+                      label: Text(
+                        'RESTORE STORY INK',
+                        style: EverloreTheme.ui(
+                          size: 13,
+                          color: EverloreTheme.void0,
+                          weight: FontWeight.w700,
+                          spacing: 0.7,
+                        ),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: EverloreTheme.gold,
+                        foregroundColor: EverloreTheme.void0,
+                        minimumSize: const Size.fromHeight(54),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
                     ),
                   ),
-                  const Spacer(flex: 7),
-                  Container(
+                  const SizedBox(height: 4),
+                  // The only way out, and it is labelled. There used to be a
+                  // bare X up in the corner as well; two ways to decline, one
+                  // of them unlabelled, is clutter on a screen that is asking
+                  // the player for money.
+                  SizedBox(
                     width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-                    decoration: BoxDecoration(
-                      color: EverloreTheme.void2.withValues(alpha: 0.84),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: EverloreTheme.goldDim.withValues(alpha: 0.52),
+                    child: TextButton(
+                      onPressed: onDismiss,
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.42),
-                          blurRadius: 28,
-                          offset: const Offset(0, 10),
+                      child: Text(
+                        'Return to the scene',
+                        style: EverloreTheme.ui(
+                          size: 12.5,
+                          color: EverloreTheme.ash,
+                          weight: FontWeight.w600,
                         ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.auto_awesome_rounded,
-                          color: EverloreTheme.gold,
-                          size: 22,
-                          shadows: [
-                            Shadow(
-                              color: EverloreTheme.gold.withValues(alpha: 0.5),
-                              blurRadius: 14,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'THE INK RUNS LOW',
-                          textAlign: TextAlign.center,
-                          style: EverloreTheme.serifDisplay(
-                            size: 23,
-                            color: EverloreTheme.parchment,
-                            weight: FontWeight.w700,
-                            spacing: 0.6,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Every realm pauses between chapters. Restore your Story Ink when you are ready, and this moment will be waiting.',
-                          textAlign: TextAlign.center,
-                          style: EverloreTheme.ui(
-                            size: 13,
-                            color: EverloreTheme.ash,
-                            height: 1.48,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: onRestore,
-                            // The mark, not a stand-in droplet — this is the
-                            // last surface that still showed one. The colour
-                            // render cannot go on a gold fill, so the drawn
-                            // version takes the button's own foreground.
-                            icon: const InkMark(
-                              size: 19,
-                              color: EverloreTheme.void0,
-                            ),
-                            label: Text(
-                              'RESTORE STORY INK',
-                              style: EverloreTheme.ui(
-                                size: 13,
-                                color: EverloreTheme.void0,
-                                weight: FontWeight.w700,
-                                spacing: 0.7,
-                              ),
-                            ),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: EverloreTheme.gold,
-                              foregroundColor: EverloreTheme.void0,
-                              minimumSize: const Size.fromHeight(52),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        TextButton(
-                          onPressed: onDismiss,
-                          child: Text(
-                            // "Scene" is the word the rest of the app uses for
-                            // where this returns you — scene settings, "the
-                            // scene could not start", mid-scene. "Page" was the
-                            // only piece of web-speak on an otherwise in-world
-                            // screen, and named something the story surface is
-                            // never called anywhere else.
-                            'Return to the scene',
-                            style: EverloreTheme.ui(
-                              size: 12,
-                              color: EverloreTheme.ash,
-                              weight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ],
