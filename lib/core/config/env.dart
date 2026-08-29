@@ -7,7 +7,7 @@ class AppConfig {
     final raw = compiled.isNotEmpty
         ? compiled
         : (dotenv.env['API_BASE_URL'] ?? 'http://localhost:3000');
-    return _normalizeLocalhostForAndroid(raw);
+    return _requireSecureInRelease(_normalizeLocalhostForAndroid(raw), 'API_BASE_URL');
   }
 
   static String get wsBaseUrl {
@@ -15,7 +15,43 @@ class AppConfig {
     final raw = compiled.isNotEmpty
         ? compiled
         : (dotenv.env['WS_BASE_URL'] ?? 'ws://localhost:3000');
-    return _normalizeLocalhostForAndroid(raw);
+    return _requireSecureInRelease(_normalizeLocalhostForAndroid(raw), 'WS_BASE_URL');
+  }
+
+  /// Schemes a release build is allowed to talk over.
+  ///
+  /// The Play listing declares that everything this app sends is encrypted in
+  /// transit, and that declaration is only honest if there is no way to build a
+  /// shipping binary that talks plaintext. Android enforces this itself from
+  /// API 28 and iOS enforces it through App Transport Security, so a release
+  /// build pointed at `http://` cannot reach the network at all — but what the
+  /// player would *see* is every request failing for no stated reason, and what
+  /// we would see is a bug report about the server being down.
+  ///
+  /// So we fail first, and say why. A release build carrying a plaintext base
+  /// URL is a packaging mistake — an unset `--dart-define`, a stale bundled
+  /// `.env` — and it is caught the moment anyone opens the build rather than
+  /// after it reaches a listing.
+  ///
+  /// Debug and profile builds are untouched: local servers speak `http://` and
+  /// `ws://`, and src/debug and src/profile permit exactly that.
+  static const _secureSchemes = {'https', 'wss'};
+
+  @visibleForTesting
+  static bool isSecureEndpoint(String url) {
+    final scheme = Uri.tryParse(url)?.scheme.toLowerCase();
+    return scheme != null && _secureSchemes.contains(scheme);
+  }
+
+  static String _requireSecureInRelease(String url, String key) {
+    if (!kReleaseMode || isSecureEndpoint(url)) return url;
+
+    throw StateError(
+      'Refusing to open an unencrypted connection: $key is "$url". '
+      'Release builds must use https:// or wss://. Rebuild with '
+      '--dart-define=$key=<secure url>, or fix the bundled .env. '
+      'See infra/PROD_NOTES.md for the production hostname.',
+    );
   }
 
   /// Rehearsal mode for the Chronicler's walkthrough.

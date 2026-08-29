@@ -1,8 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- No android:usesCleartextTraffic here on purpose, and a network security
+         config instead. Dropping the attribute only secures API 28 and up,
+         where the platform default is already false; this app ships minSdk 24,
+         and on 24-27 the default is true. res/xml/network_security_config.xml
+         is honoured from API 24, so it forbids plaintext across the whole
+         supported range.
+
+         Together these are what back the "Data is encrypted in transit"
+         declaration on the Play listing: enforced by the platform on every
+         device the app can install on, so a mistyped base URL fails loudly
+         instead of silently shipping plaintext.
+
+         Development still needs cleartext for the local server. src/debug and
+         src/profile overlay the same resource filename with a permissive
+         config. Do not add a cleartext allowance back up here. -->
     <application
-        android:label="everlore"
+        android:label="Everlore"
         android:name="${applicationName}"
-        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

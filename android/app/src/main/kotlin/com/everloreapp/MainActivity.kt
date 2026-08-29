@@ -1,4 +1,4 @@
-package com.example.everlore
+package com.everloreapp
 
 import io.flutter.embedding.android.FlutterActivity
 

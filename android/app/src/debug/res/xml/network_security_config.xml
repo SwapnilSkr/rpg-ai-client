@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Development overlay — debug builds only.
+
+  Build-type resources win over src/main, so this replaces the strict release
+  policy for local work against an http:// / ws:// dev server. It is never
+  packaged into a release build.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

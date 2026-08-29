@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Release policy: no plaintext, on every supported device.
+
+  Removing android:usesCleartextTraffic from the manifest is not enough on its
+  own. That attribute only defaults to false from API 28, and this app ships
+  minSdk 24 — so on Android 7.0 through 8.1 the default is true and the OS
+  would happily open an http:// or ws:// connection. A network security config
+  is honoured from API 24, which is exactly the range that needed covering.
+
+  This is what backs the "Data is encrypted in transit" declaration on the Play
+  listing: the guarantee is enforced by the platform on every device the app can
+  install on, rather than resting on our own care with base URLs.
+
+  src/debug and src/profile each overlay this same filename with a permissive
+  version, so local development against an http:// server is unaffected.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
