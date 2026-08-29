@@ -221,20 +221,13 @@ class _HomeViewState extends State<_HomeView> {
     return SliverPadding(
       padding: const EdgeInsets.only(bottom: 110), // clear the floating nav
       sliver: SliverList(
+        // No count label here. The top bar already prints one 40pt above it,
+        // and this one was the wrong number besides — `groups.length` is what
+        // has loaded so far, so it read "1 REALM" under a header saying "12
+        // realms" until the reader scrolled. A lone section header labelling
+        // the only section is not structure, it is noise.
         delegate: SliverChildBuilderDelegate((context, index) {
-          if (index == 0) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${groups.length} ${groups.length == 1 ? 'REALM' : 'REALMS'}',
-                  style: EverloreTheme.sectionHeader,
-                ),
-              ),
-            );
-          }
-          if (index == groups.length + 1 && state.isLoadingMore) {
+          if (index == groups.length && state.isLoadingMore) {
             return const Padding(
               padding: EdgeInsets.all(20),
               child: Center(
@@ -245,11 +238,11 @@ class _HomeViewState extends State<_HomeView> {
               ),
             );
           }
-          if (index > groups.length) return null;
-          final group = groups[index - 1];
+          if (index >= groups.length) return null;
+          final group = groups[index];
           // The newest story stands for all of them.
           return guideAnchorIf(
-            index == 1,
+            index == 0,
             GuideIds.homeCard,
             RealmGroupCard(
               group: group,
@@ -271,7 +264,7 @@ class _HomeViewState extends State<_HomeView> {
               },
             ),
           );
-        }, childCount: groups.length + 1 + (state.isLoadingMore ? 1 : 0)),
+        }, childCount: groups.length + (state.isLoadingMore ? 1 : 0)),
       ),
     );
   }
