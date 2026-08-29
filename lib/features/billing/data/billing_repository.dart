@@ -56,12 +56,16 @@ class BillingRepository {
   bool _started = false;
   BillingWallet? _cachedWallet;
   Future<BillingWallet>? _refreshInFlight;
+  Map<String, dynamic>? _cachedCatalog;
 
   Stream<BillingWallet> get walletChanges => _walletChanges.stream;
   Stream<String> get errors => _errors.stream;
 
   Future<BillingWallet> wallet({bool forceRefresh = false}) async {
     if (!forceRefresh && _cachedWallet != null) return _cachedWallet!;
+    // An explicit refresh is a surface being opened, not a turn being told, so
+    // it is the right moment to re-read process config as well.
+    _cachedCatalog = null;
     return refreshWallet();
   }
 
@@ -90,13 +94,38 @@ class BillingRepository {
   }
 
   Future<BillingWallet> _walletWithCatalog(dynamic response) async {
-    final catalog = await ApiClient.get('/billing/catalog');
+    final catalog = await _catalog();
     final map = Map<String, dynamic>.from(response as Map);
     map['purchases_enabled'] = catalog['purchases_enabled'] == true;
     map['simulation_enabled'] = catalog['simulation_enabled'] == true;
     final wallet = BillingWallet.fromJson(map);
     _cachedWallet = wallet;
     return wallet;
+  }
+
+  /// Store-availability flags, read once per session.
+  ///
+  /// This is process config on the server — no user, no database — but it was
+  /// being fetched alongside every balance read, which with a refresh on each
+  /// told turn made the story path cost two round trips instead of one.
+  ///
+  /// A failure here is not allowed to fail the wallet. The flags only decide
+  /// whether purchase controls render, and losing the balance in every header
+  /// because a config endpoint blipped is far worse than a header that briefly
+  /// believes purchases are off. Not cached on failure, so the next read
+  /// tries again.
+  Future<Map<String, dynamic>> _catalog() async {
+    final cached = _cachedCatalog;
+    if (cached != null) return cached;
+    try {
+      final fetched = Map<String, dynamic>.from(
+        await ApiClient.get('/billing/catalog') as Map,
+      );
+      _cachedCatalog = fetched;
+      return fetched;
+    } catch (_) {
+      return const {};
+    }
   }
 
   Future<BillingWallet> simulatePurchase(String productId) async {
