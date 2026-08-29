@@ -610,6 +610,15 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
         const SizedBox(height: 16),
 
+        NeuButton(
+          label: 'Blocked Content',
+          icon: Icons.shield_outlined,
+          primary: false,
+          accent: EverloreTheme.gold,
+          onTap: () => context.push('/blocked-content'),
+        ),
+        const SizedBox(height: 16),
+
         // Skipping is only consequence-free if it can be undone; without this
         // the guide's Skip is a one-way door and players hesitate over it.
         const _GuideControls(),

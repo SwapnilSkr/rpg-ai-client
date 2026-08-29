@@ -11,6 +11,7 @@ import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/widgets/everlore_empty_state.dart';
 import '../../../../shared/widgets/realm_backdrop.dart';
 import '../../../../shared/widgets/mature_content_chip.dart';
+import '../../moderation/data/moderation_repository.dart';
 
 class BrowseTemplatesScreen extends StatefulWidget {
   const BrowseTemplatesScreen({super.key});
@@ -30,25 +31,44 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
 
+  void _onBlocksChanged() {
+    if (mounted) setState(() {});
+  }
+
   List<WorldTemplate> get _visible {
+    // Same immediate-hide rule as Explore: a block applies to the list already
+    // on screen, not just to the next fetch.
+    final unblocked = _templates
+        .where(
+          (t) => !ModerationRepository.isHidden(
+            worldId: t.id,
+            creatorId: t.creatorId,
+          ),
+        )
+        .toList();
+
     if (_kindFilter == 'character') {
-      return _templates.where((t) => t.isCharacter).toList();
+      return unblocked.where((t) => t.isCharacter).toList();
     }
     if (_kindFilter == 'world') {
-      return _templates.where((t) => !t.isCharacter).toList();
+      return unblocked.where((t) => !t.isCharacter).toList();
     }
-    return _templates;
+    return unblocked;
   }
 
   @override
   void initState() {
     super.initState();
+    // Blocking happens on other screens (a world's page, the blocked-content
+    // list). This tab survives in an IndexedStack, so it has to be told.
+    ModerationRepository.revision.addListener(_onBlocksChanged);
     _scrollController.addListener(_maybeLoadMore);
     _loadTemplates();
   }
 
   @override
   void dispose() {
+    ModerationRepository.revision.removeListener(_onBlocksChanged);
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();

@@ -14,6 +14,8 @@ import '../../../core/guide/guide_anchor.dart';
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_ids.dart';
 import '../../../core/guide/guide_trigger.dart';
+import '../../../core/auth/auth_service.dart';
+import '../../moderation/presentation/content_actions_sheet.dart';
 
 class TemplateDetailScreen extends StatefulWidget {
   final String templateId;
@@ -28,10 +30,52 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
   WorldTemplate? _template;
   bool _isLoading = true;
 
+  /// The signed-in account, so the safety menu is offered on other people's
+  /// worlds and hidden on your own — there is nothing to report or block there.
+  String? _viewerId;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadViewer();
+  }
+
+  Future<void> _loadViewer() async {
+    final user = await AuthService.getCachedUser();
+    if (mounted) setState(() => _viewerId = user?.id);
+  }
+
+  bool get _canModerate {
+    final template = _template;
+    if (template == null || _viewerId == null) return false;
+    return template.creatorId.isNotEmpty && template.creatorId != _viewerId;
+  }
+
+  Future<void> _openSafetyMenu() async {
+    final template = _template;
+    if (template == null) return;
+
+    final result = await showContentActionsSheet(
+      context,
+      worldId: template.id,
+      worldTitle: template.title,
+      creatorId: template.creatorId,
+    );
+    if (!mounted) return;
+
+    // Hiding a world or blocking its creator makes this page a dead end, so
+    // leave it. A report alone does not — the world is still there while it is
+    // reviewed, and popping would imply it had already been taken down.
+    if (result == ContentActionResult.worldHidden ||
+        result == ContentActionResult.creatorBlocked) {
+      TemplateRepository.invalidate();
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/discover');
+      }
+    }
   }
 
   Future<void> _load() async {
@@ -171,6 +215,18 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                 onPressed: () =>
                     context.canPop() ? context.pop() : context.go('/templates'),
               ),
+              actions: [
+                if (_canModerate)
+                  IconButton(
+                    onPressed: _openSafetyMenu,
+                    tooltip: 'Report or hide this world',
+                    icon: const Icon(
+                      Icons.more_vert_rounded,
+                      color: EverloreTheme.parchment,
+                      size: 20,
+                    ),
+                  ),
+              ],
               flexibleSpace: FlexibleSpaceBar(
                 // No second gradient inside the bar. One layered on top of the
                 // page-wide scrim ends where the bar ends, and the step

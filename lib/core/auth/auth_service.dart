@@ -6,6 +6,7 @@ import '../guide/guide_controller.dart';
 import '../onboarding/interests_store.dart';
 import '../storage/secure_storage.dart';
 import '../../shared/models/user.dart';
+import '../../features/moderation/data/moderation_repository.dart';
 
 class AuthService {
   static final WsManager _wsManager = WsManager();
@@ -156,6 +157,9 @@ class AuthService {
     // Device guide state goes with the session; the account keeps its record,
     // so signing back in restores it rather than re-touring.
     await guide.onSignedOut();
+    // Blocks are per-account. Leaving the previous player's list in memory
+    // would hide worlds from whoever signs in next.
+    ModerationRepository.clearLocalBlocks();
     _bumpSessionEpoch();
   }
 

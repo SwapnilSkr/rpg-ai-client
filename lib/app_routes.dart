@@ -19,6 +19,7 @@ import 'package:everlore/features/personas/presentation/personas_screen.dart';
 import 'package:everlore/features/billing/presentation/billing_screen.dart';
 import 'package:everlore/shared/models/world_template.dart';
 import 'package:everlore/shared/widgets/everlore_nav_bar.dart';
+import 'features/moderation/presentation/blocked_content_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -117,6 +118,11 @@ final router = GoRouter(
       path: '/membership',
       name: 'membership',
       builder: (context, state) => const BillingScreen(),
+    ),
+    GoRoute(
+      path: '/blocked-content',
+      name: 'blocked-content',
+      builder: (context, state) => const BlockedContentScreen(),
     ),
 
     // ── The persistent shell: four primary branches, each with its own stack + state,

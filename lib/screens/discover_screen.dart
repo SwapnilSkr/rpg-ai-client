@@ -20,6 +20,7 @@ import '../shared/widgets/neu.dart';
 import '../shared/widgets/realm_backdrop.dart';
 import '../features/templates/data/template_repository.dart';
 import '../features/templates/data/interest_ranking.dart';
+import '../features/moderation/data/moderation_repository.dart';
 
 /// The default landing after auth — an art-led, interest-ranked explore feed.
 /// Two-column masonry of forged cards, champagne pill tabs, and the primary
@@ -49,6 +50,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   void initState() {
     super.initState();
+    // Blocking happens on other screens (a world's page, the blocked-content
+    // list). This tab survives in an IndexedStack, so it has to be told.
+    ModerationRepository.revision.addListener(_onBlocksChanged);
     AuthService.sessionEpoch.addListener(_onSessionChanged);
     _scrollController.addListener(_maybeLoadMore);
     _load();
@@ -56,6 +60,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   @override
   void dispose() {
+    ModerationRepository.revision.removeListener(_onBlocksChanged);
     AuthService.sessionEpoch.removeListener(_onSessionChanged);
     _searchDebounce?.cancel();
     _scrollController.dispose();
@@ -132,17 +137,33 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
   }
 
+  void _onBlocksChanged() {
+    if (mounted) setState(() {});
+  }
+
   List<WorldTemplate> get _visible {
+    // A world the player just blocked has to leave the list they are looking
+    // at, not on the next fetch. The server filters too; this is the immediate
+    // half of the same rule.
+    final unblocked = _templates
+        .where(
+          (t) => !ModerationRepository.isHidden(
+            worldId: t.id,
+            creatorId: t.creatorId,
+          ),
+        )
+        .toList();
+
     final List<WorldTemplate> byTab;
     switch (_tab) {
       case 1:
-        byTab = _templates.where((t) => !t.isCharacter).toList();
+        byTab = unblocked.where((t) => !t.isCharacter).toList();
         break;
       case 2:
-        byTab = _templates.where((t) => t.isCharacter).toList();
+        byTab = unblocked.where((t) => t.isCharacter).toList();
         break;
       default:
-        byTab = _templates;
+        byTab = unblocked;
     }
     final query = _searchController.text.trim().toLowerCase();
     if (query.isEmpty) return byTab;
