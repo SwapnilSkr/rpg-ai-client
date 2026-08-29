@@ -52,6 +52,8 @@ dependencies:
   cached_network_image: ^3.4.1
   in_app_purchase: ^3.2.3
   image_picker: ^1.1.2
+  firebase_core: ^4.14.0
+  firebase_auth: ^6.6.1
 
 dev_dependencies:
   flutter_test:

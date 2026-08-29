@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -15,6 +17,22 @@ Future<void> main() async {
   try {
     await dotenv.load();
   } catch (_) {}
+  // Before anything can reach the auth screen. Firebase reads its config from
+  // the platform files (google-services.json / GoogleService-Info.plist) that
+  // the build embeds, so there is nothing to pass here.
+  //
+  // A failure is not fatal: phone sign-in and an already-restored session both
+  // work without Firebase, and killing the app on launch would lock out every
+  // signed-in player over a subsystem only the Google button needs. The auth
+  // screen finds out on its own and hides that button.
+  try {
+    await Firebase.initializeApp();
+  } catch (error, stack) {
+    if (kDebugMode) {
+      debugPrint('[firebase] init failed, Google sign-in unavailable: $error');
+      debugPrintStack(stackTrace: stack);
+    }
+  }
   // Warm the device-cached guide record before the first frame so an arc can
   // never flash in a beat late; the account's copy folds in at splash.
   await guide.init();

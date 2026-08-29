@@ -2,6 +2,7 @@ import 'dart:async';
 import '../core/guide/guide_controller.dart';
 import '../core/config/env.dart';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -79,7 +80,9 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       await dotenv.load();
       final clientId = dotenv.env['GOOGLE_WEB_CLIENT_ID']?.trim();
-      if (clientId != null && clientId.isNotEmpty) {
+      // Firebase brokers the credential, so no Firebase app means no Google
+      // button — better a hidden button than one that always throws.
+      if (Firebase.apps.isNotEmpty && clientId != null && clientId.isNotEmpty) {
         await _googleAuthService.init(serverClientId: clientId);
         if (mounted) setState(() => _googleReady = true);
         return;
@@ -145,12 +148,11 @@ class _AuthScreenState extends State<AuthScreen> {
     });
     try {
       if (!_googleReady) throw Exception('Google sign-in is not available.');
-      final googleUser = await _googleAuthService.signIn();
-      if (googleUser == null) throw Exception('Sign-in was cancelled.');
-      final googleAuth = _googleAuthService.getAuthentication(googleUser);
-      final idToken = googleAuth.idToken;
+      // A Firebase ID token now. The account chooser is still Google's, but the
+      // credential it returns is exchanged with Firebase before it reaches us.
+      final idToken = await _googleAuthService.signIn();
       if (idToken == null || idToken.isEmpty) {
-        throw Exception('Could not retrieve your Google credentials.');
+        throw Exception('Sign-in was cancelled.');
       }
       final user = await AuthService.loginWithGoogle(idToken);
       if (!mounted) return;

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "596403299579",
+    "project_id": "everlore-app",
+    "storage_bucket": "everlore-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:596403299579:android:0593dabb9c5af0e9f2fc5e",
+        "android_client_info": {
+          "package_name": "com.everloreapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "596403299579-s625tuqsrp104iickjmq42gjudag5c4l.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.everloreapp",
+            "certificate_hash": "9b07333f11ef3cfb57f864e9ed67ee17458a7af1"
+          }
+        },
+        {
+          "client_id": "596403299579-cc9d9sdsrceacjd2tf3o2c6ukvblnrnj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzNdXBaxCy4ZBW_Tl-UYEG4TX2hsKttSI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "596403299579-cc9d9sdsrceacjd2tf3o2c6ukvblnrnj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
