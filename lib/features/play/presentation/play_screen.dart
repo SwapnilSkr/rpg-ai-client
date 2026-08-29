@@ -27,6 +27,7 @@ import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_ids.dart';
 import '../../../shared/widgets/top_confirmation_toast.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
+import '../../../shared/widgets/ink_mark.dart';
 import '../../../core/storage/local_db.dart';
 import '../../home/data/home_repository.dart';
 import '../../chronicle/data/chronicle_repository.dart';
@@ -3935,9 +3936,13 @@ class _InkReserveDialog extends StatelessWidget {
                           width: double.infinity,
                           child: FilledButton.icon(
                             onPressed: onRestore,
-                            icon: const Icon(
-                              Icons.water_drop_rounded,
-                              size: 18,
+                            // The mark, not a stand-in droplet — this is the
+                            // last surface that still showed one. The colour
+                            // render cannot go on a gold fill, so the drawn
+                            // version takes the button's own foreground.
+                            icon: const InkMark(
+                              size: 19,
+                              color: EverloreTheme.void0,
                             ),
                             label: Text(
                               'RESTORE STORY INK',
@@ -3962,7 +3967,13 @@ class _InkReserveDialog extends StatelessWidget {
                         TextButton(
                           onPressed: onDismiss,
                           child: Text(
-                            'Return to the page',
+                            // "Scene" is the word the rest of the app uses for
+                            // where this returns you — scene settings, "the
+                            // scene could not start", mid-scene. "Page" was the
+                            // only piece of web-speak on an otherwise in-world
+                            // screen, and named something the story surface is
+                            // never called anywhere else.
+                            'Return to the scene',
                             style: EverloreTheme.ui(
                               size: 12,
                               color: EverloreTheme.ash,
