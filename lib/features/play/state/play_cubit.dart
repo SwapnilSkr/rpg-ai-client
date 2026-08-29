@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/network/ws_manager.dart';
@@ -13,6 +14,42 @@ import '../../../shared/models/memory.dart';
 import '../../../shared/models/character_profile.dart';
 import '../../../shared/models/relation_candidate.dart';
 import '../../billing/data/billing_repository.dart';
+
+/// Socket error codes whose `message` was written for a player to read.
+///
+/// The server replaces every other failure with a generic line (see
+/// `toClientError` on the server), so anything outside this set must never be
+/// rendered — it used to be whatever the driver or the model SDK produced, and
+/// on the replay path it went straight into the story surface.
+const _authoredErrorCodes = {
+  'INSUFFICIENT_INK',
+  'RATE_LIMITED',
+  'BAD_REQUEST',
+  'UNAUTHENTICATED',
+  'FORBIDDEN',
+  'NOT_FOUND',
+  'CONFLICT',
+};
+
+@visibleForTesting
+bool isAuthoredSocketError(Map<String, dynamic> msg) {
+  final code = msg['code']?.toString();
+  if (code != null && code.isNotEmpty) return _authoredErrorCodes.contains(code);
+  // A server predating coded errors. The one message that was ever safe to
+  // show is the spent reserve, matched the way it always was — an app update
+  // and a deploy do not land together.
+  final text = (msg['message']?.toString() ?? '').toLowerCase();
+  return text.contains('story ink') || text.contains('not enough ink');
+}
+
+/// The server's own words when they were written for the player, [fallback]
+/// otherwise.
+@visibleForTesting
+String playerErrorMessage(Map<String, dynamic> msg, String fallback) {
+  final text = msg['message']?.toString().trim() ?? '';
+  if (text.isEmpty || !isAuthoredSocketError(msg)) return fallback;
+  return text;
+}
 
 /// Sentinel so [PlayState.copyWith] can distinguish "leave unchanged" from
 /// "set to null" for nullable fields like [replayingEventId].
@@ -727,14 +764,16 @@ class PlayCubit extends Cubit<PlayState> {
       // reflects the settled/refunded ledger immediately.
       unawaited(_refreshInk());
       final isInkDepleted =
-          serverMessage.toLowerCase().contains('story ink') ||
-          serverMessage.toLowerCase().contains('not enough ink');
+          msg['code']?.toString() == 'INSUFFICIENT_INK' ||
+          ((msg['code']?.toString().isEmpty ?? true) &&
+              (serverMessage.toLowerCase().contains('story ink') ||
+                  serverMessage.toLowerCase().contains('not enough ink')));
       // A replay in flight takes precedence: ANY error frame (including
       // GENERATION_IN_PROGRESS) must tear the replay down so the loader can
       // never get stranded. Restore the turn's original prose.
       if (_replayEventId != null) {
         _restoreReplayedEvent(
-          msg['message']?.toString() ?? 'Could not replay this response.',
+          playerErrorMessage(msg, 'Could not replay this response.'),
         );
         return;
       }
