@@ -1,3 +1,15 @@
+import java.util.Properties
+
+// Upload-signing material, kept out of the repo (android/.gitignore) and read
+// from disk at build time. A release build that cannot find it fails loudly
+// rather than silently falling back to the debug key — an APK signed with the
+// debug key is rejected by Play, and it is not obvious from the artifact which
+// key was used.
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -33,11 +45,25 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties.getProperty("keyAlias")
+            keyPassword = keystoreProperties.getProperty("keyPassword")
+            storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
+            storePassword = keystoreProperties.getProperty("storePassword")
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Falls back to debug signing ONLY when key.properties is absent,
+            // so a fresh clone can still run `flutter run --release` locally.
+            // A real release must have it: see infra notes for the keystore.
+            signingConfig = if (keystoreProperties.getProperty("storeFile") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
