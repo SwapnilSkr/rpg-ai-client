@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "596403299579-o198kjj7levmto0906mkol28hupks66m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.everloreapp",
+            "certificate_hash": "fbb1d3c36e8c51b129891e38941fc518e814b005"
+          }
+        },
+        {
           "client_id": "596403299579-s625tuqsrp104iickjmq42gjudag5c4l.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
