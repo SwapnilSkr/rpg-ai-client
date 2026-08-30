@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- EverloreTheme.void1, the scaffold ground the first Flutter frame
+         paints. Keeping the launch window on the same colour means there is
+         no flash between the system splash and the app itself. -->
+    <color name="everlore_ground">#FF0F0C0A</color>
+</resources>

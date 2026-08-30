@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ ignores windowBackground for the launch window and draws
+         its own splash instead, taking the icon from the launcher icon and
+         masking its outer third. That mask is why the wordmark used to be cut
+         off here as well as on the home screen; the icon now sits inside the
+         safe zone, so the whole badge survives. Only the background needs
+         stating, so the splash is not white. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@color/everlore_ground</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/everlore_ground</item>
+    </style>
+</resources>
