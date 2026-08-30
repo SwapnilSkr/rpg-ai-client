@@ -1,3 +1,6 @@
+// CupertinoPageTransitionsBuilder is no longer re-exported from material.dart
+// as of Flutter 3.44; it lives in the cupertino library.
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
