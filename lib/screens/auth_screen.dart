@@ -719,6 +719,23 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
 
+        // Messages
+        //
+        // Above the form, not below it. These used to sit under the Google
+        // button — off the bottom of the screen while the number pad is up, so
+        // a failed "Send the Code" showed the player nothing at all and read as
+        // a dead button. That is exactly how the 1.0.1 outage was reported to
+        // us: "Send the Code seems to have no action". The failure was being
+        // announced the whole time, just somewhere nobody could see it.
+        if (_errorMessage != null) ...[
+          const SizedBox(height: 24),
+          EngravedBanner(message: _errorMessage!, error: true),
+        ],
+        if (_successMessage != null) ...[
+          const SizedBox(height: 24),
+          EngravedBanner(message: _successMessage!),
+        ],
+
         const SizedBox(height: 32),
 
         _PhoneTab(
@@ -786,15 +803,6 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           ),
 
-        // Messages
-        if (_errorMessage != null) ...[
-          const SizedBox(height: 16),
-          EngravedBanner(message: _errorMessage!, error: true),
-        ],
-        if (_successMessage != null) ...[
-          const SizedBox(height: 16),
-          EngravedBanner(message: _successMessage!),
-        ],
 
         const SizedBox(height: 32),
       ],

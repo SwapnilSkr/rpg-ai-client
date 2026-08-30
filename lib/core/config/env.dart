@@ -2,20 +2,60 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppConfig {
-  static String get apiBaseUrl {
-    const compiled = String.fromEnvironment('API_BASE_URL', defaultValue: '');
-    final raw = compiled.isNotEmpty
-        ? compiled
-        : (dotenv.env['API_BASE_URL'] ?? 'http://localhost:3000');
-    return _requireSecureInRelease(_normalizeLocalhostForAndroid(raw), 'API_BASE_URL');
-  }
+  /// Where a shipping build talks to.
+  ///
+  /// Compiled in, deliberately, and never read from the bundled `.env`. That
+  /// file is a *developer's* file: it points at whatever server they happened
+  /// to be running — a laptop's LAN address, an emulator loopback — and it is
+  /// gitignored, so nothing in review or CI ever sees what it says. It is also
+  /// bundled as an asset, which means whatever it happened to contain at
+  /// `flutter build` time is what ships.
+  ///
+  /// That combination shipped once. Release 1.0.1 went to the closed track
+  /// carrying `API_BASE_URL=http://192.168.0.100:8081`, so every install fell
+  /// at the first request: the plaintext guard below threw before a packet was
+  /// sent, and both sign-in paths failed for every player on the track. The
+  /// guard did its job — it refused — but it could only refuse at *runtime*, on
+  /// the player's phone, which is far too late to be useful.
+  ///
+  /// So the release endpoint is no longer something a build can get wrong by
+  /// omission. `--dart-define` still wins when it is set (staging, a device
+  /// pointed at a branch server), and debug builds still read `.env` as before.
+  /// What is gone is the path where a release quietly inherits a dev machine's
+  /// address.
+  static const _releaseApiBaseUrl = 'https://api.everloreapp.com';
+  static const _releaseWsBaseUrl = 'wss://api.everloreapp.com';
 
-  static String get wsBaseUrl {
-    const compiled = String.fromEnvironment('WS_BASE_URL', defaultValue: '');
-    final raw = compiled.isNotEmpty
-        ? compiled
-        : (dotenv.env['WS_BASE_URL'] ?? 'ws://localhost:3000');
-    return _requireSecureInRelease(_normalizeLocalhostForAndroid(raw), 'WS_BASE_URL');
+  static String get apiBaseUrl => _resolve(
+    key: 'API_BASE_URL',
+    compiled: const String.fromEnvironment('API_BASE_URL', defaultValue: ''),
+    releaseDefault: _releaseApiBaseUrl,
+    devDefault: 'http://localhost:3000',
+  );
+
+  static String get wsBaseUrl => _resolve(
+    key: 'WS_BASE_URL',
+    compiled: const String.fromEnvironment('WS_BASE_URL', defaultValue: ''),
+    releaseDefault: _releaseWsBaseUrl,
+    devDefault: 'ws://localhost:3000',
+  );
+
+  /// An explicit `--dart-define` first, then the compiled-in production
+  /// endpoint in release, then `.env` (dev only), then the local default.
+  static String _resolve({
+    required String key,
+    required String compiled,
+    required String releaseDefault,
+    required String devDefault,
+  }) {
+    if (compiled.isNotEmpty) {
+      return _requireSecureInRelease(
+        _normalizeLocalhostForAndroid(compiled),
+        key,
+      );
+    }
+    if (kReleaseMode) return releaseDefault;
+    return _normalizeLocalhostForAndroid(dotenv.env[key] ?? devDefault);
   }
 
   /// Schemes a release build is allowed to talk over.
