@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app/theme/nexus_theme.dart';
 import '../core/auth/auth_service.dart';
+import '../core/errors/user_message.dart';
 import '../core/onboarding/interests_store.dart';
 import '../shared/models/user.dart';
 import '../shared/widgets/keyboard_aware_scroll.dart';
@@ -34,6 +35,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _nameFocus = FocusNode();
   PlayerGender? _gender;
   bool _saving = false;
+
+  /// Set when a step's save fails, so the player is told instead of being
+  /// advanced past work that was never persisted. Cleared on each attempt.
+  String? _error;
 
   @override
   void initState() {
@@ -77,10 +82,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _saveName() async {
     final name = _nameCtrl.text.trim();
     if (name.length < 2) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await AuthService.updatePreferences({'player_name': name});
-    } catch (_) {}
+    } catch (e) {
+      // Advancing on failure used to look identical to success: the player
+      // moved on believing they were named, and the account kept no name at
+      // all. Stay on the step, say so, and let them retry.
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = userFacingError(
+          e,
+          fallback: 'Could not save your name. Please try again.',
+        );
+      });
+      return;
+    }
     if (!mounted) return;
     setState(() => _saving = false);
     _goToStep(1);
@@ -164,6 +185,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       controller: _nameCtrl,
                       focusNode: _nameFocus,
                       saving: _saving,
+                      error: _error,
                       onContinue: _saveName,
                     ),
                     1 => _GenderStep(
@@ -235,6 +257,9 @@ class _NameStep extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool saving;
+
+  /// Why the last save failed, or null. Shown under the field.
+  final String? error;
   final VoidCallback onContinue;
 
   const _NameStep({
@@ -242,6 +267,7 @@ class _NameStep extends StatefulWidget {
     required this.controller,
     required this.focusNode,
     required this.saving,
+    required this.error,
     required this.onContinue,
   });
 
@@ -304,9 +330,24 @@ class _NameStepState extends State<_NameStep> {
                     controller: widget.controller,
                     focusNode: widget.focusNode,
                     hintText: 'Your name',
+                    // Without this the platform guesses what the field wants
+                    // and has offered saved phone numbers here.
+                    autofillHints: const [AutofillHints.name],
                     onChanged: (_) {},
                   ),
                 ),
+                if (widget.error != null) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    widget.error!,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.ebGaramond(
+                      color: EverloreTheme.ember,
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

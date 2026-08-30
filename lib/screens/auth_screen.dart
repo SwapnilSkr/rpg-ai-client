@@ -506,6 +506,9 @@ class _AuthScreenState extends State<AuthScreen> {
                 controller: _nameEditCtrl,
                 focusNode: _nameEditFocus,
                 hintText: 'Your name',
+                // Same reason as the onboarding name field: an undeclared
+                // field lets the platform offer whatever it guessed.
+                autofillHints: const [AutofillHints.name],
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -902,6 +905,11 @@ class _PhoneTabState extends State<_PhoneTab> {
                 scrollPadding: const EdgeInsets.symmetric(horizontal: 24),
                 hintText: '555 000 0000',
                 keyboardType: TextInputType.phone,
+                // The counterpart to the name hints: naming the field that
+                // genuinely wants a phone number is what stops the platform
+                // guessing that some other field wanted one. National, not
+                // full — the country code comes from the prefix selector.
+                autofillHints: const [AutofillHints.telephoneNumberNational],
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]')),
                 ],

@@ -183,6 +183,15 @@ class NeuField extends StatefulWidget {
   /// Extra space kept below the field when the framework scrolls it above the
   /// keyboard (e.g. room for a button directly under the field).
   final EdgeInsets scrollPadding;
+
+  /// What this field is for, e.g. `[AutofillHints.name]`.
+  ///
+  /// Declare it on every field the platform could plausibly fill. Left unset,
+  /// Android's autofill service guesses from surrounding text and offers
+  /// whatever it guessed — a saved phone number in a name box, say — and the
+  /// value it offers is one tap away from being accepted.
+  final List<String>? autofillHints;
+
   const NeuField({
     super.key,
     required this.controller,
@@ -194,6 +203,7 @@ class NeuField extends StatefulWidget {
     this.inputFormatters,
     this.focusNode,
     this.scrollPadding = const EdgeInsets.all(20),
+    this.autofillHints,
   });
 
   @override
@@ -253,6 +263,7 @@ class _NeuFieldState extends State<NeuField> {
               controller: widget.controller,
               focusNode: _node,
               keyboardType: widget.keyboardType,
+              autofillHints: widget.autofillHints,
               scrollPadding: widget.scrollPadding,
               inputFormatters: widget.inputFormatters,
               onChanged: widget.onChanged,
