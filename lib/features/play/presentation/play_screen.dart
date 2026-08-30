@@ -96,6 +96,10 @@ class _PlayViewState extends State<_PlayView> {
   /// One-shot composer prefill consumed by [PlayerInput] (bond actions).
   final _composerDraft = ValueNotifier<String?>(null);
 
+  /// The draft last handed back after an authored refusal, so the listener
+  /// restores it once rather than overwriting the player's edits every rebuild.
+  String? _lastRestoredDraft;
+
   /// Set when the player opens Chronicle / Thoughts / Settings from the realm
   /// menu. Cleared if they dismiss the menu outright or finish an in-sheet action.
   bool _pendingRealmMenuReturn = false;
@@ -1365,6 +1369,19 @@ class _PlayViewState extends State<_PlayView> {
         _lastSeenLoading = state.isLoading;
         _lastSeenTemplate = state.template;
         if (_isInkLimitMessage(state.error)) _showInkReserve(ctx);
+        // An authored failure told the player what to change. Give their words
+        // back so they can change them, rather than making them retype from
+        // memory a line the server just rejected.
+        final blockedDraft = state.lastFailedInput?.trim() ?? '';
+        if (state.error != null &&
+            !state.canRetry &&
+            blockedDraft.isNotEmpty &&
+            blockedDraft != _lastRestoredDraft) {
+          _lastRestoredDraft = blockedDraft;
+          _composerDraft.value = state.lastFailedInput;
+        } else if (state.error == null) {
+          _lastRestoredDraft = null;
+        }
         _maybeShowOnboarding(ctx);
         _maybeGuide(state);
       },
@@ -1482,8 +1499,14 @@ class _PlayViewState extends State<_PlayView> {
                   if (state.error != null)
                     _ErrorBar(
                       message: state.error!,
+                      // Retry is offered only where resending the same words
+                      // could actually succeed — an internal or transport
+                      // failure. An authored refusal needs an edit, not a
+                      // repeat, and its draft is returned to the composer.
                       onRetry:
-                          (state.lastFailedInput?.trim().isNotEmpty ?? false)
+                          (state.canRetry &&
+                              (state.lastFailedInput?.trim().isNotEmpty ??
+                                  false))
                           ? () => context.read<PlayCubit>().retryLastFailed()
                           : null,
                       onDismiss: () => context.read<PlayCubit>().clearError(),

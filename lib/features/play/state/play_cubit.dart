@@ -24,6 +24,7 @@ import '../../billing/data/billing_repository.dart';
 const _authoredErrorCodes = {
   'INSUFFICIENT_INK',
   'RATE_LIMITED',
+  'ACCOUNT_BANNED',
   'BAD_REQUEST',
   'UNAUTHENTICATED',
   'FORBIDDEN',
@@ -96,6 +97,16 @@ class PlayState extends Equatable {
   /// silently lost. Cleared on a successful send or when the error is dismissed.
   final String? lastFailedInput;
 
+  /// Whether [error] is worth retrying verbatim.
+  ///
+  /// Only an internal or transport failure is — the same words may well succeed
+  /// on a second attempt. An AUTHORED failure (a spent reserve, a rate limit, a
+  /// blocked line) already told the player exactly what is wrong in its own
+  /// words, and resending the identical turn would fail identically. Offering
+  /// retry there reads as a broken button and hides the real remedy, so the
+  /// error bar drops the action and the composer gets the draft back instead.
+  final bool canRetry;
+
   /// Transient status shown while a turn is still in flight — e.g. the server
   /// hit a hiccup and is retrying. Distinct from [error]: the turn isn't dead,
   /// the loader stays up. Cleared once tokens resume or the turn ends/fails.
@@ -137,6 +148,7 @@ class PlayState extends Equatable {
     this.hasOlderEvents = false,
     this.isLoadingOlder = false,
     this.lastFailedInput,
+    this.canRetry = false,
     this.notice,
     this.replayingEventId,
     this.lastStatDeltas,
@@ -162,6 +174,7 @@ class PlayState extends Equatable {
     bool? hasOlderEvents,
     bool? isLoadingOlder,
     Object? lastFailedInput = _kUnset,
+    bool? canRetry,
     Object? notice = _kUnset,
     Object? replayingEventId = _kUnset,
     Object? lastStatDeltas = _kUnset,
@@ -188,6 +201,7 @@ class PlayState extends Equatable {
       lastFailedInput: identical(lastFailedInput, _kUnset)
           ? this.lastFailedInput
           : lastFailedInput as String?,
+      canRetry: canRetry ?? this.canRetry,
       notice: identical(notice, _kUnset) ? this.notice : notice as String?,
       replayingEventId: identical(replayingEventId, _kUnset)
           ? this.replayingEventId
@@ -221,6 +235,7 @@ class PlayState extends Equatable {
     hasOlderEvents,
     isLoadingOlder,
     lastFailedInput,
+    canRetry,
     notice,
     replayingEventId,
     lastStatDeltas,
@@ -759,15 +774,13 @@ class PlayCubit extends Cubit<PlayState> {
     });
 
     _errorSub = _ws.onError.listen((msg) {
-      final serverMessage = msg['message']?.toString() ?? '';
       // Reservations are released on failed turns; refresh the header so it
       // reflects the settled/refunded ledger immediately.
       unawaited(_refreshInk());
-      final isInkDepleted =
-          msg['code']?.toString() == 'INSUFFICIENT_INK' ||
-          ((msg['code']?.toString().isEmpty ?? true) &&
-              (serverMessage.toLowerCase().contains('story ink') ||
-                  serverMessage.toLowerCase().contains('not enough ink')));
+      // An authored failure explains itself and is not worth resending; an
+      // internal one is the only kind a verbatim retry can fix. This single
+      // question decides both the copy and whether the bar offers an action.
+      final authored = isAuthoredSocketError(msg);
       // A replay in flight takes precedence: ANY error frame (including
       // GENERATION_IN_PROGRESS) must tear the replay down so the loader can
       // never get stranded. Restore the turn's original prose.
@@ -796,6 +809,7 @@ class PlayCubit extends Cubit<PlayState> {
             notice: null,
             error: null,
             lastFailedInput: null,
+            canRetry: false,
           ),
         );
         if (droppedInput != null && droppedInput.trim().isNotEmpty) {
@@ -830,9 +844,11 @@ class PlayCubit extends Cubit<PlayState> {
             narrativeStreaming: false,
             choicesPreview: false,
             notice: null,
-            error: isInkDepleted
-                ? serverMessage
-                : 'This scene could not be saved. Your action is ready to retry.',
+            error: playerErrorMessage(
+              msg,
+              'This scene could not be saved. Please try again.',
+            ),
+            canRetry: !authored,
             lastFailedInput: failedInput,
           ),
         );
@@ -857,9 +873,11 @@ class PlayCubit extends Cubit<PlayState> {
           events: events,
           isGenerating: false,
           notice: null,
-          error: isInkDepleted
-              ? serverMessage
-              : 'The scene could not start. Your action is ready to retry.',
+          error: playerErrorMessage(
+            msg,
+            'The scene could not start. Please try again.',
+          ),
+          canRetry: !authored,
           lastFailedInput: droppedInput,
         ),
       );
@@ -993,6 +1011,7 @@ class PlayCubit extends Cubit<PlayState> {
         error: null,
         notice: null,
         lastFailedInput: null,
+        canRetry: false,
         lastStatDeltas: null,
       ),
     );
@@ -1011,7 +1030,7 @@ class PlayCubit extends Cubit<PlayState> {
     // it immediately before resending so the retried turn cannot leave two
     // copies of the same player action in the visible timeline.
     final events = state.events.where((event) => !event.isOptimistic).toList();
-    emit(state.copyWith(events: events, error: null, lastFailedInput: null));
+    emit(state.copyWith(events: events, error: null, lastFailedInput: null, canRetry: false));
     sendMessage(pending);
   }
 
@@ -1118,6 +1137,7 @@ class PlayCubit extends Cubit<PlayState> {
         error: null,
         notice: null,
         lastFailedInput: null,
+        canRetry: false,
         lastStatDeltas: null,
       ),
     );
@@ -1134,7 +1154,7 @@ class PlayCubit extends Cubit<PlayState> {
 
   void clearError() {
     // Dismissing the error also abandons the retry — drop the held input.
-    emit(state.copyWith(error: null, lastFailedInput: null));
+    emit(state.copyWith(error: null, lastFailedInput: null, canRetry: false));
   }
 
   bool _protagonistPrompted = false;
@@ -1563,7 +1583,8 @@ class PlayCubit extends Cubit<PlayState> {
             choicesPreview: false,
             notice: null,
             error:
-                'We lost the connection before this scene could be saved. Your action is ready to retry.',
+                'We lost the connection before this scene could be saved. Please try again.',
+            canRetry: true,
             lastFailedInput: failedInput,
           ),
         );
@@ -1593,6 +1614,7 @@ class PlayCubit extends Cubit<PlayState> {
         notice: 'Your message is queued until the story reconnects.',
         error: null,
         lastFailedInput: null,
+        canRetry: false,
       ),
     );
     _scheduleReconciliation();

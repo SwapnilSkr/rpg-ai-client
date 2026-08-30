@@ -67,6 +67,54 @@ void main() {
       );
     });
 
+    test('a blocked line explains the theme so it can be rewritten', () {
+      // The input guard refuses a turn with copy naming what to change. It
+      // arrives as BAD_REQUEST and must reach the player verbatim — a generic
+      // line would leave them guessing, which is the exact failure the guard
+      // was built to avoid.
+      expect(
+        playerErrorMessage({
+          'code': 'BAD_REQUEST',
+          'message':
+              'Everlore does not write sexual content between family members. '
+              'Rewrite that line and the scene picks up where it left off.',
+        }, 'The scene could not start. Please try again.'),
+        startsWith('Everlore does not write sexual content'),
+      );
+    });
+
+    test('a banned account is told so, not shown a generic retry', () {
+      expect(
+        playerErrorMessage({
+          'code': 'ACCOUNT_BANNED',
+          'message': 'This account is banned',
+        }, 'fallback'),
+        'This account is banned',
+      );
+    });
+
+    test('only an unauthored failure is worth retrying verbatim', () {
+      // The rule the error bar reads: authored failures already said what is
+      // wrong and would fail identically on resend, so they drop the action
+      // and hand the draft back instead. Internal ones keep retry.
+      for (final code in const [
+        'INSUFFICIENT_INK',
+        'RATE_LIMITED',
+        'BAD_REQUEST',
+        'ACCOUNT_BANNED',
+        'FORBIDDEN',
+        'CONFLICT',
+      ]) {
+        expect(
+          isAuthoredSocketError({'code': code, 'message': 'x'}),
+          isTrue,
+          reason: '$code should not offer retry',
+        );
+      }
+      expect(isAuthoredSocketError({'code': 'INTERNAL', 'message': 'x'}), isFalse);
+      expect(isAuthoredSocketError({'message': 'ETIMEDOUT'}), isFalse);
+    });
+
     test('an empty or absent message falls back rather than showing blank', () {
       expect(playerErrorMessage({'code': 'RATE_LIMITED'}, 'fallback'), 'fallback');
       expect(playerErrorMessage({'code': 'INSUFFICIENT_INK', 'message': '  '}, 'fallback'), 'fallback');
