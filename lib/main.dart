@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'app_routes.dart';
@@ -14,6 +15,16 @@ import 'core/guide/widgets/guide_host.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Draw behind the status and navigation bars, explicitly and on every
+  // Android version. From Android 15 the system does this anyway for apps
+  // targeting SDK 35+, so declaring it is what makes the layout the same
+  // everywhere instead of changing under the app at API 35. This is the
+  // Flutter counterpart of Android's `enableEdgeToEdge()`.
+  //
+  // Deliberately no SystemUiOverlayStyle here: its colour fields route to
+  // Window.setStatusBarColor/setNavigationBarColor, which Android 15
+  // deprecated and Play flags.
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   try {
     await dotenv.load();
   } catch (_) {}
