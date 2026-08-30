@@ -151,20 +151,23 @@ class _AuthScreenState extends State<AuthScreen> {
       // A Firebase ID token now. The account chooser is still Google's, but the
       // credential it returns is exchanged with Firebase before it reaches us.
       final idToken = await _googleAuthService.signIn();
-      // Null means the player backed out of the chooser. That is a choice, not
-      // a failure, so the screen says nothing and simply stops.
+      // Null now means one thing only: the player closed the chooser. That is a
+      // choice, not a failure, so the screen says nothing and simply stops.
+      // Anything actually broken arrives as a GoogleSignInFailure instead.
       if (idToken == null || idToken.isEmpty) return;
       final user = await AuthService.loginWithGoogle(idToken);
       if (!mounted) return;
       setState(() => _currentUser = user);
       await _routeAfterAuth();
     } catch (e) {
-      setState(
-        () => _errorMessage = userFacingError(
-          e,
-          fallback: 'Could not sign in with Google. Please try again.',
-        ),
-      );
+      // The code is ours, not the transport's — a fixed vocabulary written in
+      // this repo, safe to show. It is the difference between a player saying
+      // "it doesn't work" and a player telling us which step broke on a phone
+      // we cannot reach.
+      final fallback = e is GoogleSignInFailure
+          ? 'Could not sign in with Google (${e.code}). Please try again.'
+          : 'Could not sign in with Google. Please try again.';
+      setState(() => _errorMessage = userFacingError(e, fallback: fallback));
     } finally {
       if (mounted) setState(() => _isGoogleLoading = false);
     }
