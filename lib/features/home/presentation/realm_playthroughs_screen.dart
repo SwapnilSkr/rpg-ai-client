@@ -11,6 +11,7 @@ import '../../../shared/widgets/everlore_empty_state.dart';
 import '../../../shared/widgets/realm_backdrop.dart';
 import '../data/home_repository.dart';
 import 'realm_entry_flow.dart';
+import '../../../core/errors/user_message.dart';
 
 class RealmPlaythroughsScreen extends StatefulWidget {
   final String templateId;
@@ -102,7 +103,10 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString().replaceFirst('Exception: ', '');
+        _error = userFacingError(
+          e,
+          fallback: 'Could not load these playthroughs.',
+        );
       });
     }
   }
@@ -322,7 +326,11 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: Text(
+            userFacingError(e, fallback: 'Could not archive that playthrough.'),
+          ),
+        ),
       );
     }
   }
@@ -337,7 +345,11 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: Text(
+            userFacingError(e, fallback: 'Could not delete that playthrough.'),
+          ),
+        ),
       );
     }
   }

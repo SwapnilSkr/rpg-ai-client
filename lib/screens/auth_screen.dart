@@ -10,7 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/auth/auth_service.dart';
 import '../core/auth/google_auth_service.dart';
-import '../core/network/api_client.dart';
+import '../core/errors/user_message.dart';
 import '../shared/models/user.dart';
 import '../app/theme/nexus_theme.dart';
 import '../core/onboarding/interests_store.dart';
@@ -151,18 +151,19 @@ class _AuthScreenState extends State<AuthScreen> {
       // A Firebase ID token now. The account chooser is still Google's, but the
       // credential it returns is exchanged with Firebase before it reaches us.
       final idToken = await _googleAuthService.signIn();
-      if (idToken == null || idToken.isEmpty) {
-        throw Exception('Sign-in was cancelled.');
-      }
+      // Null means the player backed out of the chooser. That is a choice, not
+      // a failure, so the screen says nothing and simply stops.
+      if (idToken == null || idToken.isEmpty) return;
       final user = await AuthService.loginWithGoogle(idToken);
       if (!mounted) return;
       setState(() => _currentUser = user);
       await _routeAfterAuth();
-    } on ApiException catch (e) {
-      setState(() => _errorMessage = e.message);
     } catch (e) {
       setState(
-        () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
+        () => _errorMessage = userFacingError(
+          e,
+          fallback: 'Could not sign in with Google. Please try again.',
+        ),
       );
     } finally {
       if (mounted) setState(() => _isGoogleLoading = false);
@@ -184,11 +185,12 @@ class _AuthScreenState extends State<AuthScreen> {
         _codeSent = true;
         _successMessage = 'A verification code was sent to $phone';
       });
-    } on ApiException catch (e) {
-      setState(() => _errorMessage = e.message);
     } catch (e) {
       setState(
-        () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
+        () => _errorMessage = userFacingError(
+          e,
+          fallback: 'Could not send the code. Please try again.',
+        ),
       );
     } finally {
       if (mounted) setState(() => _isPhoneLoading = false);
@@ -208,11 +210,12 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!mounted) return;
       setState(() => _currentUser = user);
       await _routeAfterAuth();
-    } on ApiException catch (e) {
-      setState(() => _errorMessage = e.message);
     } catch (e) {
       setState(
-        () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
+        () => _errorMessage = userFacingError(
+          e,
+          fallback: 'Could not verify the code. Please try again.',
+        ),
       );
     } finally {
       if (mounted) setState(() => _isPhoneLoading = false);
@@ -314,25 +317,19 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
       );
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = e.message;
-        _isDeletingAccount = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not delete account: ${e.message}')),
-      );
     } catch (e) {
       if (!mounted) return;
-      final message = e.toString().replaceFirst('Exception: ', '');
+      final message = userFacingError(
+        e,
+        fallback: 'Your account was not deleted. Please try again.',
+      );
       setState(() {
         _errorMessage = message;
         _isDeletingAccount = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not delete account: $message')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -360,19 +357,16 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
       );
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _errorMessage = e.message);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update preference: ${e.message}')),
-      );
     } catch (e) {
       if (!mounted) return;
-      final message = e.toString().replaceFirst('Exception: ', '');
-      setState(() => _errorMessage = message);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update preference: $message')),
+      final message = userFacingError(
+        e,
+        fallback: 'Could not update that preference. Please try again.',
       );
+      setState(() => _errorMessage = message);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isUpdatingPreferences = false);
     }
@@ -476,11 +470,12 @@ class _AuthScreenState extends State<AuthScreen> {
         _editingName = false;
         _successMessage = 'Name updated.';
       });
-    } on ApiException catch (e) {
-      setState(() => _errorMessage = e.message);
     } catch (e) {
       setState(
-        () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
+        () => _errorMessage = userFacingError(
+          e,
+          fallback: 'Could not save that name. Please try again.',
+        ),
       );
     } finally {
       if (mounted) setState(() => _isSavingName = false);

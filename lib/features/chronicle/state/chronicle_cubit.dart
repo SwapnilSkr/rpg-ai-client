@@ -10,6 +10,7 @@ import '../data/location_journal.dart';
 import '../data/relationship_ledger.dart';
 import '../data/threads_data.dart';
 import '../data/recap_data.dart';
+import '../../../core/errors/user_message.dart';
 
 enum ChronicleTab {
   recap,
@@ -300,7 +301,7 @@ class ChronicleCubit extends Cubit<ChronicleState> {
         state.copyWith(
           isLoading: false,
           isLoadingMore: false,
-          error: e.toString(),
+          error: userFacingError(e, fallback: 'Could not load this chronicle.'),
         ),
       );
     }
@@ -368,7 +369,7 @@ class ChronicleCubit extends Cubit<ChronicleState> {
         state.copyWith(
           isLoading: false,
           isLoadingMoreMemories: false,
-          error: e.toString(),
+          error: userFacingError(e, fallback: 'Could not load these memories.'),
         ),
       );
     }
@@ -420,7 +421,11 @@ class ChronicleCubit extends Cubit<ChronicleState> {
         ),
       );
     } catch (e) {
-      emit(state.copyWith(error: e.toString()));
+      emit(
+        state.copyWith(
+          error: userFacingError(e, fallback: 'Could not save that memory.'),
+        ),
+      );
     }
   }
 
@@ -433,7 +438,11 @@ class ChronicleCubit extends Cubit<ChronicleState> {
         ),
       );
     } catch (e) {
-      emit(state.copyWith(error: e.toString()));
+      emit(
+        state.copyWith(
+          error: userFacingError(e, fallback: 'Could not delete that memory.'),
+        ),
+      );
     }
   }
 
@@ -450,7 +459,11 @@ class ChronicleCubit extends Cubit<ChronicleState> {
       );
       await loadEvents(page: state.currentPage);
     } catch (e) {
-      emit(state.copyWith(error: e.toString()));
+      emit(
+        state.copyWith(
+          error: userFacingError(e, fallback: 'Could not save that change.'),
+        ),
+      );
     }
   }
 
@@ -460,7 +473,12 @@ class ChronicleCubit extends Cubit<ChronicleState> {
       final calendar = await ChronicleRepository.getCalendar(instanceId);
       emit(state.copyWith(calendar: calendar, isLoading: false));
     } catch (e) {
-      emit(state.copyWith(isLoading: false, error: e.toString()));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: userFacingError(e, fallback: 'Could not load the calendar.'),
+        ),
+      );
     }
   }
 
@@ -471,7 +489,11 @@ class ChronicleCubit extends Cubit<ChronicleState> {
       await ChronicleRepository.setActiveTimeline(instanceId, timelineId);
       await loadCalendar();
     } catch (e) {
-      emit(state.copyWith(error: e.toString()));
+      emit(
+        state.copyWith(
+          error: userFacingError(e, fallback: 'Could not switch timeline.'),
+        ),
+      );
     }
   }
 
@@ -481,7 +503,12 @@ class ChronicleCubit extends Cubit<ChronicleState> {
       final locations = await ChronicleRepository.getLocations(instanceId);
       emit(state.copyWith(locations: locations, isLoading: false));
     } catch (e) {
-      emit(state.copyWith(isLoading: false, error: e.toString()));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: userFacingError(e, fallback: 'Could not load places.'),
+        ),
+      );
     }
   }
 
@@ -491,7 +518,12 @@ class ChronicleCubit extends Cubit<ChronicleState> {
       final bonds = await ChronicleRepository.getRelationships(instanceId);
       emit(state.copyWith(bonds: bonds, isLoading: false));
     } catch (e) {
-      emit(state.copyWith(isLoading: false, error: e.toString()));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: userFacingError(e, fallback: 'Could not load bonds.'),
+        ),
+      );
     }
   }
 
@@ -501,7 +533,12 @@ class ChronicleCubit extends Cubit<ChronicleState> {
       final threads = await ChronicleRepository.getThreads(instanceId);
       emit(state.copyWith(threads: threads, isLoading: false));
     } catch (e) {
-      emit(state.copyWith(isLoading: false, error: e.toString()));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: userFacingError(e, fallback: 'Could not load threads.'),
+        ),
+      );
     }
   }
 
@@ -511,7 +548,12 @@ class ChronicleCubit extends Cubit<ChronicleState> {
       final recap = await ChronicleRepository.getRecap(instanceId);
       emit(state.copyWith(recap: recap, isLoading: false));
     } catch (e) {
-      emit(state.copyWith(isLoading: false, error: e.toString()));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: userFacingError(e, fallback: 'Could not load the recap.'),
+        ),
+      );
     }
   }
 

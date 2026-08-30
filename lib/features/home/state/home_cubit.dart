@@ -6,6 +6,7 @@ import '../../../core/storage/local_db.dart';
 import '../../../shared/models/world_instance.dart';
 import '../data/home_repository.dart';
 import '../domain/realm_group.dart';
+import '../../../core/errors/user_message.dart';
 
 class HomeState extends Equatable {
   final List<WorldInstance> instances;
@@ -105,7 +106,14 @@ class HomeCubit extends Cubit<HomeState> {
         ),
       );
     } catch (e) {
-      if (!silent) emit(state.copyWith(isLoading: false, error: e.toString()));
+      if (!silent) {
+        emit(
+          state.copyWith(
+            isLoading: false,
+            error: userFacingError(e, fallback: 'Could not load your realms.'),
+          ),
+        );
+      }
     }
   }
 
@@ -131,7 +139,12 @@ class HomeCubit extends Cubit<HomeState> {
         ),
       );
     } catch (e) {
-      emit(state.copyWith(isLoadingMore: false, error: e.toString()));
+      emit(
+        state.copyWith(
+          isLoadingMore: false,
+          error: userFacingError(e, fallback: 'Could not load more realms.'),
+        ),
+      );
     }
   }
 
@@ -140,7 +153,11 @@ class HomeCubit extends Cubit<HomeState> {
       final instance = await HomeRepository.createInstance(templateId);
       return instance;
     } catch (e) {
-      emit(state.copyWith(error: e.toString()));
+      emit(
+        state.copyWith(
+          error: userFacingError(e, fallback: 'Could not open that realm.'),
+        ),
+      );
       return null;
     }
   }
@@ -156,7 +173,12 @@ class HomeCubit extends Cubit<HomeState> {
     try {
       await HomeRepository.archiveInstance(instanceId);
     } catch (e) {
-      emit(state.copyWith(instances: before, error: e.toString()));
+      emit(
+        state.copyWith(
+          instances: before,
+          error: userFacingError(e, fallback: 'Could not archive that realm.'),
+        ),
+      );
     }
   }
 
@@ -172,7 +194,12 @@ class HomeCubit extends Cubit<HomeState> {
       await HomeRepository.deleteInstance(instanceId);
       await LocalDb.clearInstanceCache(instanceId);
     } catch (e) {
-      emit(state.copyWith(instances: before, error: e.toString()));
+      emit(
+        state.copyWith(
+          instances: before,
+          error: userFacingError(e, fallback: 'Could not delete that realm.'),
+        ),
+      );
     }
   }
 

@@ -12,6 +12,7 @@ import '../../../../shared/widgets/everlore_empty_state.dart';
 import '../../../../shared/widgets/realm_backdrop.dart';
 import '../../../../shared/widgets/mature_content_chip.dart';
 import '../../moderation/data/moderation_repository.dart';
+import '../../../core/errors/user_message.dart';
 
 class BrowseTemplatesScreen extends StatefulWidget {
   const BrowseTemplatesScreen({super.key});
@@ -97,7 +98,7 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _error = e.toString().replaceFirst('Exception: ', '');
+        _error = userFacingError(e, fallback: 'Could not load worlds.');
       });
     }
   }

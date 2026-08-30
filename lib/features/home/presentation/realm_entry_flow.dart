@@ -8,6 +8,7 @@ import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/neu.dart';
 import '../data/home_repository.dart';
 import '../../personas/data/persona_repository.dart';
+import '../../../core/errors/user_message.dart';
 
 enum RealmEntryChoice { continueStory, beginAnew }
 
@@ -86,7 +87,7 @@ Future<void> beginNewRealmStory(
     context.push('/play/${instance.id}');
   } catch (e) {
     if (!context.mounted) return;
-    final msg = e.toString().replaceFirst('Exception: ', '');
+    final msg = userFacingError(e, fallback: 'Could not enter that realm.');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),

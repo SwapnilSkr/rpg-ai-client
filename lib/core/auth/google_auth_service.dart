@@ -30,9 +30,20 @@ class GoogleAuthService {
   /// Returns null when the player backs out of the chooser, which is a normal
   /// outcome and not an error.
   Future<String?> signIn() async {
-    final account = _googleSignIn.supportsAuthenticate()
-        ? await _googleSignIn.authenticate(scopeHint: ['email', 'profile'])
-        : await _googleSignIn.attemptLightweightAuthentication();
+    final GoogleSignInAccount? account;
+    try {
+      account = _googleSignIn.supportsAuthenticate()
+          ? await _googleSignIn.authenticate(scopeHint: ['email', 'profile'])
+          : await _googleSignIn.attemptLightweightAuthentication();
+    } on GoogleSignInException catch (e) {
+      // Backing out of the chooser is not a failure, and the plugin reports it
+      // as an exception rather than a null account. Its message reads
+      // "activity is cancelled by the user", which is developer wording that
+      // should never reach a player — so it becomes a null return, and the
+      // caller stays quiet.
+      if (e.code == GoogleSignInExceptionCode.canceled) return null;
+      rethrow;
+    }
     if (account == null) return null;
 
     final googleIdToken = account.authentication.idToken;

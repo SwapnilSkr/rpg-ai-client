@@ -82,13 +82,30 @@ class ApiClient {
   }
 
   static dynamic _handleResponse(http.Response response) {
-    final body = jsonDecode(response.body);
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return body;
+    final ok = response.statusCode >= 200 && response.statusCode < 300;
+
+    dynamic body;
+    try {
+      body = response.body.isEmpty ? null : jsonDecode(response.body);
+    } on FormatException {
+      // Not every response on this socket is ours. A proxy timing out, a
+      // gateway error page, or a truncated body all arrive as text that is not
+      // JSON, and decoding it used to throw a FormatException carrying that
+      // text — which callers then rendered to the player.
+      if (ok) rethrow;
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: 'Unknown error',
+      );
     }
+
+    if (ok) return body;
+
+    // A non-2xx body is not guaranteed to be a JSON object either.
+    final error = body is Map ? body['error'] : null;
     throw ApiException(
       statusCode: response.statusCode,
-      message: body['error'] ?? 'Unknown error',
+      message: error?.toString() ?? 'Unknown error',
     );
   }
 }

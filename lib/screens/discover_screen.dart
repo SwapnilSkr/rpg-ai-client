@@ -21,6 +21,7 @@ import '../shared/widgets/realm_backdrop.dart';
 import '../features/templates/data/template_repository.dart';
 import '../features/templates/data/interest_ranking.dart';
 import '../features/moderation/data/moderation_repository.dart';
+import '../core/errors/user_message.dart';
 
 /// The default landing after auth — an art-led, interest-ranked explore feed.
 /// Two-column masonry of forged cards, champagne pill tabs, and the primary
@@ -100,7 +101,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString().replaceFirst('Exception: ', '');
+        _error = userFacingError(e, fallback: 'Could not load worlds.');
       });
     }
   }
