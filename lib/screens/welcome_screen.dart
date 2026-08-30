@@ -116,16 +116,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
                   const Spacer(flex: 2),
 
+                  // Signing in is the only way in. Browsing worlds first used
+                  // to be offered here, but a realm you cannot enter is a
+                  // worse first impression than a door, so the door is all
+                  // this screen shows.
                   NeuButton(
                     label: 'BEGIN YOUR JOURNEY',
                     icon: Icons.auto_awesome,
                     onTap: () => context.push('/auth'),
-                  ),
-                  const SizedBox(height: 14),
-                  NeuButton(
-                    label: 'Explore Worlds',
-                    primary: false,
-                    onTap: () => context.push('/templates'),
                   ),
 
                   const SizedBox(height: 40),
