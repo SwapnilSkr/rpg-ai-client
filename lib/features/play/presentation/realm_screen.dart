@@ -22,12 +22,23 @@ class RealmScreenArgs {
   final VoidCallback? onReset;
   final VoidCallback? onDelete;
 
+  /// Live turn count from the open playthrough. `instance.meta` is a snapshot
+  /// taken when the realm was first loaded, so after a few turns it reads
+  /// "3 TURNS" on a story that is twenty deep. The play screen always knows the
+  /// true number, so it hands it over rather than letting this screen guess.
+  final int? liveTotalEvents;
+
+  /// Live echo count, same reasoning as [liveTotalEvents].
+  final int? liveTotalMemories;
+
   const RealmScreenArgs({
     required this.instance,
     required this.template,
     required this.characters,
     this.onReset,
     this.onDelete,
+    this.liveTotalEvents,
+    this.liveTotalMemories,
   });
 }
 
@@ -172,8 +183,10 @@ class RealmScreen extends StatelessWidget {
                           ),
                         ),
                       _RealmStatus(
-                        turns: instance.meta.totalEvents,
-                        memories: instance.meta.totalMemories,
+                        turns: realm.liveTotalEvents ?? instance.meta.totalEvents,
+                        memories:
+                            realm.liveTotalMemories ??
+                            instance.meta.totalMemories,
                         characters: characters.length,
                       ),
                       const SizedBox(height: 24),

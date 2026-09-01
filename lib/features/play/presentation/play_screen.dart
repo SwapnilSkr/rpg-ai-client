@@ -1454,6 +1454,15 @@ class _PlayViewState extends State<_PlayView> {
                               instance: state.instance!,
                               template: state.template!,
                               characters: state.characters,
+                              liveTotalEvents: state.totalEvents,
+                              // The in-memory list is capped, so it is a FLOOR,
+                              // not a total — take whichever is larger so the
+                              // count can only ever grow toward the truth, never
+                              // shrink below what the server last reported.
+                              liveTotalMemories: state.memories.length >
+                                      (state.instance?.meta.totalMemories ?? 0)
+                                  ? state.memories.length
+                                  : null,
                               onReset: () => _confirmResetChat(
                                 context,
                                 context.read<PlayCubit>(),
