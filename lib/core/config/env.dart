@@ -40,6 +40,34 @@ class AppConfig {
     devDefault: 'ws://localhost:3000',
   );
 
+  /// The Google web client ID that Firebase brokers the sign-in credential
+  /// through.
+  ///
+  /// Compiled in for the same reason the endpoints above are. This used to be
+  /// read straight from the bundled `.env` on the auth screen, which made a
+  /// *developer's* gitignored file load-bearing for production sign-in, with a
+  /// failure that said nothing: the read is wrapped in a bare catch, a missing
+  /// or mistyped key just leaves `_googleReady` false, and the Google button
+  /// silently is not there. No crash to report, nothing in review to catch it.
+  ///
+  /// Not a secret. It is a public identifier, already sitting in
+  /// `google-services.json` and readable in any shipped APK — the reason it
+  /// belongs here is packaging determinism, not confidentiality.
+  static const _releaseGoogleWebClientId =
+      '596403299579-cc9d9sdsrceacjd2tf3o2c6ukvblnrnj.apps.googleusercontent.com';
+
+  /// Empty when nothing is configured, which is the auth screen's signal to
+  /// hide the Google button rather than offer one that always throws.
+  static String get googleWebClientId {
+    const compiled = String.fromEnvironment(
+      'GOOGLE_WEB_CLIENT_ID',
+      defaultValue: '',
+    );
+    if (compiled.isNotEmpty) return compiled.trim();
+    if (kReleaseMode) return _releaseGoogleWebClientId;
+    return _env('GOOGLE_WEB_CLIENT_ID') ?? '';
+  }
+
   /// An explicit `--dart-define` first, then the compiled-in production
   /// endpoint in release, then `.env` (dev only), then the local default.
   static String _resolve({

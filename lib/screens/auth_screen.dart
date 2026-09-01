@@ -4,7 +4,6 @@ import '../core/config/env.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/auth/auth_service.dart';
@@ -77,11 +76,10 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _initGoogleSignIn() async {
     try {
-      await dotenv.load();
-      final clientId = dotenv.env['GOOGLE_WEB_CLIENT_ID']?.trim();
+      final clientId = AppConfig.googleWebClientId;
       // Firebase brokers the credential, so no Firebase app means no Google
       // button — better a hidden button than one that always throws.
-      if (Firebase.apps.isNotEmpty && clientId != null && clientId.isNotEmpty) {
+      if (Firebase.apps.isNotEmpty && clientId.isNotEmpty) {
         await _googleAuthService.init(serverClientId: clientId);
         if (mounted) setState(() => _googleReady = true);
         return;
