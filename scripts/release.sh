@@ -76,11 +76,21 @@ if HITS="$(grep -rlE "$PRIVATE_RE" "$WORK" 2>/dev/null)"; then
 fi
 
 HOST="${API_BASE_URL#https://}"
+# NOTE: `strings … | grep -q` is wrong under `set -o pipefail`. grep -q exits the
+# moment it matches, strings then dies of SIGPIPE (141), and pipefail reports the
+# PIPELINE as failed — so a bundle that DOES contain the host is rejected for
+# containing it. This gate passed when it was written only because the binaries
+# were small enough that strings finished before grep could exit; they have since
+# grown, and it began refusing every artifact. Materialise the strings first so
+# there is no pipe to break.
+SYMS="$WORK/.strings"
 for so in $(find "$WORK" -name libapp.so); do
   ABI="$(basename "$(dirname "$so")")"
-  strings -a "$so" | grep -qF "$HOST" \
+  strings -a "$so" > "$SYMS"
+  grep -qF "$HOST" "$SYMS" \
     || { echo "✗ $ABI/libapp.so does not contain $HOST" >&2; exit 1; }
 done
+rm -f "$SYMS"
 
 echo
 echo "✓ $(grep -m1 '^version:' pubspec.yaml)"
