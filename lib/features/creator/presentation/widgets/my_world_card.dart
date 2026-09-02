@@ -6,6 +6,7 @@ import '../../../../../shared/app_icons.dart';
 import '../../../../../shared/models/world_template.dart';
 import '../../../../../shared/widgets/mature_content_chip.dart';
 import '../../../../../shared/widgets/everlore_network_image.dart';
+import '../../../../shared/text_format.dart';
 
 class MyWorldCard extends StatelessWidget {
   final WorldTemplate template;
@@ -245,7 +246,7 @@ class MyWorldCard extends StatelessWidget {
                             _InfoChip(
                               icon: Icons.bar_chart,
                               label:
-                                  '${template.baseStatsTemplate.length} stats',
+                                  countLabel(template.baseStatsTemplate.length, 'stat'),
                               color: EverloreTheme.ash,
                             ),
                           ...template.sceneTags
@@ -253,7 +254,7 @@ class MyWorldCard extends StatelessWidget {
                               .map(
                                 (tag) => _InfoChip(
                                   icon: Icons.label_outline,
-                                  label: tag,
+                                  label: humanizeTag(tag),
                                   color: EverloreTheme.ash,
                                 ),
                               ),

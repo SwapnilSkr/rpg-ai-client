@@ -17,6 +17,10 @@ import '../shared/widgets/keyboard_aware_scroll.dart';
 import '../shared/widgets/realm_backdrop.dart';
 import '../shared/widgets/neu.dart';
 import '../shared/widgets/player_avatar.dart';
+import '../shared/widgets/interest_picker.dart';
+import '../shared/narrative_styles.dart';
+import '../shared/widgets/everlore_sheet.dart';
+import '../shared/widgets/everlore_notice.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, this.title});
@@ -44,6 +48,11 @@ class _AuthScreenState extends State<AuthScreen> {
   final _nameEditCtrl = TextEditingController();
   final _nameEditFocus = FocusNode();
   bool _isDeletingAccount = false;
+  bool _isSavingInterests = false;
+
+  /// Genre picks shown on the profile tab. Sourced from the account, falling
+  /// back to the device store when the account has none recorded yet.
+  List<String> _interests = const [];
   bool _codeSent = false;
   String? _errorMessage;
   String? _successMessage;
@@ -95,8 +104,11 @@ class _AuthScreenState extends State<AuthScreen> {
     if (!mounted) return;
 
     if (cachedUser != null) {
+      final interests = await _resolveInterests(cachedUser);
+      if (!mounted) return;
       setState(() {
         _currentUser = cachedUser;
+        _interests = interests;
         _sessionReady = true;
       });
       unawaited(_initGoogleSignIn());
@@ -309,13 +321,10 @@ class _AuthScreenState extends State<AuthScreen> {
         _isDeletingAccount = false;
       });
       context.go('/auth');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Your account was deleted.',
-            style: EverloreTheme.ui(size: 13, color: EverloreTheme.parchment),
-          ),
-        ),
+      showEverloreNotice(
+        context,
+        'Your account was deleted.',
+        tone: NoticeTone.success,
       );
     } catch (e) {
       if (!mounted) return;
@@ -327,9 +336,7 @@ class _AuthScreenState extends State<AuthScreen> {
         _errorMessage = message;
         _isDeletingAccount = false;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      showEverloreNotice(context, message, tone: NoticeTone.error);
     }
   }
 
@@ -344,18 +351,13 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final updated = await AuthService.setNsfwEnabled(enabled);
       if (!mounted) return;
-      setState(() {
-        _currentUser = updated;
-        _successMessage = enabled
+      setState(() => _currentUser = updated);
+      showEverloreNotice(
+        context,
+        enabled
             ? 'Mature content enabled for eligible worlds.'
-            : 'Mature content disabled.';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            enabled ? 'NSFW preference enabled.' : 'NSFW preference disabled.',
-          ),
-        ),
+            : 'Mature content disabled.',
+        tone: NoticeTone.success,
       );
     } catch (e) {
       if (!mounted) return;
@@ -363,10 +365,7 @@ class _AuthScreenState extends State<AuthScreen> {
         e,
         fallback: 'Could not update that preference. Please try again.',
       );
-      setState(() => _errorMessage = message);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      showEverloreNotice(context, message, tone: NoticeTone.error);
     } finally {
       if (mounted) setState(() => _isUpdatingPreferences = false);
     }
@@ -385,11 +384,11 @@ class _AuthScreenState extends State<AuthScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // Back button — only in the sign-in flow. The profile is a nav
-              // tab (no back) or pushed (OS/gesture back handles it).
-              if (_sessionReady &&
-                  _currentUser == null &&
-                  !_isProfileTab(context))
+              // Back button — shown wherever this screen was pushed over
+              // something, the profile included. It used to be hidden there on
+              // the theory that the profile was a nav tab; it is not, it is a
+              // pushed route, so the only way out was the OS back gesture.
+              if (_sessionReady && context.canPop())
                 Align(
                   alignment: Alignment.topLeft,
                   child: Padding(
@@ -402,6 +401,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                       onPressed: () =>
                           context.canPop() ? context.pop() : context.go('/'),
+                      tooltip: 'Back',
                     ),
                   ),
                 )
@@ -468,17 +468,75 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() {
         _currentUser = updated;
         _editingName = false;
-        _successMessage = 'Name updated.';
       });
+      showEverloreNotice(context, 'Name updated.', tone: NoticeTone.success);
     } catch (e) {
-      setState(
-        () => _errorMessage = userFacingError(
+      if (!mounted) return;
+      showEverloreNotice(
+        context,
+        userFacingError(
           e,
           fallback: 'Could not save that name. Please try again.',
         ),
+        tone: NoticeTone.error,
       );
     } finally {
       if (mounted) setState(() => _isSavingName = false);
+    }
+  }
+
+  Future<List<String>> _resolveInterests(User user) async {
+    final fromAccount = user.preferences.interests;
+    if (fromAccount.isNotEmpty) return fromAccount;
+    return InterestsStore.getInterests();
+  }
+
+  Future<void> _openInterestsEditor() async {
+    final picked = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: EverloreTheme.void2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _InterestsEditorSheet(initial: _interests),
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      _isSavingInterests = true;
+      _clearMessages();
+    });
+    // Written locally first so discovery ranking reflects the change even if
+    // the account update fails; the store is the reader for that path.
+    await InterestsStore.saveInterests(picked);
+    try {
+      final updated = await AuthService.updatePreferences({
+        'interests': picked,
+      });
+      if (!mounted) return;
+      setState(() {
+        _currentUser = updated;
+        _interests = picked;
+      });
+      showEverloreNotice(
+        context,
+        'Interests updated.',
+        tone: NoticeTone.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _interests = picked);
+      showEverloreNotice(
+        context,
+        userFacingError(
+          e,
+          fallback: 'Could not save your interests. Please try again.',
+        ),
+        tone: NoticeTone.error,
+      );
+    } finally {
+      if (mounted) setState(() => _isSavingInterests = false);
     }
   }
 
@@ -598,6 +656,13 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
 
         const SizedBox(height: 28),
+
+        _InterestsSummary(
+          interests: _interests,
+          saving: _isSavingInterests,
+          onEdit: _isSavingInterests ? null : _openInterestsEditor,
+        ),
+        const SizedBox(height: 16),
 
         NeuButton(
           label: 'Membership & Ink',
@@ -800,7 +865,6 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
             ),
           ),
-
 
         const SizedBox(height: 32),
       ],
@@ -1071,6 +1135,172 @@ class _GuideControls extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Profile card listing the player's genre interests, with a tap to change
+/// them. The same picks the interests onboarding beat collects.
+class _InterestsSummary extends StatelessWidget {
+  final List<String> interests;
+  final bool saving;
+  final VoidCallback? onEdit;
+
+  const _InterestsSummary({
+    required this.interests,
+    required this.saving,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: EverloreTheme.cardDecoration,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.auto_stories_outlined,
+                size: 18,
+                color: EverloreTheme.goldDim,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Your Interests',
+                  style: TextStyle(
+                    fontFamily: EverloreTheme.uiFamily,
+                    color: EverloreTheme.parchment,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: saving ? null : onEdit,
+                child: Text(
+                  saving ? 'Saving…' : 'Change',
+                  style: TextStyle(
+                    fontFamily: EverloreTheme.uiFamily,
+                    color: saving ? EverloreTheme.ash : EverloreTheme.gold,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            interests.isEmpty
+                ? 'Pick the kinds of stories you love and we\'ll surface those realms first.'
+                : 'Realms in these styles are surfaced first.',
+            style: const TextStyle(
+              fontFamily: EverloreTheme.uiFamily,
+              color: EverloreTheme.ash,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          if (interests.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final key in interests)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: EverloreTheme.gold.withValues(alpha: 0.12),
+                      border: Border.all(
+                        color: EverloreTheme.gold.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      narrativeStyleLabel(key),
+                      style: TextStyle(
+                        fontFamily: EverloreTheme.uiFamily,
+                        color: EverloreTheme.parchment,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom sheet wrapping the shared interests grid. Pops the new selection, or
+/// null when the player backs out without saving.
+class _InterestsEditorSheet extends StatefulWidget {
+  final List<String> initial;
+  const _InterestsEditorSheet({required this.initial});
+
+  @override
+  State<_InterestsEditorSheet> createState() => _InterestsEditorSheetState();
+}
+
+class _InterestsEditorSheetState extends State<_InterestsEditorSheet> {
+  late final Set<String> _selected = {...widget.initial};
+
+  void _toggle(String key) {
+    setState(() {
+      if (!_selected.remove(key)) _selected.add(key);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = _selected.isNotEmpty;
+    return SheetFrame(
+      padding: const EdgeInsets.fromLTRB(20, 6, 20, 12),
+      footer: NeuButton(
+        label: ready ? 'Save interests' : 'Choose at least one',
+        icon: ready ? Icons.auto_awesome : null,
+        onTap: ready ? () => Navigator.pop(context, _selected.toList()) : null,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Which worlds call to you?',
+            style: GoogleFonts.cinzel(
+              color: EverloreTheme.gold,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              'Tap to add or remove. We\'ll summon matching realms first.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.ebGaramond(
+                color: EverloreTheme.ash,
+                fontSize: 15,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          InterestPickerGrid(selected: _selected, onToggle: _toggle),
         ],
       ),
     );

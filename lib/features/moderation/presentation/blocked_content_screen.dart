@@ -5,7 +5,7 @@ import '../../../core/network/api_client.dart';
 import '../../../shared/widgets/everlore_empty_state.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
-import '../../../shared/widgets/top_confirmation_toast.dart';
+import '../../../shared/widgets/everlore_notice.dart';
 import '../../templates/data/template_repository.dart';
 import '../data/moderation_repository.dart';
 
@@ -83,20 +83,22 @@ class _BlockedContentScreenState extends State<BlockedContentScreen> {
           worlds: _blocks.worlds.where((w) => w.id != id).toList(),
         );
       });
-      showTopConfirmationToast(
+      showEverloreNotice(
         context,
-        icon: Icons.visibility_outlined,
-        message: isCreator
+        isCreator
             ? '$label unblocked. Their worlds are back.'
             : '$label is visible again.',
+        tone: NoticeTone.success,
+        icon: Icons.visibility_outlined,
       );
     } catch (_) {
       if (!mounted) return;
       setState(() => _pending.remove(id));
-      showTopConfirmationToast(
+      showEverloreNotice(
         context,
+        'Could not undo that. Try again.',
+        tone: NoticeTone.error,
         icon: Icons.error_outline_rounded,
-        message: 'Could not undo that. Try again.',
       );
     }
   }

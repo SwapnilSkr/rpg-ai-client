@@ -8,6 +8,7 @@ import '../../../shared/models/world_template.dart';
 import 'widgets/voice_picker.dart';
 import 'widgets/image_forge.dart';
 import 'widgets/autofill_card.dart';
+import '../../../shared/widgets/everlore_sheet.dart';
 
 // ─────────────────────────────────────────────
 // Entry point
@@ -89,75 +90,143 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
           }
         },
         builder: (context, state) {
-          return Scaffold(
-            backgroundColor: EverloreTheme.void1,
-            body: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.asset(
-                  'assets/art/forge-world-cover.webp',
-                  fit: BoxFit.cover,
-                  alignment: Alignment.center,
-                ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        EverloreTheme.void1.withValues(alpha: 0.32),
-                        EverloreTheme.void1.withValues(alpha: 0.7),
-                        EverloreTheme.void0.withValues(alpha: 0.88),
-                      ],
-                      stops: const [0, 0.46, 1],
+          return PopScope(
+            // Nothing is saved until the world is forged, so the back gesture
+            // threw away every step typed so far without a word. Ask first.
+            canPop: !state.hasUnsavedWork,
+            onPopInvokedWithResult: (didPop, _) async {
+              if (didPop) return;
+              if (await _confirmDiscard(context) && context.mounted) {
+                context.pop();
+              }
+            },
+            child: Scaffold(
+              backgroundColor: EverloreTheme.void1,
+              body: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(
+                    'assets/art/forge-world-cover.webp',
+                    fit: BoxFit.cover,
+                    alignment: Alignment.center,
+                  ),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        // This is a five-step form, not a hero page: field
+                        // labels and their helper lines sit directly on the
+                        // backdrop the whole way down. At a 0.32 top stop the
+                        // cover art read straight through "World Name" and the
+                        // line under it. Keep the art behind the title, but
+                        // give the form something to be read against.
+                        colors: [
+                          EverloreTheme.void1.withValues(alpha: 0.62),
+                          EverloreTheme.void1.withValues(alpha: 0.82),
+                          EverloreTheme.void0.withValues(alpha: 0.92),
+                        ],
+                        stops: const [0, 0.46, 1],
+                      ),
                     ),
                   ),
-                ),
-                SafeArea(
-                  child: Column(
-                    children: [
-                      _ForgeHeader(
-                        step: state.step,
-                        isEditing: widget.existing != null,
-                        onBack: () {
-                          if (state.step == 0) {
-                            context.pop();
-                          } else {
-                            _cubit.prevStep();
-                          }
-                        },
-                      ),
-                      _StepProgress(step: state.step),
-                      Expanded(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 280),
-                          transitionBuilder: (child, animation) =>
-                              FadeTransition(opacity: animation, child: child),
-                          child: _buildStep(context, state),
+                  SafeArea(
+                    child: Column(
+                      children: [
+                        _ForgeHeader(
+                          step: state.step,
+                          isEditing: widget.existing != null,
+                          onBack: () async {
+                            if (state.step > 0) {
+                              _cubit.prevStep();
+                              return;
+                            }
+                            if (await _confirmDiscard(context) &&
+                                context.mounted) {
+                              context.pop();
+                            }
+                          },
                         ),
-                      ),
-                      if (state.error != null)
-                        _ErrorBar(
-                          message: state.error!,
-                          onDismiss: () =>
-                              context.read<ForgeWorldCubit>().clearError(),
+                        _StepProgress(step: state.step),
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 280),
+                            transitionBuilder: (child, animation) =>
+                                FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                            child: _buildStep(context, state),
+                          ),
                         ),
-                      _ForgeNavBar(
-                        step: state.step,
-                        canProceed: state.canProceed,
-                        isSubmitting: state.isSubmitting,
-                        onNext: () => _cubit.nextStep(),
-                        onForge: () => _cubit.forge(),
-                      ),
-                    ],
+                        if (state.error != null)
+                          _ErrorBar(
+                            message: state.error!,
+                            onDismiss: () =>
+                                context.read<ForgeWorldCubit>().clearError(),
+                          ),
+                        _ForgeNavBar(
+                          step: state.step,
+                          canProceed: state.canProceed,
+                          isSubmitting: state.isSubmitting,
+                          onNext: () => _cubit.nextStep(),
+                          onForge: () => _cubit.forge(),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },
       ),
     );
+  }
+
+  /// Shared by the system back gesture and the header arrow, so both routes
+  /// out of a half-built world behave the same way.
+  Future<bool> _confirmDiscard(BuildContext context) async {
+    if (!_cubit.state.hasUnsavedWork) return true;
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: EverloreTheme.void2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
+        ),
+        title: Text(
+          'Leave this world unfinished?',
+          style: EverloreTheme.serifDisplay(
+            size: 18,
+            color: EverloreTheme.parchment,
+          ),
+        ),
+        content: const Text(
+          'Nothing you have written here has been saved yet. Leaving now '
+          'discards it.',
+          style: TextStyle(color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              'Keep forging',
+              style: TextStyle(color: EverloreTheme.ash),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Discard',
+              style: TextStyle(color: EverloreTheme.crimson),
+            ),
+          ),
+        ],
+      ),
+    );
+    return leave ?? false;
   }
 
   Widget _buildStep(BuildContext context, ForgeWorldState state) {
@@ -241,16 +310,21 @@ class _ForgeHeader extends StatelessWidget {
           const SizedBox(width: 12),
           const Icon(Icons.auto_fix_high, color: EverloreTheme.gold, size: 16),
           const SizedBox(width: 6),
-          Text(
-            isEditing ? 'EDIT WORLD' : 'FORGE WORLD',
-            style: const TextStyle(
-              color: EverloreTheme.gold,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 2.5,
+          // 2.5 of letter-spacing at large system text is enough to push the
+          // step counter off a 320pt screen.
+          Expanded(
+            child: Text(
+              isEditing ? 'EDIT WORLD' : 'FORGE WORLD',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: EverloreTheme.gold,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.5,
+              ),
             ),
           ),
-          const Spacer(),
           Text(
             '${step + 1} / $_stepCount',
             style: const TextStyle(color: EverloreTheme.ash, fontSize: 13),
@@ -497,25 +571,33 @@ class _ForgeButton extends StatelessWidget {
                     color: EverloreTheme.void1,
                   ),
                 )
-              : const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.auto_fix_high,
-                      color: EverloreTheme.void1,
-                      size: 18,
-                    ),
-                    SizedBox(width: 10),
-                    Text(
-                      'FORGE THIS WORLD',
-                      style: TextStyle(
+              // The label is unconstrained inside a Row that also carries
+              // "Back", so at large system text the last word of the whole
+              // flow's CTA ran 62px past the button. Shrink it to fit rather
+              // than cut it — this is the one control that finishes a world.
+              : const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.auto_fix_high,
                         color: EverloreTheme.void1,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
+                        size: 18,
                       ),
-                    ),
-                  ],
+                      SizedBox(width: 10),
+                      Text(
+                        'FORGE THIS WORLD',
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: EverloreTheme.void1,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
         ),
       ),
@@ -755,6 +837,11 @@ class _ToggleCard extends StatelessWidget {
                 ],
               ),
             ),
+            // The description is Expanded and the switch is not, so a long
+            // subtitle wraps to exactly the switch's left edge and its last
+            // word touches the control — at large text "…full world —" ran
+            // straight into it.
+            const SizedBox(width: 12),
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               width: 44,
@@ -895,7 +982,7 @@ class _Step0Essence extends StatelessWidget {
             icon: Icons.psychology_alt,
             title: 'Conscious Soul',
             subtitle:
-                'A lead AI character within this full world — lore, scenes, cast, and systems still belong to the setting',
+                'A lead character with a mind of their own — the lore, scenes, cast, and systems still belong to the setting',
             value: state.isSentient,
             activeColor: EverloreTheme.violet,
             onChanged: cubit.setIsSentient,
@@ -905,7 +992,7 @@ class _Step0Essence extends StatelessWidget {
             icon: Icons.auto_stories,
             title: 'Game Master',
             subtitle:
-                'The AI acts as a neutral narrator, orchestrating the world and responding to player choices',
+                'A neutral narrator who orchestrates the world and answers what players choose',
             value: !state.isSentient,
             activeColor: EverloreTheme.cyan,
             onChanged: (v) => cubit.setIsSentient(!v),
@@ -958,7 +1045,7 @@ class _Step4Portrait extends StatelessWidget {
             icon: Icons.image_outlined,
             text:
                 'An optional portrait for your world — shown on its card and as the '
-                'chat background. Drafted by “Generate with AI”, or write your own.',
+                'scene background. Drafted by “Summon a draft”, or write your own.',
           ),
           const SizedBox(height: 24),
           ImageForge(
@@ -1006,7 +1093,7 @@ class _Step1Voice extends StatelessWidget {
           _StepIntro(
             icon: Icons.record_voice_over,
             text:
-                "The Oracle's Voice is the AI's core instruction set — it defines the narrator's personality, tone, rules, and the soul of your world.",
+                "The Oracle's Voice is how your world speaks — the narrator's personality, tone, rules, and the soul of the place.",
           ),
           const SizedBox(height: 20),
           Container(
@@ -1053,7 +1140,7 @@ class _Step1Voice extends StatelessWidget {
           const SizedBox(height: 20),
           _FormLabel(
             label: "Oracle's Voice",
-            hint: 'System prompt — the AI reads this before every response',
+            hint: 'Your narrator reads this before every scene',
             required: true,
             maxLength: 1500,
             counterFor: seedCtrl,
@@ -1201,7 +1288,7 @@ class _Step2LoreState extends State<_Step2Lore> {
           _StepIntro(
             icon: Icons.history_edu,
             text:
-                'The Ancient Lore is your world\'s foundational knowledge — history, geography, factions, mythology. The AI uses this as its encyclopedia.',
+                'The Ancient Lore is your world\'s foundational knowledge — history, geography, factions, mythology. Your narrator draws on it as an encyclopedia.',
           ),
           const SizedBox(height: 20),
           _FormLabel(
@@ -1574,6 +1661,7 @@ class _Step3Stats extends StatelessWidget {
     int? index,
   ) {
     showModalBottomSheet(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -1600,6 +1688,7 @@ class _Step3Stats extends StatelessWidget {
     int? index,
   ) {
     showModalBottomSheet(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -2123,16 +2212,7 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Handle
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: EverloreTheme.void4,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          const SheetGrabHandle(),
           const SizedBox(height: 16),
           Text(
             widget.existing != null ? 'Edit Vital Force' : 'New Vital Force',

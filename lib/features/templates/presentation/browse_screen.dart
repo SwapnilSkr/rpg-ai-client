@@ -13,6 +13,7 @@ import '../../../../shared/widgets/realm_backdrop.dart';
 import '../../../../shared/widgets/mature_content_chip.dart';
 import '../../moderation/data/moderation_repository.dart';
 import '../../../core/errors/user_message.dart';
+import '../../../shared/text_format.dart';
 
 class BrowseTemplatesScreen extends StatefulWidget {
   const BrowseTemplatesScreen({super.key});
@@ -609,11 +610,15 @@ class _WorldCard extends StatelessWidget {
                               children: [
                                 EvIcon(AppIcons.scene(tag), size: 14),
                                 const SizedBox(width: 4),
-                                Text(
-                                  tag,
-                                  style: const TextStyle(
-                                    color: EverloreTheme.ash,
-                                    fontSize: 10,
+                                Flexible(
+                                  child: Text(
+                                    humanizeTag(tag),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: EverloreTheme.ash,
+                                      fontSize: 10,
+                                    ),
                                   ),
                                 ),
                               ],

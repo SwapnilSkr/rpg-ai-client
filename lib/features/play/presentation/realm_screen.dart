@@ -12,6 +12,8 @@ import '../../../shared/models/world_template.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../shared/widgets/everlore_empty_state.dart';
 import '../../../shared/widgets/realm_backdrop.dart';
+import '../../../shared/text_format.dart';
+import '../../../shared/widgets/status_bar_scrim.dart';
 
 /// Snapshot passed from Play. This is deliberately presentation-only: the Realm
 /// is a calm map of an already-open playthrough, not a second game state owner.
@@ -183,7 +185,8 @@ class RealmScreen extends StatelessWidget {
                           ),
                         ),
                       _RealmStatus(
-                        turns: realm.liveTotalEvents ?? instance.meta.totalEvents,
+                        turns:
+                            realm.liveTotalEvents ?? instance.meta.totalEvents,
                         memories:
                             realm.liveTotalMemories ??
                             instance.meta.totalMemories,
@@ -232,6 +235,23 @@ class RealmScreen extends StatelessWidget {
                                 '/chronicle/$instanceId?section=world',
                               ),
                             ),
+                            // The Chronicle has a fifth tome. Its tab strip
+                            // scrolls, so Archive sat off the right edge with
+                            // nothing to say it was there, and this list — the
+                            // only signposted way in — skipped it entirely.
+                            _RealmAction(
+                              icon: Icons.bookmark_outline,
+                              title: 'Echo archive',
+                              subtitle:
+                                  (realm.liveTotalMemories ??
+                                          instance.meta.totalMemories) ==
+                                      0
+                                  ? 'Kept moments will be gathered here.'
+                                  : 'Search, revisit, and tend the moments worth keeping.',
+                              onTap: () => context.push(
+                                '/chronicle/$instanceId?section=archive',
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -259,7 +279,10 @@ class RealmScreen extends StatelessWidget {
                             _RealmInfo(
                               icon: Icons.theater_comedy_outlined,
                               label: 'Mode',
-                              value: instance.mode.replaceAll('_', ' '),
+                              // `free_play` reads as "free play" without
+                              // this — the only lower-case value in a column
+                              // of proper ones.
+                              value: humanizeTag(instance.mode),
                             ),
                           ],
                         ),
@@ -282,7 +305,7 @@ class RealmScreen extends StatelessWidget {
                                     color: EverloreTheme.gold,
                                   ),
                                   title: Text(
-                                    'Reset this chat',
+                                    'Reset this playthrough',
                                     style: EverloreTheme.ui(
                                       size: 14,
                                       color: EverloreTheme.parchment,
@@ -310,7 +333,7 @@ class RealmScreen extends StatelessWidget {
                                     color: EverloreTheme.crimson,
                                   ),
                                   title: Text(
-                                    'Delete this chat',
+                                    'Delete this playthrough',
                                     style: EverloreTheme.ui(
                                       size: 14,
                                       color: EverloreTheme.crimson,
@@ -330,6 +353,7 @@ class RealmScreen extends StatelessWidget {
                 ),
               ],
             ),
+            const StatusBarScrim(),
           ],
         ),
       ),
@@ -379,9 +403,17 @@ class _RealmStatus extends StatelessWidget {
     ),
     child: Row(
       children: [
-        _RealmStat(value: '$turns', label: 'TURNS'),
-        _RealmStat(value: '$characters', label: 'PEOPLE'),
-        _RealmStat(value: '$memories', label: 'ECHOES'),
+        // Labels agree with their count — a realm one turn old read
+        // "1 TURNS", which is the shape of the row, not of the story.
+        _RealmStat(value: '$turns', label: turns == 1 ? 'TURN' : 'TURNS'),
+        _RealmStat(
+          value: '$characters',
+          label: characters == 1 ? 'PERSON' : 'PEOPLE',
+        ),
+        _RealmStat(
+          value: '$memories',
+          label: memories == 1 ? 'ECHO' : 'ECHOES',
+        ),
       ],
     ),
   );

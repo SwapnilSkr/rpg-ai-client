@@ -320,7 +320,12 @@ class _CurrentPlaceBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
           colors: [
-            EverloreTheme.gold.withValues(alpha: 0.12),
+            // Same as the almanac's card: a low-alpha gold is transparent,
+            // and the Chronicle draws these over full-strength artwork.
+            Color.alphaBlend(
+              EverloreTheme.gold.withValues(alpha: 0.12),
+              EverloreTheme.void2,
+            ),
             EverloreTheme.void2,
           ],
           begin: Alignment.topLeft,

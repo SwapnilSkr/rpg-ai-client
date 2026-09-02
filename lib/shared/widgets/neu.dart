@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../app/theme/nexus_theme.dart';
 import '../app_icons.dart';
+import 'everlore_sheet.dart';
 
 /// Neumorphic / skeuomorphic UI primitives for the "Crossing the Threshold"
 /// auth pass. All reuse EverloreTheme tokens — no new colours.
@@ -554,6 +555,7 @@ Future<DialCode?> showDialCodePicker(
   DialCode? selected,
 }) {
   return showModalBottomSheet<DialCode>(
+      useRootNavigator: true,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -613,14 +615,7 @@ class _DialCodeSheetState extends State<_DialCodeSheet> {
           children: [
             const SizedBox(height: 12),
             // Grab handle.
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: EverloreTheme.goldDim.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const SheetGrabHandle(),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
               child: Text(

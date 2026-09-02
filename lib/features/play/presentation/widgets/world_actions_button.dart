@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/models/character_profile.dart';
 import '../../../../../shared/models/relation_candidate.dart';
-import '../../../../../shared/widgets/top_confirmation_toast.dart';
+import '../../../../shared/widgets/everlore_notice.dart';
 
 /// A deliberate, structured alternative to asking the player to phrase state
 /// changes perfectly in prose. Time, travel, party, and kinship all originate
@@ -60,6 +60,7 @@ class WorldActionsButton extends StatelessWidget {
     var candidatesLoaded = false;
     var candidates = const <RelationCandidate>[];
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -201,6 +202,7 @@ class WorldActionsButton extends StatelessWidget {
     List<RelationCandidate> candidates,
   ) {
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -278,6 +280,7 @@ class WorldActionsButton extends StatelessWidget {
       'partner',
     ];
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -404,6 +407,7 @@ class WorldActionsButton extends StatelessWidget {
         candidate.counterpartCharacterName ??
         'this identity';
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -458,12 +462,13 @@ class WorldActionsButton extends StatelessWidget {
                     Navigator.of(sheetContext).pop();
                   }
                   if (context.mounted) {
-                    showTopConfirmationToast(
+                    showEverloreNotice(
                       context,
-                      icon: Icons.verified_user_outlined,
-                      message: isMerge
+                      isMerge
                           ? 'Identity merged — ${candidate.characterName} is $revealedName.'
                           : 'Name revealed — ${candidate.characterName} is $revealedName.',
+                      tone: NoticeTone.success,
+                      icon: Icons.verified_user_outlined,
                     );
                   }
                 },
@@ -521,6 +526,7 @@ class WorldActionsButton extends StatelessWidget {
   ) {
     final relation = candidate.replacesRelation ?? candidate.relation;
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -570,11 +576,11 @@ class WorldActionsButton extends StatelessWidget {
                     Navigator.of(sheetContext).pop();
                   }
                   if (context.mounted) {
-                    showTopConfirmationToast(
+                    showEverloreNotice(
                       context,
+                      'Family canon updated — ${candidate.characterName} is no longer your ${_relationLabel(relation).toLowerCase()}.',
+                      tone: NoticeTone.success,
                       icon: Icons.history_toggle_off_outlined,
-                      message:
-                          'Family canon updated — ${candidate.characterName} is no longer your ${_relationLabel(relation).toLowerCase()}.',
                     );
                   }
                 },
@@ -633,6 +639,7 @@ class WorldActionsButton extends StatelessWidget {
     var knownDestinations = const <String>[];
     final available = _presentTravelCompanions();
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -943,6 +950,7 @@ class WorldActionsButton extends StatelessWidget {
       'partner',
     ];
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -1248,10 +1256,11 @@ class WorldActionsButton extends StatelessWidget {
   }) {
     final relationLabel = _relationLabel(relation).toLowerCase();
     final action = correction ? 'updated' : 'confirmed';
-    showTopConfirmationToast(
+    showEverloreNotice(
       context,
+      'Relationship $action — $character is your $relationLabel.',
+      tone: NoticeTone.success,
       icon: Icons.account_tree_outlined,
-      message: 'Relationship $action — $character is your $relationLabel.',
     );
   }
 

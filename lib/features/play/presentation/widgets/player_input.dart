@@ -6,6 +6,7 @@ import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/models/character_profile.dart';
 import '../../../../../shared/models/relation_candidate.dart';
 import 'world_actions_button.dart';
+import '../../../../app/layout/responsive.dart';
 
 class PlayerInput extends StatefulWidget {
   final bool isGenerating;
@@ -323,7 +324,11 @@ class _PlayerInputState extends State<PlayerInput> {
     if (widget.isGenerating) return widget.notice ?? 'The story unfolds…';
     if (widget.notice != null) return widget.notice!;
     if (!widget.isConnected) return 'Reconnecting…';
-    return 'What do you do?';
+    // Two round controls and the action-marker button leave the field about
+    // half a narrow phone wide, and at large system text "What do you do?"
+    // came out as "What do y...". Ask it in fewer words instead of in fewer
+    // letters.
+    return EvLayout.of(context).isCompact ? 'What now?' : 'What do you do?';
   }
 }
 
@@ -382,6 +387,10 @@ class _ComposerTextFieldState extends State<_ComposerTextField> {
         isCollapsed: true,
         filled: false,
         hintText: widget.hintText,
+        // The field's height follows what has been typed, not the hint, so a
+        // hint that wraps is simply drawn past the bottom of the box — which
+        // is what a narrow phone at large text does to "What do you do?".
+        hintMaxLines: 1,
         hintStyle: EverloreTheme.ui(
           size: 14,
           color: EverloreTheme.ash.withValues(alpha: 0.45),

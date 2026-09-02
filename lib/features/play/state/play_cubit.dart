@@ -1410,7 +1410,7 @@ class PlayCubit extends Cubit<PlayState> {
       emit(
         state.copyWith(
           isLoading: false,
-          error: 'Could not reset the chat. Please try again.',
+          error: 'Could not reset this playthrough. Please try again.',
         ),
       );
       _ws.loadInstance(instanceId); // resync to server truth on failure

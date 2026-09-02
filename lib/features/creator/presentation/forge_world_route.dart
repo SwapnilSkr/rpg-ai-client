@@ -49,7 +49,10 @@ class ForgeWorldRoute extends StatelessWidget {
             context,
             title: 'Ascend to forge',
             body:
-                'World creation requires Premium or Creator tier. Upgrade from My Worlds.',
+                // The tab is "Worlds" and upgrading happens in the profile;
+                // "Upgrade from My Worlds" named neither.
+                'World creation is granted to Premium and Creator wielders. '
+                'You can upgrade from your profile.',
             buttonLabel: 'Back',
             onPressed: () => context.go('/my-worlds'),
           );

@@ -3,6 +3,7 @@ import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/widgets/everlore_empty_state.dart';
 import '../data/chronicle_repository.dart';
 import '../data/location_journal.dart';
+import '../../../shared/text_format.dart';
 
 /// "What happened here before?" — one place's recorded history, loaded on
 /// demand. Events along the top as a faint timeline, then the memories the
@@ -315,7 +316,7 @@ class _EventTile extends StatelessWidget {
         event.milestone != null && event.milestone!.trim().isNotEmpty;
     final hasPreview =
         event.preview != null && event.preview!.trim().isNotEmpty;
-    final kind = _pretty(event.sceneTag, event.type);
+    final kind = sceneMomentLabel(event.sceneTag, event.type);
     final timeLabel = event.anchor?.eventTimeLabel;
 
     // Lead with what actually happened (player's beat → narration snippet →
@@ -382,9 +383,4 @@ class _EventTile extends StatelessWidget {
     );
   }
 
-  String _pretty(String? sceneTag, String type) {
-    final raw = (sceneTag != null && sceneTag.isNotEmpty) ? sceneTag : type;
-    if (raw.isEmpty) return 'A moment';
-    return raw[0].toUpperCase() + raw.substring(1).replaceAll('_', ' ');
-  }
 }

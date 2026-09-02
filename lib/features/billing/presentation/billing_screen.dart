@@ -8,6 +8,7 @@ import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/ink_mark.dart';
 import '../data/billing_repository.dart';
+import '../../../shared/widgets/everlore_notice.dart';
 
 class BillingScreen extends StatefulWidget {
   const BillingScreen({super.key});
@@ -33,9 +34,7 @@ class _BillingScreenState extends State<BillingScreen> {
     });
     _errorSub = BillingRepository.instance.errors.listen((message) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        showEverloreNotice(context, message, tone: NoticeTone.error);
       }
     });
     _load();
@@ -88,16 +87,18 @@ class _BillingScreenState extends State<BillingScreen> {
       );
       if (mounted) {
         setState(() => _wallet = wallet);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Test checkout complete — no charge.')),
+        showEverloreNotice(
+          context,
+          'Test checkout complete — no charge.',
+          tone: NoticeTone.success,
         );
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Test checkout could not be completed.'),
-          ),
+        showEverloreNotice(
+          context,
+          'Test checkout could not be completed.',
+          tone: NoticeTone.error,
         );
       }
     } finally {
@@ -225,7 +226,12 @@ class _BillingScreenState extends State<BillingScreen> {
                             ] else if (!_wallet!.purchasesEnabled) ...[
                               const SizedBox(height: 24),
                               Text(
-                                'Google Play billing will appear here once this release is connected to the verified Play product catalog.',
+                                // Player-facing: no store, no catalogue, no
+                                // plumbing. They only need to know it is not
+                                // available to them yet.
+                                'Ink refills are not available yet. Your '
+                                'balance and everything you have written stay '
+                                'exactly as they are.',
                                 style: EverloreTheme.ui(
                                   size: 13,
                                   color: EverloreTheme.ash,

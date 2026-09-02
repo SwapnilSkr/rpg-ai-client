@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../data/recap_data.dart';
 import '../../../../shared/widgets/everlore_empty_state.dart';
+import '../../../../shared/widgets/story_prose.dart';
 
 /// "Story so far" — a memory-aware recap for re-entering a world. The scene
 /// summary forms the prose spine; live open threads, bonds, and the current
@@ -103,10 +104,18 @@ class _SpineCard extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
+        // The Chronicle's hero art is barely dimmed at the top of the scroll,
+        // which is exactly where this card sits. A translucent gold wash let
+        // the brightest part of the illustration through the first paragraph.
+        // Keep the warm top-left, but blend it into an opaque card so the
+        // prose is read against the card and not against the artwork.
         gradient: LinearGradient(
           colors: [
-            EverloreTheme.gold.withValues(alpha: 0.16),
-            EverloreTheme.void2.withValues(alpha: 0.56),
+            Color.alphaBlend(
+              EverloreTheme.gold.withValues(alpha: 0.14),
+              EverloreTheme.void2,
+            ).withValues(alpha: 0.94),
+            EverloreTheme.void2.withValues(alpha: 0.94),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -138,12 +147,25 @@ class _SpineCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            text,
-            style: const TextStyle(
-              color: EverloreTheme.parchment,
-              fontSize: 15,
-              height: 1.6,
+          // The recap quotes the narration verbatim, so it carries the same
+          // `*action*` / `"speech"` markers the play surface renders as prose.
+          // Rendered as plain text it showed the player literal asterisks.
+          Text.rich(
+            TextSpan(
+              children: storyProseSpans(
+                text,
+                narrationStyle: const TextStyle(
+                  color: EverloreTheme.parchment,
+                  fontSize: 15,
+                  height: 1.6,
+                  fontStyle: FontStyle.italic,
+                ),
+                dialogueStyle: const TextStyle(
+                  color: EverloreTheme.parchment,
+                  fontSize: 15,
+                  height: 1.6,
+                ),
+              ),
             ),
           ),
         ],

@@ -16,6 +16,8 @@ import '../../../shared/widgets/everlore_top_bar.dart';
 import '../../../shared/widgets/neu.dart';
 import '../../../shared/widgets/everlore_empty_state.dart';
 import '../../../shared/widgets/realm_backdrop.dart';
+import '../../../shared/widgets/everlore_notice.dart';
+import '../../../app/layout/responsive.dart';
 
 class MyWorldsScreen extends StatelessWidget {
   const MyWorldsScreen({super.key});
@@ -157,20 +159,10 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
           BlocConsumer<MyWorldsCubit, MyWorldsState>(
             listener: (context, state) {
               if (state.error != null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      state.error!,
-                      style: const TextStyle(color: EverloreTheme.parchment),
-                    ),
-                    backgroundColor: EverloreTheme.crimson.withValues(
-                      alpha: 0.9,
-                    ),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
+                showEverloreNotice(
+                  context,
+                  state.error!,
+                  tone: NoticeTone.error,
                 );
                 context.read<MyWorldsCubit>().clearError();
               }
@@ -528,10 +520,15 @@ class _UnauthGate extends StatelessWidget {
 class _UpgradeGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    // Centered, non-scrolling — fits the viewport without a vertical scroll.
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 28),
+    // Centred when the screen can hold it, scrolled when it cannot: this
+    // used to be a plain centred column and ran 68pt off the bottom of a
+    // small phone.
+    return EvCenteredScroll(
+      // Bottom clearance is the floating nav bar's, not decoration: without
+      // it the last card sits underneath the bar.
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 112),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(

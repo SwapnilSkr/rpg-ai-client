@@ -182,7 +182,7 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
   }
 
   /// Render (or re-roll) the avatar from the current visual prompt. The prompt
-  /// comes from "Generate with AI" or is typed by the creator; the UI disables
+  /// comes from "Summon a draft" or is typed by the creator; the UI disables
   /// this until one exists.
   Future<void> generateImage() async {
     if (state.isImageBusy) return;

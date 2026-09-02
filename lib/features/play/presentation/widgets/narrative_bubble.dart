@@ -6,6 +6,7 @@ import '../../../../../shared/models/event.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
 import '../../../../../shared/widgets/story_prose.dart';
+import '../../../../shared/widgets/everlore_notice.dart';
 
 const _kNarrationMutedAlpha = kNarrationMutedAlpha;
 
@@ -722,16 +723,10 @@ class _CopyButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       onTap: () {
         Clipboard.setData(ClipboardData(text: text));
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Copied to clipboard',
-              style: EverloreTheme.ui(size: 13, color: EverloreTheme.parchment),
-            ),
-            duration: const Duration(seconds: 1),
-            backgroundColor: EverloreTheme.void3,
-            behavior: SnackBarBehavior.floating,
-          ),
+        showEverloreNotice(
+          context,
+          'Copied to clipboard',
+          tone: NoticeTone.info,
         );
       },
       child: Padding(

@@ -125,6 +125,23 @@ class ForgeWorldState extends Equatable {
     this.result,
   });
 
+  /// Whether leaving now would throw work away. A world is five steps long
+  /// and nothing is persisted until it is forged, so Back — including the
+  /// system gesture, which a creator also uses to dismiss the keyboard —
+  /// silently discarded everything typed so far.
+  bool get hasUnsavedWork {
+    if (isSubmitting || result != null) return false;
+    return title.trim().isNotEmpty ||
+        description.trim().isNotEmpty ||
+        seedPrompt.trim().isNotEmpty ||
+        globalLore.trim().isNotEmpty ||
+        openingLine.trim().isNotEmpty ||
+        imageUrl.trim().isNotEmpty ||
+        sceneTags.isNotEmpty ||
+        stats.isNotEmpty ||
+        flags.isNotEmpty;
+  }
+
   ForgeWorldState copyWith({
     int? step,
     String? title,
@@ -446,7 +463,7 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   }
 
   /// Render (or re-roll) the world image from the current visual prompt. The
-  /// prompt comes from "Generate with AI" or is typed by the creator; the UI
+  /// prompt comes from "Summon a draft" or is typed by the creator; the UI
   /// disables this until one exists.
   Future<void> generateImage() async {
     if (state.isImageBusy) return;

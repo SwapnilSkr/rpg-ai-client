@@ -8,7 +8,7 @@ import '../../../../shared/widgets/everlore_network_image.dart';
 /// Reusable avatar/background generator used in world + character creation.
 ///
 /// Prompt-FIRST flow: the editable visual prompt is always shown. It is filled
-/// either by "Generate with AI" (which drafts it alongside everything else) or
+/// either by "Summon a draft" (which drafts it alongside everything else) or
 /// by the creator typing their own — then "Generate image" renders from that
 /// prompt. Regenerate re-rolls until they're happy. One portrait image serves as
 /// both the listing avatar and the in-chat background. Empty [imageUrl] = none
@@ -61,8 +61,8 @@ class ImageForge extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Choose AI art or upload your own. One image appears on the card and '
-          'as the chat background; uploads are preserved and optimized for fast '
+          'Summon a portrait or upload your own. One image appears on the card and '
+          'as the scene background; uploads are preserved and optimized for fast '
           'loading. PNG, JPEG, WebP, and HEIC are supported.',
           style: EverloreTheme.ui(
             size: 12,
@@ -132,7 +132,7 @@ class ImageForge extends StatelessWidget {
             labelText: 'Visual prompt',
             labelStyle: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
             hintText:
-                'Describe the look, or use “Generate with AI” to draft it.',
+                'Describe the look, or use “Summon a draft” to fill it in.',
             hintStyle: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
             counterText: '',
             filled: true,

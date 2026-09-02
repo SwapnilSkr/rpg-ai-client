@@ -258,7 +258,7 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
           ),
           _field(
             label: 'Greeting',
-            hint: 'The first thing they say when the chat opens.',
+            hint: 'The first thing they say when the story opens.',
             controller: _greetingCtrl,
             onChanged: cubit.setGreeting,
             maxLines: 3,
@@ -290,8 +290,8 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'An optional portrait — shown on their card and as the chat '
-            'background. Drafted by “Generate with AI”, or write your own.',
+            'An optional portrait — shown on their card and as the scene '
+            'background. Drafted by “Summon a draft”, or write your own.',
             style: EverloreTheme.ui(
               size: 13,
               color: EverloreTheme.ash,
@@ -578,7 +578,7 @@ class _MatureToggle extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'Allows mature themes if you enable them in preferences. Also steers “Generate with AI”.',
+                    'Allows mature themes if you enable them in preferences. Also steers “Summon a draft”.',
                     style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
                   ),
                 ],

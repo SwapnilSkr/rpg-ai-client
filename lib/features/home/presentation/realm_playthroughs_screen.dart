@@ -12,6 +12,8 @@ import '../../../shared/widgets/realm_backdrop.dart';
 import '../data/home_repository.dart';
 import 'realm_entry_flow.dart';
 import '../../../core/errors/user_message.dart';
+import '../../../shared/widgets/everlore_notice.dart';
+import '../../../shared/text_format.dart';
 
 class RealmPlaythroughsScreen extends StatefulWidget {
   final String templateId;
@@ -325,12 +327,10 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
       if (mounted) unawaited(_load());
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            userFacingError(e, fallback: 'Could not archive that playthrough.'),
-          ),
-        ),
+      showEverloreNotice(
+        context,
+        userFacingError(e, fallback: 'Could not archive that playthrough.'),
+        tone: NoticeTone.error,
       );
     }
   }
@@ -344,12 +344,10 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
       if (countBefore <= 1) context.pop();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            userFacingError(e, fallback: 'Could not delete that playthrough.'),
-          ),
-        ),
+      showEverloreNotice(
+        context,
+        userFacingError(e, fallback: 'Could not delete that playthrough.'),
+        tone: NoticeTone.error,
       );
     }
   }
@@ -451,7 +449,7 @@ class _StoryCard extends StatelessWidget {
                       EvIcon(AppIcons.event, size: 14),
                       const SizedBox(width: 4),
                       Text(
-                        '${story.summary.totalEvents} turns',
+                        countLabel(story.summary.totalEvents, 'turn'),
                         style: const TextStyle(
                           color: EverloreTheme.ash,
                           fontSize: 12,
@@ -484,6 +482,7 @@ class _StoryCard extends StatelessWidget {
 
   void _showOptions(BuildContext context) {
     showModalBottomSheet(
+      useRootNavigator: true,
       context: context,
       backgroundColor: EverloreTheme.void2,
       shape: const RoundedRectangleBorder(

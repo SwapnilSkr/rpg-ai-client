@@ -9,6 +9,9 @@ import '../../../shared/widgets/neu.dart';
 import '../data/home_repository.dart';
 import '../../personas/data/persona_repository.dart';
 import '../../../core/errors/user_message.dart';
+import '../../../shared/widgets/everlore_sheet.dart';
+import '../../../shared/widgets/everlore_notice.dart';
+import '../../../shared/text_format.dart';
 
 enum RealmEntryChoice { continueStory, beginAnew }
 
@@ -88,13 +91,10 @@ Future<void> beginNewRealmStory(
   } catch (e) {
     if (!context.mounted) return;
     final msg = userFacingError(e, fallback: 'Could not enter that realm.');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: EverloreTheme.crimson.withValues(alpha: 0.9),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+    showEverloreNotice(
+      context,
+      msg,
+      tone: NoticeTone.error,
     );
   }
 }
@@ -116,6 +116,7 @@ Future<_PersonaStartChoice?> _chooseSentientPersona(
   }
   if (!context.mounted) return null;
   return showModalBottomSheet<_PersonaStartChoice>(
+      useRootNavigator: true,
     context: context,
     isScrollControlled: true,
     backgroundColor: EverloreTheme.void2,
@@ -187,16 +188,7 @@ class _SentientPersonaStartSheetState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: EverloreTheme.void4,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            const SheetGrabHandle(),
             const SizedBox(height: 16),
             Text(
               'Who enters this story?',
@@ -341,6 +333,7 @@ Future<RealmEntryResult?> showRealmContinueSheet(
   required RealmPlayStatus status,
 }) {
   return showModalBottomSheet<RealmEntryResult>(
+      useRootNavigator: true,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: status.count > 1,
@@ -405,14 +398,7 @@ class _RealmContinueSheet extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+              const SheetGrabHandle(),
               const SizedBox(height: 18),
               Text(
                 "You've wandered here before",
@@ -553,8 +539,8 @@ class _StoryPickTile extends StatelessWidget {
 
   String _subtitle() {
     final ago = _formatAgo(lastActiveAt);
-    if (turnCount > 0 && ago.isNotEmpty) return '$turnCount turns · $ago';
-    if (turnCount > 0) return '$turnCount turns';
+    if (turnCount > 0 && ago.isNotEmpty) return '${countLabel(turnCount, 'turn')} · $ago';
+    if (turnCount > 0) return countLabel(turnCount, 'turn');
     if (ago.isNotEmpty) return 'Last visited $ago';
     return 'Ready to continue';
   }

@@ -25,7 +25,7 @@ import '../../../core/guide/guide_trigger.dart';
 import '../../../core/guide/guide_controller.dart';
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_ids.dart';
-import '../../../shared/widgets/top_confirmation_toast.dart';
+import '../../../shared/widgets/everlore_notice.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../shared/widgets/ink_mark.dart';
 import '../../billing/data/billing_repository.dart';
@@ -33,6 +33,8 @@ import '../../../core/storage/local_db.dart';
 import '../../home/data/home_repository.dart';
 import '../../chronicle/data/chronicle_repository.dart';
 import 'realm_screen.dart';
+import '../../../shared/widgets/everlore_sheet.dart';
+import '../../../shared/text_format.dart';
 
 /// Whether [c] should be treated as in the current scene. [presence] is the set
 /// of lowercased names the latest turn reported present, or null when presence
@@ -207,6 +209,7 @@ class _PlayViewState extends State<_PlayView> {
     final presence = _presentNames(cubit.state);
     final isPresent = _scenePresent(character, presence);
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       backgroundColor: EverloreTheme.void2,
       shape: const RoundedRectangleBorder(
@@ -394,6 +397,7 @@ class _PlayViewState extends State<_PlayView> {
         cubit.state.memories.where((m) => m.concerns(name)).toList()
           ..sort((a, b) => b.importance.compareTo(a.importance));
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -522,6 +526,7 @@ class _PlayViewState extends State<_PlayView> {
     if (!mounted || !context.mounted) return;
     _onboardingOpen = true;
     await showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       isDismissible: false,
@@ -555,6 +560,7 @@ class _PlayViewState extends State<_PlayView> {
   void _showRealmMenu(BuildContext context) {
     var navigatingFromMenu = false;
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) => _RealmMenuSheet(
@@ -741,16 +747,18 @@ class _PlayViewState extends State<_PlayView> {
   /// Shared top confirmation for scene-setting changes; it stays clear of the
   /// composer and uses the same presentation as relationship confirmations.
   void _showSceneSnack(BuildContext context, String message) {
-    showTopConfirmationToast(
+    showEverloreNotice(
       context,
+      message,
+      tone: NoticeTone.success,
       icon: Icons.auto_awesome,
-      message: message,
     );
   }
 
   void _showTimelineSheet(BuildContext context) {
     final cubit = context.read<PlayCubit>();
     showModalBottomSheet(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -778,6 +786,7 @@ class _PlayViewState extends State<_PlayView> {
   void _showThoughtsSheet(BuildContext context) {
     final cubit = context.read<PlayCubit>();
     showModalBottomSheet(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -842,6 +851,7 @@ class _PlayViewState extends State<_PlayView> {
     CharacterProfile character,
   ) {
     showModalBottomSheet(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -864,7 +874,7 @@ class _PlayViewState extends State<_PlayView> {
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: EverloreTheme.void2,
         title: Text(
-          'Reset this chat?',
+          'Reset this playthrough?',
           style: EverloreTheme.serifDisplay(
             size: 18,
             color: EverloreTheme.parchment,
@@ -872,7 +882,7 @@ class _PlayViewState extends State<_PlayView> {
         ),
         content: Text(
           'The entire story, its memories, and everything that happened will be '
-          'wiped, and the chat will start over from the opening line. The world '
+          'wiped, and it will start over from the opening line. The world '
           'and character themselves are kept. This cannot be undone.',
           style: EverloreTheme.ui(
             size: 14,
@@ -891,20 +901,11 @@ class _PlayViewState extends State<_PlayView> {
           TextButton(
             onPressed: () {
               Navigator.pop(dialogCtx);
-              final messenger = ScaffoldMessenger.of(context);
               cubit.resetChat();
-              messenger.showSnackBar(
-                SnackBar(
-                  behavior: SnackBarBehavior.floating,
-                  backgroundColor: EverloreTheme.void3,
-                  content: Text(
-                    'Chat reset — starting over from the beginning.',
-                    style: EverloreTheme.ui(
-                      size: 13,
-                      color: EverloreTheme.parchment,
-                    ),
-                  ),
-                ),
+              showEverloreNotice(
+                context,
+                'Chat reset — starting over from the beginning.',
+                tone: NoticeTone.success,
               );
             },
             child: Text(
@@ -923,7 +924,7 @@ class _PlayViewState extends State<_PlayView> {
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: EverloreTheme.void2,
         title: Text(
-          'Delete this chat?',
+          'Delete this playthrough?',
           style: EverloreTheme.serifDisplay(
             size: 18,
             color: EverloreTheme.parchment,
@@ -949,25 +950,16 @@ class _PlayViewState extends State<_PlayView> {
           TextButton(
             onPressed: () async {
               Navigator.pop(dialogCtx);
-              final messenger = ScaffoldMessenger.of(context);
               final router = GoRouter.of(context);
               try {
                 await HomeRepository.deleteInstance(instanceId);
                 await LocalDb.clearInstanceCache(instanceId);
                 router.go('/'); // home route is '/', not '/home'
               } catch (_) {
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Could not delete the chat. Try again.',
-                      style: EverloreTheme.ui(
-                        size: 13,
-                        color: EverloreTheme.parchment,
-                      ),
-                    ),
-                    backgroundColor: EverloreTheme.void3,
-                    behavior: SnackBarBehavior.floating,
-                  ),
+                showEverloreNotice(
+                  context,
+                  'Could not delete this playthrough. Try again.',
+                  tone: NoticeTone.error,
                 );
               }
             },
@@ -987,6 +979,7 @@ class _PlayViewState extends State<_PlayView> {
   void _showTurnMenu(BuildContext context, GameEvent event, bool canReplay) {
     final cubit = context.read<PlayCubit>();
     showModalBottomSheet(
+      useRootNavigator: true,
       context: context,
       backgroundColor: EverloreTheme.void2,
       shape: const RoundedRectangleBorder(
@@ -997,14 +990,7 @@ class _PlayViewState extends State<_PlayView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 10),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: EverloreTheme.void4,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const SheetGrabHandle(),
             const SizedBox(height: 8),
             if (canReplay)
               ListTile(
@@ -1052,19 +1038,10 @@ class _PlayViewState extends State<_PlayView> {
                   Clipboard.setData(
                     ClipboardData(text: event.aiResponse?.trim() ?? ''),
                   );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Copied to clipboard',
-                        style: EverloreTheme.ui(
-                          size: 13,
-                          color: EverloreTheme.parchment,
-                        ),
-                      ),
-                      duration: const Duration(seconds: 1),
-                      backgroundColor: EverloreTheme.void3,
-                      behavior: SnackBarBehavior.floating,
-                    ),
+                  showEverloreNotice(
+                    context,
+                    'Copied to clipboard',
+                    tone: NoticeTone.info,
                   );
                 },
               ),
@@ -2109,7 +2086,7 @@ class _OlderHistoryLoader extends StatelessWidget {
                   isLoading
                       ? 'Unfurling earlier chapters…'
                       : totalEvents > 0
-                      ? 'Load earlier chapters ($totalEvents turns)'
+                      ? 'Load earlier chapters (${countLabel(totalEvents, 'turn')})'
                       : 'Load earlier chapters',
                   style: EverloreTheme.ui(
                     size: 12,
@@ -2156,14 +2133,7 @@ class _RealmMenuSheet extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+                const SheetGrabHandle(),
                 const SizedBox(height: 18),
                 Text(
                   'Realm Menu',
@@ -3227,7 +3197,7 @@ class _PlaythroughManagement extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Reset or remove this chat',
+                    'Reset it or remove it entirely',
                     style: EverloreTheme.ui(
                       size: 11,
                       color: EverloreTheme.ash.withValues(alpha: 0.72),
@@ -3266,7 +3236,7 @@ class _PlaythroughManagement extends StatelessWidget {
             _managementAction(
               modalContext,
               Icons.restart_alt_rounded,
-              'Reset this chat',
+              'Reset this playthrough',
               'Start again from the opening line.',
               EverloreTheme.gold,
               onReset,
@@ -3275,7 +3245,7 @@ class _PlaythroughManagement extends StatelessWidget {
             _managementAction(
               modalContext,
               Icons.delete_outline,
-              'Delete this chat',
+              'Delete this playthrough',
               'Permanently remove this playthrough.',
               EverloreTheme.crimson,
               onDelete,
@@ -3451,16 +3421,7 @@ class _ThoughtsSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: EverloreTheme.void4,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            const SheetGrabHandle(),
             const SizedBox(height: 16),
             Text(
               'You & the Cast',
@@ -4103,16 +4064,7 @@ class _ProtagonistOnboardingSheetState
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: EverloreTheme.void4,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          const SheetGrabHandle(),
           const SizedBox(height: 16),
           Text(
             'Who are you in this world?',
@@ -4388,16 +4340,7 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: EverloreTheme.void4,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
+              const SheetGrabHandle(),
               const SizedBox(height: 14),
               Row(
                 children: [

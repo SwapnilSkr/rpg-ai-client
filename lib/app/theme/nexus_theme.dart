@@ -290,6 +290,26 @@ class EverloreTheme {
         ),
       ),
       dividerColor: white10,
+      // Every modal sheet, wherever it is raised from, gets the same shape,
+      // ground and barrier — and on a wide screen it stays a sheet instead of
+      // stretching the full width of a tablet.
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: void2,
+        modalBackgroundColor: void2,
+        modalBarrierColor: Colors.black.withValues(alpha: 0.62),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        clipBehavior: Clip.antiAlias,
+        // Deliberately no `constraints` here. A bare maxWidth makes the sheet
+        // shrink-wrap its content horizontally on every screen — a settings
+        // sheet on a 320pt phone came out half the width of the phone. Width
+        // capping for wide screens belongs to the sheet's own body (see
+        // SheetFrame), which keeps the sheet full-width and centres what is
+        // inside it.
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+      ),
       dialogTheme: DialogThemeData(
         backgroundColor: void2,
         shape: RoundedRectangleBorder(

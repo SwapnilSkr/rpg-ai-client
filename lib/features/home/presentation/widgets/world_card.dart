@@ -3,6 +3,7 @@ import '../../../../../shared/models/world_instance.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
 import '../../../../../shared/widgets/everlore_network_image.dart';
+import '../../../../shared/widgets/everlore_sheet.dart';
 
 // Warm-obsidian bases for realm cards — pick by hash of instanceId. Subtle
 // variation only; the brand stays the forged shell, the accent is the tint.
@@ -243,6 +244,7 @@ class WorldCard extends StatelessWidget {
 
   void _showOptions(BuildContext context) {
     showModalBottomSheet(
+      useRootNavigator: true,
       context: context,
       backgroundColor: EverloreTheme.void2,
       shape: const RoundedRectangleBorder(
@@ -254,14 +256,7 @@ class WorldCard extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: EverloreTheme.void4,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+              const SheetGrabHandle(),
               const SizedBox(height: 20),
               if (onArchive != null)
                 _OptionTile(

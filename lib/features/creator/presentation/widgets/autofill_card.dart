@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../shared/widgets/everlore_sheet.dart';
 
-/// "Generate with AI" entry point shown at the top of the creation flows.
+/// "Summon a draft" entry point shown at the top of the creation flows.
 ///
 /// Tapping it opens a modal that asks the creator — in their own words — what
 /// they want this world/character to be. That single response (which can be as
@@ -47,6 +48,7 @@ class AutofillLauncher extends StatelessWidget {
 
   Future<void> _open(BuildContext context) async {
     final brief = await showModalBottomSheet<String>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -114,7 +116,7 @@ class AutofillLauncher extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        busy ? 'Drafting…' : 'Generate with AI',
+                        busy ? 'Drafting…' : 'Summon a draft',
                         style: EverloreTheme.ui(
                           size: 14,
                           color: EverloreTheme.parchment,
@@ -125,7 +127,7 @@ class AutofillLauncher extends StatelessWidget {
                       Text(
                         busy
                             ? 'Conjuring your $subject — one moment.'
-                            : 'Tell the AI your idea and set the tone — it drafts everything for you to edit.',
+                            : 'Describe your idea and set the tone — everything is drafted for you to edit.',
                         style: EverloreTheme.ui(
                           size: 12,
                           color: EverloreTheme.ash,
@@ -235,16 +237,7 @@ class _AutofillSheetState extends State<_AutofillSheet> {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 12, bottom: 4),
-              child: Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: EverloreTheme.ash.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
+              child: const SheetGrabHandle(),
             ),
             Flexible(
               child: SingleChildScrollView(

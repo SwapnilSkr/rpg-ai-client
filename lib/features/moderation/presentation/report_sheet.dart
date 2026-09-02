@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/network/api_client.dart';
-import '../../../shared/widgets/top_confirmation_toast.dart';
+import '../../../shared/widgets/everlore_notice.dart';
 import '../data/moderation_repository.dart';
 
 /// Opens the report flow for a world.
@@ -14,6 +14,7 @@ Future<bool> showReportWorldSheet(
   required String worldTitle,
 }) async {
   final filed = await showModalBottomSheet<bool>(
+      useRootNavigator: true,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -34,6 +35,7 @@ Future<bool> showReportCreatorSheet(
   required String creatorLabel,
 }) async {
   final filed = await showModalBottomSheet<bool>(
+      useRootNavigator: true,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -99,10 +101,11 @@ class _ReportSheetState extends State<_ReportSheet> {
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
-      showTopConfirmationToast(
+      showEverloreNotice(
         context,
+        'Report sent. Our team will review it.',
+        tone: NoticeTone.success,
         icon: Icons.shield_outlined,
-        message: 'Report sent. Our team will review it.',
       );
     } on ApiException catch (e) {
       if (!mounted) return;

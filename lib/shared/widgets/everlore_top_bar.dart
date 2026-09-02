@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme/nexus_theme.dart';
 import '../../features/billing/data/billing_repository.dart';
 import 'ink_mark.dart';
+import '../../app/layout/responsive.dart';
 
 class EverloreTopBar extends StatelessWidget {
   final String title;
@@ -55,21 +56,32 @@ class EverloreTopBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: EverloreTheme.ui(
-                    size: 21,
-                    color: EverloreTheme.parchment,
-                    weight: FontWeight.w800,
+                // A page title is two or three words and must never be cut:
+                // at 1.3 system text on a 320pt phone the balance chip and
+                // the two round controls left "Your Realms" reading
+                // "Your Re...". Shrink the words rather than lose them.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    style: EverloreTheme.ui(
+                      size: 21,
+                      color: EverloreTheme.parchment,
+                      weight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
                   const SizedBox(height: 2),
+                  // "Find worlds and characters" does not fit beside the
+                  // balance and the two controls on a 320pt phone, and read
+                  // as "Find worlds and ...". Give it the second line rather
+                  // than the ellipsis; the bar grows by one small line.
                   Text(
                     subtitle!,
-                    maxLines: 1,
+                    maxLines: EvLayout.of(context).isCompact ? 2 : 1,
                     overflow: TextOverflow.ellipsis,
                     style: EverloreTheme.ui(size: 11, color: EverloreTheme.ash),
                   ),

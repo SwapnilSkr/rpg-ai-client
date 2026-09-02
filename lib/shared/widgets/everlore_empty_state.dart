@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/nexus_theme.dart';
 import '../../core/guide/guide_anchor.dart';
+import '../../app/layout/responsive.dart';
 
 /// A calm, actionable empty state for the primary app surfaces.
 ///
@@ -102,12 +103,25 @@ class _EverloreEmptyStateState extends State<EverloreEmptyState>
 
   @override
   Widget build(BuildContext context) {
-    final emblemSize = widget.compact ? 76.0 : 104.0;
+    // A short screen — a small phone, or any phone at large system text —
+    // cannot afford the full emblem and the 40pt of air above it. Without
+    // this the primary action ("Create persona") started life below the nav
+    // bar, which is the one thing an empty state must never do.
+    final layout = EvLayout.of(context);
+    final tight = layout.isShort || layout.isCompact;
+    final emblemSize = tight ? 58.0 : (widget.compact ? 76.0 : 104.0);
     final hasArt = widget.artAsset != null && !widget.fullBleedArt;
     final artRadius = BorderRadius.circular(20);
     final content = Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(32, 40, 32, 112),
+        padding: EdgeInsets.fromLTRB(
+          tight ? 22 : 32,
+          tight ? 10 : 40,
+          tight ? 22 : 32,
+          // Clears the floating nav bar; the action must land above it, not
+          // under it, or an empty tab has no way out of itself.
+          112,
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),
           child: Column(
@@ -201,7 +215,7 @@ class _EverloreEmptyStateState extends State<EverloreEmptyState>
                           bottom: 12,
                           child: Icon(
                             widget.icon,
-                            size: widget.compact ? 20 : 24,
+                            size: tight ? 20 : (widget.compact ? 20 : 24),
                             color: widget.accent.withValues(alpha: 0.96),
                             shadows: [
                               Shadow(
@@ -217,8 +231,11 @@ class _EverloreEmptyStateState extends State<EverloreEmptyState>
                   ),
                 ),
               ),
-              SizedBox(height: widget.compact ? 18 : 24),
-              if (widget.eyebrow != null) ...[
+              SizedBox(height: tight ? 12 : (widget.compact ? 18 : 24)),
+              // The eyebrow is decoration; on a short screen it is the first
+              // thing to go, because the action button is the last thing that
+              // may be pushed under the nav bar.
+              if (widget.eyebrow != null && !tight) ...[
                 Text(
                   widget.eyebrow!.toUpperCase(),
                   textAlign: TextAlign.center,
@@ -251,7 +268,7 @@ class _EverloreEmptyStateState extends State<EverloreEmptyState>
                 ),
               ),
               if (widget.onAction != null && widget.actionLabel != null) ...[
-                SizedBox(height: widget.compact ? 20 : 28),
+                SizedBox(height: tight ? 14 : (widget.compact ? 20 : 28)),
                 if (widget.anchorId == null)
                   _actionButton()
                 else

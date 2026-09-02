@@ -12,6 +12,7 @@ import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/everlore_empty_state.dart';
 import '../../../shared/widgets/realm_backdrop.dart';
 import '../data/persona_repository.dart';
+import '../../../shared/widgets/everlore_sheet.dart';
 
 const _genderOptions = [
   ('male', 'Male'),
@@ -122,6 +123,7 @@ class _PersonasScreenState extends State<PersonasScreen> {
 
   Future<void> _openEditor([Persona? persona]) async {
     final changed = await showModalBottomSheet<bool>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: EverloreTheme.void2,
@@ -547,130 +549,110 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 18,
-          bottom: MediaQuery.viewInsetsOf(context).bottom + 18,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return SheetFrame(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.persona == null ? 'New Persona' : 'Edit Persona',
+            style: EverloreTheme.serifDisplay(
+              size: 22,
+              color: EverloreTheme.parchment,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            widget.persona == null
+                ? 'A reusable identity for your journeys.'
+                : 'Refine the identity carried into your journeys.',
+            style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+          ),
+          const SizedBox(height: 22),
+          _PersonaField(
+            controller: _name,
+            label: 'Name',
+            hint: 'The name you want to be known by',
+            maxLength: 60,
+            required: true,
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'IDENTITY',
+            style: EverloreTheme.ui(
+              size: 11,
+              color: EverloreTheme.goldDim,
+              weight: FontWeight.w700,
+              spacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
             children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.42),
-                    borderRadius: BorderRadius.circular(99),
+              for (final g in _genderOptions)
+                ChoiceChip(
+                  label: Text(g.$2),
+                  selected: _gender == g.$1,
+                  onSelected: (_) => setState(() => _gender = g.$1),
+                  selectedColor: EverloreTheme.gold.withValues(alpha: 0.18),
+                  backgroundColor: EverloreTheme.void3,
+                  labelStyle: EverloreTheme.ui(
+                    size: 12,
+                    color: _gender == g.$1
+                        ? EverloreTheme.gold
+                        : EverloreTheme.ash,
                   ),
                 ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                widget.persona == null ? 'New Persona' : 'Edit Persona',
-                style: EverloreTheme.serifDisplay(
-                  size: 22,
-                  color: EverloreTheme.parchment,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                widget.persona == null
-                    ? 'A reusable identity for your journeys.'
-                    : 'Refine the identity carried into your journeys.',
-                style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
-              ),
-              const SizedBox(height: 22),
-              _PersonaField(
-                controller: _name,
-                label: 'Name',
-                hint: 'The name you want to be known by',
-                maxLength: 60,
-                required: true,
-              ),
-              const SizedBox(height: 18),
-              Text(
-                'IDENTITY',
-                style: EverloreTheme.ui(
-                  size: 11,
-                  color: EverloreTheme.goldDim,
-                  weight: FontWeight.w700,
-                  spacing: 1.2,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  for (final g in _genderOptions)
-                    ChoiceChip(
-                      label: Text(g.$2),
-                      selected: _gender == g.$1,
-                      onSelected: (_) => setState(() => _gender = g.$1),
-                      selectedColor: EverloreTheme.gold.withValues(alpha: 0.18),
-                      backgroundColor: EverloreTheme.void3,
-                      labelStyle: EverloreTheme.ui(
-                        size: 12,
-                        color: _gender == g.$1
-                            ? EverloreTheme.gold
-                            : EverloreTheme.ash,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _PersonaField(
-                controller: _age,
-                label: 'Age',
-                hint: 'Optional · 13–120',
-                keyboardType: TextInputType.number,
-                optional: true,
-              ),
-              const SizedBox(height: 18),
-              _PersonaField(
-                controller: _description,
-                label: 'Persona essence',
-                hint: 'A few traits, a voice, or a past they carry.',
-                helper: 'This helps a world recognize who you are.',
-                maxLength: 500,
-                maxLines: 3,
-                optional: true,
-              ),
-              const SizedBox(height: 18),
-              _PersonaField(
-                controller: _other,
-                label: 'Private notes',
-                hint: 'Anything else you want remembered.',
-                helper: 'Optional details for future journeys.',
-                maxLength: 500,
-                maxLines: 3,
-                optional: true,
-              ),
-              const SizedBox(height: 22),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _saving ? null : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: EverloreTheme.gold,
-                    foregroundColor: EverloreTheme.void0,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: Text(_saving ? 'Saving persona…' : 'Save persona'),
-                ),
-              ),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          _PersonaField(
+            controller: _age,
+            label: 'Age',
+            hint: 'Optional · 13–120',
+            keyboardType: TextInputType.number,
+            optional: true,
+          ),
+          const SizedBox(height: 18),
+          _PersonaField(
+            controller: _description,
+            label: 'Persona essence',
+            hint: 'A few traits, a voice, or a past they carry.',
+            helper: 'This helps a world recognize who you are.',
+            maxLength: 500,
+            maxLines: 3,
+            optional: true,
+          ),
+          const SizedBox(height: 18),
+          _PersonaField(
+            controller: _other,
+            label: 'Private notes',
+            hint: 'Anything else you want remembered.',
+            helper: 'Optional details for future journeys.',
+            maxLength: 500,
+            maxLines: 3,
+            optional: true,
+          ),
+          const SizedBox(height: 22),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: EverloreTheme.gold,
+                foregroundColor: EverloreTheme.void0,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: Text(_saving ? 'Saving persona…' : 'Save persona'),
+            ),
+          ),
+        ],
       ),
     );
   }

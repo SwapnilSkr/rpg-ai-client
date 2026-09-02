@@ -34,6 +34,7 @@ class AdvanceTimeButton extends StatelessWidget {
   void _showTimeSheet(BuildContext context) {
     HapticFeedback.mediumImpact();
     showModalBottomSheet(
+      useRootNavigator: true,
       context: context,
       backgroundColor: EverloreTheme.void2,
       shape: const RoundedRectangleBorder(

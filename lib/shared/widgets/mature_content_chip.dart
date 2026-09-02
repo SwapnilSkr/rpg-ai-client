@@ -57,17 +57,21 @@ class MatureContentChip extends StatelessWidget {
                 : const Color(0xFFF472B6),
           ),
           SizedBox(width: compact ? 4 : 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: EverloreTheme.uiFamily,
-              color: compact
-                  ? EverloreTheme.parchment.withValues(alpha: 0.92)
-                  : const Color(0xFFF9A8D4),
-              fontSize: fontSize,
-              fontWeight: FontWeight.w700,
-              letterSpacing: compact ? 0.2 : 0.35,
-              height: 1.0,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: EverloreTheme.uiFamily,
+                color: compact
+                    ? EverloreTheme.parchment.withValues(alpha: 0.92)
+                    : const Color(0xFFF9A8D4),
+                fontSize: fontSize,
+                fontWeight: FontWeight.w700,
+                letterSpacing: compact ? 0.2 : 0.35,
+                height: 1.0,
+              ),
             ),
           ),
         ],

@@ -323,7 +323,19 @@ class _NameStepState extends State<_NameStep> {
                     height: 1.5,
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 8),
+                // The name is editable from the profile tab, so say so — this
+                // step reads as a permanent choice otherwise.
+                Text(
+                  'You can change it later in your profile.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.ebGaramond(
+                    color: EverloreTheme.ash.withValues(alpha: 0.75),
+                    fontSize: 15,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 36),
                 KeyboardAwareInputGroup(
                   focusNode: widget.focusNode,
                   child: NeuField(

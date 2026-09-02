@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'app_routes.dart';
 import 'app/theme/nexus_theme.dart';
+import 'app/layout/responsive.dart';
 import 'shared/widgets/dismiss_keyboard.dart';
 import 'core/network/ws_manager.dart';
 import 'core/auth/auth_service.dart';
@@ -135,8 +136,12 @@ class _EverloreAppState extends State<EverloreApp> {
       routerConfig: router,
       // GuideHost sits above the Navigator so the Chronicler can point at
       // controls inside modal sheets and dialogs, not just plain routes.
-      builder: (context, child) => GuideHost(
-        child: DismissKeyboard(child: child ?? const SizedBox.shrink()),
+      // Text scale is clamped before anything below it lays out, so a
+      // player on 200% system text gets large type rather than a clipped one.
+      builder: (context, child) => EvTextScaleGuard(
+        child: GuideHost(
+          child: DismissKeyboard(child: child ?? const SizedBox.shrink()),
+        ),
       ),
     );
   }

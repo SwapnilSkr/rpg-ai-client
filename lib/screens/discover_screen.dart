@@ -22,6 +22,7 @@ import '../features/templates/data/template_repository.dart';
 import '../features/templates/data/interest_ranking.dart';
 import '../features/moderation/data/moderation_repository.dart';
 import '../core/errors/user_message.dart';
+import '../app/layout/responsive.dart';
 
 /// The default landing after auth — an art-led, interest-ranked explore feed.
 /// Two-column masonry of forged cards, champagne pill tabs, and the primary
@@ -284,8 +285,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Widget _buildTabs() {
+    // The pill row is a fixed strip, so it has to grow with the player's text
+    // size or the labels are trimmed top and bottom.
+    final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
     return SizedBox(
-      height: 44,
+      height: 44 * textScale.clamp(1.0, 1.4),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -405,11 +409,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       );
     }
 
-    // Two-column masonry: distribute cards across columns by parity.
-    final left = <WorldTemplate>[];
-    final right = <WorldTemplate>[];
+    // Masonry, with as many columns as the width can carry. Two was hard
+    // coded, so on a tablet the same two columns simply grew until a cover
+    // filled half the screen and only four worlds were browsable at once.
+    final columnCount = switch (EvLayout.of(context).widthClass) {
+      EvWidthClass.compact => 2,
+      EvWidthClass.regular => 2,
+      EvWidthClass.expanded => 3,
+    };
+    final columns = List.generate(columnCount, (_) => <WorldTemplate>[]);
     for (var i = 0; i < visible.length; i++) {
-      (i.isEven ? left : right).add(visible[i]);
+      columns[i % columnCount].add(visible[i]);
     }
 
     return RefreshIndicator(
@@ -430,9 +440,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: _column(left, anchorFirst: true)),
-                const SizedBox(width: 12),
-                Expanded(child: _column(right)),
+                for (final (index, column) in columns.indexed) ...[
+                  if (index > 0) const SizedBox(width: 12),
+                  Expanded(child: _column(column, anchorFirst: index == 0)),
+                ],
               ],
             ),
             if (_isLoadingMore)
@@ -610,13 +621,17 @@ class _DiscoverCard extends StatelessWidget {
         children: [
           EvIcon(AppIcons.familyForStyle(template.narrativeStyle), size: 16),
           const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: EverloreTheme.uiFamily,
-              color: EverloreTheme.goldGlow,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: EverloreTheme.uiFamily,
+                color: EverloreTheme.goldGlow,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

@@ -5,6 +5,8 @@ import '../../../../shared/app_icons.dart';
 import '../../../../shared/models/world_instance.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../domain/realm_group.dart';
+import '../../../../shared/text_format.dart';
+import '../../../../app/layout/responsive.dart';
 
 /// A realm-level overview for the home feed. Stories deliberately live on the
 /// dedicated playthrough screen so a realm with a long history does not turn
@@ -167,8 +169,8 @@ class RealmGroupCard extends StatelessWidget {
                             const SizedBox(height: 2),
                             Text(
                               [
-                                '${latest.meta.totalEvents} events',
-                                '${latest.meta.totalMemories} echoes',
+                                countLabel(latest.meta.totalEvents, 'event'),
+                                countLabel(latest.meta.totalMemories, 'echo', plural: 'echoes'),
                                 if (last != null) _relative(last),
                               ].join(' • '),
                               maxLines: 1,
@@ -181,14 +183,19 @@ class RealmGroupCard extends StatelessWidget {
                           ],
                         ),
                       ),
-                      Text(
-                        'Continue',
-                        style: EverloreTheme.ui(
-                          size: 12,
-                          color: accent,
-                          weight: FontWeight.w700,
+                      // On the narrowest phones the word costs about a third
+                      // of the line the scene and its tally have to share.
+                      // The chevron already says "continue", so spend the
+                      // width on the story instead.
+                      if (!EvLayout.of(context).isCompact)
+                        Text(
+                          'Continue',
+                          style: EverloreTheme.ui(
+                            size: 12,
+                            color: accent,
+                            weight: FontWeight.w700,
+                          ),
                         ),
-                      ),
                       Icon(
                         Icons.chevron_right_rounded,
                         color: accent,
@@ -230,7 +237,7 @@ class RealmGroupCard extends StatelessWidget {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                '${group.storyCount} stories',
+                                countLabel(group.storyCount, 'story', plural: 'stories'),
                                 style: EverloreTheme.ui(
                                   size: 11,
                                   color: accent,
@@ -251,11 +258,10 @@ class RealmGroupCard extends StatelessWidget {
     );
   }
 
-  String _sceneLabel(String tag) {
-    final words = tag.replaceAll('_', ' ').trim();
-    if (words.isEmpty) return 'Continue the story';
-    return words[0].toUpperCase() + words.substring(1);
-  }
+  /// The scene tag is an internal word, so this card headed a playthrough
+  /// with "Dialogue". Same fix as the Chronicle's almanac.
+  String _sceneLabel(String tag) =>
+      tag.trim().isEmpty ? 'Continue the story' : sceneMomentLabel(tag, '');
 
   String _relative(DateTime date) {
     final diff = DateTime.now().difference(date);

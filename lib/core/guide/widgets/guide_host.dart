@@ -430,6 +430,7 @@ class _GuideLayer extends StatelessWidget {
 
           _positionedCard(
             size: size,
+            textScale: media.textScaler.scale(14) / 14,
             padding: insets,
             hole: hole,
             still: still,
@@ -461,6 +462,7 @@ class _GuideLayer extends StatelessWidget {
   /// notch, a keyboard, and a player who has turned system text up to 200%.
   Widget _positionedCard({
     required Size size,
+    required double textScale,
     required EdgeInsets padding,
     required RRect? hole,
     required bool still,
@@ -475,8 +477,11 @@ class _GuideLayer extends StatelessWidget {
 
     /// Below this a band is too cramped to read from; float over the scrim.
     /// Proportional, because a flat 168 is a third of a landscape phone and a
-    /// tenth of a tablet.
-    final minBand = math.min(168.0, usable * 0.34);
+    /// tenth of a tablet — and scaled by the player's text size, since the
+    /// same three lines of prose need half again the room at 140%. Without
+    /// the scale a large-text card was squeezed into a band it could not fit
+    /// and the bottom of it was left inside the scroll view, out of sight.
+    final minBand = math.min(168.0 * textScale, usable * 0.34 * textScale);
 
     // The card scrolls inside whatever room it is given, in every placement.
     // Between short screens, landscape, and large system text the card can

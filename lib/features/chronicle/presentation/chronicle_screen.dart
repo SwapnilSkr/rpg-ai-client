@@ -122,10 +122,16 @@ class _ChronicleViewState extends State<_ChronicleView> {
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
+                      // Content begins about a tenth of the way down, where
+                      // the old 0.18 top stop left the keeper art at nearly
+                      // full strength behind the first card of every tab —
+                      // search fields, filter chips and echo text all sat on
+                      // the brightest part of the illustration. Still art,
+                      // still atmosphere, but now it reads as a backdrop.
                       colors: [
-                        EverloreTheme.void0.withValues(alpha: 0.18),
-                        EverloreTheme.void0.withValues(alpha: 0.52),
-                        EverloreTheme.void0.withValues(alpha: 0.78),
+                        EverloreTheme.void0.withValues(alpha: 0.42),
+                        EverloreTheme.void0.withValues(alpha: 0.66),
+                        EverloreTheme.void0.withValues(alpha: 0.86),
                       ],
                       stops: const [0, 0.44, 1],
                     ),
@@ -486,13 +492,55 @@ class _ChronicleViewState extends State<_ChronicleView> {
   }
 }
 
-class _ChronicleHeader extends StatelessWidget {
+class _ChronicleHeader extends StatefulWidget {
   final ChronicleTab activeTab;
 
   const _ChronicleHeader({required this.activeTab});
 
   @override
+  State<_ChronicleHeader> createState() => _ChronicleHeaderState();
+}
+
+class _ChronicleHeaderState extends State<_ChronicleHeader> {
+  /// The strip holds five tomes and only about four fit on a phone, so the
+  /// active one can sit off the edge — landing on Archive used to leave the
+  /// strip showing Overview, with nothing to say which tome you were reading.
+  final _tabKeys = List.generate(5, (_) => GlobalKey());
+
+  int get _activeIndex => switch (widget.activeTab) {
+    ChronicleTab.recap => 0,
+    ChronicleTab.timeline => 1,
+    ChronicleTab.bonds || ChronicleTab.threads => 2,
+    ChronicleTab.places || ChronicleTab.calendar => 3,
+    ChronicleTab.memories => 4,
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _revealActiveTab());
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChronicleHeader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeTab != widget.activeTab) _revealActiveTab();
+  }
+
+  void _revealActiveTab() {
+    final ctx = _tabKeys[_activeIndex].currentContext;
+    if (ctx == null || !mounted) return;
+    Scrollable.ensureVisible(
+      ctx,
+      alignment: 0.5,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final activeTab = widget.activeTab;
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: const BoxDecoration(
@@ -577,6 +625,7 @@ class _ChronicleHeader extends StatelessWidget {
                   child: Row(
                     children: [
                       GuideAnchor(
+                        key: _tabKeys[0],
                         id: GuideIds.chronicleOverview,
                         child: _TabButton(
                           label: 'Overview',
@@ -589,6 +638,7 @@ class _ChronicleHeader extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       GuideAnchor(
+                        key: _tabKeys[1],
                         id: GuideIds.chronicleStory,
                         child: _TabButton(
                           label: 'Story',
@@ -601,6 +651,7 @@ class _ChronicleHeader extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       GuideAnchor(
+                        key: _tabKeys[2],
                         id: GuideIds.chroniclePeople,
                         child: _TabButton(
                           label: 'People',
@@ -615,6 +666,7 @@ class _ChronicleHeader extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       GuideAnchor(
+                        key: _tabKeys[3],
                         id: GuideIds.chronicleWorld,
                         child: _TabButton(
                           label: 'World',
@@ -629,6 +681,7 @@ class _ChronicleHeader extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       GuideAnchor(
+                        key: _tabKeys[4],
                         id: GuideIds.chronicleArchive,
                         child: _TabButton(
                           label: 'Archive',

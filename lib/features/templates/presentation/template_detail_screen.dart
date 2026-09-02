@@ -16,6 +16,8 @@ import '../../../core/guide/guide_ids.dart';
 import '../../../core/guide/guide_trigger.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../moderation/presentation/content_actions_sheet.dart';
+import '../../../shared/text_format.dart';
+import '../../../shared/widgets/status_bar_scrim.dart';
 
 class TemplateDetailScreen extends StatefulWidget {
   final String templateId;
@@ -312,7 +314,10 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
             ),
 
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+              // Clears the pinned CTA, which grows with the player's text
+              // size and the home indicator — a flat 120 left the last lines
+              // of the description sliced in half underneath it.
+              padding: EdgeInsets.fromLTRB(20, 20, 20, _ctaClearance(context)),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   // Description. The pitch, and the one thing on the screen
@@ -450,7 +455,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                             ),
                           ),
                           child: Text(
-                            tag,
+                            humanizeTag(tag),
                             style: const TextStyle(
                               color: EverloreTheme.ash,
                               fontSize: 12,
@@ -466,6 +471,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
           ],
         ),
 
+        const StatusBarScrim(),
         // Bottom CTA
         Positioned(
           bottom: 0,
@@ -524,6 +530,15 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
       ],
     );
   }
+}
+
+/// Height the pinned "Enter this world" bar actually occupies: its padding,
+/// the button's own padding, one line of its label at the current text scale,
+/// and the home indicator.
+double _ctaClearance(BuildContext context) {
+  final media = MediaQuery.of(context);
+  final label = media.textScaler.scale(15) * 1.3;
+  return media.padding.bottom + 16 + 20 + 36 + label + 16;
 }
 
 String _invitationFor(WorldTemplate template) {

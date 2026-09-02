@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/nexus_theme.dart';
 import '../app_icons.dart';
+import 'everlore_sheet.dart';
 
 /// Persistent shell scaffold: hosts the four nav branches (Explore · Realms ·
 /// Worlds · Personas) and the single, always-on [EverloreNavBar]. The branches keep
@@ -64,8 +65,16 @@ class EverloreNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    // On a tablet the bar used to run the full 800pt of the screen, which
+    // reads as a stretched phone layout. Cap and centre it instead.
+    final width = MediaQuery.sizeOf(context).width;
+    final side = width > 560 ? (width - 520) / 2 : 18.0;
     return Padding(
-      padding: EdgeInsets.only(left: 18, right: 18, bottom: bottomInset + 10),
+      padding: EdgeInsets.only(
+        left: side,
+        right: side,
+        bottom: bottomInset + 10,
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(26),
         child: BackdropFilter(
@@ -238,7 +247,9 @@ class _CreateAction extends StatelessWidget {
 /// old "+ only made characters" gap.
 void showCreateChooser(BuildContext context) {
   showModalBottomSheet<void>(
+    useRootNavigator: true,
     context: context,
+    isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (sheetCtx) => Container(
       decoration: const BoxDecoration(
@@ -246,45 +257,33 @@ void showCreateChooser(BuildContext context) {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(top: BorderSide(color: Color(0x33D8B878))),
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 18),
-              _CreateChoice(
-                icon: AppIcons.navRealms,
-                title: 'Forge a World',
-                subtitle:
-                    'A full RPG setting — lore, scenes, cast, and a narrator or lead character.',
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  context.push('/my-worlds/forge');
-                },
-              ),
-              const SizedBox(height: 12),
-              _CreateChoice(
-                icon: AppIcons.createCharacter,
-                title: 'Create a Character',
-                subtitle:
-                    'A character-first story — one central companion; the wider cast can emerge over time.',
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  context.push('/characters/new');
-                },
-              ),
-            ],
-          ),
+      child: SheetFrame(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _CreateChoice(
+              icon: AppIcons.navRealms,
+              title: 'Forge a World',
+              subtitle:
+                  'A full RPG setting — lore, scenes, cast, and a narrator or lead character.',
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                context.push('/my-worlds/forge');
+              },
+            ),
+            const SizedBox(height: 12),
+            _CreateChoice(
+              icon: AppIcons.createCharacter,
+              title: 'Create a Character',
+              subtitle:
+                  'A character-first story — one central companion; the wider cast can emerge over time.',
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                context.push('/characters/new');
+              },
+            ),
+          ],
         ),
       ),
     ),

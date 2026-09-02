@@ -4,6 +4,7 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../data/calendar_data.dart';
 import '../../state/chronicle_cubit.dart';
 import '../../../../shared/widgets/everlore_empty_state.dart';
+import '../../../../shared/text_format.dart';
 
 /// The Almanac: surfaces the story-time backend (calendars, timeline branches,
 /// the current in-world cursor) that the engine has always tracked but the
@@ -90,9 +91,16 @@ class _CurrentTimeCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
+        // A 0.12-alpha gold is 88% TRANSPARENT, not a 12% tint over the card:
+        // the keeper artwork came straight through the top half of this card
+        // and swallowed the date under it. Blend the tint into an opaque base
+        // so the gradient reads as warmth rather than as a window.
         gradient: LinearGradient(
           colors: [
-            EverloreTheme.gold.withValues(alpha: 0.12),
+            Color.alphaBlend(
+              EverloreTheme.gold.withValues(alpha: 0.12),
+              EverloreTheme.void2,
+            ),
             EverloreTheme.void2,
           ],
           begin: Alignment.topLeft,
@@ -111,13 +119,19 @@ class _CurrentTimeCard extends StatelessWidget {
                 size: 16,
               ),
               const SizedBox(width: 6),
-              Text(
-                'PRESENT MOMENT',
-                style: TextStyle(
-                  color: EverloreTheme.gold.withValues(alpha: 0.8),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
+              // Wide letter-spacing plus a large system text size pushed this
+              // label past the card on a 320pt phone.
+              Expanded(
+                child: Text(
+                  'PRESENT MOMENT',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: EverloreTheme.gold.withValues(alpha: 0.8),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
             ],
@@ -367,7 +381,7 @@ class _EventRow extends StatelessWidget {
         ? event.milestone!
         : (travel?.label ??
               (event.anchor?.eventTimeLabel ??
-                  _prettyTag(event.sceneTag, event.type)));
+                  sceneMomentLabel(event.sceneTag, event.type)));
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -426,9 +440,4 @@ class _EventRow extends StatelessWidget {
     );
   }
 
-  String _prettyTag(String? sceneTag, String type) {
-    final raw = (sceneTag != null && sceneTag.isNotEmpty) ? sceneTag : type;
-    if (raw.isEmpty) return 'A moment';
-    return raw[0].toUpperCase() + raw.substring(1).replaceAll('_', ' ');
-  }
 }
