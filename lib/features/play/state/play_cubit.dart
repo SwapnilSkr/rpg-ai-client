@@ -72,11 +72,10 @@ class PlayState extends Equatable {
   final bool isRewinding;
 
   /// True only while the NARRATIVE prose is still streaming/revealing into the
-  /// bubble — drives the in-bubble "still writing" indicator. Distinct from
-  /// [isGenerating] (which stays true through post-prose server work — choices,
-  /// codex, kinship — and gates the composer). It flips false the instant the
-  /// prose reveal finishes, so the typing indicator doesn't hang while the rest
-  /// of the turn's bookkeeping completes.
+  /// bubble — drives the in-bubble "still writing" indicator and locks the
+  /// composer. Distinct from [isGenerating], which stays true through post-prose
+  /// server work (choices, codex, kinship, persist). The composer unlocks the
+  /// instant this flips false; continue/travel stay gated on [isGenerating].
   final bool narrativeStreaming;
 
   /// True once the narrator's choices have arrived early (the `choices_ready`
@@ -84,6 +83,15 @@ class PlayState extends Equatable {
   /// flight optimistic turn so options appear with the prose. Cleared when the
   /// turn finalizes or a new one starts.
   final bool choicesPreview;
+
+  /// A player send is waiting for the in-flight turn to persist. Chips must
+  /// not fire into that held line, and the composer hint should say so.
+  final bool hasQueuedSend;
+
+  /// One-shot composer restore when a held next line cannot be dispatched
+  /// because the in-flight turn failed. The play screen copies this into the
+  /// field and the next successful send clears it.
+  final String? restoreComposerText;
 
   final bool isConnected;
   final bool isLoading;
@@ -114,7 +122,7 @@ class PlayState extends Equatable {
 
   /// Id of the event whose AI turn is currently being re-woven (streaming a
   /// replay variant). Drives the in-bubble weaving/streaming treatment and is
-  /// independent of [isGenerating] (which gates the composer for new turns).
+  /// independent of [isGenerating] (which gates continue/travel until persist).
   final String? replayingEventId;
 
   /// Stat changes from the most recent completed turn — drives the floating
@@ -141,6 +149,8 @@ class PlayState extends Equatable {
     this.isRewinding = false,
     this.narrativeStreaming = false,
     this.choicesPreview = false,
+    this.hasQueuedSend = false,
+    this.restoreComposerText,
     this.isConnected = false,
     this.isLoading = true,
     this.error,
@@ -167,6 +177,8 @@ class PlayState extends Equatable {
     bool? isRewinding,
     bool? narrativeStreaming,
     bool? choicesPreview,
+    bool? hasQueuedSend,
+    Object? restoreComposerText = _kUnset,
     bool? isConnected,
     bool? isLoading,
     String? error,
@@ -192,6 +204,10 @@ class PlayState extends Equatable {
       isRewinding: isRewinding ?? this.isRewinding,
       narrativeStreaming: narrativeStreaming ?? this.narrativeStreaming,
       choicesPreview: choicesPreview ?? this.choicesPreview,
+      hasQueuedSend: hasQueuedSend ?? this.hasQueuedSend,
+      restoreComposerText: identical(restoreComposerText, _kUnset)
+          ? this.restoreComposerText
+          : restoreComposerText as String?,
       isConnected: isConnected ?? this.isConnected,
       isLoading: isLoading ?? this.isLoading,
       error: error,
@@ -228,6 +244,8 @@ class PlayState extends Equatable {
     isRewinding,
     narrativeStreaming,
     choicesPreview,
+    hasQueuedSend,
+    restoreComposerText,
     isConnected,
     isLoading,
     error,
@@ -243,6 +261,17 @@ class PlayState extends Equatable {
     milestoneStamp,
     milestones,
   ];
+
+  /// Composer is only locked while prose is still appearing, during rewind,
+  /// or while a replay is weaving. Post-prose bookkeeping keeps [isGenerating]
+  /// true but must not trap the player's next line.
+  bool get composerLocked =>
+      isRewinding || replayingEventId != null || narrativeStreaming;
+
+  /// Continue, travel, and other world mutations wait until the in-flight
+  /// turn is persisted. A queued chat send is not a world action.
+  bool get worldActionsLocked =>
+      isRewinding || replayingEventId != null || isGenerating;
 }
 
 class PlayCubit extends Cubit<PlayState> {
@@ -282,11 +311,15 @@ class PlayCubit extends Cubit<PlayState> {
   Timer? _generationWatchdog;
   Timer? _reconciliationTimer;
 
-  /// A message submitted after the client has lost a generation stream. The
-  /// server still owns the sequencing lock, so retain one explicit next action
-  /// and send it automatically once a reconnect/load confirms the prior turn
-  /// settled. This is deliberately a single slot: the newest player intent wins
-  /// and no invisible chain of actions can be fired into an unknown story state.
+  /// A message waiting to dispatch. Two producers share the slot:
+  ///
+  /// - Reconnect / rewind / `GENERATION_IN_PROGRESS`: send after a load
+  ///   confirms the prior turn settled ([_scheduleReconciliation]).
+  /// - Post-prose hold: the player replied once the narrator's words were on
+  ///   screen, but the in-flight turn has not persisted yet. Dispatch on
+  ///   `generation_complete` without polling.
+  ///
+  /// Newest player intent wins. No invisible chain of actions.
   String? _queuedMessage;
   static const _reconciliationInterval = Duration(seconds: 3);
 
@@ -450,7 +483,9 @@ class PlayCubit extends Cubit<PlayState> {
       if (msg['instanceId']?.toString() != instanceId) return;
       _armGenerationWatchdog(_generationQuietTimeout);
       // Tokens are flowing again — drop any "retrying" notice.
-      if (state.notice != null) emit(state.copyWith(notice: null));
+      if (state.notice != null && !state.hasQueuedSend) {
+        emit(state.copyWith(notice: null));
+      }
       final delta = msg['delta']?.toString() ?? '';
       if (delta.isEmpty) return;
 
@@ -543,8 +578,9 @@ class PlayCubit extends Cubit<PlayState> {
       }
       // The story prose is complete (any choices/bookkeeping tail is hidden and
       // still generating). Mark it so the reveal loop can drop the "writing"
-      // indicator once it finishes painting the remaining buffered text — the
-      // composer stays locked via isGenerating until generation_complete.
+      // indicator — and unlock the composer — once it finishes painting the
+      // remaining buffered text. Continue/travel stay locked via isGenerating
+      // until generation_complete.
       _proseStreamEnded = true;
       _armGenerationWatchdog(_generationFinalizationTimeout);
       _startGenerationReveal();
@@ -556,6 +592,8 @@ class PlayCubit extends Cubit<PlayState> {
     // replace the event with the final (audited) choices.
     _choicesReadySub = _ws.onChoicesReady.listen((msg) {
       if (msg['instanceId']?.toString() != instanceId) return;
+      // A held next line already dismissed these chips; don't bring them back.
+      if (state.hasQueuedSend) return;
       final choices = Choice.listFromAny(msg['choices']);
       if (choices.isEmpty) return;
       final events = [...state.events];
@@ -649,15 +687,18 @@ class PlayCubit extends Cubit<PlayState> {
           isGenerating: false,
           narrativeStreaming: false,
           choicesPreview: false,
+          hasQueuedSend: false,
           notice: null,
           instance: state.instance?.applyStateDiff(eventData['state_diff']),
           totalEvents: nextTotalEvents,
           hasOlderEvents:
               state.hasOlderEvents || nextTotalEvents > trimmedEvents.length,
           lastStatDeltas: statDeltas,
+          restoreComposerText: null,
         ),
       );
       unawaited(_refreshInk());
+      _sendQueuedMessage();
     });
 
     _milestoneSub = _ws.onMilestoneUnlocked.listen((msg) {
@@ -802,6 +843,7 @@ class PlayCubit extends Cubit<PlayState> {
         final droppedInput = idx >= 0 ? events[idx].playerInput : null;
         if (idx >= 0) events.removeAt(idx);
         _clearGenerationTimers();
+        _takeQueuedSend();
         emit(
           state.copyWith(
             events: events,
@@ -810,6 +852,8 @@ class PlayCubit extends Cubit<PlayState> {
             error: null,
             lastFailedInput: null,
             canRetry: false,
+            hasQueuedSend: false,
+            restoreComposerText: null,
           ),
         );
         if (droppedInput != null && droppedInput.trim().isNotEmpty) {
@@ -850,6 +894,8 @@ class PlayCubit extends Cubit<PlayState> {
             ),
             canRetry: !authored,
             lastFailedInput: failedInput,
+            hasQueuedSend: false,
+            restoreComposerText: _takeQueuedSend(),
           ),
         );
         return;
@@ -879,6 +925,8 @@ class PlayCubit extends Cubit<PlayState> {
           ),
           canRetry: !authored,
           lastFailedInput: droppedInput,
+          hasQueuedSend: false,
+          restoreComposerText: _takeQueuedSend(),
         ),
       );
     });
@@ -982,7 +1030,14 @@ class PlayCubit extends Cubit<PlayState> {
       _queueMessage(message);
       return;
     }
-    if (state.isGenerating || state.replayingEventId != null) {
+    if (state.replayingEventId != null) return;
+    // Prose is still appearing — the composer is locked, so this is a no-op
+    // rather than a silent queue.
+    if (state.narrativeStreaming) return;
+    // The narrator's words are on screen but the turn has not persisted.
+    // Hold this line locally; do not start the next generation job.
+    if (state.isGenerating) {
+      _holdSendUntilTurnSettles(message);
       return;
     }
 
@@ -1006,6 +1061,8 @@ class PlayCubit extends Cubit<PlayState> {
         isGenerating: true,
         narrativeStreaming: true,
         choicesPreview: false,
+        hasQueuedSend: false,
+        restoreComposerText: null,
         hasOlderEvents:
             state.hasOlderEvents || state.events.length >= _activeEventLimit,
         error: null,
@@ -1586,6 +1643,8 @@ class PlayCubit extends Cubit<PlayState> {
                 'We lost the connection before this scene could be saved. Please try again.',
             canRetry: true,
             lastFailedInput: failedInput,
+            hasQueuedSend: false,
+            restoreComposerText: _takeQueuedSend(),
           ),
         );
         return;
@@ -1600,6 +1659,8 @@ class PlayCubit extends Cubit<PlayState> {
           events: events.where((e) => !e.isOptimistic).toList(),
           isGenerating: false,
           error: null,
+          hasQueuedSend: false,
+          restoreComposerText: _takeQueuedSend(),
         ),
       );
     });
@@ -1611,6 +1672,7 @@ class PlayCubit extends Cubit<PlayState> {
     _queuedMessage = next;
     emit(
       state.copyWith(
+        hasQueuedSend: true,
         notice: 'Your message is queued until the story reconnects.',
         error: null,
         lastFailedInput: null,
@@ -1618,6 +1680,39 @@ class PlayCubit extends Cubit<PlayState> {
       ),
     );
     _scheduleReconciliation();
+  }
+
+  /// Hold a player line until the in-flight turn persists. Does not start a
+  /// generation job, does not add a second optimistic bubble, and does not
+  /// poll — [generation_complete] dispatches it.
+  void _holdSendUntilTurnSettles(String message) {
+    final next = message.trim();
+    if (next.isEmpty) return;
+    _queuedMessage = next;
+    final events = [...state.events];
+    final idx = events.lastIndexWhere((e) => e.isOptimistic);
+    if (idx >= 0 && events[idx].choices.isNotEmpty) {
+      events[idx] = events[idx].copyWith(choices: const []);
+    }
+    emit(
+      state.copyWith(
+        events: events,
+        hasQueuedSend: true,
+        choicesPreview: false,
+        notice: 'Sending when this scene settles…',
+        error: null,
+        lastFailedInput: null,
+        canRetry: false,
+      ),
+    );
+  }
+
+  String? _takeQueuedSend() {
+    final held = _queuedMessage;
+    _queuedMessage = null;
+    _reconciliationTimer?.cancel();
+    _reconciliationTimer = null;
+    return held;
   }
 
   void _scheduleReconciliation() {
@@ -1643,7 +1738,7 @@ class PlayCubit extends Cubit<PlayState> {
     _queuedMessage = null;
     _reconciliationTimer?.cancel();
     _reconciliationTimer = null;
-    emit(state.copyWith(notice: null));
+    emit(state.copyWith(notice: null, hasQueuedSend: false));
     unawaited(sendMessage(queued));
   }
 

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -121,6 +122,11 @@ class _SplashScreenState extends State<SplashScreen>
         remoteOptOut: user.preferences.guideOptOut,
       );
       if (!mounted) return;
+      const debugPlay = const String.fromEnvironment('DEBUG_OPEN_PLAY');
+      if (kDebugMode && debugPlay.isNotEmpty) {
+        context.go('/play/$debugPlay');
+        return;
+      }
       // Discover unless this account still needs interests onboarding.
       final onboarded = await InterestsStore.hasCompletedOnboarding(user: user);
       if (!mounted) return;

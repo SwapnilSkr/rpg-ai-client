@@ -102,6 +102,9 @@ class _PlayViewState extends State<_PlayView> {
   /// restores it once rather than overwriting the player's edits every rebuild.
   String? _lastRestoredDraft;
 
+  /// The held next line restored after the in-flight turn failed.
+  String? _lastRestoredQueued;
+
   /// Set when the player opens Chronicle / Thoughts / Settings from the realm
   /// menu. Cleared if they dismiss the menu outright or finish an in-sheet action.
   bool _pendingRealmMenuReturn = false;
@@ -1359,6 +1362,17 @@ class _PlayViewState extends State<_PlayView> {
         } else if (state.error == null) {
           _lastRestoredDraft = null;
         }
+        final heldDraft = state.restoreComposerText?.trim() ?? '';
+        if (heldDraft.isNotEmpty && heldDraft != _lastRestoredQueued) {
+          _lastRestoredQueued = heldDraft;
+          // An authored refusal already put the failed turn back in the field.
+          // Don't overwrite it with the held next line.
+          if (_composerDraft.value == null) {
+            _composerDraft.value = state.restoreComposerText;
+          }
+        } else if (state.restoreComposerText == null) {
+          _lastRestoredQueued = null;
+        }
         _maybeShowOnboarding(ctx);
         _maybeGuide(state);
       },
@@ -1536,7 +1550,8 @@ class _PlayViewState extends State<_PlayView> {
                                 final showChoices =
                                     (settledChoices || previewChoices) &&
                                     state.replayingEventId == null &&
-                                    state.isConnected;
+                                    state.isConnected &&
+                                    !state.hasQueuedSend;
                                 // Fallback window: prose has settled but no choices yet
                                 // (narrator emitted none → they come with the metadata
                                 // pass at generation_complete). Show a quiet "preparing
@@ -1549,7 +1564,8 @@ class _PlayViewState extends State<_PlayView> {
                                     state.isGenerating &&
                                     !state.narrativeStreaming &&
                                     state.replayingEventId == null &&
-                                    state.isConnected;
+                                    state.isConnected &&
+                                    !state.hasQueuedSend;
                                 final showTrailingSlot =
                                     showChoices || showChoicesLoading;
                                 final itemCount =
@@ -1583,12 +1599,14 @@ class _PlayViewState extends State<_PlayView> {
                                           id: GuideIds.playChoices,
                                           child: ChoiceChips(
                                             choices: latest.choices,
-                                            enabled: true,
+                                            enabled: !state.hasQueuedSend,
                                             // Drop the pre-formatted move into the composer
                                             // (fills + focuses) so the player can edit the
                                             // narration/dialogue before sending it.
-                                            onChoose: (choice) =>
-                                                _composerDraft.value = choice,
+                                            onChoose: (choice) {
+                                              if (state.hasQueuedSend) return;
+                                              _composerDraft.value = choice;
+                                            },
                                           ),
                                         );
                                       }
@@ -1720,7 +1738,9 @@ class _PlayViewState extends State<_PlayView> {
                   ),
 
                   PlayerInput(
-                    isGenerating: state.isGenerating || state.isRewinding,
+                    composerLocked: state.composerLocked,
+                    worldActionsLocked: state.worldActionsLocked,
+                    hasQueuedSend: state.hasQueuedSend,
                     isConnected: state.isConnected,
                     notice: state.notice,
                     onSend: (msg) => context.read<PlayCubit>().sendMessage(msg),

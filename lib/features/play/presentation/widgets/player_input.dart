@@ -9,7 +9,15 @@ import 'world_actions_button.dart';
 import '../../../../app/layout/responsive.dart';
 
 class PlayerInput extends StatefulWidget {
-  final bool isGenerating;
+  /// Locks the text field and send orb (prose still revealing, rewind, replay).
+  final bool composerLocked;
+
+  /// Locks continue / travel / relationship while a turn is still persisting.
+  final bool worldActionsLocked;
+
+  /// A send is waiting for the in-flight turn to persist.
+  final bool hasQueuedSend;
+
   final bool isConnected;
   final ValueChanged<String> onSend;
 
@@ -60,7 +68,9 @@ class PlayerInput extends StatefulWidget {
 
   const PlayerInput({
     super.key,
-    required this.isGenerating,
+    required this.composerLocked,
+    required this.worldActionsLocked,
+    required this.hasQueuedSend,
     required this.isConnected,
     required this.onSend,
     this.onContinue,
@@ -100,7 +110,7 @@ class _PlayerInputState extends State<PlayerInput> {
   @override
   void didUpdateWidget(PlayerInput oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!oldWidget.isGenerating && widget.isGenerating) {
+    if (!oldWidget.composerLocked && widget.composerLocked) {
       _focusNode.unfocus();
     }
     if (!identical(oldWidget.draft, widget.draft)) {
@@ -145,14 +155,14 @@ class _PlayerInputState extends State<PlayerInput> {
 
   void _submit() {
     final text = _controller.text.trim();
-    if (text.isEmpty || widget.isGenerating) return;
+    if (text.isEmpty || widget.composerLocked) return;
     widget.onSend(text);
     _controller.clear();
     _focusNode.unfocus();
   }
 
   void _insertNarrationMarkers() {
-    if (widget.isGenerating || !widget.isConnected) return;
+    if (widget.composerLocked || !widget.isConnected) return;
 
     void insert() {
       final value = _controller.value;
@@ -186,8 +196,9 @@ class _PlayerInputState extends State<PlayerInput> {
 
   @override
   Widget build(BuildContext context) {
-    final canSend = _hasText && !widget.isGenerating && widget.isConnected;
-    final enabled = !widget.isGenerating && widget.isConnected;
+    final canSend = _hasText && !widget.composerLocked && widget.isConnected;
+    final composerEnabled = !widget.composerLocked && widget.isConnected;
+    final worldEnabled = !widget.worldActionsLocked && widget.isConnected;
 
     return Container(
       decoration: const BoxDecoration(
@@ -243,7 +254,7 @@ class _PlayerInputState extends State<PlayerInput> {
                                 GuideAnchor(
                                   id: GuideIds.playNarrationMarker,
                                   child: _NarrationMarkerButton(
-                                    enabled: enabled,
+                                    enabled: composerEnabled,
                                     focused: focused,
                                     onTap: _insertNarrationMarkers,
                                   ),
@@ -260,9 +271,9 @@ class _PlayerInputState extends State<PlayerInput> {
                         child: _ComposerTextField(
                           controller: _controller,
                           focusNode: _focusNode,
-                          enabled: enabled,
+                          enabled: composerEnabled,
                           hintText: _hintText(),
-                          onSubmit: enabled ? _submit : null,
+                          onSubmit: composerEnabled ? _submit : null,
                         ),
                       ),
                     ),
@@ -278,7 +289,7 @@ class _PlayerInputState extends State<PlayerInput> {
                     GuideAnchor(
                       id: GuideIds.playWorldActions,
                       child: WorldActionsButton(
-                        enabled: enabled,
+                        enabled: worldEnabled,
                         onContinue: widget.onContinue!,
                         onAdvance: widget.onAdvance!,
                         onTravel: widget.onTravel!,
@@ -321,9 +332,17 @@ class _PlayerInputState extends State<PlayerInput> {
   }
 
   String _hintText() {
-    if (widget.isGenerating) return widget.notice ?? 'The story unfolds…';
-    if (widget.notice != null) return widget.notice!;
     if (!widget.isConnected) return 'Reconnecting…';
+    if (widget.composerLocked) {
+      return widget.notice ?? 'The story unfolds…';
+    }
+    if (widget.hasQueuedSend) {
+      return widget.notice ?? 'Sending when this scene settles…';
+    }
+    if (widget.worldActionsLocked) {
+      return widget.notice ?? 'You can reply — the scene is still settling.';
+    }
+    if (widget.notice != null) return widget.notice!;
     // Two round controls and the action-marker button leave the field about
     // half a narrow phone wide, and at large system text "What do you do?"
     // came out as "What do y...". Ask it in fewer words instead of in fewer
