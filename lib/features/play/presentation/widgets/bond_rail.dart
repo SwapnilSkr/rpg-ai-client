@@ -30,13 +30,15 @@ class BondRail extends StatelessWidget {
   Widget build(BuildContext context) {
     // Only side characters the story has actually bonded with — protagonist
     // excluded (the player has no meters toward themself), and meterless cards
-    // omitted so a fresh scene stays uncluttered. Most-mentioned first.
-    final cast =
+    // omitted so a fresh scene stays uncluttered. Most-mentioned first so the
+    // people the story keeps returning to sit at the leading edge; the row
+    // scrolls for the rest. A horizontal ListView only builds tokens in view,
+    // so a long bonded cast does not paint every circle at once.
+    final shown =
         characters
             .where((c) => !c.isProtagonist && c.relationship != null)
             .toList()
           ..sort((a, b) => b.mentionCount.compareTo(a.mentionCount));
-    final shown = cast.take(5).toList(growable: false);
     if (shown.isEmpty) return const SizedBox.shrink();
 
     return SizedBox(
