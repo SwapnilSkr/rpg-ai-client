@@ -26,6 +26,8 @@ class InteractiveWorldRepository {
     required String type,
     String? locationId,
     String? choiceId,
+    String? petitionId,
+    String? resolutionId,
   }) async {
     final value = await ApiClient.post(
       '/interactive-worlds/$worldKey/instances/$instanceId/actions',
@@ -33,6 +35,8 @@ class InteractiveWorldRepository {
         'type': type,
         if (locationId != null) 'location_id': locationId,
         if (choiceId != null) 'choice_id': choiceId,
+        if (petitionId != null) 'petition_id': petitionId,
+        if (resolutionId != null) 'resolution_id': resolutionId,
       },
     );
     return Map<String, dynamic>.from(value as Map);

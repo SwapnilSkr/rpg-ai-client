@@ -33,6 +33,7 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
   final _repository = const InteractiveWorldRepository();
   InteractiveWorld? _world;
   InteractiveWorldState _state = const InteractiveWorldState.empty();
+  WorldProgression _progression = WorldProgression.empty;
   _View _view = _View.map;
   String? _selectedId;
   bool _loading = true;
@@ -101,6 +102,12 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
         flags: const {},
       );
     }
+    final rawProgression = payload['progression'];
+    if (rawProgression is Map) {
+      _progression = WorldProgression.fromJson(
+        Map<String, dynamic>.from(rawProgression),
+      );
+    }
     _selectedId ??= _state.currentLocationId;
   }
 
@@ -111,6 +118,8 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
     required String type,
     String? locationId,
     String? choiceId,
+    String? petitionId,
+    String? resolutionId,
   }) async {
     if (!_isServerBacked) {
       _notice('Open this world from your realm to play it.');
@@ -125,6 +134,8 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
         type: type,
         locationId: locationId,
         choiceId: choiceId,
+        petitionId: petitionId,
+        resolutionId: resolutionId,
       );
       if (!mounted) return;
       setState(() {
@@ -252,6 +263,12 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
     final choices = world.choices
         .where((c) => c.availableAt(location.id, _state.flags))
         .toList();
+    // A petition displaces the scene's own copy rather than sitting beside it.
+    // Someone is standing in front of the player waiting to be answered, and
+    // that is the whole of what this place is until it is answered.
+    final petition = _progression.petitions
+        .where((p) => p.at == location.id)
+        .firstOrNull;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -295,13 +312,23 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
         ),
         Align(
           alignment: Alignment.bottomCenter,
-          child: _StoryPanel(
-            headline: location.sceneHeadline ?? location.title,
-            body: location.sceneBody ?? location.description,
-            choices: choices,
-            busy: _acting,
-            onChoose: (id) => _act(type: 'choose', choiceId: id),
-          ),
+          child: petition != null
+              ? _PetitionPanel(
+                  petition: petition,
+                  busy: _acting,
+                  onRule: (resolutionId) => _act(
+                    type: 'rule',
+                    petitionId: petition.id,
+                    resolutionId: resolutionId,
+                  ),
+                )
+              : _StoryPanel(
+                  headline: location.sceneHeadline ?? location.title,
+                  body: location.sceneBody ?? location.description,
+                  choices: choices,
+                  busy: _acting,
+                  onChoose: (id) => _act(type: 'choose', choiceId: id),
+                ),
         ),
       ],
     );
@@ -474,6 +501,120 @@ class _StoryPanel extends StatelessWidget {
           const SizedBox(height: 8),
         ],
       ],
+    ),
+  );
+}
+
+/// A quarrel put in front of the player, and the ways of ending it.
+///
+/// Both parties are shown in full and neither is marked as the honest one,
+/// because in most of these neither is lying. The rulings are given as labels
+/// only — what each one costs is discovered by ruling it, which is what makes
+/// this a judgement rather than a shop.
+class _PetitionPanel extends StatelessWidget {
+  const _PetitionPanel({
+    required this.petition,
+    required this.busy,
+    required this.onRule,
+  });
+
+  final WorldPetition petition;
+  final bool busy;
+  final ValueChanged<String> onRule;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+    padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+    // Three parties, their claims, any rulings quoted back and three ways to
+    // answer will not fit a phone. The panel takes at most two thirds of the
+    // screen and scrolls inside that, so the scene behind it stays visible and
+    // the buttons are always reachable.
+    constraints: BoxConstraints(
+      maxHeight: MediaQuery.sizeOf(context).height * 0.66,
+    ),
+    decoration: BoxDecoration(
+      color: const Color(0xF20D0A09),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0x5CC8A96A)),
+    ),
+    child: SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'BROUGHT BEFORE YOU',
+            style: TextStyle(
+              color: Color(0x99C8A96A),
+              fontSize: 10,
+              letterSpacing: 1.6,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            petition.title,
+            style: const TextStyle(
+              color: EverloreTheme.parchment,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          for (final party in petition.parties) ...[
+            Text(
+              party.name,
+              style: const TextStyle(
+                color: Color(0xE6C8A96A),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              party.claim,
+              style: const TextStyle(
+                color: Color(0xB3EFE3CC),
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          // Your own words, brought back by someone who has read them.
+          for (final principle in petition.cites) ...[
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(color: const Color(0x66C8A96A), width: 2),
+                ),
+                color: const Color(0x14C8A96A),
+              ),
+              child: Text(
+                'They quote you: $principle',
+                style: const TextStyle(
+                  color: Color(0xCCEFE3CC),
+                  fontSize: 12,
+                  height: 1.4,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          for (final resolution in petition.resolutions) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: busy ? null : () => onRule(resolution.id),
+                child: Text(resolution.label, textAlign: TextAlign.center),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
     ),
   );
 }

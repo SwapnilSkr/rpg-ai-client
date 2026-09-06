@@ -384,3 +384,151 @@ class InteractiveWorldState {
     );
   }
 }
+
+/// A quarrel brought to the player to rule on, once the reign has begun.
+///
+/// The parties state their own cases and disagree; what is actually true is
+/// deliberately not sent, and neither is what any ruling will cost. Both live
+/// on the server. A petition the client could see through is not a judgement,
+/// it is a menu with the answers printed on it.
+@immutable
+class WorldPetition {
+  const WorldPetition({
+    required this.id,
+    required this.title,
+    required this.at,
+    required this.kind,
+    required this.parties,
+    required this.resolutions,
+    required this.cites,
+  });
+
+  final String id;
+  final String title;
+  final String at;
+  final String kind;
+  final List<({String name, String claim})> parties;
+  final List<({String id, String label})> resolutions;
+
+  /// Rulings this petitioner has arrived already quoting. A principle set here
+  /// or one route away travels, and the claim has been shaped to win under it.
+  final List<String> cites;
+
+  factory WorldPetition.fromJson(Map<String, dynamic> json) => WorldPetition(
+    id: json['id'] as String? ?? '',
+    title: json['title'] as String? ?? '',
+    at: json['at'] as String? ?? '',
+    kind: json['kind'] as String? ?? '',
+    parties: (json['parties'] as List? ?? const [])
+        .whereType<Map>()
+        .map(
+          (p) => (
+            name: p['name'] as String? ?? '',
+            claim: p['claim'] as String? ?? '',
+          ),
+        )
+        .toList(),
+    resolutions: (json['resolutions'] as List? ?? const [])
+        .whereType<Map>()
+        .map(
+          (r) => (id: r['id'] as String? ?? '', label: r['label'] as String? ?? ''),
+        )
+        .toList(),
+    cites: (json['cites'] as List? ?? const [])
+        .whereType<Map>()
+        .map((c) => c['principle'] as String? ?? '')
+        .where((p) => p.isNotEmpty)
+        .toList(),
+  );
+}
+
+/// One ruling already handed down. The player's own record.
+@immutable
+class WorldLedgerEntry {
+  const WorldLedgerEntry({
+    required this.petitionId,
+    required this.madeWhole,
+    required this.madeToPay,
+    required this.principle,
+  });
+
+  final String petitionId;
+  final String madeWhole;
+  final String madeToPay;
+  final String principle;
+
+  factory WorldLedgerEntry.fromJson(Map<String, dynamic> json) => WorldLedgerEntry(
+    petitionId: json['petition_id'] as String? ?? '',
+    madeWhole: json['made_whole'] as String? ?? '',
+    madeToPay: json['made_to_pay'] as String? ?? '',
+    principle: json['principle'] as String? ?? '',
+  );
+}
+
+/// What the player has become: how factions read them, what they have earned,
+/// where the story landed, and what is now being brought to them.
+///
+/// All of it is derived on the server from the choices and rulings already
+/// recorded, so the client renders it and never accumulates it — a stale total
+/// here would be a total nothing could correct.
+@immutable
+class WorldProgression {
+  const WorldProgression({
+    this.standing = const [],
+    this.marks = const [],
+    this.endingTitle,
+    this.endingCost,
+    this.reignDescription,
+    this.petitions = const [],
+    this.ledger = const [],
+  });
+
+  final List<({String id, String title, int value})> standing;
+  final List<({String title, String description, bool earned})> marks;
+  final String? endingTitle;
+  final String? endingCost;
+  final String? reignDescription;
+  final List<WorldPetition> petitions;
+  final List<WorldLedgerEntry> ledger;
+
+  bool get hasEnded => endingTitle != null;
+
+  static const empty = WorldProgression();
+
+  factory WorldProgression.fromJson(Map<String, dynamic> json) {
+    final ending = json['ending'] as Map?;
+    return WorldProgression(
+      standing: (json['standing'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (s) => (
+              id: s['id'] as String? ?? '',
+              title: s['title'] as String? ?? '',
+              value: (s['value'] as num? ?? 0).toInt(),
+            ),
+          )
+          .toList(),
+      marks: (json['marks'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (m) => (
+              title: m['title'] as String? ?? '',
+              description: m['description'] as String? ?? '',
+              earned: m['earned'] == true,
+            ),
+          )
+          .toList(),
+      endingTitle: ending?['title'] as String?,
+      endingCost: ending?['cost'] as String?,
+      reignDescription: ending?['reign_description'] as String?,
+      petitions: (json['petitions'] as List? ?? const [])
+          .whereType<Map>()
+          .map((p) => WorldPetition.fromJson(Map<String, dynamic>.from(p)))
+          .toList(),
+      ledger: (json['ledger'] as List? ?? const [])
+          .whereType<Map>()
+          .map((e) => WorldLedgerEntry.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
+    );
+  }
+}
