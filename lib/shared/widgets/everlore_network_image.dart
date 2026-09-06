@@ -42,14 +42,13 @@ class EverloreNetworkImage extends StatelessWidget {
       placeholderFadeInDuration: const Duration(milliseconds: 120),
       placeholder: (_, __) => placeholder ?? const ArtworkLoadingPlaceholder(),
       errorWidget: (_, __, ___) => errorWidget ?? const _ArtworkFallback(),
+      // A childless DecoratedBox collapses to zero under loose constraints, so
+      // the art vanished a frame after it decoded anywhere it was not given a
+      // tight box. Image sizes to the bitmap when it is asked to.
       imageBuilder: (context, imageProvider) => Semantics(
         image: true,
         label: semanticLabel,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            image: DecorationImage(image: imageProvider, fit: fit),
-          ),
-        ),
+        child: Image(image: imageProvider, fit: fit),
       ),
     );
   }

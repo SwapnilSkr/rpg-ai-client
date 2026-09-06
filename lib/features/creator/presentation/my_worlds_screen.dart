@@ -1,10 +1,12 @@
 import 'dart:async';
+
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_trigger.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+
 import '../state/my_worlds_cubit.dart';
 import 'widgets/my_world_card.dart';
 import '../../../app/theme/nexus_theme.dart';
@@ -85,6 +87,29 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
     });
   }
 
+  EverloreTopBar _worldsTopBar(
+    BuildContext context, {
+    String subtitle = 'Your creations',
+    double backgroundOpacity = 0.98,
+    List<Widget> extraActions = const [],
+  }) {
+    return EverloreTopBar(
+      title: 'My Worlds',
+      subtitle: subtitle,
+      backgroundOpacity: backgroundOpacity,
+      showProfile: false,
+      actions: [
+        EverloreTopBarIcon(
+          icon: Icons.arrow_back_rounded,
+          tooltip: 'Back to profile',
+          onTap: () =>
+              context.canPop() ? context.pop() : context.go('/profile'),
+        ),
+        ...extraActions,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<User?>(
@@ -92,11 +117,12 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
       builder: (context, snapshot) {
         final user = snapshot.data;
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
+          return Scaffold(
             backgroundColor: EverloreTheme.void1,
             body: Column(
               children: [
-                EverloreTopBar(title: 'Worlds', subtitle: 'Your creations'),
+                _worldsTopBar(context),
+                const _InteractivePlaythroughLink(),
                 Expanded(
                   child: Center(
                     child: EverloreSessionLoader(message: 'Opening your forge'),
@@ -121,7 +147,8 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const EverloreTopBar(title: 'Worlds', subtitle: 'Your creations'),
+          _worldsTopBar(context),
+          const _InteractivePlaythroughLink(),
           Expanded(
             child: type == _GateType.unauth ? _UnauthGate() : _UpgradeGate(),
           ),
@@ -172,15 +199,15 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                 flow: GuideFlows.myWorlds,
                 child: Column(
                   children: [
-                    EverloreTopBar(
-                      title: 'Worlds',
+                    _worldsTopBar(
+                      context,
                       subtitle: state.total == 0
                           ? (_searchController.text.isNotEmpty
                                 ? 'No matching worlds'
                                 : 'No worlds yet')
                           : '${state.total} ${state.total == 1 ? 'world' : 'worlds'}',
                       backgroundOpacity: 0.68,
-                      actions: [
+                      extraActions: [
                         EverloreTopBarIcon(
                           icon: _searchOpen
                               ? Icons.close_rounded
@@ -192,6 +219,7 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                         ),
                       ],
                     ),
+                    const _InteractivePlaythroughLink(),
                     AnimatedSize(
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOutCubic,
@@ -425,8 +453,7 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                         } else {
                           setDialogState(() {
                             isReleasing = false;
-                            releaseError =
-                                'The release could not be completed. Nothing changed — try again.';
+                            releaseError = 'The release could not be completed. Nothing changed — try again.';
                           });
                         }
                       },
@@ -458,6 +485,102 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
           ),
         );
       },
+    );
+  }
+}
+
+/// A permanent entry point for the local-first RPG prototype. It lives above
+/// account-gated creator content so a player can test it without publishing a
+/// world or changing their membership.
+class _InteractivePlaythroughLink extends StatelessWidget {
+  const _InteractivePlaythroughLink();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Semantics(
+        button: true,
+        label: 'Explore The Iron Verdict interactive world',
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => context.push('/interactive/iron-verdict/lab'),
+            child: Ink(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  colors: [
+                    EverloreTheme.ember.withValues(alpha: 0.26),
+                    EverloreTheme.void3.withValues(alpha: 0.94),
+                  ],
+                ),
+                border: Border.all(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.42),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: EverloreTheme.gold.withValues(alpha: 0.14),
+                    ),
+                    child: const Icon(
+                      Icons.sports_martial_arts_rounded,
+                      color: EverloreTheme.gold,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'THE IRON VERDICT',
+                          style: EverloreTheme.ui(
+                            size: 12,
+                            color: EverloreTheme.gold,
+                            weight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Explore the interactive world',
+                          style: EverloreTheme.ui(
+                            size: 14,
+                            color: EverloreTheme.parchment,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'A living map, places that unlock, and scenes shaped by your choices.',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: EverloreTheme.ui(
+                            size: 11,
+                            color: EverloreTheme.ash,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    color: EverloreTheme.gold,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

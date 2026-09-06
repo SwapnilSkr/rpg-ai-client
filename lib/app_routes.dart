@@ -17,15 +17,24 @@ import 'package:everlore/features/creator/presentation/forge_world_route.dart';
 import 'package:everlore/features/creator/presentation/create_character_screen.dart';
 import 'package:everlore/features/personas/presentation/personas_screen.dart';
 import 'package:everlore/features/billing/presentation/billing_screen.dart';
+import 'package:everlore/features/interactive/presentation/iron_verdict_world_screen.dart';
 import 'package:everlore/shared/models/world_template.dart';
 import 'package:everlore/shared/widgets/everlore_nav_bar.dart';
+
 import 'features/moderation/presentation/blocked_content_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
+const _defaultInitialRoute = String.fromEnvironment(
+  'EVERLORE_START_ROUTE',
+  defaultValue: '/splash',
+);
+
 final router = GoRouter(
   navigatorKey: _rootNavigatorKey,
-  initialLocation: '/splash',
+  // Lets the prototype boot directly in an emulator without changing the
+  // production entry point.
+  initialLocation: _defaultInitialRoute,
   routes: [
     // ── Full-screen, no nav bar (pre-app / gate→threshold) ──
     GoRoute(
@@ -97,6 +106,11 @@ final router = GoRouter(
       builder: (context, state) => const CreateCharacterScreen(),
     ),
     GoRoute(
+      path: '/my-worlds',
+      name: 'my_worlds',
+      builder: (context, state) => const MyWorldsScreen(),
+    ),
+    GoRoute(
       path: '/my-worlds/forge',
       name: 'forge_world',
       builder: (context, state) => const ForgeWorldRoute(),
@@ -110,14 +124,17 @@ final router = GoRouter(
       ),
     ),
     GoRoute(
-      path: '/profile',
-      name: 'profile',
-      builder: (context, state) => const AuthScreen(),
-    ),
-    GoRoute(
       path: '/membership',
       name: 'membership',
       builder: (context, state) => const BillingScreen(),
+    ),
+    // A self-contained, local-first vertical slice for the interactive world.
+    GoRoute(
+      path: '/interactive/iron-verdict/lab',
+      name: 'iron_verdict_lab',
+      builder: (context, state) => IronVerdictWorldScreen(
+        instanceId: state.uri.queryParameters['instanceId'],
+      ),
     ),
     GoRoute(
       path: '/blocked-content',
@@ -152,18 +169,18 @@ final router = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/my-worlds',
-              name: 'my_worlds',
-              builder: (context, state) => const MyWorldsScreen(),
+              path: '/personas',
+              name: 'personas',
+              builder: (context, state) => const PersonasScreen(),
             ),
           ],
         ),
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/personas',
-              name: 'personas',
-              builder: (context, state) => const PersonasScreen(),
+              path: '/profile',
+              name: 'profile',
+              builder: (context, state) => const AuthScreen(),
             ),
           ],
         ),
