@@ -161,21 +161,42 @@ class WorldChoice {
     required this.at,
     required this.label,
     required this.requires,
+    required this.forbids,
   });
 
   final String id;
   final String at;
   final String label;
-  final String? requires;
+
+  /// Every flag that must be set. Authored as a bare string for the common
+  /// single-gate case and as a list where a road needs more than one.
+  final List<String> requires;
+
+  /// Any flag that withdraws this choice. The endgame roads are exclusive —
+  /// once the writ is in the Court's hands it cannot also be burned — and
+  /// without this the player is offered a road the server will refuse.
+  final List<String> forbids;
 
   bool availableAt(String locationId, Set<String> flags) =>
-      at == locationId && (requires == null || flags.contains(requires));
+      at == locationId &&
+      requires.every(flags.contains) &&
+      !forbids.any(flags.contains);
+
+  /// Accepts a string, a list, or nothing. The authored data uses whichever
+  /// reads better at the site, so parsing has to take both rather than crash
+  /// on the shape it did not expect.
+  static List<String> _flags(Object? value) => switch (value) {
+    String flag => [flag],
+    List<Object?> list => list.whereType<String>().toList(),
+    _ => const [],
+  };
 
   factory WorldChoice.fromJson(Map<String, dynamic> json) => WorldChoice(
     id: json['id'] as String? ?? '',
     at: json['at'] as String? ?? '',
     label: json['label'] as String? ?? '',
-    requires: json['requires'] as String?,
+    requires: _flags(json['requires']),
+    forbids: _flags(json['forbids']),
   );
 }
 
