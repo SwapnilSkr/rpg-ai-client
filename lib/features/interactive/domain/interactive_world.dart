@@ -610,3 +610,196 @@ class WorldSpoken {
     },
   );
 }
+
+/// One side of a Verdict fought on the sand.
+///
+/// [characterId] is set only where the fighter is also someone the player can
+/// meet and talk to, so the person on the sand and the person in the room are
+/// known to be the same. [portraitUrl] may be null: the player has no painted
+/// face, and neither does a champion hired for one afternoon.
+@immutable
+class WorldDuelFighter {
+  const WorldDuelFighter({
+    required this.side,
+    required this.characterId,
+    required this.name,
+    required this.role,
+    required this.isPlayer,
+    required this.portraitUrl,
+    required this.vigour,
+  });
+
+  final String side;
+  final String? characterId;
+  final String name;
+  final String role;
+  final bool isPlayer;
+  final String? portraitUrl;
+
+  /// What they can take before it is over. Never shown as a number.
+  final int vigour;
+
+  factory WorldDuelFighter.fromJson(Map<String, dynamic> json) =>
+      WorldDuelFighter(
+        side: json['side'] as String? ?? '',
+        characterId: switch (json['character_id']) {
+          final String id when id.isNotEmpty => id,
+          _ => null,
+        },
+        name: json['name'] as String? ?? '',
+        role: json['role'] as String? ?? '',
+        isPlayer: json['is_player'] == true,
+        portraitUrl: switch (json['portrait_url']) {
+          final String url when url.isNotEmpty => url,
+          _ => null,
+        },
+        vigour: (json['vigour'] as num?)?.round() ?? 0,
+      );
+}
+
+/// One exchange, already staged. The client renders it and decides nothing:
+/// who acts, what it costs and where the bars stand afterwards all arrive
+/// settled, because they are what the rest of the story is written against.
+@immutable
+class WorldDuelBeat {
+  const WorldDuelBeat({
+    required this.actor,
+    required this.actorName,
+    required this.action,
+    required this.said,
+    required this.toll,
+    required this.portraitUrl,
+    required this.challengerVigour,
+    required this.defenderVigour,
+    required this.decisive,
+  });
+
+  final String actor;
+  final String actorName;
+  final String action;
+
+  /// Words spoken aloud mid-fight, where the author wrote any. Most exchanges
+  /// are silent and a bubble on every one of them would be chatter.
+  final String? said;
+  final int toll;
+  final String? portraitUrl;
+  final int challengerVigour;
+  final int defenderVigour;
+
+  /// The exchange the Verdict turns on. Exactly one carries it.
+  final bool decisive;
+
+  factory WorldDuelBeat.fromJson(Map<String, dynamic> json) => WorldDuelBeat(
+    actor: json['actor'] as String? ?? '',
+    actorName: json['actor_name'] as String? ?? '',
+    action: json['action'] as String? ?? '',
+    said: switch (json['said']) {
+      final String line when line.trim().isNotEmpty => line,
+      _ => null,
+    },
+    toll: (json['toll'] as num?)?.round() ?? 0,
+    portraitUrl: switch (json['portrait_url']) {
+      final String url when url.isNotEmpty => url,
+      _ => null,
+    },
+    challengerVigour: (json['challenger_vigour'] as num?)?.round() ?? 0,
+    defenderVigour: (json['defender_vigour'] as num?)?.round() ?? 0,
+    decisive: json['decisive'] == true,
+  );
+}
+
+/// How the Verdict ended, and what it cost. Read out when the fight is over.
+@immutable
+class WorldDuelOutcome {
+  const WorldDuelOutcome({
+    required this.winner,
+    required this.victorName,
+    required this.fallenName,
+    required this.verdict,
+    required this.cost,
+    required this.fatal,
+  });
+
+  final String winner;
+  final String victorName;
+  final String fallenName;
+  final String verdict;
+  final String cost;
+  final bool fatal;
+
+  factory WorldDuelOutcome.fromJson(Map<String, dynamic> json) =>
+      WorldDuelOutcome(
+        winner: json['winner'] as String? ?? '',
+        victorName: json['victor_name'] as String? ?? '',
+        fallenName: json['fallen_name'] as String? ?? '',
+        verdict: json['verdict'] as String? ?? '',
+        cost: json['cost'] as String? ?? '',
+        fatal: json['fatal'] == true,
+      );
+}
+
+/// A fight that makes law, arriving with the turn that called for it.
+///
+/// It is present only on the turn the fight happens, and it is a rendering of
+/// something already decided — the world has already written down who won by
+/// the time this is drawn. Nothing here may be recomputed, skipped forward or
+/// resolved differently on the device.
+@immutable
+class WorldDuel {
+  const WorldDuel({
+    required this.id,
+    required this.at,
+    required this.question,
+    required this.herald,
+    required this.vigour,
+    required this.challenger,
+    required this.defender,
+    required this.beats,
+    required this.outcome,
+  });
+
+  final String id;
+  final String at;
+
+  /// The matter being settled, read to the tiers before the first blow.
+  final String question;
+  final String herald;
+  final int vigour;
+  final WorldDuelFighter challenger;
+  final WorldDuelFighter defender;
+  final List<WorldDuelBeat> beats;
+  final WorldDuelOutcome outcome;
+
+  WorldDuelFighter fighter(String side) =>
+      side == 'challenger' ? challenger : defender;
+
+  /// A fight with no exchanges is a title card, and a turn that carries a
+  /// half-formed one is better rendered as the choice it already was.
+  static WorldDuel? tryFrom(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    final challenger = json['challenger'];
+    final defender = json['defender'];
+    final outcome = json['outcome'];
+    if (challenger is! Map || defender is! Map || outcome is! Map) return null;
+    final beats = (json['beats'] as List? ?? const [])
+        .whereType<Map>()
+        .map((beat) => WorldDuelBeat.fromJson(Map<String, dynamic>.from(beat)))
+        .where((beat) => beat.action.trim().isNotEmpty)
+        .toList();
+    if (beats.isEmpty) return null;
+    return WorldDuel(
+      id: json['id'] as String? ?? '',
+      at: json['at'] as String? ?? '',
+      question: json['question'] as String? ?? '',
+      herald: json['herald'] as String? ?? '',
+      vigour: (json['vigour'] as num?)?.round() ?? 100,
+      challenger: WorldDuelFighter.fromJson(
+        Map<String, dynamic>.from(challenger),
+      ),
+      defender: WorldDuelFighter.fromJson(Map<String, dynamic>.from(defender)),
+      beats: beats,
+      outcome: WorldDuelOutcome.fromJson(Map<String, dynamic>.from(outcome)),
+    );
+  }
+}

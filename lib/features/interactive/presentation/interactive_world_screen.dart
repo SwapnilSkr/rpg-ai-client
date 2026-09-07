@@ -7,6 +7,7 @@ import '../data/interactive_world_repository.dart';
 import '../domain/interactive_world.dart';
 import 'travel_transition.dart';
 import 'world_characters.dart';
+import 'world_duel.dart';
 import 'world_map_view.dart';
 
 /// An interactive world — a terrain plate with placed markers, not a chat UI
@@ -197,10 +198,15 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
         said: said,
       );
       if (!mounted) return false;
+      // Read off the payload BEFORE it is applied, because applying it is what
+      // moves the player on: by the time the room has changed, the fight that
+      // changed it is no longer the turn we are holding.
+      final fought = WorldDuel.tryFrom(payload['duel']);
       setState(() {
         _apply(payload);
         _acting = false;
       });
+      if (fought != null) await _watch(fought);
       return true;
     } catch (error) {
       if (!mounted) return false;
@@ -210,6 +216,25 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
       _notice(_reasonFrom(error));
       return false;
     }
+  }
+
+  /// The fight a choice was settled by.
+  ///
+  /// Watched AFTER the turn has been applied and never before: the Verdict is
+  /// already law, so a player who backs out of the screen, kills the app or
+  /// never sees a single exchange still lives in the duchy it decided. This
+  /// only shows them what happened.
+  Future<void> _watch(WorldDuel duel) async {
+    final backdrop = _world?.urlFor(_world?.byId(duel.at)?.sceneAssetId);
+    await Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        opaque: true,
+        transitionDuration: const Duration(milliseconds: 420),
+        pageBuilder: (_, _, _) => DuelStage(duel: duel, backdropUrl: backdrop),
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+    );
   }
 
   WorldPresence? get _addressing {
