@@ -1033,7 +1033,7 @@ class _PlayViewState extends State<_PlayView> {
                   ),
                 ),
                 subtitle: Text(
-                  'Copy this AI turn to the clipboard.',
+                  'Copy this turn to the clipboard.',
                   style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
                 ),
                 onTap: () {
@@ -1064,7 +1064,7 @@ class _PlayViewState extends State<_PlayView> {
                   ),
                 ),
                 subtitle: Text(
-                  'Rewrite this AI turn and re-curate its memories.',
+                  'Rewrite this turn, and what it left in memory.',
                   style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
                 ),
                 onTap: () {
@@ -1113,7 +1113,7 @@ class _PlayViewState extends State<_PlayView> {
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: EverloreTheme.void2,
         title: Text(
-          'Edit AI response',
+          'Edit this turn',
           style: EverloreTheme.serifDisplay(
             size: 18,
             color: EverloreTheme.parchment,

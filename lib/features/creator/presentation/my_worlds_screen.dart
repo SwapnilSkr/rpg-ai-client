@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_trigger.dart';
 
@@ -13,6 +15,7 @@ import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../core/errors/user_message.dart';
 import '../../interactive/data/interactive_world_repository.dart';
+import '../../interactive/domain/interactive_world.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
@@ -21,6 +24,7 @@ import '../../../shared/widgets/neu.dart';
 import '../../../shared/widgets/everlore_empty_state.dart';
 import '../../../shared/widgets/realm_backdrop.dart';
 import '../../../shared/widgets/everlore_notice.dart';
+import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../app/layout/responsive.dart';
 
 class MyWorldsScreen extends StatelessWidget {
@@ -491,13 +495,19 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
   }
 }
 
-/// A permanent entry point for the local-first RPG prototype. It lives above
-/// account-gated creator content so a player can test it without publishing a
-/// world or changing their membership.
+enum _GateType { unauth, upgrade }
+
+/// The entrances to the walkable worlds this player may enter.
 ///
-/// Resolves the player's save before opening the map: without an id this
-/// route is an authoring preview, which is how play used to land with
-/// nothing persisting.
+/// One world used to be written in here by hand — its title, its blurb and
+/// its key — so a second walkable world would have been invisible until
+/// somebody remembered to add another card, and the copy on it described the
+/// format rather than the world. It is asked for now.
+///
+/// The list is asked for on behalf of a player who may be entitled to none of
+/// them, and offering none is an ordinary answer: the section simply is not
+/// there. Only worlds the player can actually begin are returned, so an
+/// entrance here never refuses the moment it is taken.
 class _InteractivePlaythroughLink extends StatefulWidget {
   const _InteractivePlaythroughLink();
 
@@ -506,13 +516,58 @@ class _InteractivePlaythroughLink extends StatefulWidget {
       _InteractivePlaythroughLinkState();
 }
 
-class _InteractivePlaythroughLinkState extends State<_InteractivePlaythroughLink> {
-  static const _worldKey = 'iron-verdict';
+class _InteractivePlaythroughLinkState
+    extends State<_InteractivePlaythroughLink> {
   static const _repository = InteractiveWorldRepository();
 
+  List<InteractiveWorldEntrance>? _worlds;
   bool _opening = false;
 
-  Future<void> _openForPlay() async {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    List<InteractiveWorldEntrance> worlds;
+    try {
+      worlds = await _repository.listPlayable();
+    } catch (_) {
+      // A world nobody could fetch is not an error worth a notice on a screen
+      // the player came to for something else. They are shown no entrance,
+      // which is what they would see if there were none.
+      worlds = const [];
+    }
+    if (!mounted) return;
+    // Held until the paintings are ready, so a card does not arrive as an
+    // empty frame and fill in underneath the player's thumb.
+    await _warmCovers(worlds);
+    if (!mounted) return;
+    setState(() => _worlds = worlds);
+  }
+
+  /// Bounded on purpose: one unreachable painting must not keep every
+  /// entrance off the screen, and the card draws without a face perfectly
+  /// well.
+  Future<void> _warmCovers(List<InteractiveWorldEntrance> worlds) async {
+    final urls = worlds.map((w) => w.coverUrl).whereType<String>();
+    if (urls.isEmpty) return;
+    await Future.any([
+      Future.wait(
+        urls.map(
+          (url) => precacheImage(
+            CachedNetworkImageProvider(url),
+            context,
+            onError: (_, _) {},
+          ),
+        ),
+      ),
+      Future<void>.delayed(const Duration(milliseconds: 1800)),
+    ]);
+  }
+
+  Future<void> _openForPlay(InteractiveWorldEntrance world) async {
     if (_opening) return;
     _opening = true;
     try {
@@ -526,7 +581,7 @@ class _InteractivePlaythroughLinkState extends State<_InteractivePlaythroughLink
       final instanceId = await showEverloreSessionLoading<String>(
         context,
         message: 'Opening the gate',
-        task: () => _repository.resolveInstance(_worldKey),
+        task: () => _repository.resolveInstance(world.worldKey),
       );
       if (!mounted) return;
       if (instanceId == null || instanceId.isEmpty) {
@@ -537,7 +592,9 @@ class _InteractivePlaythroughLinkState extends State<_InteractivePlaythroughLink
         );
         return;
       }
-      context.push('/interactive/$_worldKey/lab?instanceId=$instanceId');
+      context.push(
+        '/interactive/${world.worldKey}/lab?instanceId=$instanceId',
+      );
     } catch (error) {
       if (!mounted) return;
       showEverloreNotice(
@@ -552,69 +609,91 @@ class _InteractivePlaythroughLinkState extends State<_InteractivePlaythroughLink
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Semantics(
-        button: true,
-        label: 'Explore The Iron Verdict interactive world',
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => unawaited(_openForPlay()),
-            child: Ink(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: LinearGradient(
-                  colors: [
-                    EverloreTheme.ember.withValues(alpha: 0.26),
-                    EverloreTheme.void3.withValues(alpha: 0.94),
-                  ],
-                ),
-                border: Border.all(
-                  color: EverloreTheme.goldDim.withValues(alpha: 0.42),
-                ),
+    final worlds = _worlds;
+    // Nothing is drawn while the answer is unknown. A placeholder card that
+    // resolves to no worlds would be an entrance that vanishes.
+    if (worlds == null || worlds.isEmpty) return const SizedBox.shrink();
+    return Column(
+      children: [
+        for (final world in worlds)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: _WorldEntranceCard(
+              world: world,
+              onTap: () => unawaited(_openForPlay(world)),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One world's entrance: its own painting, its own name, its own invitation.
+class _WorldEntranceCard extends StatelessWidget {
+  const _WorldEntranceCard({required this.world, required this.onTap});
+
+  final InteractiveWorldEntrance world;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Enter ${world.title}',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Ink(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                colors: [
+                  EverloreTheme.ember.withValues(alpha: 0.26),
+                  EverloreTheme.void3.withValues(alpha: 0.94),
+                ],
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: EverloreTheme.gold.withValues(alpha: 0.14),
-                    ),
-                    child: const Icon(
-                      Icons.sports_martial_arts_rounded,
-                      color: EverloreTheme.gold,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'THE IRON VERDICT',
-                          style: EverloreTheme.ui(
-                            size: 12,
-                            color: EverloreTheme.gold,
-                            weight: FontWeight.w800,
-                          ),
+              border: Border.all(
+                color: EverloreTheme.goldDim.withValues(alpha: 0.42),
+              ),
+            ),
+            child: Row(
+              children: [
+                _Cover(world: world),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        world.title.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: EverloreTheme.ui(
+                          size: 12,
+                          color: EverloreTheme.gold,
+                          weight: FontWeight.w800,
                         ),
+                      ),
+                      if (world.chapterTitle.isNotEmpty) ...[
                         const SizedBox(height: 3),
                         Text(
-                          'Explore the interactive world',
+                          world.chapterTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: EverloreTheme.ui(
                             size: 14,
                             color: EverloreTheme.parchment,
                             weight: FontWeight.w700,
                           ),
                         ),
+                      ],
+                      if (world.blurb != null) ...[
                         const SizedBox(height: 2),
                         Text(
-                          'A living map, places that unlock, and scenes shaped by your choices.',
+                          world.blurb!,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: EverloreTheme.ui(
@@ -623,15 +702,15 @@ class _InteractivePlaythroughLinkState extends State<_InteractivePlaythroughLink
                           ),
                         ),
                       ],
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  const Icon(
-                    Icons.arrow_forward_rounded,
-                    color: EverloreTheme.gold,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.arrow_forward_rounded,
+                  color: EverloreTheme.gold,
+                ),
+              ],
             ),
           ),
         ),
@@ -640,7 +719,59 @@ class _InteractivePlaythroughLinkState extends State<_InteractivePlaythroughLink
   }
 }
 
-enum _GateType { unauth, upgrade }
+/// The world's opening painting, cropped to a plate.
+///
+/// A world with no published painting keeps its shape on the card rather than
+/// collapsing the row, so an unpainted world does not read as a broken one.
+class _Cover extends StatelessWidget {
+  const _Cover({required this.world});
+
+  final InteractiveWorldEntrance world;
+
+  @override
+  Widget build(BuildContext context) {
+    const size = 48.0;
+    final url = world.coverUrl;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: url == null
+            ? DecoratedBox(
+                decoration: BoxDecoration(
+                  color: EverloreTheme.gold.withValues(alpha: 0.14),
+                ),
+                child: const Icon(
+                  Icons.travel_explore_rounded,
+                  color: EverloreTheme.gold,
+                  size: 22,
+                ),
+              )
+            : EverloreNetworkImage(
+                imageUrl: url,
+                fit: BoxFit.cover,
+                semanticLabel: world.title,
+                memCacheWidth:
+                    (size * MediaQuery.devicePixelRatioOf(context)).round(),
+                placeholder: ColoredBox(
+                  color: EverloreTheme.void4.withValues(alpha: 0.6),
+                ),
+                errorWidget: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: EverloreTheme.gold.withValues(alpha: 0.14),
+                  ),
+                  child: const Icon(
+                    Icons.travel_explore_rounded,
+                    color: EverloreTheme.gold,
+                    size: 22,
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}
 
 class _UnauthGate extends StatelessWidget {
   @override
@@ -779,8 +910,8 @@ class _UpgradeGate extends StatelessWidget {
                 ),
                 _UpgradeFeature(
                   icon: Icons.psychology_alt,
-                  title: 'Custom AI Personalities',
-                  subtitle: 'Define the Oracle\'s Voice and soul',
+                  title: 'Custom Voices',
+                  subtitle: 'Define the Oracle\'s voice and soul',
                 ),
                 _UpgradeFeature(
                   icon: Icons.bar_chart,

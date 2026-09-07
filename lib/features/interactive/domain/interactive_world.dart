@@ -803,3 +803,45 @@ class WorldDuel {
     );
   }
 }
+
+/// A walkable world as it is offered, before the player has stepped into it.
+///
+/// Everything drawn on its entrance comes from here. Nothing about a world is
+/// written into the client: naming one by hand is how a second walkable world
+/// would have stayed invisible until somebody remembered to add a card for it.
+@immutable
+class InteractiveWorldEntrance {
+  const InteractiveWorldEntrance({
+    required this.worldKey,
+    required this.title,
+    required this.chapterTitle,
+    required this.blurb,
+    required this.coverUrl,
+  });
+
+  final String worldKey;
+  final String title;
+  final String chapterTitle;
+
+  /// One authored line of invitation. Null where the world has none, which is
+  /// a quieter card rather than a placeholder sentence about the format.
+  final String? blurb;
+
+  /// The world's own opening painting. Null renders the card without a face.
+  final String? coverUrl;
+
+  factory InteractiveWorldEntrance.fromJson(Map<String, dynamic> json) =>
+      InteractiveWorldEntrance(
+        worldKey: json['world_key'] as String? ?? '',
+        title: json['title'] as String? ?? '',
+        chapterTitle: json['chapter_title'] as String? ?? '',
+        blurb: switch (json['blurb']) {
+          final String line when line.trim().isNotEmpty => line,
+          _ => null,
+        },
+        coverUrl: switch (json['cover_url']) {
+          final String url when url.isNotEmpty => url,
+          _ => null,
+        },
+      );
+}

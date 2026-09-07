@@ -553,9 +553,9 @@ String _scopeDescriptionFor(WorldTemplate template) {
     return 'A focused character-first story. Their backstory can naturally bring supporting characters and scenes into play.';
   }
   if (template.isSentient) {
-    return 'A complete RPG setting guided by a lead AI character, with room for lore, cast, and scene threads.';
+    return 'A complete RPG setting guided by a lead character, with room for lore, cast, and scene threads.';
   }
-  return 'A complete RPG setting narrated by a neutral AI Game Master.';
+  return 'A complete RPG setting narrated by a neutral Game Master.';
 }
 
 class _SectionHeader extends StatelessWidget {

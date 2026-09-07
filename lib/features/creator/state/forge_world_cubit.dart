@@ -453,9 +453,9 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
 
   String _autofillErr(Object e) {
     if (e is ApiException) {
-      if (e.statusCode == 403) return 'AI drafting needs Premium or Creator.';
+      if (e.statusCode == 403) return 'Drafting a world for you needs Premium or Creator.';
       if (e.statusCode == 429) {
-        return 'Too many AI drafts — try again shortly.';
+        return 'Too many drafts — try again shortly.';
       }
       return e.message;
     }
