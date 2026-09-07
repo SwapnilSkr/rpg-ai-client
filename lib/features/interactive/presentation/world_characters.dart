@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/nexus_theme.dart';
@@ -189,11 +191,11 @@ class _StandingFigure extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: EverloreTheme.ui(
+                    size: 12,
                     color: EverloreTheme.parchment,
-                    fontSize: 12,
                     height: 1.2,
-                    fontWeight: FontWeight.w600,
+                    weight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -516,7 +518,21 @@ class _ParchmentStage extends StatelessWidget {
     final size = MediaQuery.sizeOf(context);
     final pad = MediaQuery.paddingOf(context);
     final keys = MediaQuery.viewInsetsOf(context).bottom;
-    final panelH = (size.height * 0.26).clamp(168.0, 252.0);
+    final scaler = MediaQuery.textScalerOf(context);
+    // Eighteen-point prose plus the say control used to clip inside a
+    // clamp that never asked the reader's scaler. The panel grows with
+    // the type, and when the field opens it cannot be taller than the
+    // space above the keys.
+    final prose = scaler.scale(18) * 1.55;
+    final field = scaler.scale(17) * 1.45;
+    final needed = composing
+        ? 22 + field * 4 + 24 + 10
+        : 22 + prose * 3 + 48 + 10;
+    final floor = composing ? 148.0 : 168.0;
+    final ceiling = math.max(floor, size.height - keys - 88);
+    final panelH = math
+        .max(size.height * 0.26, needed)
+        .clamp(floor, math.min(ceiling, size.height * 0.48));
     return Padding(
       padding: EdgeInsets.only(bottom: keys > 0 ? keys : 0),
       child: SizedBox(
@@ -835,69 +851,85 @@ class _SayField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: TextField(
-            controller: said,
-            focusNode: focus,
-            maxLength: _speakLimit,
-            minLines: 1,
-            maxLines: 4,
-            textCapitalization: TextCapitalization.sentences,
-            style: EverloreTheme.aiText.copyWith(
-              color: const Color(0xFF2A2118),
-              fontSize: 17,
-              height: 1.45,
-            ),
-            cursorColor: EverloreTheme.goldDeep,
-            decoration: InputDecoration(
-              hintText: 'What do you say?',
-              hintStyle: EverloreTheme.aiText.copyWith(
-                color: const Color(0x992A2118),
-                fontSize: 17,
-              ),
-              counterText: '',
-              filled: true,
-              fillColor: const Color(0x33FFFFFF),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0x66C8A96A)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0x66C8A96A)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: EverloreTheme.goldDeep,
-                  width: 1.4,
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Four lines at the reader's scale will not fit once the keys
+        // are up. Cap what is shown to the height actually left, so
+        // the field scrolls instead of clipping the Speak control.
+        final line = scaler.scale(17) * 1.45;
+        final fit = constraints.hasBoundedHeight
+            ? ((constraints.maxHeight - 20) / line).floor().clamp(1, 4)
+            : 4;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: said,
+                focusNode: focus,
+                maxLength: _speakLimit,
+                minLines: 1,
+                maxLines: fit,
+                textCapitalization: TextCapitalization.sentences,
+                style: EverloreTheme.aiText.copyWith(
+                  color: const Color(0xFF2A2118),
+                  fontSize: 17,
+                  height: 1.45,
                 ),
+                cursorColor: EverloreTheme.goldDeep,
+                decoration: InputDecoration(
+                  hintText: 'What do you say?',
+                  hintStyle: EverloreTheme.aiText.copyWith(
+                    color: const Color(0x992A2118),
+                    fontSize: 17,
+                  ),
+                  counterText: '',
+                  filled: true,
+                  fillColor: const Color(0x33FFFFFF),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: EverloreTheme.goldDim.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: EverloreTheme.goldDim.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: EverloreTheme.goldDeep,
+                      width: 1.4,
+                    ),
+                  ),
+                ),
+                onSubmitted: (_) => onSubmit(),
               ),
             ),
-            onSubmitted: (_) => onSubmit(),
-          ),
-        ),
-        const SizedBox(width: 8),
-        FilledButton(
-          onPressed: canSpeak ? onSubmit : null,
-          style: FilledButton.styleFrom(
-            backgroundColor: EverloreTheme.goldDeep,
-            foregroundColor: EverloreTheme.goldHot,
-            disabledBackgroundColor: EverloreTheme.goldDeep.withValues(
-              alpha: 0.35,
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: canSpeak ? onSubmit : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: EverloreTheme.goldDeep,
+                foregroundColor: EverloreTheme.goldHot,
+                disabledBackgroundColor: EverloreTheme.goldDeep.withValues(
+                  alpha: 0.35,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              child: const Text('Speak'),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          ),
-          child: const Text('Speak'),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }
@@ -931,16 +963,16 @@ class _Waiting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(top: 6),
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
       child: Row(
         children: [
-          WorldStill(size: 14, color: Color(0xCC6E5A2E)),
-          SizedBox(width: 10),
+          const WorldStill(size: 14, color: Color(0xCC6E5A2E)),
+          const SizedBox(width: 10),
           Text(
             'They hear you.',
-            style: TextStyle(
-              color: Color(0xCC2A2118),
+            style: EverloreTheme.aiText.copyWith(
+              color: const Color(0xCC2A2118),
               fontSize: 14,
               fontStyle: FontStyle.italic,
             ),

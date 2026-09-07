@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
 import '../domain/interactive_world.dart';
 class _FogPainter extends CustomPainter {
@@ -310,6 +311,7 @@ class _WorldMapViewState extends State<WorldMapView> {
                         selected: location.id == widget.selectedId,
                         here: location.id == widget.state.currentLocationId,
                         title: location.title,
+                        onSelect: () => widget.onSelect(location),
                       ),
                     Positioned.fill(
                       child: IgnorePointer(
@@ -367,6 +369,7 @@ class _Landmark extends StatelessWidget {
     required this.selected,
     required this.here,
     required this.title,
+    required this.onSelect,
   });
 
   final TransformationController view;
@@ -375,6 +378,7 @@ class _Landmark extends StatelessWidget {
   final bool selected;
   final bool here;
   final String title;
+  final VoidCallback onSelect;
 
   /// A place pinned on a painting that already shows it.
   ///
@@ -384,51 +388,87 @@ class _Landmark extends StatelessWidget {
   Widget _buildMarker() {
     return Positioned.fromRect(
       rect: Rect.fromCenter(center: rect.center, width: 0, height: 0),
-      child: IgnorePointer(
-        child: OverflowBox(
-          minWidth: 0,
-          minHeight: 0,
-          maxWidth: double.infinity,
-          maxHeight: double.infinity,
-          child: ValueListenableBuilder<Matrix4>(
-            valueListenable: view,
-            builder: (context, m, _) {
-              final zoom = m.getMaxScaleOnAxis();
-              return Transform.scale(
-                scale: zoom <= 0 ? 1 : 1 / zoom,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedScale(
-                      scale: selected ? 1.18 : 1,
-                      duration: const Duration(milliseconds: 180),
-                      child: _pin(),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      title,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.visible,
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.1,
-                        letterSpacing: .3,
-                        color: selected
-                            ? const Color(0xFFF6E9CC)
-                            : const Color(0xDDE6D6B4),
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                        shadows: const [
-                          Shadow(color: Color(0xF2000000), blurRadius: 5),
-                          Shadow(color: Color(0xB3000000), blurRadius: 14),
-                        ],
+      child: OverflowBox(
+        minWidth: 0,
+        minHeight: 0,
+        maxWidth: double.infinity,
+        maxHeight: double.infinity,
+        child: ValueListenableBuilder<Matrix4>(
+          valueListenable: view,
+          builder: (context, m, _) {
+            final zoom = m.getMaxScaleOnAxis();
+            final screen = MatrixUtils.transformPoint(m, rect.center);
+            final scaler = MediaQuery.textScalerOf(context);
+            // A landmark under the title used to print its name through
+            // the world's own. The letters are withheld while they would
+            // sit in that band; the pin stays, and the card still names
+            // the place.
+            final chromeTop =
+                12 +
+                (scaler.scale(12) + scaler.scale(20) + 6).clamp(48.0, 88.0);
+            final labelClear = screen.dy + 18 >= chromeTop;
+            return Transform.scale(
+              scale: zoom <= 0 ? 1 : 1 / zoom,
+              child: Semantics(
+                button: true,
+                selected: selected,
+                // The pins are hit-tested by coordinate so a tap lands on
+                // the painting. Without a node per marker a reader hears
+                // an empty landscape.
+                label: here ? '$title. You stand here.' : title,
+                onTap: onSelect,
+                child: IgnorePointer(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedScale(
+                        scale: selected ? 1.18 : 1,
+                        duration: const Duration(milliseconds: 180),
+                        child: _pin(),
                       ),
-                    ),
-                  ],
+                      if (labelClear) ...[
+                        const SizedBox(height: 5),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 120),
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            // At a raised text scale a visible overflow
+                            // painted through the next place's name, so
+                            // two landmarks read as one.
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: EverloreTheme.ui(
+                              size: 13,
+                              height: 1.1,
+                              spacing: .3,
+                              color: selected
+                                  ? const Color(0xFFF6E9CC)
+                                  : const Color(0xDDE6D6B4),
+                              weight: selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ).copyWith(
+                              shadows: const [
+                                Shadow(
+                                  color: Color(0xF2000000),
+                                  blurRadius: 5,
+                                ),
+                                Shadow(
+                                  color: Color(0xB3000000),
+                                  blurRadius: 14,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       ),
     );

@@ -633,9 +633,13 @@ class _BeatPanel extends StatelessWidget {
             children: [
               TextButton(
                 onPressed: onSkip,
+                // Thirty-two dips used to be the whole target, and a
+                // thumb missed it beside the chevron. Forty-four is
+                // the floor.
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  minimumSize: const Size(0, 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(44, 44),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: const Color(0xFF6E5A2E),
                 ),
                 child: Text(

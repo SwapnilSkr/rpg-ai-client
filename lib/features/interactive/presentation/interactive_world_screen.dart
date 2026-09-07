@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/nexus_theme.dart';
+import '../../../shared/widgets/everlore_empty_state.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
+import '../../../shared/widgets/everlore_notice.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../data/interactive_world_repository.dart';
 import '../domain/interactive_world.dart';
@@ -203,7 +205,9 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
       // The road was held for a walk this glimpse cannot take. Leaving
       // the lock set would freeze every later action on a preview.
       if (alreadyActing && mounted) setState(() => _acting = false);
-      _notice('This glimpse has no memory of you. Enter from My Worlds to play.');
+      _notice(
+        'This glimpse has no memory of you. Come as one already walking these lands.',
+      );
       return false;
     }
     // The road is already held while the destination is drawn. Dropping
@@ -239,7 +243,15 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
       setState(() => _acting = false);
       // The server owns the refusal and its wording; surface it rather than
       // guessing a reason the fiction has not given.
-      _notice(_reasonFrom(error));
+      final reason = _reasonFrom(error);
+      _notice(
+        reason,
+        // A refusal the world worded is the fiction speaking. Only a
+        // message that never arrived is an error.
+        tone: reason == _unreachable
+            ? NoticeTone.error
+            : NoticeTone.info,
+      );
       return false;
     }
   }
@@ -349,14 +361,14 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     final match = RegExp(
       r'"message"\s*:\s*"([^"]+)"',
     ).firstMatch(error.toString());
-    return match?.group(1) ?? 'That did not reach the world. Try it again.';
+    return match?.group(1) ?? _unreachable;
   }
 
-  void _notice(String message) {
+  static const _unreachable = 'That did not reach the world. Try it again.';
+
+  void _notice(String message, {NoticeTone tone = NoticeTone.info}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    showEverloreNotice(context, message, tone: tone);
   }
 
   Future<void> _travel(WorldLocation destination) async {
@@ -441,7 +453,11 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
         child: _loading
             ? Center(child: EverloreSessionLoader(message: _waitingLine))
             : world == null
-            ? _Failure(message: _error ?? 'This world is not published yet.', onRetry: _load)
+            ? _Failure(
+                title: 'The way is closed',
+                message: _error ?? 'The way in is not open.',
+                onRetry: _load,
+              )
             : _view == _View.map
             ? _buildMap(world)
             : _buildScene(world),
@@ -470,6 +486,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                 onPressed: () => Navigator.of(context).maybePop(),
                 icon: const Icon(Icons.arrow_back_rounded),
                 color: EverloreTheme.parchment,
+                tooltip: 'Back',
               ),
               Expanded(
                 child: _Title(
@@ -511,9 +528,11 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     final location = _here;
     if (location == null || !location.isEnterable) {
       return _Failure(
+        title: 'No door stands open',
         message: 'There is nothing to enter here.',
         onRetry: () => setState(() => _view = _View.map),
         label: 'Back to the map',
+        icon: Icons.map_outlined,
       );
     }
     final url = world.urlFor(location.sceneAssetId);
@@ -665,7 +684,9 @@ class _SelectionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xE6100C0A),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0x33C8A96A)),
+        border: Border.all(
+          color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -693,14 +714,7 @@ class _SelectionCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
-          Text(
-            location.title,
-            style: const TextStyle(
-              color: EverloreTheme.parchment,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(location.title, style: EverloreTheme.cardTitle),
           const SizedBox(height: 6),
           Text(
             // A sealed place says what it wants. A wall the player understands
@@ -708,21 +722,19 @@ class _SelectionCard extends StatelessWidget {
             sealed
                 ? (location.sealedReason ?? 'This place is closed to you.')
                 : location.description,
-            style: const TextStyle(color: Color(0xB3EFE3CC), fontSize: 13, height: 1.35),
-          ),
-          const SizedBox(height: 14),
-          if (isHere && location.isEnterable)
-            _Action(label: 'Enter', busy: busy, onTap: onEnter)
-          else if (!sealed)
-            _Action(label: 'Travel here', busy: busy, onTap: onTravel)
-          else
-            const Row(
-              children: [
-                Icon(Icons.lock_outline_rounded, size: 15, color: Color(0x80C8A96A)),
-                SizedBox(width: 6),
-                Text('Sealed', style: TextStyle(color: Color(0x80C8A96A), fontSize: 12)),
-              ],
+            style: EverloreTheme.aiText.copyWith(
+              color: EverloreTheme.parchment.withValues(alpha: 0.7),
+              fontSize: 15,
+              height: 1.45,
             ),
+          ),
+          if (isHere && location.isEnterable) ...[
+            const SizedBox(height: 14),
+            _Action(label: 'Enter', busy: busy, onTap: onEnter),
+          ] else if (!sealed) ...[
+            const SizedBox(height: 14),
+            _Action(label: 'Travel here', busy: busy, onTap: onTravel),
+          ],
         ],
       ),
     );
@@ -740,9 +752,34 @@ class _Action extends StatelessWidget {
     width: double.infinity,
     child: FilledButton(
       onPressed: busy ? null : onTap,
-      child: busy
-          ? const WorldStill(size: 16, color: EverloreTheme.void0)
-          : Text(label),
+      style: FilledButton.styleFrom(
+        backgroundColor: EverloreTheme.gold,
+        foregroundColor: EverloreTheme.void0,
+        disabledBackgroundColor: EverloreTheme.gold,
+        disabledForegroundColor: EverloreTheme.void0,
+        minimumSize: const Size.fromHeight(54),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (busy) ...[
+            const WorldStill(size: 16, color: EverloreTheme.void0),
+            const SizedBox(width: 10),
+          ],
+          Text(
+            label,
+            style: EverloreTheme.ui(
+              size: 13,
+              color: EverloreTheme.void0,
+              weight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -766,40 +803,50 @@ class _StoryPanel extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
     padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+    // A long scene, or a reader with large text, used to climb the
+    // painting and cover the room. The panel takes at most two thirds
+    // of the screen and scrolls inside that, so the scene behind it
+    // stays visible and the choices are always reachable.
+    constraints: BoxConstraints(
+      maxHeight: MediaQuery.sizeOf(context).height * 0.66,
+    ),
     decoration: BoxDecoration(
       color: const Color(0xE60D0A09),
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: const Color(0x2EC8A96A)),
+      border: Border.all(
+        color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+      ),
     ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          headline,
-          style: const TextStyle(
-            color: EverloreTheme.parchment,
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          body,
-          style: const TextStyle(color: Color(0xB3EFE3CC), fontSize: 14, height: 1.45),
-        ),
-        if (choices.isNotEmpty) const SizedBox(height: 16),
-        for (final choice in choices) ...[
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: busy ? null : () => onChoose(choice.id),
-              child: Text(choice.label),
+    child: SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(headline, style: EverloreTheme.cardTitle),
+          const SizedBox(height: 8),
+          Text(
+            body,
+            style: EverloreTheme.aiText.copyWith(
+              color: EverloreTheme.parchment.withValues(alpha: 0.7),
+              height: 1.5,
             ),
           ),
-          const SizedBox(height: 8),
+          if (choices.isNotEmpty) const SizedBox(height: 16),
+          for (final choice in choices) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: busy ? null : () => onChoose(choice.id),
+                child: Text(
+                  choice.label,
+                  style: EverloreTheme.ui(size: 13, weight: FontWeight.w600),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
         ],
-      ],
+      ),
     ),
   );
 }
@@ -835,47 +882,37 @@ class _PetitionPanel extends StatelessWidget {
     decoration: BoxDecoration(
       color: const Color(0xF20D0A09),
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: const Color(0x5CC8A96A)),
+      border: Border.all(
+        color: EverloreTheme.goldDim.withValues(alpha: 0.42),
+      ),
     ),
     child: SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
+          Text(
             'BROUGHT BEFORE YOU',
-            style: TextStyle(
-              color: Color(0x99C8A96A),
-              fontSize: 10,
-              letterSpacing: 1.6,
-            ),
+            style: EverloreTheme.sectionHeader,
           ),
           const SizedBox(height: 4),
-          Text(
-            petition.title,
-            style: const TextStyle(
-              color: EverloreTheme.parchment,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(petition.title, style: EverloreTheme.cardTitle),
           const SizedBox(height: 14),
           for (final party in petition.parties) ...[
             Text(
               party.name,
-              style: const TextStyle(
-                color: Color(0xE6C8A96A),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+              style: EverloreTheme.ui(
+                size: 13,
+                color: EverloreTheme.gold,
+                weight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 3),
             Text(
               party.claim,
-              style: const TextStyle(
-                color: Color(0xB3EFE3CC),
-                fontSize: 13,
-                height: 1.4,
+              style: EverloreTheme.aiText.copyWith(
+                color: EverloreTheme.parchment.withValues(alpha: 0.7),
+                height: 1.45,
               ),
             ),
             const SizedBox(height: 12),
@@ -886,15 +923,18 @@ class _PetitionPanel extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
               decoration: BoxDecoration(
                 border: Border(
-                  left: BorderSide(color: const Color(0x66C8A96A), width: 2),
+                  left: BorderSide(
+                    color: EverloreTheme.goldDim.withValues(alpha: 0.4),
+                    width: 2,
+                  ),
                 ),
-                color: const Color(0x14C8A96A),
+                color: EverloreTheme.gold.withValues(alpha: 0.08),
               ),
               child: Text(
                 'They quote you: $principle',
-                style: const TextStyle(
-                  color: Color(0xCCEFE3CC),
-                  fontSize: 12,
+                style: EverloreTheme.aiText.copyWith(
+                  color: EverloreTheme.parchment.withValues(alpha: 0.8),
+                  fontSize: 15,
                   height: 1.4,
                   fontStyle: FontStyle.italic,
                 ),
@@ -907,7 +947,11 @@ class _PetitionPanel extends StatelessWidget {
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: busy ? null : () => onRule(resolution.id),
-                child: Text(resolution.label, textAlign: TextAlign.center),
+                child: Text(
+                  resolution.label,
+                  textAlign: TextAlign.center,
+                  style: EverloreTheme.ui(size: 13, weight: FontWeight.w600),
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -923,6 +967,17 @@ class _Title extends StatelessWidget {
   final String subtitle;
   final String title;
 
+  /// A northern plate can be bright sky directly behind the name. The
+  /// shadow holds the letters without dimming the land; without it the
+  /// title vanishes into the painting.
+  static const _overPaint = [
+    Shadow(
+      color: Color(0xCC0A0807),
+      blurRadius: 18,
+      offset: Offset(0, 2),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -930,18 +985,21 @@ class _Title extends StatelessWidget {
     children: [
       Text(
         subtitle,
-        style: const TextStyle(
-          color: Color(0x99C8A96A),
-          fontSize: 10,
-          letterSpacing: 1.6,
-        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: EverloreTheme.sectionHeader.copyWith(shadows: _overPaint),
       ),
-      Text(
-        title,
-        style: const TextStyle(
-          color: EverloreTheme.parchment,
-          fontSize: 19,
-          fontWeight: FontWeight.w600,
+      // A long place name used to walk into the map control. Shrink the
+      // words rather than lose them or cover the icon.
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(
+          title,
+          maxLines: 1,
+          style: EverloreTheme.serifDisplay(size: 19).copyWith(
+            shadows: _overPaint,
+          ),
         ),
       ),
     ],
@@ -950,27 +1008,25 @@ class _Title extends StatelessWidget {
 
 class _Failure extends StatelessWidget {
   const _Failure({
+    required this.title,
     required this.message,
     required this.onRetry,
     this.label = 'Try again',
+    this.icon = Icons.explore_off_outlined,
   });
+  final String title;
   final String message;
   final VoidCallback onRetry;
   final String label;
+  final IconData icon;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Color(0xB3EFE3CC)),
-        ),
-        const SizedBox(height: 14),
-        OutlinedButton(onPressed: onRetry, child: Text(label)),
-      ],
-    ),
+  Widget build(BuildContext context) => EverloreEmptyState(
+    icon: icon,
+    title: title,
+    message: message,
+    actionLabel: label,
+    onAction: onRetry,
+    compact: true,
   );
 }
