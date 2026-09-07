@@ -122,7 +122,7 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
     String? resolutionId,
   }) async {
     if (!_isServerBacked) {
-      _notice('Open this world from your realm to play it.');
+      _notice('This glimpse has no memory of you. Enter from My Worlds to play.');
       return;
     }
     if (_acting) return;
@@ -151,10 +151,19 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
     }
   }
 
+  /// Why the world would not take that action.
+  ///
+  /// Only a refusal the server actually worded is reported as a refusal. When
+  /// the request never got an answer — a dropped connection, a request that
+  /// timed out — the player is told that instead, because the previous
+  /// fallback claimed the road was closed to them and that is a lie the
+  /// fiction never told: the road was open, the message never arrived. It sent
+  /// a play-test hunting a locked choice that was not locked.
   String _reasonFrom(Object error) {
-    final text = error.toString();
-    final match = RegExp(r'"message"\s*:\s*"([^"]+)"').firstMatch(text);
-    return match?.group(1) ?? 'That is not open to you.';
+    final match = RegExp(
+      r'"message"\s*:\s*"([^"]+)"',
+    ).firstMatch(error.toString());
+    return match?.group(1) ?? 'That did not reach the world. Try it again.';
   }
 
   void _notice(String message) {

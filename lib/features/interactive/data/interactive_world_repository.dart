@@ -10,6 +10,20 @@ class InteractiveWorldRepository {
     return Map<String, dynamic>.from(value as Map);
   }
 
+  /// The player's save for this world, created on first walk.
+  ///
+  /// Opening the map without this id is the authoring preview, which is how
+  /// play used to land with nothing persisting.
+  Future<String> resolveInstance(String worldKey) async {
+    final value = await ApiClient.get('/interactive-worlds/$worldKey/instance');
+    final map = Map<String, dynamic>.from(value as Map);
+    final id = map['instance_id']?.toString().trim() ?? '';
+    if (id.isEmpty) {
+      throw ApiException(statusCode: 502, message: 'Unknown error');
+    }
+    return id;
+  }
+
   Future<Map<String, dynamic>> loadInstance({
     required String worldKey,
     required String instanceId,

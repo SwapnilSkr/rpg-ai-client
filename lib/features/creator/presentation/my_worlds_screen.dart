@@ -11,6 +11,8 @@ import '../state/my_worlds_cubit.dart';
 import 'widgets/my_world_card.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
+import '../../../core/errors/user_message.dart';
+import '../../interactive/data/interactive_world_repository.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
@@ -492,8 +494,61 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
 /// A permanent entry point for the local-first RPG prototype. It lives above
 /// account-gated creator content so a player can test it without publishing a
 /// world or changing their membership.
-class _InteractivePlaythroughLink extends StatelessWidget {
+///
+/// Resolves the player's save before opening the map: without an id this
+/// route is an authoring preview, which is how play used to land with
+/// nothing persisting.
+class _InteractivePlaythroughLink extends StatefulWidget {
   const _InteractivePlaythroughLink();
+
+  @override
+  State<_InteractivePlaythroughLink> createState() =>
+      _InteractivePlaythroughLinkState();
+}
+
+class _InteractivePlaythroughLinkState extends State<_InteractivePlaythroughLink> {
+  static const _worldKey = 'iron-verdict';
+  static const _repository = InteractiveWorldRepository();
+
+  bool _opening = false;
+
+  Future<void> _openForPlay() async {
+    if (_opening) return;
+    _opening = true;
+    try {
+      final loggedIn = await AuthService.isLoggedIn();
+      if (!mounted) return;
+      if (!loggedIn) {
+        context.push('/auth');
+        return;
+      }
+
+      final instanceId = await showEverloreSessionLoading<String>(
+        context,
+        message: 'Opening the gate',
+        task: () => _repository.resolveInstance(_worldKey),
+      );
+      if (!mounted) return;
+      if (instanceId == null || instanceId.isEmpty) {
+        showEverloreNotice(
+          context,
+          'The world could not be opened.',
+          tone: NoticeTone.error,
+        );
+        return;
+      }
+      context.push('/interactive/$_worldKey/lab?instanceId=$instanceId');
+    } catch (error) {
+      if (!mounted) return;
+      showEverloreNotice(
+        context,
+        userFacingError(error, fallback: 'The world could not be opened.'),
+        tone: NoticeTone.error,
+      );
+    } finally {
+      _opening = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -506,7 +561,7 @@ class _InteractivePlaythroughLink extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () => context.push('/interactive/iron-verdict/lab'),
+            onTap: () => unawaited(_openForPlay()),
             child: Ink(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(

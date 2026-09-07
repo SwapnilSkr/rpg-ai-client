@@ -193,6 +193,22 @@ class RealmScreen extends StatelessWidget {
                         characters: characters.length,
                       ),
                       const SizedBox(height: 24),
+                      // The key, not the title: matching names is how a map
+                      // save was treated as a chat realm, and a rename would
+                      // silently drop this entrance.
+                      if (template.isInteractiveWorld) ...[
+                        _SectionLabel('EXPLORE THE REALM'),
+                        const SizedBox(height: 10),
+                        _RealmAction(
+                          icon: Icons.map_outlined,
+                          title: 'Enter Aldermere',
+                          subtitle: 'Explore your persistent interactive map, places, and quest paths.',
+                          onTap: () => context.push(
+                            '/interactive/${template.interactiveWorldKey}/lab?instanceId=$instanceId',
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
                       _SectionLabel('ENTER THE TOMES'),
                       const SizedBox(height: 10),
                       GuideAnchor(
@@ -202,16 +218,14 @@ class RealmScreen extends StatelessWidget {
                             _RealmAction(
                               icon: Icons.auto_stories_outlined,
                               title: 'Chronicle overview',
-                              subtitle:
-                                  'Your story so far, current place, and what matters now.',
+                              subtitle: 'Your story so far, current place, and what matters now.',
                               onTap: () =>
                                   context.push('/chronicle/$instanceId'),
                             ),
                             _RealmAction(
                               icon: Icons.timeline_outlined,
                               title: 'Story timeline',
-                              subtitle:
-                                  'Read, revisit, and manage the turns that led here.',
+                              subtitle: 'Read, revisit, and manage the turns that led here.',
                               onTap: () => context.push(
                                 '/chronicle/$instanceId?section=story',
                               ),
@@ -229,8 +243,7 @@ class RealmScreen extends StatelessWidget {
                             _RealmAction(
                               icon: Icons.public_outlined,
                               title: 'World atlas',
-                              subtitle:
-                                  'Places, time, and the shape of the world you have discovered.',
+                              subtitle: 'Places, time, and the shape of the world you have discovered.',
                               onTap: () => context.push(
                                 '/chronicle/$instanceId?section=world',
                               ),

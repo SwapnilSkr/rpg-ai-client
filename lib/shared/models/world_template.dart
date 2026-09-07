@@ -35,6 +35,8 @@ class WorldTemplate {
   final String slug;
   final String description;
   final String kind; // 'world' | 'character'
+  /// Authored key of a walkable map world. Absent on ordinary chat playthroughs.
+  final String? interactiveWorldKey;
   final bool isPublished;
   final bool isSentient;
   final bool isNsfwCapable;
@@ -61,6 +63,7 @@ class WorldTemplate {
     required this.slug,
     required this.description,
     this.kind = 'world',
+    this.interactiveWorldKey,
     this.isPublished = false,
     this.isSentient = false,
     this.isNsfwCapable = false,
@@ -83,6 +86,23 @@ class WorldTemplate {
 
   bool get isCharacter => kind == 'character';
 
+  /// Walkable map world, not a chat playthrough. Derived from the template
+  /// field so a rename cannot hide or invent one.
+  bool get isInteractiveWorld =>
+      interactiveWorldKey != null && interactiveWorldKey!.isNotEmpty;
+
+  /// Same tell as [isInteractiveWorld], for the nested maps the realm list
+  /// carries instead of a [WorldTemplate].
+  static bool isInteractiveJson(Map<String, dynamic>? json) {
+    return _readInteractiveWorldKey(json?['interactive_world_key']) != null;
+  }
+
+  static String? _readInteractiveWorldKey(dynamic value) {
+    if (value is! String) return null;
+    final key = value.trim();
+    return key.isEmpty ? null : key;
+  }
+
   factory WorldTemplate.fromJson(Map<String, dynamic> json) {
     final statsMap = <String, StatDefinition>{};
     if (json['base_stats_template'] is Map) {
@@ -98,6 +118,7 @@ class WorldTemplate {
       slug: json['slug'] ?? '',
       description: json['description'] ?? '',
       kind: (json['kind'] ?? 'world').toString(),
+      interactiveWorldKey: _readInteractiveWorldKey(json['interactive_world_key']),
       isPublished: json['is_published'] ?? false,
       isSentient: json['is_sentient'] ?? false,
       isNsfwCapable: json['is_nsfw_capable'] ?? false,

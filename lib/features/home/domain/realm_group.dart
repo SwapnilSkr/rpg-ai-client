@@ -1,4 +1,5 @@
 import '../../../shared/models/world_instance.dart';
+import '../../../shared/models/world_template.dart';
 
 /// One published world the player has entered — may have several stories in progress.
 class RealmGroup {
@@ -22,6 +23,10 @@ class RealmGroup {
       template?['title'] as String? ??
       latest.template?['title'] as String? ??
       'Untitled Realm';
+
+  bool get isInteractiveWorld =>
+      WorldTemplate.isInteractiveJson(template) ||
+      WorldTemplate.isInteractiveJson(latest.template);
 }
 
 RealmGroup realmGroupFromJson(Map<String, dynamic> json) {
@@ -57,7 +62,7 @@ List<RealmGroup> groupInstancesByRealm(List<WorldInstance> instances) {
       template: stories.first.template,
       stories: stories,
     );
-  }).toList();
+  }).where((group) => !group.isInteractiveWorld).toList();
 
   groups.sort((a, b) {
     final aAt = a.latest.meta.lastActiveAt ?? a.latest.createdAt ?? DateTime(0);

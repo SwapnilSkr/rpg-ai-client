@@ -4,6 +4,7 @@ import '../../../core/auth/auth_service.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/models/realm_play_status.dart';
 import '../../../shared/models/world_instance.dart';
+import '../../../shared/models/world_template.dart';
 import '../domain/realm_group.dart';
 
 class RealmPage {
@@ -166,6 +167,7 @@ class HomeRepository {
         .map(
           (item) => realmGroupFromJson(Map<String, dynamic>.from(item as Map)),
         )
+        .where((group) => !group.isInteractiveWorld)
         .toList();
     return RealmPage(
       realms: realms,
@@ -182,7 +184,10 @@ class HomeRepository {
       '/instances?include_archived=$includeArchived',
     );
     final list = response as List;
-    final instances = list.map((e) => WorldInstance.fromJson(e)).toList();
+    final instances = list
+        .map((e) => WorldInstance.fromJson(e))
+        .where((instance) => !WorldTemplate.isInteractiveJson(instance.template))
+        .toList();
     _instancesCache[includeArchived] = instances;
     return instances;
   }
