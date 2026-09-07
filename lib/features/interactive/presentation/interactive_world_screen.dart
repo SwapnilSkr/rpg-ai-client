@@ -6,34 +6,54 @@ import '../../../app/theme/nexus_theme.dart';
 import '../data/interactive_world_repository.dart';
 import '../domain/interactive_world.dart';
 import 'travel_transition.dart';
+import 'world_characters.dart';
 import 'world_map_view.dart';
 
-/// The Iron Verdict — a terrain plate with placed landmarks, not a chat UI with
-/// a decorative map.
+/// An interactive world — a terrain plate with placed markers, not a chat UI
+/// with a decorative map.
 ///
 /// Everything visible here is authored server data: which places exist, what
 /// the player has heard of, what is sealed and why, and what can be done. The
 /// client renders and predicts; it never decides.
-class IronVerdictWorldScreen extends StatefulWidget {
-  const IronVerdictWorldScreen({super.key, this.instanceId});
+///
+/// The world is named by [worldKey] rather than baked in. The server has
+/// always been world-agnostic — it reads whatever is in its data folder and
+/// every route takes the key as a parameter — and this screen used to hold a
+/// single world's key as a constant, so none of that could reach a player.
+/// Worse, the callers had already begun building the path from real data while
+/// the route still matched one literal segment: the first second world added
+/// would have pushed a path nothing could route, and if it had routed, this
+/// screen would have loaded the wrong world anyway.
+class InteractiveWorldScreen extends StatefulWidget {
+  const InteractiveWorldScreen({
+    super.key,
+    required this.worldKey,
+    this.instanceId,
+  });
+
+  /// Which authored world to open, taken from the route.
+  final String worldKey;
 
   /// A real play instance makes this screen server-backed. Without one it is
   /// the authoring preview: the published world, with no player state.
   final String? instanceId;
 
   @override
-  State<IronVerdictWorldScreen> createState() => _IronVerdictWorldScreenState();
+  State<InteractiveWorldScreen> createState() => _InteractiveWorldScreenState();
 }
 
 enum _View { map, scene }
 
-class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
-  static const _worldKey = 'iron-verdict';
+class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
 
   final _repository = const InteractiveWorldRepository();
   InteractiveWorld? _world;
   InteractiveWorldState _state = const InteractiveWorldState.empty();
   WorldProgression _progression = WorldProgression.empty;
+  List<WorldPresence> _cast = const [];
+  final Map<String, List<VisitLine>> _visit = {};
+  final Set<String> _metHere = {};
+  String? _addressingId;
   _View _view = _View.map;
   String? _selectedId;
   bool _loading = true;
@@ -57,10 +77,10 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
     try {
       final payload = _isServerBacked
           ? await _repository.loadInstance(
-              worldKey: _worldKey,
+              worldKey: widget.worldKey,
               instanceId: widget.instanceId!,
             )
-          : {'world': await _repository.loadWorld(_worldKey)};
+          : {'world': await _repository.loadWorld(widget.worldKey)};
       if (!mounted) return;
       _apply(payload);
       setState(() => _loading = false);
@@ -82,6 +102,7 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
       );
       if (world != null) _world = world;
     }
+    final previousAt = _state.currentLocationId;
     final rawState = payload['state'];
     if (rawState is Map) {
       _state = InteractiveWorldState.fromJson(
@@ -102,11 +123,45 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
         flags: const {},
       );
     }
+    // A word can unseal a door or walk the player on. Keeping the last room's
+    // exchange would put those sentences in a place that never heard them.
+    if (previousAt.isNotEmpty && previousAt != _state.currentLocationId) {
+      _visit.clear();
+      _metHere.clear();
+      _addressingId = null;
+    }
     final rawProgression = payload['progression'];
     if (rawProgression is Map) {
       _progression = WorldProgression.fromJson(
         Map<String, dynamic>.from(rawProgression),
       );
+    }
+    final rawCast = payload['cast'];
+    if (rawCast is List) {
+      _cast = rawCast
+          .whereType<Map>()
+          .map((raw) => WorldPresence.fromJson(Map<String, dynamic>.from(raw)))
+          .where((who) => who.id.isNotEmpty)
+          .toList();
+    }
+    if (_addressingId != null &&
+        !_cast.any((who) => who.id == _addressingId)) {
+      _addressingId = null;
+    }
+    // Talk is not a side channel. The rest of the payload is applied the
+    // same way a choice is; this only keeps the line they just answered.
+    final rawSpoken = payload['spoken'];
+    if (rawSpoken is Map) {
+      final spoken = WorldSpoken.fromJson(Map<String, dynamic>.from(rawSpoken));
+      if (spoken.characterId.isNotEmpty && spoken.line.isNotEmpty) {
+        _visit.putIfAbsent(spoken.characterId, () => []).add(
+          VisitLine(
+            fromPlayer: false,
+            text: spoken.line,
+            portraitUrl: spoken.portraitUrl,
+          ),
+        );
+      }
     }
     _selectedId ??= _state.currentLocationId;
   }
@@ -114,41 +169,121 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
   WorldLocation? get _selected => _world?.byId(_selectedId ?? '');
   WorldLocation? get _here => _world?.byId(_state.currentLocationId);
 
-  Future<void> _act({
+  Future<bool> _act({
     required String type,
     String? locationId,
     String? choiceId,
     String? petitionId,
     String? resolutionId,
+    String? characterId,
+    String? said,
   }) async {
     if (!_isServerBacked) {
       _notice('This glimpse has no memory of you. Enter from My Worlds to play.');
-      return;
+      return false;
     }
-    if (_acting) return;
+    if (_acting) return false;
     setState(() => _acting = true);
     try {
       final payload = await _repository.act(
-        worldKey: _worldKey,
+        worldKey: widget.worldKey,
         instanceId: widget.instanceId!,
         type: type,
         locationId: locationId,
         choiceId: choiceId,
         petitionId: petitionId,
         resolutionId: resolutionId,
+        characterId: characterId,
+        said: said,
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _apply(payload);
         _acting = false;
       });
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _acting = false);
       // The server owns the refusal and its wording; surface it rather than
       // guessing a reason the fiction has not given.
       _notice(_reasonFrom(error));
+      return false;
     }
+  }
+
+  WorldPresence? get _addressing {
+    final id = _addressingId;
+    if (id == null) return null;
+    for (final who in _cast) {
+      if (who.id == id) return who;
+    }
+    return null;
+  }
+
+  void _address(WorldPresence who) {
+    if (_acting) return;
+    // first_met is the entrance, not a title. Putting it under their feet
+    // every time the player walked in made a meeting into a caption.
+    final meeting = who.firstMet;
+    if (!_metHere.contains(who.id) && meeting != null) {
+      final lines = _visit.putIfAbsent(who.id, () => []);
+      if (lines.isEmpty) {
+        lines.add(
+          VisitLine(
+            fromPlayer: false,
+            text: meeting,
+            portraitUrl: who.portraitUrl,
+            meeting: true,
+          ),
+        );
+      }
+      _metHere.add(who.id);
+    }
+    setState(() => _addressingId = who.id);
+  }
+
+  Future<void> _speak(String characterId, String said) async {
+    // Two talks in flight would interleave replies onto the same visit, and
+    // the second would be a sentence the first had not finished answering.
+    if (_acting) return;
+    final text = said.trim();
+    if (text.isEmpty || text.length > 500) return;
+    if (!_cast.any((who) => who.id == characterId)) return;
+    setState(() {
+      _visit.putIfAbsent(characterId, () => []).add(
+        VisitLine(fromPlayer: true, text: text),
+      );
+    });
+    final reached = await _act(
+      type: 'talk',
+      characterId: characterId,
+      said: text,
+    );
+    if (reached || !mounted) return;
+    setState(() {
+      final lines = _visit[characterId];
+      if (lines != null &&
+          lines.isNotEmpty &&
+          lines.last.fromPlayer &&
+          lines.last.text == text) {
+        lines.removeLast();
+      }
+    });
+  }
+
+  String? _bearingFor(WorldPresence who) {
+    final lines = _visit[who.id];
+    if (lines == null) return who.portraitUrl;
+    for (var i = lines.length - 1; i >= 0; i--) {
+      final line = lines[i];
+      // Meeting uses the face they stand with. Only a reply's bearing
+      // may change what they are wearing.
+      if (!line.fromPlayer && !line.meeting && line.portraitUrl != null) {
+        return line.portraitUrl;
+      }
+    }
+    return who.portraitUrl;
   }
 
   /// Why the world would not take that action.
@@ -278,6 +413,7 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
     final petition = _progression.petitions
         .where((p) => p.at == location.id)
         .firstOrNull;
+    final addressing = _addressing;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -305,7 +441,10 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
           child: Row(
             children: [
               IconButton(
-                onPressed: () => setState(() => _view = _View.map),
+                onPressed: () => setState(() {
+                  _addressingId = null;
+                  _view = _View.map;
+                }),
                 icon: const Icon(Icons.map_outlined),
                 color: EverloreTheme.parchment,
                 tooltip: 'World map',
@@ -319,9 +458,23 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
             ],
           ),
         ),
+        // Stood in the painting, not stacked on the copy. A tall petition
+        // used to shove them up the frame like a roster; the panel is
+        // allowed to cover their feet the way dusk covers a room.
+        if (addressing == null && _cast.isNotEmpty)
+          Align(
+            alignment: const Alignment(0, 0.22),
+            child: SceneCast(
+              people: _cast,
+              enabled: !_acting,
+              onAddress: _address,
+            ),
+          ),
         Align(
           alignment: Alignment.bottomCenter,
-          child: petition != null
+          child: addressing != null
+              ? _buildConversation(addressing)
+              : petition != null
               ? _PetitionPanel(
                   petition: petition,
                   busy: _acting,
@@ -338,6 +491,27 @@ class _IronVerdictWorldScreenState extends State<IronVerdictWorldScreen> {
                   busy: _acting,
                   onChoose: (id) => _act(type: 'choose', choiceId: id),
                 ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConversation(WorldPresence who) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CharacterCutout(
+          name: who.name,
+          portraitUrl: _bearingFor(who),
+          height: 168,
+        ),
+        const SizedBox(height: 4),
+        ConversationPanel(
+          person: who,
+          lines: _visit[who.id] ?? const [],
+          busy: _acting,
+          onSpeak: (said) => unawaited(_speak(who.id, said)),
+          onLeave: () => setState(() => _addressingId = null),
         ),
       ],
     );

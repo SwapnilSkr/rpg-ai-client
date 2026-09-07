@@ -17,7 +17,7 @@ import 'package:everlore/features/creator/presentation/forge_world_route.dart';
 import 'package:everlore/features/creator/presentation/create_character_screen.dart';
 import 'package:everlore/features/personas/presentation/personas_screen.dart';
 import 'package:everlore/features/billing/presentation/billing_screen.dart';
-import 'package:everlore/features/interactive/presentation/iron_verdict_world_screen.dart';
+import 'package:everlore/features/interactive/presentation/interactive_world_screen.dart';
 import 'package:everlore/shared/models/world_template.dart';
 import 'package:everlore/shared/widgets/everlore_nav_bar.dart';
 
@@ -128,11 +128,14 @@ final router = GoRouter(
       name: 'membership',
       builder: (context, state) => const BillingScreen(),
     ),
-    // A self-contained, local-first vertical slice for the interactive world.
+    // The world key is a path PARAMETER, not a literal. Callers already build
+    // this path from the template's own key, so a literal segment matched only
+    // for as long as exactly one interactive world existed.
     GoRoute(
-      path: '/interactive/iron-verdict/lab',
-      name: 'iron_verdict_lab',
-      builder: (context, state) => IronVerdictWorldScreen(
+      path: '/interactive/:worldKey/lab',
+      name: 'interactive_world',
+      builder: (context, state) => InteractiveWorldScreen(
+        worldKey: state.pathParameters['worldKey']!,
         instanceId: state.uri.queryParameters['instanceId'],
       ),
     ),

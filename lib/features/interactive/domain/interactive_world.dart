@@ -532,3 +532,81 @@ class WorldProgression {
     );
   }
 }
+
+/// Someone standing where the player is. The server has already filtered this
+/// to the room; the client must not invent a second list from world data.
+///
+/// What they know, want or fear is deliberately absent. Showing a blank for
+/// those would teach the player that the surface is incomplete, so the model
+/// does not have the fields.
+@immutable
+class WorldPresence {
+  const WorldPresence({
+    required this.id,
+    required this.name,
+    required this.role,
+    required this.faction,
+    required this.portraitUrl,
+    required this.met,
+    required this.firstMet,
+  });
+
+  final String id;
+  final String name;
+  final String role;
+  final String faction;
+  final String? portraitUrl;
+  final bool met;
+
+  /// Authored entrance, present only while [met] is false. It is the meeting
+  /// itself, not a caption to keep under their feet.
+  final String? firstMet;
+
+  factory WorldPresence.fromJson(Map<String, dynamic> json) => WorldPresence(
+    id: json['id'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    role: json['role'] as String? ?? '',
+    faction: json['faction'] as String? ?? '',
+    // An empty string is not a face; treating it as a URL flashes a failed
+    // load and then a fallback, which reads as a broken painting.
+    portraitUrl: switch (json['portrait_url']) {
+      final String url when url.isNotEmpty => url,
+      _ => null,
+    },
+    met: json['met'] == true,
+    firstMet: switch (json['first_met']) {
+      final String prose when prose.isNotEmpty => prose,
+      _ => null,
+    },
+  );
+}
+
+/// The line that came back from a word spoken. Null on every other action.
+///
+/// [portraitUrl] is the bearing of this reply and may differ from the face
+/// they wear while standing in the room. A missing line is still a reply —
+/// the world does not mark a refusal as an error.
+@immutable
+class WorldSpoken {
+  const WorldSpoken({
+    required this.characterId,
+    required this.name,
+    required this.line,
+    required this.portraitUrl,
+  });
+
+  final String characterId;
+  final String name;
+  final String line;
+  final String? portraitUrl;
+
+  factory WorldSpoken.fromJson(Map<String, dynamic> json) => WorldSpoken(
+    characterId: json['character_id'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    line: json['line'] as String? ?? '',
+    portraitUrl: switch (json['portrait_url']) {
+      final String url when url.isNotEmpty => url,
+      _ => null,
+    },
+  );
+}
