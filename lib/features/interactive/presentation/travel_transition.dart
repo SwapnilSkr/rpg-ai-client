@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/everlore_network_image.dart';
+
 /// Walking-point-of-view travel.
 ///
 /// Cutting straight to a new place makes travel free, and free travel makes a
@@ -75,11 +77,19 @@ class _TravelTransitionState extends State<TravelTransition>
                         scale: zoom,
                         child: widget.backgroundUrl == null
                             ? const ColoredBox(color: Color(0xFF14100E))
-                            : Image.network(
-                                widget.backgroundUrl!,
+                            // The walk holds this same provider. A
+                            // NetworkImage here would paint from a shelf
+                            // the gate never warmed, and the destination
+                            // would still fade in as an empty room.
+                            : EverloreNetworkImage(
+                                imageUrl: widget.backgroundUrl!,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) =>
-                                    const ColoredBox(color: Color(0xFF14100E)),
+                                placeholder: const ColoredBox(
+                                  color: Color(0xFF14100E),
+                                ),
+                                errorWidget: const ColoredBox(
+                                  color: Color(0xFF14100E),
+                                ),
                               ),
                       ),
                     ),

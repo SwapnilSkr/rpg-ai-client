@@ -4,6 +4,7 @@ import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../shared/widgets/story_prose.dart';
 import '../domain/interactive_world.dart';
+import 'world_frame.dart';
 
 /// The world refuses a longer word. Matching the field to that bound
 /// keeps a line from being sent that the room will not keep.
@@ -43,6 +44,17 @@ class CharacterCutout extends StatelessWidget {
     this.enabled = true,
   });
 
+  /// How tall a figure stands in the painting. The opening warms this
+  /// decode size; any other height stocks a shelf these cut-outs will
+  /// not paint from.
+  static const standingHeight = 148.0;
+
+  /// A different height here stocks a shelf the cut-out will not paint from.
+  static int cacheHeightOf(
+    BuildContext context, {
+    double height = standingHeight,
+  }) => (height * MediaQuery.devicePixelRatioOf(context)).round();
+
   final String name;
   final String? portraitUrl;
   final double height;
@@ -60,8 +72,7 @@ class CharacterCutout extends StatelessWidget {
           : EverloreNetworkImage(
               imageUrl: portraitUrl!,
               fit: BoxFit.contain,
-              memCacheHeight: (height * MediaQuery.devicePixelRatioOf(context))
-                  .round(),
+              memCacheHeight: cacheHeightOf(context, height: height),
               semanticLabel: name,
               placeholder: const ColoredBox(color: Colors.transparent),
               errorWidget: _AbsentFace(name: name),
@@ -170,7 +181,7 @@ class _StandingFigure extends StatelessWidget {
                 CharacterCutout(
                   name: person.name,
                   portraitUrl: person.portraitUrl,
-                  height: 148,
+                  height: CharacterCutout.standingHeight,
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -924,14 +935,7 @@ class _Waiting extends StatelessWidget {
       padding: EdgeInsets.only(top: 6),
       child: Row(
         children: [
-          SizedBox(
-            height: 12,
-            width: 12,
-            child: CircularProgressIndicator(
-              strokeWidth: 1.5,
-              color: Color(0xCC6E5A2E),
-            ),
-          ),
+          WorldStill(size: 14, color: Color(0xCC6E5A2E)),
           SizedBox(width: 10),
           Text(
             'They hear you.',

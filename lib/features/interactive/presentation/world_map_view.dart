@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/everlore_network_image.dart';
 import '../domain/interactive_world.dart';
 class _FogPainter extends CustomPainter {
   const _FogPainter({
@@ -295,7 +296,6 @@ class _WorldMapViewState extends State<WorldMapView> {
                                 .clamp(1, 1 << 30),
                             child: _Plate(
                               url: widget.world.urlFor(plateId),
-                              width: canvas.width,
                             ),
                           ),
                       ],
@@ -334,9 +334,8 @@ class _WorldMapViewState extends State<WorldMapView> {
 }
 
 class _Plate extends StatelessWidget {
-  const _Plate({required this.url, required this.width});
+  const _Plate({required this.url});
   final String? url;
-  final double width;
 
   @override
   Widget build(BuildContext context) {
@@ -346,11 +345,16 @@ class _Plate extends StatelessWidget {
         child: SizedBox.expand(),
       );
     }
-    return Image.network(
-      url!,
-      width: width,
-      fit: BoxFit.cover,
-      errorBuilder: (_, _, _) => const ColoredBox(color: Color(0xFF1B1714)),
+    // The opening holds this same provider. A NetworkImage here would
+    // paint from a shelf the gate never warmed, and the player would
+    // still watch an empty grid after the sigil.
+    return SizedBox.expand(
+      child: EverloreNetworkImage(
+        imageUrl: url!,
+        fit: BoxFit.cover,
+        placeholder: const ColoredBox(color: Color(0xFF1B1714)),
+        errorWidget: const ColoredBox(color: Color(0xFF1B1714)),
+      ),
     );
   }
 }

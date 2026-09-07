@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
+import '../../../shared/widgets/everlore_session_loader.dart';
 import '../domain/interactive_world.dart';
+import 'world_frame.dart';
 
 /// A VERDICT FOUGHT ON THE SAND.
 ///
@@ -34,11 +38,37 @@ const _herald = -1;
 
 class _DuelStageState extends State<DuelStage> {
   int _step = _herald;
+  bool _ready = false;
 
   List<WorldDuelBeat> get _beats => widget.duel.beats;
   bool get _over => _step >= _beats.length;
   WorldDuelBeat? get _beat =>
       _step >= 0 && _step < _beats.length ? _beats[_step] : null;
+
+  @override
+  void initState() {
+    super.initState();
+    // precacheImage reads the configuration off the tree. Asking from
+    // initState, before the first frame, is a wait that never completes.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_unveil());
+    });
+  }
+
+  /// The Herald reads before the first blow. Waiting on every exchange's
+  /// bearing would hold the sand for faces that have not entered yet.
+  Future<void> _unveil() async {
+    if (!mounted) return;
+    await awaitWorldFrame(
+      context,
+      urls: [
+        widget.backdropUrl,
+        widget.duel.challenger.portraitUrl,
+        widget.duel.defender.portraitUrl,
+      ],
+    );
+    if (mounted) setState(() => _ready = true);
+  }
 
   void _advance() {
     if (_over) return;
@@ -74,6 +104,14 @@ class _DuelStageState extends State<DuelStage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_ready) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0A0908),
+        body: Center(
+          child: EverloreSessionLoader(message: 'The sand is set'),
+        ),
+      );
+    }
     final duel = widget.duel;
     final size = MediaQuery.sizeOf(context);
     final beat = _beat;

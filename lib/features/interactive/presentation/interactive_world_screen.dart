@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/nexus_theme.dart';
+import '../../../shared/widgets/everlore_network_image.dart';
+import '../../../shared/widgets/everlore_session_loader.dart';
 import '../data/interactive_world_repository.dart';
 import '../domain/interactive_world.dart';
 import 'travel_transition.dart';
 import 'world_characters.dart';
 import 'world_duel.dart';
+import 'world_frame.dart';
 import 'world_map_view.dart';
 
 /// An interactive world — a terrain plate with placed markers, not a chat UI
@@ -61,6 +64,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   bool _acting = false;
   String? _error;
   String? _travellingTo;
+  String _waitingLine = 'The land unfolds';
 
   bool get _isServerBacked => widget.instanceId != null;
 
@@ -74,6 +78,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _waitingLine = 'The land unfolds';
     });
     try {
       final payload = _isServerBacked
@@ -84,6 +89,20 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
           : {'world': await _repository.loadWorld(widget.worldKey)};
       if (!mounted) return;
       _apply(payload);
+      final world = _world;
+      if (world != null) {
+        // The map is shown the moment the words arrive. The plates then
+        // fill in after, so a cold opening is an empty grid. Only the
+        // land under the camera belongs on this wait — the rest of the
+        // world would hold the gate for a minute.
+        await awaitWorldFrame(
+          context,
+          urls: [
+            for (final plateId in world.plateAssetIds) world.urlFor(plateId),
+          ],
+        );
+      }
+      if (!mounted) return;
       setState(() => _loading = false);
     } catch (error) {
       if (!mounted) return;
@@ -178,13 +197,20 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     String? resolutionId,
     String? characterId,
     String? said,
+    bool alreadyActing = false,
   }) async {
     if (!_isServerBacked) {
+      // The road was held for a walk this glimpse cannot take. Leaving
+      // the lock set would freeze every later action on a preview.
+      if (alreadyActing && mounted) setState(() => _acting = false);
       _notice('This glimpse has no memory of you. Enter from My Worlds to play.');
       return false;
     }
-    if (_acting) return false;
-    setState(() => _acting = true);
+    // The road is already held while the destination is drawn. Dropping
+    // the lock to call this would let a second tap start a second move;
+    // treating the hold as a refusal would swallow the walk that waited.
+    if (_acting && !alreadyActing) return false;
+    if (!alreadyActing) setState(() => _acting = true);
     try {
       final payload = await _repository.act(
         worldKey: widget.worldKey,
@@ -334,14 +360,68 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   }
 
   Future<void> _travel(WorldLocation destination) async {
+    if (_acting) return;
+    setState(() => _acting = true);
+    final world = _world;
+    if (world != null) {
+      // The walk eases the destination in. Starting it before that
+      // painting can be drawn is arriving in a room that is not there.
+      await awaitWorldFrame(
+        context,
+        urls: [world.urlFor(destination.sceneAssetId)],
+      );
+    }
+    if (!mounted) return;
     setState(() => _travellingTo = destination.id);
-    await _act(type: 'move', locationId: destination.id);
+    await _act(type: 'move', locationId: destination.id, alreadyActing: true);
     if (!mounted) return;
     final arrived = _state.currentLocationId == destination.id;
+    if (arrived && destination.isEnterable) {
+      setState(() {
+        _travellingTo = null;
+        _loading = true;
+        _waitingLine = 'You cross the threshold';
+      });
+      await _awaitSceneFrame();
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _view = _View.scene;
+      });
+    } else {
+      setState(() => _travellingTo = null);
+    }
+  }
+
+  /// The room is shown the moment they tap Enter. The painting and the
+  /// people in it then fill in after, so they watch a dark frame become
+  /// a place.
+  Future<void> _enterScene() async {
+    if (_acting || _loading) return;
     setState(() {
-      _travellingTo = null;
-      if (arrived && destination.isEnterable) _view = _View.scene;
+      _loading = true;
+      _waitingLine = 'You cross the threshold';
     });
+    await _awaitSceneFrame();
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _view = _View.scene;
+    });
+  }
+
+  /// Fifty-eight paintings is a minute of the sigil. Only the room they
+  /// are walking into, and the faces already in it, can hold this curtain.
+  Future<void> _awaitSceneFrame() async {
+    final world = _world;
+    final here = _here;
+    if (world == null || here == null || !mounted) return;
+    await awaitWorldFrame(
+      context,
+      urls: [world.urlFor(here.sceneAssetId)],
+      cutouts: [for (final who in _cast) who.portraitUrl],
+      cutoutMaxHeight: CharacterCutout.cacheHeightOf(context),
+    );
   }
 
   bool get _inConversation => _view == _View.scene && _addressing != null;
@@ -359,7 +439,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
         top: !talking,
         bottom: !talking,
         child: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(child: EverloreSessionLoader(message: _waitingLine))
             : world == null
             ? _Failure(message: _error ?? 'This world is not published yet.', onRetry: _load)
             : _view == _View.map
@@ -412,7 +492,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
               isHere: selected.id == _state.currentLocationId,
               busy: _acting,
               onTravel: () => _travel(selected),
-              onEnter: () => setState(() => _view = _View.scene),
+              onEnter: () => unawaited(_enterScene()),
             ),
           ),
         if (_travellingTo != null)
@@ -451,10 +531,14 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
       fit: StackFit.expand,
       children: [
         if (url != null)
-          Image.network(
-            url,
+          // The opening holds this same provider. A NetworkImage here
+          // would paint from a shelf the gate never warmed, and the
+          // player would still watch a dark room become a place.
+          EverloreNetworkImage(
+            imageUrl: url,
             fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => const ColoredBox(color: Color(0xFF14100E)),
+            placeholder: const ColoredBox(color: Color(0xFF14100E)),
+            errorWidget: const ColoredBox(color: Color(0xFF14100E)),
           )
         else
           const ColoredBox(color: Color(0xFF14100E)),
@@ -657,11 +741,7 @@ class _Action extends StatelessWidget {
     child: FilledButton(
       onPressed: busy ? null : onTap,
       child: busy
-          ? const SizedBox(
-              height: 16,
-              width: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+          ? const WorldStill(size: 16, color: EverloreTheme.void0)
           : Text(label),
     ),
   );
