@@ -5,6 +5,10 @@ import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../shared/widgets/story_prose.dart';
 import '../domain/interactive_world.dart';
 
+/// The world refuses a longer word. Matching the field to that bound
+/// keeps a line from being sent that the room will not keep.
+const _speakLimit = 500;
+
 /// One beat of a conversation that exists only for this visit.
 ///
 /// The world keeps what matters. Repeating this after a reload would invent a
@@ -190,11 +194,12 @@ class _StandingFigure extends StatelessWidget {
   }
 }
 
-/// The exchange with one person, and the field that sends the next word.
+/// The exchange with one person, as a visual-novel beat over the painting.
 class ConversationPanel extends StatefulWidget {
   const ConversationPanel({
     super.key,
     required this.person,
+    required this.bearingUrl,
     required this.lines,
     required this.busy,
     required this.onSpeak,
@@ -202,6 +207,7 @@ class ConversationPanel extends StatefulWidget {
   });
 
   final WorldPresence person;
+  final String? bearingUrl;
   final List<VisitLine> lines;
   final bool busy;
   final ValueChanged<String> onSpeak;
@@ -211,27 +217,44 @@ class ConversationPanel extends StatefulWidget {
   State<ConversationPanel> createState() => _ConversationPanelState();
 }
 
-class _ConversationPanelState extends State<ConversationPanel> {
+class _ConversationPanelState extends State<ConversationPanel>
+    with SingleTickerProviderStateMixin {
   final _said = TextEditingController();
   final _focus = FocusNode();
-  final _scroll = ScrollController();
+  late final AnimationController _chevron;
   bool _hasText = false;
-
-  static const _limit = 500;
+  bool _composing = false;
+  int _page = 0;
 
   @override
   void initState() {
     super.initState();
     _said.addListener(_onSaid);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _pinToLatest());
+    _chevron = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    // A visit already in progress must open on the latest beat. Starting
+    // at zero would replay the meeting after they had already walked away.
+    _page = widget.lines.isEmpty ? 0 : widget.lines.length - 1;
   }
 
   @override
   void didUpdateWidget(ConversationPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.lines.length != widget.lines.length ||
-        oldWidget.busy != widget.busy) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _pinToLatest());
+    if (oldWidget.person.id != widget.person.id) {
+      _page = widget.lines.isEmpty ? 0 : widget.lines.length - 1;
+      _composing = false;
+      return;
+    }
+    if (widget.lines.length != oldWidget.lines.length) {
+      // New speech is the beat they must see. Leaving _page behind would
+      // hide their own line until they tapped, and the reply would land
+      // on a panel that still held the previous voice.
+      setState(() {
+        _page = widget.lines.isEmpty ? 0 : widget.lines.length - 1;
+        _composing = false;
+      });
     }
   }
 
@@ -240,7 +263,7 @@ class _ConversationPanelState extends State<ConversationPanel> {
     _said.removeListener(_onSaid);
     _said.dispose();
     _focus.dispose();
-    _scroll.dispose();
+    _chevron.dispose();
     super.dispose();
   }
 
@@ -249,178 +272,644 @@ class _ConversationPanelState extends State<ConversationPanel> {
     if (has != _hasText) setState(() => _hasText = has);
   }
 
-  void _pinToLatest() {
-    if (!_scroll.hasClients) return;
-    _scroll.jumpTo(_scroll.position.maxScrollExtent);
+  VisitLine? get _shown {
+    if (widget.lines.isEmpty) return null;
+    final i = _page.clamp(0, widget.lines.length - 1);
+    return widget.lines[i];
+  }
+
+  bool get _fromPlayer => _shown?.fromPlayer ?? false;
+
+  bool get _canAdvance =>
+      !_composing && widget.lines.isNotEmpty && _page < widget.lines.length - 1;
+
+  String? get _face {
+    final line = _shown;
+    if (line != null && !line.fromPlayer && line.portraitUrl != null) {
+      return line.portraitUrl;
+    }
+    return widget.bearingUrl;
+  }
+
+  void _advance() {
+    if (!_canAdvance) return;
+    setState(() => _page += 1);
+  }
+
+  void _openCompose() {
+    if (widget.busy || _composing) return;
+    setState(() => _composing = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
   }
 
   void _submit() {
     if (widget.busy) return;
     final text = _said.text.trim();
-    if (text.isEmpty || text.length > _limit) return;
+    if (text.isEmpty || text.length > _speakLimit) return;
     widget.onSpeak(text);
     _said.clear();
+    setState(() => _composing = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final canSpeak = _hasText && !widget.busy;
-    final tall = MediaQuery.sizeOf(context).height;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
-      // Header, a short exchange and the field must stay on a phone. The
-      // scene behind has to remain visible or this becomes a chat screen
-      // that happens to have a painting.
-      constraints: BoxConstraints(maxHeight: tall * 0.48),
-      decoration: BoxDecoration(
-        color: const Color(0xF20D0A09),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0x2EC8A96A)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.person.name,
-                      style: const TextStyle(
-                        color: EverloreTheme.parchment,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (widget.person.role.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.person.role,
-                        style: const TextStyle(
-                          color: Color(0x99C8A96A),
-                          fontSize: 11,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              IconButton(
+    final shown = _shown;
+    final fromPlayer = _fromPlayer;
+    final speaker = fromPlayer ? 'You' : widget.person.name;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const _PanelScrim(),
+        _VnSpeaker(
+          name: widget.person.name,
+          portraitUrl: _face,
+          onRight: fromPlayer,
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: SafeArea(
+            bottom: false,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
                 onPressed: widget.onLeave,
                 icon: const Icon(Icons.close_rounded),
                 color: EverloreTheme.parchment,
                 tooltip: 'Step away',
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: tall * 0.26),
-            child: ListView(
-              controller: _scroll,
-              shrinkWrap: true,
-              children: [
-                for (final line in widget.lines) _Line(line: line),
-                if (widget.busy) const _Waiting(),
-              ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _said,
-                  focusNode: _focus,
-                  enabled: !widget.busy,
-                  maxLength: _limit,
-                  minLines: 1,
-                  maxLines: 4,
-                  textCapitalization: TextCapitalization.sentences,
-                  style: const TextStyle(
-                    color: EverloreTheme.parchment,
-                    fontSize: 14,
-                    height: 1.4,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: 'What do you say?',
-                    counterText: '',
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                  ),
-                  onSubmitted: (_) => _submit(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: canSpeak ? _submit : null,
-                child: widget.busy
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Speak'),
-              ),
-            ],
+        ),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: _ParchmentStage(
+            speaker: speaker,
+            fromPlayer: fromPlayer,
+            line: shown,
+            busy: widget.busy,
+            composing: _composing,
+            canAdvance: _canAdvance,
+            canSpeak: _hasText && !widget.busy,
+            chevron: _chevron,
+            said: _said,
+            focus: _focus,
+            onAdvance: _advance,
+            onCompose: _openCompose,
+            onSubmit: _submit,
           ),
-        ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Darkens only the band the parchment sits on. A full-frame veil would
+/// swallow the painting the figure is meant to stand in.
+class _PanelScrim extends StatelessWidget {
+  const _PanelScrim();
+
+  @override
+  Widget build(BuildContext context) {
+    return const IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0x00000000),
+              Color(0x00000000),
+              Color(0x59000000),
+            ],
+            stops: [0.0, 0.58, 1.0],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _Line extends StatelessWidget {
-  const _Line({required this.line});
+/// A 2:3 full-body cut-out framed as a half-body speaker.
+///
+/// Fitting the whole figure in this slot would put their feet on a phone
+/// that is taller than 3:2 at 60% width. Cover-scaling from the top keeps
+/// the head and lets the legs leave the frame.
+class _VnSpeaker extends StatelessWidget {
+  const _VnSpeaker({
+    required this.name,
+    required this.portraitUrl,
+    required this.onRight,
+  });
 
-  final VisitLine line;
+  final String name;
+  final String? portraitUrl;
+  final bool onRight;
 
   @override
   Widget build(BuildContext context) {
-    if (line.fromPlayer) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Text(
-          line.text,
-          style: const TextStyle(
-            color: Color(0xD8C8A96A),
-            fontSize: 14,
-            height: 1.4,
+    final size = MediaQuery.sizeOf(context);
+    return AnimatedAlign(
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOutCubic,
+      alignment: onRight ? Alignment.centerRight : Alignment.centerLeft,
+      child: SizedBox(
+        width: size.width * 0.62,
+        height: size.height,
+        child: portraitUrl == null
+            ? _AbsentFace(name: name, large: true)
+            : _TopAnchoredCutout(name: name, portraitUrl: portraitUrl!),
+      ),
+    );
+  }
+}
+
+class _TopAnchoredCutout extends StatelessWidget {
+  const _TopAnchoredCutout({required this.name, required this.portraitUrl});
+
+  final String name;
+  final String portraitUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final slotH = constraints.maxHeight;
+        // 1.42× the slot makes a 2:3 body taller than the phone, so the
+        // bottom edge crops at the thigh instead of showing a figurine.
+        final paintedH = slotH * 1.42;
+        final paintedW = paintedH * 2 / 3;
+        final dpr = MediaQuery.devicePixelRatioOf(context);
+        return ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.topCenter,
+            minWidth: paintedW,
+            maxWidth: paintedW,
+            minHeight: paintedH,
+            maxHeight: paintedH,
+            child: SizedBox(
+              width: paintedW,
+              height: paintedH,
+              child: EverloreNetworkImage(
+                imageUrl: portraitUrl,
+                fit: BoxFit.contain,
+                memCacheHeight: (paintedH * dpr).round(),
+                semanticLabel: name,
+                placeholder: const ColoredBox(color: Colors.transparent),
+                errorWidget: _AbsentFace(name: name, large: true),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ParchmentStage extends StatelessWidget {
+  const _ParchmentStage({
+    required this.speaker,
+    required this.fromPlayer,
+    required this.line,
+    required this.busy,
+    required this.composing,
+    required this.canAdvance,
+    required this.canSpeak,
+    required this.chevron,
+    required this.said,
+    required this.focus,
+    required this.onAdvance,
+    required this.onCompose,
+    required this.onSubmit,
+  });
+
+  final String speaker;
+  final bool fromPlayer;
+  final VisitLine? line;
+  final bool busy;
+  final bool composing;
+  final bool canAdvance;
+  final bool canSpeak;
+  final Animation<double> chevron;
+  final TextEditingController said;
+  final FocusNode focus;
+  final VoidCallback onAdvance;
+  final VoidCallback onCompose;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final pad = MediaQuery.paddingOf(context);
+    final keys = MediaQuery.viewInsetsOf(context).bottom;
+    final panelH = (size.height * 0.26).clamp(168.0, 252.0);
+    return Padding(
+      padding: EdgeInsets.only(bottom: keys > 0 ? keys : 0),
+      child: SizedBox(
+        height: panelH + pad.bottom + 18,
+        width: double.infinity,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              top: 18,
+              child: _ParchmentPanel(
+                fromPlayer: fromPlayer,
+                line: line,
+                busy: busy,
+                composing: composing,
+                canAdvance: canAdvance,
+                canSpeak: canSpeak,
+                chevron: chevron,
+                said: said,
+                focus: focus,
+                bottomInset: pad.bottom,
+                onAdvance: onAdvance,
+                onCompose: onCompose,
+                onSubmit: onSubmit,
+              ),
+            ),
+            Positioned(
+              top: 0,
+              left: fromPlayer ? null : 22,
+              right: fromPlayer ? 22 : null,
+              child: _NameRibbon(name: speaker),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ParchmentPanel extends StatelessWidget {
+  const _ParchmentPanel({
+    required this.fromPlayer,
+    required this.line,
+    required this.busy,
+    required this.composing,
+    required this.canAdvance,
+    required this.canSpeak,
+    required this.chevron,
+    required this.said,
+    required this.focus,
+    required this.bottomInset,
+    required this.onAdvance,
+    required this.onCompose,
+    required this.onSubmit,
+  });
+
+  final bool fromPlayer;
+  final VisitLine? line;
+  final bool busy;
+  final bool composing;
+  final bool canAdvance;
+  final bool canSpeak;
+  final Animation<double> chevron;
+  final TextEditingController said;
+  final FocusNode focus;
+  final double bottomInset;
+  final VoidCallback onAdvance;
+  final VoidCallback onCompose;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: canAdvance ? onAdvance : null,
+        splashColor: const Color(0x14C8A96A),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFFE8D5B0), Color(0xFFD4C09A)],
+            ),
+            border: Border(
+              top: BorderSide(color: Color(0x66C8A96A)),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 16,
+                offset: Offset(0, -4),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              const _PaperGrain(),
+              Padding(
+                padding: EdgeInsets.fromLTRB(22, 22, 22, 10 + bottomInset),
+                child: composing
+                    ? _SayField(
+                        said: said,
+                        focus: focus,
+                        canSpeak: canSpeak,
+                        onSubmit: onSubmit,
+                      )
+                    : _PanelBody(
+                        fromPlayer: fromPlayer,
+                        line: line,
+                        busy: busy,
+                        canAdvance: canAdvance,
+                        onCompose: onCompose,
+                      ),
+              ),
+              if (canAdvance)
+                Positioned(
+                  right: 14,
+                  bottom: 8 + bottomInset,
+                  child: _AdvanceChevron(animation: chevron),
+                ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PaperGrain extends StatelessWidget {
+  const _PaperGrain();
+
+  @override
+  Widget build(BuildContext context) {
+    return const IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0x33FFFFFF),
+              Color(0x00000000),
+              Color(0x14000000),
+            ],
+            stops: [0.0, 0.45, 1.0],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NameRibbon extends StatelessWidget {
+  const _NameRibbon({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            EverloreTheme.goldDeep,
+            EverloreTheme.ember,
+            EverloreTheme.gold,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(3),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x44000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+        child: Text(
+          name,
+          style: EverloreTheme.serifDisplay(
+            size: 13,
+            color: EverloreTheme.goldHot,
+            weight: FontWeight.w600,
+            spacing: 0.6,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PanelBody extends StatelessWidget {
+  const _PanelBody({
+    required this.fromPlayer,
+    required this.line,
+    required this.busy,
+    required this.canAdvance,
+    required this.onCompose,
+  });
+
+  final bool fromPlayer;
+  final VisitLine? line;
+  final bool busy;
+  final bool canAdvance;
+  final VoidCallback onCompose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: line == null
+              ? const SizedBox.shrink()
+              : _BeatText(line: line!, fromPlayer: fromPlayer),
+        ),
+        if (busy)
+          const _Waiting()
+        else if (!canAdvance)
+          _SayAffordance(onTap: onCompose),
+      ],
+    );
+  }
+}
+
+class _BeatText extends StatelessWidget {
+  const _BeatText({required this.line, required this.fromPlayer});
+
+  final VisitLine line;
+  final bool fromPlayer;
+
+  static const _ink = Color(0xFF2A2118);
+
+  @override
+  Widget build(BuildContext context) {
+    final base = EverloreTheme.aiText.copyWith(
+      color: _ink,
+      fontSize: 18,
+      height: 1.55,
+    );
+    if (fromPlayer) {
+      return Text(
+        line.text,
+        style: base.copyWith(fontStyle: FontStyle.italic),
       );
     }
-
-    final prose = Text.rich(
-      TextSpan(children: storyProseSpans(line.text)),
-      style: EverloreTheme.aiText.copyWith(fontSize: 16, height: 1.5),
-    );
-
-    if (!line.meeting) {
-      return Padding(padding: const EdgeInsets.only(bottom: 12), child: prose);
-    }
-
-    // The entrance is a moment, not another turn in a thread. A quiet rule
-    // keeps it from collapsing into the replies that follow.
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        decoration: const BoxDecoration(
-          border: Border(
-            left: BorderSide(color: Color(0x66C8A96A), width: 2),
+    return Text.rich(
+      TextSpan(
+        children: storyProseSpans(
+          line.text,
+          dialogueStyle: base.copyWith(
+            fontStyle: FontStyle.normal,
+            fontWeight: FontWeight.w600,
+            color: _ink,
           ),
-          color: Color(0x14C8A96A),
+          narrationStyle: base.copyWith(
+            fontStyle: FontStyle.italic,
+            fontWeight: FontWeight.w400,
+            color: _ink.withValues(alpha: 0.78),
+          ),
         ),
-        child: prose,
+      ),
+      style: base,
+    );
+  }
+}
+
+class _SayAffordance extends StatelessWidget {
+  const _SayAffordance({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton(
+        onPressed: onTap,
+        style: TextButton.styleFrom(
+          foregroundColor: EverloreTheme.goldDeep,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          minimumSize: const Size(48, 48),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(
+          'Say something',
+          style: EverloreTheme.serifDisplay(
+            size: 14,
+            color: EverloreTheme.goldDeep,
+            weight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SayField extends StatelessWidget {
+  const _SayField({
+    required this.said,
+    required this.focus,
+    required this.canSpeak,
+    required this.onSubmit,
+  });
+
+  final TextEditingController said;
+  final FocusNode focus;
+  final bool canSpeak;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: TextField(
+            controller: said,
+            focusNode: focus,
+            maxLength: _speakLimit,
+            minLines: 1,
+            maxLines: 4,
+            textCapitalization: TextCapitalization.sentences,
+            style: EverloreTheme.aiText.copyWith(
+              color: const Color(0xFF2A2118),
+              fontSize: 17,
+              height: 1.45,
+            ),
+            cursorColor: EverloreTheme.goldDeep,
+            decoration: InputDecoration(
+              hintText: 'What do you say?',
+              hintStyle: EverloreTheme.aiText.copyWith(
+                color: const Color(0x992A2118),
+                fontSize: 17,
+              ),
+              counterText: '',
+              filled: true,
+              fillColor: const Color(0x33FFFFFF),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0x66C8A96A)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0x66C8A96A)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(
+                  color: EverloreTheme.goldDeep,
+                  width: 1.4,
+                ),
+              ),
+            ),
+            onSubmitted: (_) => onSubmit(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        FilledButton(
+          onPressed: canSpeak ? onSubmit : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: EverloreTheme.goldDeep,
+            foregroundColor: EverloreTheme.goldHot,
+            disabledBackgroundColor: EverloreTheme.goldDeep.withValues(
+              alpha: 0.35,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+          child: const Text('Speak'),
+        ),
+      ],
+    );
+  }
+}
+
+class _AdvanceChevron extends StatelessWidget {
+  const _AdvanceChevron({required this.animation});
+
+  final Animation<double> animation;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, animation.value * 4 - 2),
+          child: child,
+        );
+      },
+      child: const Icon(
+        Icons.expand_more_rounded,
+        size: 26,
+        color: Color(0xCC6E5A2E),
       ),
     );
   }
@@ -432,20 +921,23 @@ class _Waiting extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Padding(
-      padding: EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(top: 6),
       child: Row(
         children: [
           SizedBox(
             height: 12,
             width: 12,
-            child: CircularProgressIndicator(strokeWidth: 1.5),
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              color: Color(0xCC6E5A2E),
+            ),
           ),
           SizedBox(width: 10),
           Text(
             'They hear you.',
             style: TextStyle(
-              color: Color(0x99EFE3CC),
-              fontSize: 13,
+              color: Color(0xCC2A2118),
+              fontSize: 14,
               fontStyle: FontStyle.italic,
             ),
           ),
@@ -458,9 +950,10 @@ class _Waiting extends StatelessWidget {
 /// A missing face is still a person in the room. A broken-image glyph would
 /// say the painting failed, which is not what happened.
 class _AbsentFace extends StatelessWidget {
-  const _AbsentFace({required this.name});
+  const _AbsentFace({required this.name, this.large = false});
 
   final String name;
+  final bool large;
 
   @override
   Widget build(BuildContext context) {
@@ -479,11 +972,12 @@ class _AbsentFace extends StatelessWidget {
           ),
         ),
       ),
-      child: Center(
+      child: Align(
+        alignment: large ? const Alignment(0, -0.35) : Alignment.center,
         child: Text(
           initial,
           style: EverloreTheme.serifDisplay(
-            size: 34,
+            size: large ? 72 : 34,
             color: EverloreTheme.goldDim.withValues(alpha: 0.7),
           ),
         ),

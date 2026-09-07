@@ -319,12 +319,20 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     });
   }
 
+  bool get _inConversation => _view == _View.scene && _addressing != null;
+
   @override
   Widget build(BuildContext context) {
     final world = _world;
+    final talking = !_loading && world != null && _inConversation;
     return Scaffold(
       backgroundColor: const Color(0xFF0A0908),
+      // The painting must not shrink when the field opens. Only the
+      // parchment is padded for the keyboard.
+      resizeToAvoidBottomInset: !talking,
       body: SafeArea(
+        top: !talking,
+        bottom: !talking,
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : world == null
@@ -414,7 +422,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
         .where((p) => p.at == location.id)
         .firstOrNull;
     final addressing = _addressing;
-    return Stack(
+    final scene = Stack(
       fit: StackFit.expand,
       children: [
         if (url != null)
@@ -425,39 +433,41 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
           )
         else
           const ColoredBox(color: Color(0xFF14100E)),
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0x22000000), Color(0xCC000000)],
+        if (addressing == null)
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0x22000000), Color(0xCC000000)],
+              ),
             ),
           ),
-        ),
-        Positioned(
-          top: 8,
-          left: 12,
-          right: 12,
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: () => setState(() {
-                  _addressingId = null;
-                  _view = _View.map;
-                }),
-                icon: const Icon(Icons.map_outlined),
-                color: EverloreTheme.parchment,
-                tooltip: 'World map',
-              ),
-              Expanded(
-                child: _Title(
-                  subtitle: location.realm.toUpperCase(),
-                  title: location.title,
+        if (addressing == null)
+          Positioned(
+            top: 8,
+            left: 12,
+            right: 12,
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: () => setState(() {
+                    _addressingId = null;
+                    _view = _View.map;
+                  }),
+                  icon: const Icon(Icons.map_outlined),
+                  color: EverloreTheme.parchment,
+                  tooltip: 'World map',
                 ),
-              ),
-            ],
+                Expanded(
+                  child: _Title(
+                    subtitle: location.realm.toUpperCase(),
+                    title: location.title,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
         // Stood in the painting, not stacked on the copy. A tall petition
         // used to shove them up the frame like a roster; the panel is
         // allowed to cover their feet the way dusk covers a room.
@@ -470,50 +480,51 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
               onAddress: _address,
             ),
           ),
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: addressing != null
-              ? _buildConversation(addressing)
-              : petition != null
-              ? _PetitionPanel(
-                  petition: petition,
-                  busy: _acting,
-                  onRule: (resolutionId) => _act(
-                    type: 'rule',
-                    petitionId: petition.id,
-                    resolutionId: resolutionId,
+        if (addressing != null)
+          Positioned.fill(child: _buildConversation(addressing))
+        else
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: petition != null
+                ? _PetitionPanel(
+                    petition: petition,
+                    busy: _acting,
+                    onRule: (resolutionId) => _act(
+                      type: 'rule',
+                      petitionId: petition.id,
+                      resolutionId: resolutionId,
+                    ),
+                  )
+                : _StoryPanel(
+                    headline: location.sceneHeadline ?? location.title,
+                    body: location.sceneBody ?? location.description,
+                    choices: choices,
+                    busy: _acting,
+                    onChoose: (id) => _act(type: 'choose', choiceId: id),
                   ),
-                )
-              : _StoryPanel(
-                  headline: location.sceneHeadline ?? location.title,
-                  body: location.sceneBody ?? location.description,
-                  choices: choices,
-                  busy: _acting,
-                  onChoose: (id) => _act(type: 'choose', choiceId: id),
-                ),
-        ),
+          ),
       ],
+    );
+    if (addressing == null) return scene;
+    // Back from a meeting must return to the room, not the map. The
+    // route pop would have thrown them out of a place they were still in.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(() => _addressingId = null);
+      },
+      child: scene,
     );
   }
 
   Widget _buildConversation(WorldPresence who) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        CharacterCutout(
-          name: who.name,
-          portraitUrl: _bearingFor(who),
-          height: 168,
-        ),
-        const SizedBox(height: 4),
-        ConversationPanel(
-          person: who,
-          lines: _visit[who.id] ?? const [],
-          busy: _acting,
-          onSpeak: (said) => unawaited(_speak(who.id, said)),
-          onLeave: () => setState(() => _addressingId = null),
-        ),
-      ],
+    return ConversationPanel(
+      person: who,
+      bearingUrl: _bearingFor(who),
+      lines: _visit[who.id] ?? const [],
+      busy: _acting,
+      onSpeak: (said) => unawaited(_speak(who.id, said)),
+      onLeave: () => setState(() => _addressingId = null),
     );
   }
 }
