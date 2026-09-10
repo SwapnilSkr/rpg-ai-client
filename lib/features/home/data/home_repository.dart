@@ -6,6 +6,7 @@ import '../../../shared/models/realm_play_status.dart';
 import '../../../shared/models/world_instance.dart';
 import '../../../shared/models/world_template.dart';
 import '../domain/realm_group.dart';
+import '../../interactive/data/interactive_world_repository.dart';
 
 class RealmPage {
   final List<RealmGroup> realms;
@@ -149,25 +150,33 @@ class HomeRepository {
 
   /// Compact, server-grouped realm feed. Each page contains one row per world
   /// with its latest story and total playthrough count.
+  ///
+  /// [walks] is the map-world shelf. Chat and walkable saves are listed
+  /// separately so a map with no narrator turns cannot sit on Your Realms.
   static Future<RealmPage> getRealmPage({
     int page = 1,
     int limit = 12,
     String search = '',
+    bool walks = false,
   }) async {
     _syncSessionCache();
     final query = <String>['page=$page', 'limit=$limit'];
     if (search.trim().isNotEmpty) {
       query.add('search=${Uri.encodeQueryComponent(search.trim())}');
     }
-    final response = await ApiClient.get(
-      '/instances/realms?${query.join('&')}',
-    );
+    final path = walks
+        ? '/interactive-worlds/instances?${query.join('&')}'
+        : '/instances/realms?${[...query, 'kind=chat'].join('&')}';
+    final response = await ApiClient.get(path);
     final raw = (response['realms'] as List?) ?? const [];
     final realms = raw
         .map(
           (item) => realmGroupFromJson(Map<String, dynamic>.from(item as Map)),
         )
-        .where((group) => !group.isInteractiveWorld)
+        .where(
+          (group) =>
+              walks ? group.isInteractiveWorld : !group.isInteractiveWorld,
+        )
         .toList();
     return RealmPage(
       realms: realms,
@@ -186,7 +195,9 @@ class HomeRepository {
     final list = response as List;
     final instances = list
         .map((e) => WorldInstance.fromJson(e))
-        .where((instance) => !WorldTemplate.isInteractiveJson(instance.template))
+        .where(
+          (instance) => !WorldTemplate.isInteractiveJson(instance.template),
+        )
         .toList();
     _instancesCache[includeArchived] = instances;
     return instances;
@@ -195,7 +206,20 @@ class HomeRepository {
   static Future<WorldInstance> createInstance(
     String templateId, {
     String? personaId,
+    String? interactiveWorldKey,
   }) async {
+    if (interactiveWorldKey != null && interactiveWorldKey.trim().isNotEmpty) {
+      const repo = InteractiveWorldRepository();
+      final id = await repo.createInstance(interactiveWorldKey.trim());
+      final created = WorldInstance(
+        id: id,
+        templateId: templateId,
+        playerId: '',
+      );
+      invalidate(templateId: templateId);
+      _realmChanges.add(RealmChange.created(created));
+      return created;
+    }
     final response = await ApiClient.post(
       '/instances',
       body: {

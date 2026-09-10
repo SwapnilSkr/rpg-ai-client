@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+
 import '../../../core/storage/local_db.dart';
 import '../../../shared/models/world_instance.dart';
 import '../data/home_repository.dart';
@@ -68,7 +69,11 @@ class HomeCubit extends Cubit<HomeState> {
   late final StreamSubscription<RealmChange> _realmChangeSub;
   String _search = '';
 
-  HomeCubit() : super(const HomeState()) {
+  /// True on the Walks shelf. The same feed and mutations, a different
+  /// server filter, so a map save never appears as a chat realm.
+  final bool walks;
+
+  HomeCubit({this.walks = false}) : super(const HomeState()) {
     _realmChangeSub = HomeRepository.realmChanges.listen(_onRealmChange);
   }
 
@@ -95,7 +100,10 @@ class HomeCubit extends Cubit<HomeState> {
     _search = search ?? _search;
     if (!silent) emit(state.copyWith(isLoading: true, error: null));
     try {
-      final result = await HomeRepository.getRealmPage(search: _search);
+      final result = await HomeRepository.getRealmPage(
+        search: _search,
+        walks: walks,
+      );
       emit(
         state.copyWith(
           realms: result.realms,
@@ -110,7 +118,12 @@ class HomeCubit extends Cubit<HomeState> {
         emit(
           state.copyWith(
             isLoading: false,
-            error: userFacingError(e, fallback: 'Could not load your realms.'),
+            error: userFacingError(
+              e,
+              fallback: walks
+                  ? 'Could not load your walks.'
+                  : 'Could not load your realms.',
+            ),
           ),
         );
       }
@@ -124,6 +137,7 @@ class HomeCubit extends Cubit<HomeState> {
       final result = await HomeRepository.getRealmPage(
         page: state.page + 1,
         search: _search,
+        walks: walks,
       );
       final known = state.realms.map((realm) => realm.templateId).toSet();
       emit(
@@ -142,7 +156,12 @@ class HomeCubit extends Cubit<HomeState> {
       emit(
         state.copyWith(
           isLoadingMore: false,
-          error: userFacingError(e, fallback: 'Could not load more realms.'),
+          error: userFacingError(
+            e,
+            fallback: walks
+                ? 'Could not load more walks.'
+                : 'Could not load more realms.',
+          ),
         ),
       );
     }
@@ -162,44 +181,64 @@ class HomeCubit extends Cubit<HomeState> {
     }
   }
 
-  Future<void> archiveInstance(String instanceId) async {
-    final before = state.instances;
+  Future<bool> archiveInstance(String instanceId) async {
+    final before = state.realms;
+    final beforeTotal = state.total;
     emit(
       state.copyWith(
-        instances: before.where((i) => i.id != instanceId).toList(),
+        realms: before.where((group) => group.latest.id != instanceId).toList(),
+        total: (beforeTotal - 1).clamp(0, beforeTotal),
         error: null,
       ),
     );
     try {
       await HomeRepository.archiveInstance(instanceId);
+      return true;
     } catch (e) {
       emit(
         state.copyWith(
-          instances: before,
-          error: userFacingError(e, fallback: 'Could not archive that realm.'),
+          realms: before,
+          total: beforeTotal,
+          error: userFacingError(
+            e,
+            fallback: walks
+                ? 'Could not seal that walk.'
+                : 'Could not seal that story.',
+          ),
         ),
       );
+      return false;
     }
   }
 
-  Future<void> deleteInstance(String instanceId) async {
-    final before = state.instances;
+  Future<bool> deleteInstance(String instanceId) async {
+    final before = state.realms;
+    final beforeTotal = state.total;
     emit(
       state.copyWith(
-        instances: before.where((i) => i.id != instanceId).toList(),
+        realms: before.where((group) => group.latest.id != instanceId).toList(),
+        total: (beforeTotal - 1).clamp(0, beforeTotal),
         error: null,
       ),
     );
     try {
       await HomeRepository.deleteInstance(instanceId);
       await LocalDb.clearInstanceCache(instanceId);
+      return true;
     } catch (e) {
       emit(
         state.copyWith(
-          instances: before,
-          error: userFacingError(e, fallback: 'Could not delete that realm.'),
+          realms: before,
+          total: beforeTotal,
+          error: userFacingError(
+            e,
+            fallback: walks
+                ? 'Could not delete that walk.'
+                : 'Could not delete that story.',
+          ),
         ),
       );
+      return false;
     }
   }
 

@@ -91,7 +91,8 @@ class WorldLocation {
     required this.routes,
     required this.unlockFlag,
     required this.sealedReason,
-    required this.revealFlag,
+    required this.revealFlags,
+    required this.sceneWhen,
   });
 
   final String id;
@@ -111,7 +112,8 @@ class WorldLocation {
   final List<String> routes;
   final String? unlockFlag;
   final String? sealedReason;
-  final String? revealFlag;
+  final List<String> revealFlags;
+  final List<WorldSceneWhen> sceneWhen;
 
   /// A place with no scene is map presence only — named, owned, fought over,
   /// travelled past, but never entered. That is what keeps thirty locations
@@ -123,13 +125,31 @@ class WorldLocation {
   /// drawing a place the player has not heard of.
   WorldVisibility visibilityFor(Set<String> flags) {
     if (authoredVisibility == WorldVisibility.rumoured &&
-        !(revealFlag != null && flags.contains(revealFlag))) {
+        !revealFlags.any(flags.contains)) {
       return WorldVisibility.rumoured;
     }
     if (unlockFlag != null && !flags.contains(unlockFlag)) {
       return WorldVisibility.sealed;
     }
     return WorldVisibility.open;
+  }
+
+  ({String headline, String body}) sceneCopy({
+    required Set<String> flags,
+    String? leadId,
+  }) {
+    for (final variant in sceneWhen) {
+      if (variant.lead != null && variant.lead != leadId) continue;
+      if (variant.flag != null && !flags.contains(variant.flag)) continue;
+      return (
+        headline: variant.headline ?? sceneHeadline ?? title,
+        body: variant.body ?? sceneBody ?? description,
+      );
+    }
+    return (
+      headline: sceneHeadline ?? title,
+      body: sceneBody ?? description,
+    );
   }
 
   factory WorldLocation.fromJson(Map<String, dynamic> json) => WorldLocation(
@@ -148,7 +168,28 @@ class WorldLocation {
     routes: (json['routes'] as List? ?? const []).whereType<String>().toList(),
     unlockFlag: json['unlock_flag'] as String?,
     sealedReason: json['sealed_reason'] as String?,
-    revealFlag: json['reveal_flag'] as String?,
+    revealFlags: WorldChoice._flags(json['reveal_flag']),
+    sceneWhen: (json['scene_when'] as List? ?? const [])
+        .whereType<Map>()
+        .map((raw) => WorldSceneWhen.fromJson(Map<String, dynamic>.from(raw)))
+        .toList(),
+  );
+}
+
+@immutable
+class WorldSceneWhen {
+  const WorldSceneWhen({this.flag, this.lead, this.headline, this.body});
+
+  final String? flag;
+  final String? lead;
+  final String? headline;
+  final String? body;
+
+  factory WorldSceneWhen.fromJson(Map<String, dynamic> json) => WorldSceneWhen(
+    flag: json['flag'] as String?,
+    lead: json['lead'] as String?,
+    headline: json['headline'] as String?,
+    body: json['body'] as String?,
   );
 }
 
@@ -162,6 +203,11 @@ class WorldChoice {
     required this.label,
     required this.requires,
     required this.forbids,
+    required this.forLeads,
+    required this.notForLeads,
+    required this.requireTraits,
+    this.trainHint,
+    this.critical,
   });
 
   final String id;
@@ -176,11 +222,35 @@ class WorldChoice {
   /// once the writ is in the Court's hands it cannot also be burned — and
   /// without this the player is offered a road the server will refuse.
   final List<String> forbids;
+  final List<String> forLeads;
+  final List<String> notForLeads;
+  final WorldTraits? requireTraits;
+  final String? trainHint;
+  final WorldCritical? critical;
 
-  bool availableAt(String locationId, Set<String> flags) =>
+  bool availableAt(
+    String locationId,
+    Set<String> flags, {
+    Set<String> taken = const {},
+    String? leadId,
+  }) =>
       at == locationId &&
+      !taken.contains(id) &&
       requires.every(flags.contains) &&
-      !forbids.any(flags.contains);
+      !forbids.any(flags.contains) &&
+      (forLeads.isEmpty || (leadId != null && forLeads.contains(leadId))) &&
+      (leadId == null || !notForLeads.contains(leadId));
+
+  bool traitsMet(WorldTraits? traits) {
+    final need = requireTraits;
+    if (need == null) return true;
+    if (traits == null) return false;
+    if (need.strength > 0 && traits.strength < need.strength) return false;
+    if (need.charisma > 0 && traits.charisma < need.charisma) return false;
+    if (need.leadership > 0 && traits.leadership < need.leadership) return false;
+    if (need.level > 0 && traits.level < need.level) return false;
+    return true;
+  }
 
   /// Accepts a string, a list, or nothing. The authored data uses whichever
   /// reads better at the site, so parsing has to take both rather than crash
@@ -197,7 +267,148 @@ class WorldChoice {
     label: json['label'] as String? ?? '',
     requires: _flags(json['requires']),
     forbids: _flags(json['forbids']),
+    forLeads: _flags(json['for_leads']),
+    notForLeads: _flags(json['not_for_leads']),
+    requireTraits: WorldTraits.tryFrom(json['require_traits']),
+    trainHint: json['train_hint'] as String?,
+    critical: WorldCritical.tryFrom(json['critical']),
   );
+}
+
+@immutable
+class WorldCritical {
+  const WorldCritical({
+    required this.id,
+    required this.title,
+    required this.hint,
+  });
+
+  final String id;
+  final String title;
+  final String hint;
+
+  static WorldCritical? tryFrom(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    final id = json['id'] as String? ?? '';
+    if (id.isEmpty) return null;
+    return WorldCritical(
+      id: id,
+      title: json['title'] as String? ?? '',
+      hint: json['hint'] as String? ?? '',
+    );
+  }
+}
+
+@immutable
+class WorldDrill {
+  const WorldDrill({
+    required this.id,
+    required this.at,
+    required this.label,
+  });
+
+  final String id;
+  final String at;
+  final String label;
+
+  factory WorldDrill.fromJson(Map<String, dynamic> json) => WorldDrill(
+    id: json['id'] as String? ?? '',
+    at: json['at'] as String? ?? '',
+    label: json['label'] as String? ?? '',
+  );
+}
+
+@immutable
+class WorldMoment {
+  const WorldMoment({
+    required this.id,
+    required this.title,
+    required this.hint,
+    required this.at,
+    required this.place,
+    required this.kind,
+    required this.fatal,
+  });
+
+  final String id;
+  final String title;
+  final String hint;
+  final String at;
+  final String place;
+  final String kind;
+  final bool fatal;
+
+  factory WorldMoment.fromJson(Map<String, dynamic> json) => WorldMoment(
+    id: json['id'] as String? ?? '',
+    title: json['title'] as String? ?? '',
+    hint: json['hint'] as String? ?? '',
+    at: json['at'] as String? ?? '',
+    place: json['place'] as String? ?? '',
+    kind: json['kind'] as String? ?? 'hinge',
+    fatal: json['fatal'] == true,
+  );
+}
+
+@immutable
+class WorldContest {
+  const WorldContest({
+    required this.choiceId,
+    required this.opponent,
+    required this.warning,
+    required this.winnableNow,
+    required this.winnableAtCap,
+    required this.fatal,
+  });
+
+  final String choiceId;
+  final String opponent;
+  final String warning;
+  final bool winnableNow;
+  final bool winnableAtCap;
+  final bool fatal;
+
+  factory WorldContest.fromJson(Map<String, dynamic> json) => WorldContest(
+    choiceId: json['choice_id'] as String? ?? '',
+    opponent: json['opponent'] as String? ?? '',
+    warning: json['warning'] as String? ?? '',
+    winnableNow: json['winnable_now'] == true,
+    winnableAtCap: json['winnable_at_cap'] == true,
+    fatal: json['fatal'] == true,
+  );
+}
+
+@immutable
+class WorldDeath {
+  const WorldDeath({
+    required this.title,
+    required this.body,
+    required this.restoreId,
+    required this.restoreTitle,
+    required this.rebind,
+  });
+
+  final String title;
+  final String body;
+  final String? restoreId;
+  final String? restoreTitle;
+  final List<WorldLeadCard> rebind;
+
+  static WorldDeath? tryFrom(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    return WorldDeath(
+      title: json['title'] as String? ?? 'The sand has you.',
+      body: json['body'] as String? ?? '',
+      restoreId: json['restore_id'] as String?,
+      restoreTitle: json['restore_title'] as String?,
+      rebind: (json['rebind'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => WorldLeadCard.fromJson(Map<String, dynamic>.from(row)))
+          .where((lead) => lead.characterId.isNotEmpty)
+          .toList(),
+    );
+  }
 }
 
 @immutable
@@ -237,6 +448,7 @@ class InteractiveWorld {
     required this.realms,
     required this.locations,
     required this.choices,
+    required this.drills,
     required this.assetUrls,
     required this.assetAspects,
   });
@@ -253,6 +465,7 @@ class InteractiveWorld {
   final List<WorldRealm> realms;
   final List<WorldLocation> locations;
   final List<WorldChoice> choices;
+  final List<WorldDrill> drills;
   final Map<String, String> assetUrls;
 
   /// height / width of each published asset, measured by the asset pipeline.
@@ -338,6 +551,10 @@ class InteractiveWorld {
           .whereType<Map>()
           .map((raw) => WorldChoice.fromJson(Map<String, dynamic>.from(raw)))
           .toList(),
+      drills: (json['drills'] as List? ?? const [])
+          .whereType<Map>()
+          .map((raw) => WorldDrill.fromJson(Map<String, dynamic>.from(raw)))
+          .toList(),
       assetUrls: urls,
       assetAspects: aspects,
     );
@@ -352,23 +569,45 @@ class InteractiveWorldState {
     required this.unlockedIds,
     required this.revealedIds,
     required this.flags,
+    required this.travelLocationIds,
+    this.seenSceneIds = const {},
+    this.takenChoiceIds = const {},
+    this.protagonistId,
+    this.traits,
   });
 
   const InteractiveWorldState.empty()
     : currentLocationId = '',
       unlockedIds = const {},
       revealedIds = const {},
-      flags = const {};
+      flags = const {},
+      travelLocationIds = const {},
+      seenSceneIds = const {},
+      takenChoiceIds = const {},
+      protagonistId = null,
+      traits = null;
 
   final String currentLocationId;
   final Set<String> unlockedIds;
   final Set<String> revealedIds;
   final Set<String> flags;
 
+  /// Open authored neighbours the server will accept as one move.
+  /// The map may show other open places, but visibility is not adjacency.
+  final Set<String> travelLocationIds;
+  final Set<String> seenSceneIds;
+  final Set<String> takenChoiceIds;
+  final String? protagonistId;
+  final WorldTraits? traits;
+
   factory InteractiveWorldState.fromJson(Map<String, dynamic> json) {
     final rawFlags = Map<String, dynamic>.from(
       json['flags'] as Map? ?? const {},
     );
+    final rawProtagonist = json['protagonist'];
+    final protagonist = rawProtagonist is Map
+        ? rawProtagonist['character_id'] as String?
+        : null;
     return InteractiveWorldState(
       currentLocationId: json['current_location_id'] as String? ?? '',
       unlockedIds: (json['unlocked_location_ids'] as List? ?? const [])
@@ -381,6 +620,114 @@ class InteractiveWorldState {
           .where((entry) => entry.value == true)
           .map((entry) => entry.key)
           .toSet(),
+      travelLocationIds: (json['travel_location_ids'] as List? ?? const [])
+          .whereType<String>()
+          .toSet(),
+      seenSceneIds: (json['seen_scene_ids'] as List? ?? const [])
+          .whereType<String>()
+          .toSet(),
+      takenChoiceIds: (json['taken_choice_ids'] as List? ?? const [])
+          .whereType<String>()
+          .toSet(),
+      protagonistId: (protagonist != null && protagonist.isNotEmpty)
+          ? protagonist
+          : null,
+      traits: WorldTraits.tryFrom(json['traits']),
+    );
+  }
+}
+
+@immutable
+class WorldTraits {
+  const WorldTraits({
+    required this.strength,
+    required this.charisma,
+    required this.leadership,
+    required this.level,
+  });
+
+  final int strength;
+  final int charisma;
+  final int leadership;
+  final int level;
+
+  static WorldTraits? tryFrom(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    return WorldTraits(
+      strength: (json['strength'] as num?)?.round() ?? 0,
+      charisma: (json['charisma'] as num?)?.round() ?? 0,
+      leadership: (json['leadership'] as num?)?.round() ?? 0,
+      level: (json['level'] as num?)?.round() ?? 0,
+    );
+  }
+}
+
+@immutable
+class WorldLeadCard {
+  const WorldLeadCard({
+    required this.characterId,
+    required this.name,
+    required this.role,
+    required this.want,
+    required this.portraitUrl,
+    this.sceneUrl,
+    this.traits,
+  });
+
+  final String characterId;
+  final String name;
+  final String role;
+  final String want;
+  final String? portraitUrl;
+  final String? sceneUrl;
+  final WorldTraits? traits;
+
+  factory WorldLeadCard.fromJson(Map<String, dynamic> json) => WorldLeadCard(
+    characterId: json['character_id'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    role: json['role'] as String? ?? '',
+    want: json['want'] as String? ?? '',
+    portraitUrl: switch (json['portrait_url']) {
+      final String url when url.isNotEmpty => url,
+      _ => null,
+    },
+    sceneUrl: switch (json['scene_url']) {
+      final String url when url.isNotEmpty => url,
+      _ => null,
+    },
+    traits: WorldTraits.tryFrom(json['start_traits']) ??
+        WorldTraits.tryFrom(json['traits']),
+  );
+}
+
+@immutable
+class WorldPrologue {
+  const WorldPrologue({
+    required this.headline,
+    required this.beats,
+    required this.sceneUrl,
+  });
+
+  final String headline;
+  final List<String> beats;
+  final String? sceneUrl;
+
+  static WorldPrologue? tryFrom(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    final beats = (json['beats'] as List? ?? const [])
+        .whereType<String>()
+        .where((beat) => beat.isNotEmpty)
+        .toList();
+    if (beats.isEmpty) return null;
+    return WorldPrologue(
+      headline: json['headline'] as String? ?? '',
+      beats: beats,
+      sceneUrl: switch (json['scene_url']) {
+        final String url when url.isNotEmpty => url,
+        _ => null,
+      },
     );
   }
 }
@@ -431,7 +778,10 @@ class WorldPetition {
     resolutions: (json['resolutions'] as List? ?? const [])
         .whereType<Map>()
         .map(
-          (r) => (id: r['id'] as String? ?? '', label: r['label'] as String? ?? ''),
+          (r) => (
+            id: r['id'] as String? ?? '',
+            label: r['label'] as String? ?? '',
+          ),
         )
         .toList(),
     cites: (json['cites'] as List? ?? const [])
@@ -457,12 +807,13 @@ class WorldLedgerEntry {
   final String madeToPay;
   final String principle;
 
-  factory WorldLedgerEntry.fromJson(Map<String, dynamic> json) => WorldLedgerEntry(
-    petitionId: json['petition_id'] as String? ?? '',
-    madeWhole: json['made_whole'] as String? ?? '',
-    madeToPay: json['made_to_pay'] as String? ?? '',
-    principle: json['principle'] as String? ?? '',
-  );
+  factory WorldLedgerEntry.fromJson(Map<String, dynamic> json) =>
+      WorldLedgerEntry(
+        petitionId: json['petition_id'] as String? ?? '',
+        madeWhole: json['made_whole'] as String? ?? '',
+        madeToPay: json['made_to_pay'] as String? ?? '',
+        principle: json['principle'] as String? ?? '',
+      );
 }
 
 /// What the player has become: how factions read them, what they have earned,
@@ -549,6 +900,7 @@ class WorldPresence {
     required this.portraitUrl,
     required this.met,
     required this.firstMet,
+    this.disposition,
   });
 
   final String id;
@@ -557,6 +909,7 @@ class WorldPresence {
   final String faction;
   final String? portraitUrl;
   final bool met;
+  final int? disposition;
 
   /// Authored entrance, present only while [met] is false. It is the meeting
   /// itself, not a caption to keep under their feet.
@@ -574,6 +927,7 @@ class WorldPresence {
       _ => null,
     },
     met: json['met'] == true,
+    disposition: (json['disposition'] as num?)?.toInt(),
     firstMet: switch (json['first_met']) {
       final String prose when prose.isNotEmpty => prose,
       _ => null,
@@ -813,6 +1167,7 @@ class WorldDuel {
 class InteractiveWorldEntrance {
   const InteractiveWorldEntrance({
     required this.worldKey,
+    required this.templateId,
     required this.title,
     required this.chapterTitle,
     required this.blurb,
@@ -820,6 +1175,9 @@ class InteractiveWorldEntrance {
   });
 
   final String worldKey;
+
+  /// The template Explore opens. Empty only if the server omitted it.
+  final String templateId;
   final String title;
   final String chapterTitle;
 
@@ -833,6 +1191,7 @@ class InteractiveWorldEntrance {
   factory InteractiveWorldEntrance.fromJson(Map<String, dynamic> json) =>
       InteractiveWorldEntrance(
         worldKey: json['world_key'] as String? ?? '',
+        templateId: json['template_id']?.toString() ?? '',
         title: json['title'] as String? ?? '',
         chapterTitle: json['chapter_title'] as String? ?? '',
         blurb: switch (json['blurb']) {

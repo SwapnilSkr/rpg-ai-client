@@ -4,16 +4,19 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/widgets/everlore_empty_state.dart';
-import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../shared/widgets/everlore_notice.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../data/interactive_world_repository.dart';
 import '../domain/interactive_world.dart';
+import 'stage/stage.dart';
 import 'travel_transition.dart';
 import 'world_characters.dart';
 import 'world_duel.dart';
 import 'world_frame.dart';
+import 'world_identity.dart';
 import 'world_map_view.dart';
+import 'world_moments.dart';
+import 'world_prologue.dart';
 
 /// An interactive world — a terrain plate with placed markers, not a chat UI
 /// with a decorative map.
@@ -51,12 +54,22 @@ class InteractiveWorldScreen extends StatefulWidget {
 enum _View { map, scene }
 
 class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
-
   final _repository = const InteractiveWorldRepository();
   InteractiveWorld? _world;
   InteractiveWorldState _state = const InteractiveWorldState.empty();
   WorldProgression _progression = WorldProgression.empty;
   List<WorldPresence> _cast = const [];
+  List<WorldLeadCard> _playable = const [];
+  WorldLeadCard? _lead;
+  WorldPrologue? _prologue;
+  WorldDeath? _death;
+  List<WorldMoment> _moments = const [];
+  List<WorldDrill> _drillsHere = const [];
+  List<WorldContest> _contests = const [];
+  bool _showMoments = false;
+  bool _needsIdentity = false;
+  String? _sceneHeadline;
+  String? _sceneBody;
   final Map<String, List<VisitLine>> _visit = {};
   final Set<String> _metHere = {};
   String? _addressingId;
@@ -135,14 +148,30 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
       final open = _world!.locations
           .where((l) => l.authoredVisibility == WorldVisibility.open)
           .toList();
-      _state = InteractiveWorldState(
+        _state = InteractiveWorldState(
         currentLocationId: open.isEmpty ? '' : open.first.id,
         unlockedIds: open.map((l) => l.id).toSet(),
-        revealedIds: _world!.locations
-            .where((l) => l.authoredVisibility != WorldVisibility.rumoured)
-            .map((l) => l.id)
-            .toSet(),
+        revealedIds: {
+          if (open.isNotEmpty) open.first.id,
+          if (open.isNotEmpty)
+            ...open.first.routes.where((id) {
+              final neighbour = _world!.byId(id);
+              return neighbour != null &&
+                  neighbour.authoredVisibility != WorldVisibility.rumoured;
+            }),
+        },
         flags: const {},
+        // A preview has no server state. Mirror only the authored first step so
+        // it still illustrates the graph without implying arbitrary travel.
+        travelLocationIds: open.isEmpty
+            ? const {}
+            : open.first.routes
+                  .where(
+                    (id) =>
+                        _world!.byId(id)?.authoredVisibility ==
+                        WorldVisibility.open,
+                  )
+                  .toSet(),
       );
     }
     // A word can unseal a door or walk the player on. Keeping the last room's
@@ -166,8 +195,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
           .where((who) => who.id.isNotEmpty)
           .toList();
     }
-    if (_addressingId != null &&
-        !_cast.any((who) => who.id == _addressingId)) {
+    if (_addressingId != null && !_cast.any((who) => who.id == _addressingId)) {
       _addressingId = null;
     }
     // Talk is not a side channel. The rest of the payload is applied the
@@ -176,16 +204,50 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     if (rawSpoken is Map) {
       final spoken = WorldSpoken.fromJson(Map<String, dynamic>.from(rawSpoken));
       if (spoken.characterId.isNotEmpty && spoken.line.isNotEmpty) {
-        _visit.putIfAbsent(spoken.characterId, () => []).add(
-          VisitLine(
-            fromPlayer: false,
-            text: spoken.line,
-            portraitUrl: spoken.portraitUrl,
-          ),
-        );
+        _visit
+            .putIfAbsent(spoken.characterId, () => [])
+            .add(
+              VisitLine(
+                fromPlayer: false,
+                text: spoken.line,
+                portraitUrl: spoken.portraitUrl,
+              ),
+            );
       }
     }
     _selectedId ??= _state.currentLocationId;
+    _needsIdentity = payload['needs_identity'] == true;
+    _playable = (payload['playable'] as List? ?? const [])
+        .whereType<Map>()
+        .map((raw) => WorldLeadCard.fromJson(Map<String, dynamic>.from(raw)))
+        .where((lead) => lead.characterId.isNotEmpty)
+        .toList();
+    final rawLead = payload['lead'];
+    _lead = rawLead is Map
+        ? WorldLeadCard.fromJson(Map<String, dynamic>.from(rawLead))
+        : null;
+    _prologue = WorldPrologue.tryFrom(payload['prologue']);
+    _death = WorldDeath.tryFrom(payload['death']);
+    _moments = (payload['moments'] as List? ?? const [])
+        .whereType<Map>()
+        .map((raw) => WorldMoment.fromJson(Map<String, dynamic>.from(raw)))
+        .where((moment) => moment.id.isNotEmpty)
+        .toList();
+    _drillsHere = (payload['drills'] as List? ?? const [])
+        .whereType<Map>()
+        .map((raw) => WorldDrill.fromJson(Map<String, dynamic>.from(raw)))
+        .where((drill) => drill.id.isNotEmpty)
+        .toList();
+    _contests = (payload['contests'] as List? ?? const [])
+        .whereType<Map>()
+        .map((raw) => WorldContest.fromJson(Map<String, dynamic>.from(raw)))
+        .where((contest) => contest.choiceId.isNotEmpty)
+        .toList();
+    final rawScene = payload['scene'];
+    if (rawScene is Map) {
+      _sceneHeadline = rawScene['headline'] as String?;
+      _sceneBody = rawScene['body'] as String?;
+    }
   }
 
   WorldLocation? get _selected => _world?.byId(_selectedId ?? '');
@@ -199,6 +261,8 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     String? resolutionId,
     String? characterId,
     String? said,
+    String? checkpointId,
+    String? drillId,
     bool alreadyActing = false,
   }) async {
     if (!_isServerBacked) {
@@ -226,6 +290,8 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
         resolutionId: resolutionId,
         characterId: characterId,
         said: said,
+        checkpointId: checkpointId,
+        drillId: drillId,
       );
       if (!mounted) return false;
       // Read off the payload BEFORE it is applied, because applying it is what
@@ -248,9 +314,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
         reason,
         // A refusal the world worded is the fiction speaking. Only a
         // message that never arrived is an error.
-        tone: reason == _unreachable
-            ? NoticeTone.error
-            : NoticeTone.info,
+        tone: reason == _unreachable ? NoticeTone.error : NoticeTone.info,
       );
       return false;
     }
@@ -314,9 +378,9 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     if (text.isEmpty || text.length > 500) return;
     if (!_cast.any((who) => who.id == characterId)) return;
     setState(() {
-      _visit.putIfAbsent(characterId, () => []).add(
-        VisitLine(fromPlayer: true, text: text),
-      );
+      _visit
+          .putIfAbsent(characterId, () => [])
+          .add(VisitLine(fromPlayer: true, text: text));
     });
     final reached = await _act(
       type: 'talk',
@@ -358,13 +422,36 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   /// fiction never told: the road was open, the message never arrived. It sent
   /// a play-test hunting a locked choice that was not locked.
   String _reasonFrom(Object error) {
-    final match = RegExp(
-      r'"message"\s*:\s*"([^"]+)"',
-    ).firstMatch(error.toString());
+    final match = RegExp(r'"message"\s*:\s*"([^"]+)"')
+        .firstMatch(error.toString());
     return match?.group(1) ?? _unreachable;
   }
 
   static const _unreachable = 'That did not reach the world. Try it again.';
+
+  Future<void> _restore(String checkpointId) async {
+    final reached = await _act(type: 'restore', checkpointId: checkpointId);
+    if (!reached || !mounted) return;
+    setState(() {
+      _showMoments = false;
+      _view = _View.map;
+      _visit.clear();
+      _metHere.clear();
+      _addressingId = null;
+    });
+  }
+
+  Future<void> _rebind(WorldLeadCard lead) async {
+    final reached = await _act(type: 'rebind', characterId: lead.characterId);
+    if (!reached || !mounted) return;
+    setState(() {
+      _showMoments = false;
+      _view = _View.map;
+      _visit.clear();
+      _metHere.clear();
+      _addressingId = null;
+    });
+  }
 
   void _notice(String message, {NoticeTone tone = NoticeTone.info}) {
     if (!mounted) return;
@@ -428,11 +515,29 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     final world = _world;
     final here = _here;
     if (world == null || here == null || !mounted) return;
+    // The room stands inside the safe area. Warming against the raw
+    // frame stocks a shelf the cut-out will not paint from.
+    final media = MediaQuery.of(context);
+    final size = Size(
+      media.size.width - media.padding.left - media.padding.right,
+      media.size.height - media.padding.top - media.padding.bottom,
+    );
+    final petitionHere = _progression.petitions.any((p) => p.at == here.id);
+    final reserved = StageMeasure.roomReservedHeight(
+      screenHeight: size.height,
+      petition: petitionHere,
+    );
     await awaitWorldFrame(
       context,
       urls: [world.urlFor(here.sceneAssetId)],
       cutouts: [for (final who in _cast) who.portraitUrl],
-      cutoutMaxHeight: CharacterCutout.cacheHeightOf(context),
+      cutoutMaxHeight: StageMeasure.figureCacheHeight(
+        context,
+        slotHeight: StageMeasure.roomSlotHeight(
+          screenHeight: size.height,
+          reservedPanelHeight: reserved,
+        ),
+      ),
     );
   }
 
@@ -457,6 +562,28 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                 title: 'The way is closed',
                 message: _error ?? 'The way in is not open.',
                 onRetry: _load,
+              )
+            : _needsIdentity
+            ? WorldIdentitySheet(
+                leads: _playable,
+                busy: _acting,
+                onLeave: () => Navigator.of(context).maybePop(),
+                onChoose: (lead) => unawaited(
+                  _act(type: 'bind', characterId: lead.characterId),
+                ),
+              )
+            : _death != null
+            ? WorldDeathSheet(
+                death: _death!,
+                busy: _acting,
+                onLeave: () => Navigator.of(context).maybePop(),
+                onRestore: _restore,
+                onRebind: _rebind,
+              )
+            : _prologue != null
+            ? WorldPrologueStage(
+                prologue: _prologue!,
+                onFinished: () => unawaited(_act(type: 'begin')),
               )
             : _view == _View.map
             ? _buildMap(world)
@@ -494,6 +621,10 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                   title: world.title,
                 ),
               ),
+              _HingesButton(
+                count: _moments.length,
+                onPressed: () => setState(() => _showMoments = true),
+              ),
             ],
           ),
         ),
@@ -507,6 +638,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
               location: selected,
               visibility: selected.visibilityFor(_state.flags),
               isHere: selected.id == _state.currentLocationId,
+              canTravel: _state.travelLocationIds.contains(selected.id),
               busy: _acting,
               onTravel: () => _travel(selected),
               onEnter: () => unawaited(_enterScene()),
@@ -518,6 +650,15 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
               backgroundUrl: world.urlFor(
                 world.byId(_travellingTo!)?.sceneAssetId,
               ),
+            ),
+          ),
+        if (_showMoments)
+          Positioned.fill(
+            child: WorldMomentsSheet(
+              moments: _moments,
+              busy: _acting,
+              onRestore: _restore,
+              onClose: () => setState(() => _showMoments = false),
             ),
           ),
       ],
@@ -537,7 +678,14 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     }
     final url = world.urlFor(location.sceneAssetId);
     final choices = world.choices
-        .where((c) => c.availableAt(location.id, _state.flags))
+        .where(
+          (c) => c.availableAt(
+            location.id,
+            _state.flags,
+            taken: _state.takenChoiceIds,
+            leadId: _state.protagonistId,
+          ),
+        )
         .toList();
     // A petition displaces the scene's own copy rather than sitting beside it.
     // Someone is standing in front of the player waiting to be answered, and
@@ -546,28 +694,36 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
         .where((p) => p.at == location.id)
         .firstOrNull;
     final addressing = _addressing;
+    final reserved = StageMeasure.roomReservedHeight(
+      screenHeight: MediaQuery.sizeOf(context).height,
+      petition: petition != null,
+    );
+    final sceneCopy = location.sceneCopy(
+      flags: _state.flags,
+      leadId: _state.protagonistId,
+    );
+    final choosing = addressing == null && petition == null && choices.isNotEmpty;
     final scene = Stack(
       fit: StackFit.expand,
       children: [
-        if (url != null)
-          // The opening holds this same provider. A NetworkImage here
-          // would paint from a shelf the gate never warmed, and the
-          // player would still watch a dark room become a place.
-          EverloreNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.cover,
-            placeholder: const ColoredBox(color: Color(0xFF14100E)),
-            errorWidget: const ColoredBox(color: Color(0xFF14100E)),
+        // The conversation paints its own backdrop. Drawing it here as
+        // well would stack two veils and swallow the figure meant to
+        // stand in the room.
+        if (addressing == null) StageBackdrop(url: url, veil: StageVeil.room),
+        // Choice is your body only. Talk is the person you addressed.
+        // An idle room may still show who is standing here.
+        if (addressing == null && choosing)
+          Positioned.fill(
+            child: _ChoiceFigure(lead: _lead, reservedPanelHeight: reserved),
           )
-        else
-          const ColoredBox(color: Color(0xFF14100E)),
-        if (addressing == null)
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0x22000000), Color(0xCC000000)],
+        else if (addressing == null && _cast.isNotEmpty)
+          Positioned.fill(
+            child: _FadeIn(
+              child: SceneCast(
+                people: _cast,
+                reservedPanelHeight: reserved,
+                enabled: !_acting,
+                onAddress: _address,
               ),
             ),
           ),
@@ -593,19 +749,11 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                     title: location.title,
                   ),
                 ),
+                _HingesButton(
+                  count: _moments.length,
+                  onPressed: () => setState(() => _showMoments = true),
+                ),
               ],
-            ),
-          ),
-        // Stood in the painting, not stacked on the copy. A tall petition
-        // used to shove them up the frame like a roster; the panel is
-        // allowed to cover their feet the way dusk covers a room.
-        if (addressing == null && _cast.isNotEmpty)
-          Align(
-            alignment: const Alignment(0, 0.22),
-            child: SceneCast(
-              people: _cast,
-              enabled: !_acting,
-              onAddress: _address,
             ),
           ),
         if (addressing != null)
@@ -624,12 +772,39 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                     ),
                   )
                 : _StoryPanel(
-                    headline: location.sceneHeadline ?? location.title,
-                    body: location.sceneBody ?? location.description,
+                    headline:
+                        _sceneHeadline ?? sceneCopy.headline,
+                    body: _sceneBody ?? sceneCopy.body,
                     choices: choices,
+                    drills: _drillsHere,
+                    contests: _contests,
+                    people: _cast,
+                    traits: _state.traits,
+                    standing: _progression.standing,
                     busy: _acting,
-                    onChoose: (id) => _act(type: 'choose', choiceId: id),
+                    onChoose: (choice) {
+                      if (!choice.traitsMet(_state.traits)) {
+                        _notice(
+                          choice.trainHint ??
+                              'You have not the strength for that',
+                        );
+                        return;
+                      }
+                      _act(type: 'choose', choiceId: choice.id);
+                    },
+                    onTrain: (drill) =>
+                        _act(type: 'train', drillId: drill.id),
+                    onAddress: _address,
                   ),
+          ),
+        if (_showMoments)
+          Positioned.fill(
+            child: WorldMomentsSheet(
+              moments: _moments,
+              busy: _acting,
+              onRestore: _restore,
+              onClose: () => setState(() => _showMoments = false),
+            ),
           ),
       ],
     );
@@ -649,8 +824,10 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     return ConversationPanel(
       person: who,
       bearingUrl: _bearingFor(who),
+      backdropUrl: _world?.urlFor(_here?.sceneAssetId),
       lines: _visit[who.id] ?? const [],
       busy: _acting,
+      playerPortraitUrl: _lead?.portraitUrl,
       onSpeak: (said) => unawaited(_speak(who.id, said)),
       onLeave: () => setState(() => _addressingId = null),
     );
@@ -663,6 +840,7 @@ class _SelectionCard extends StatelessWidget {
     required this.location,
     required this.visibility,
     required this.isHere,
+    required this.canTravel,
     required this.busy,
     required this.onTravel,
     required this.onEnter,
@@ -672,6 +850,7 @@ class _SelectionCard extends StatelessWidget {
   final WorldLocation location;
   final WorldVisibility visibility;
   final bool isHere;
+  final bool canTravel;
   final bool busy;
   final VoidCallback onTravel;
   final VoidCallback onEnter;
@@ -684,9 +863,7 @@ class _SelectionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xE6100C0A),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: EverloreTheme.goldDim.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -731,7 +908,7 @@ class _SelectionCard extends StatelessWidget {
           if (isHere && location.isEnterable) ...[
             const SizedBox(height: 14),
             _Action(label: 'Enter', busy: busy, onTap: onEnter),
-          ] else if (!sealed) ...[
+          ] else if (!sealed && canTravel) ...[
             const SizedBox(height: 14),
             _Action(label: 'Travel here', busy: busy, onTap: onTravel),
           ],
@@ -758,9 +935,7 @@ class _Action extends StatelessWidget {
         disabledBackgroundColor: EverloreTheme.gold,
         disabledForegroundColor: EverloreTheme.void0,
         minimumSize: const Size.fromHeight(54),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -784,71 +959,316 @@ class _Action extends StatelessWidget {
   );
 }
 
+class _HingesButton extends StatelessWidget {
+  const _HingesButton({required this.count, required this.onPressed});
+
+  final int count;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: count == 0 ? 'The road behind you' : 'The road behind you · $count',
+      color: EverloreTheme.parchment,
+      icon: Badge(
+        isLabelVisible: count > 0,
+        label: Text('$count'),
+        backgroundColor: StageMeasure.brass,
+        textColor: StageMeasure.ground,
+        child: const Icon(Icons.history_rounded),
+      ),
+    );
+  }
+}
+
+class _HingeChoice extends StatelessWidget {
+  const _HingeChoice({
+    required this.choice,
+    required this.traits,
+    required this.contest,
+    required this.busy,
+    required this.onChoose,
+  });
+
+  final WorldChoice choice;
+  final WorldTraits? traits;
+  final WorldContest? contest;
+  final bool busy;
+  final ValueChanged<WorldChoice> onChoose;
+
+  @override
+  Widget build(BuildContext context) {
+    final hinge = choice.critical;
+    final short = !choice.traitsMet(traits);
+    final weight = contest != null && !contest!.winnableNow;
+    final hint = weight
+        ? contest!.warning
+        : short
+        ? choice.trainHint
+        : hinge?.hint;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (weight) ...[
+          Text(
+            contest!.fatal
+                ? 'WEIGHT · YOU WILL FALL'
+                : 'WEIGHT · YOU WILL LOSE',
+            style: EverloreTheme.caption.copyWith(
+              color: StageMeasure.danger,
+              fontSize: 10,
+              letterSpacing: 1.4,
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
+        if (hinge != null) ...[
+          Text(
+            'HINGE · ${hinge.title.toUpperCase()}',
+            style: EverloreTheme.caption.copyWith(
+              color: StageMeasure.brassDeep,
+              fontSize: 10,
+              letterSpacing: 1.4,
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
+        SizedBox(
+          width: double.infinity,
+          child: StageChoice(
+            label: choice.label,
+            busy: busy,
+            onPressed: busy ? null : () => onChoose(choice),
+          ),
+        ),
+        if (hint != null && hint.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            hint,
+            style: EverloreTheme.aiText.copyWith(
+              color: weight ? StageMeasure.danger : StageMeasure.inkMuted,
+              fontSize: 13,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _StoryPanel extends StatelessWidget {
   const _StoryPanel({
     required this.headline,
     required this.body,
     required this.choices,
+    required this.drills,
+    required this.contests,
+    required this.people,
+    required this.traits,
+    required this.standing,
     required this.busy,
     required this.onChoose,
+    required this.onTrain,
+    required this.onAddress,
   });
 
   final String headline;
   final String body;
   final List<WorldChoice> choices;
+  final List<WorldDrill> drills;
+  final List<WorldContest> contests;
+  final List<WorldPresence> people;
+  final WorldTraits? traits;
+  final List<({String id, String title, int value})> standing;
   final bool busy;
-  final ValueChanged<String> onChoose;
+  final ValueChanged<WorldChoice> onChoose;
+  final ValueChanged<WorldDrill> onTrain;
+  final ValueChanged<WorldPresence> onAddress;
 
   @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-    padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-    // A long scene, or a reader with large text, used to climb the
-    // painting and cover the room. The panel takes at most two thirds
-    // of the screen and scrolls inside that, so the scene behind it
-    // stays visible and the choices are always reachable.
-    constraints: BoxConstraints(
-      maxHeight: MediaQuery.sizeOf(context).height * 0.66,
-    ),
-    decoration: BoxDecoration(
-      color: const Color(0xE60D0A09),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(
-        color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, StageMeasure.roomPanelFoot),
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight:
+            MediaQuery.sizeOf(context).height * StageMeasure.roomPanelCeiling,
       ),
-    ),
-    child: SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(headline, style: EverloreTheme.cardTitle),
-          const SizedBox(height: 8),
-          Text(
-            body,
-            style: EverloreTheme.aiText.copyWith(
-              color: EverloreTheme.parchment.withValues(alpha: 0.7),
-              height: 1.5,
+      child: _FadeIn(
+        child: StagePanel(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (traits != null || standing.isNotEmpty) ...[
+                  _WalkMeters(traits: traits, standing: standing),
+                  const SizedBox(height: 12),
+                ],
+                Text(
+                  headline,
+                  style: EverloreTheme.serifDisplay(
+                    size: 18,
+                    color: StageMeasure.ink,
+                    weight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  body,
+                  style: EverloreTheme.aiText.copyWith(
+                    color: StageMeasure.inkMuted,
+                    fontSize: 16,
+                    height: 1.5,
+                  ),
+                ),
+                if (people.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  for (final who in people) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: StageChoice(
+                        label: who.disposition == null
+                            ? 'Speak with ${who.name}'
+                            : 'Speak with ${who.name}  ·  ${who.disposition}',
+                        busy: busy,
+                        onPressed: busy ? null : () => onAddress(who),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+                if (drills.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'WORK THE PLACE',
+                    style: EverloreTheme.caption.copyWith(
+                      color: StageMeasure.brassDeep,
+                      fontSize: 10,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final drill in drills) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: StageChoice(
+                        label: drill.label,
+                        busy: busy,
+                        onPressed: busy ? null : () => onTrain(drill),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+                if (choices.isNotEmpty) const SizedBox(height: 8),
+                for (final choice in choices) ...[
+                  _HingeChoice(
+                    choice: choice,
+                    traits: traits,
+                    contest: contests
+                        .where((entry) => entry.choiceId == choice.id)
+                        .firstOrNull,
+                    busy: busy,
+                    onChoose: onChoose,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ],
             ),
           ),
-          if (choices.isNotEmpty) const SizedBox(height: 16),
-          for (final choice in choices) ...[
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: busy ? null : () => onChoose(choice.id),
-                child: Text(
-                  choice.label,
-                  style: EverloreTheme.ui(size: 13, weight: FontWeight.w600),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ],
+        ),
       ),
     ),
   );
+}
+
+class _ChoiceFigure extends StatelessWidget {
+  const _ChoiceFigure({required this.lead, required this.reservedPanelHeight});
+
+  final WorldLeadCard? lead;
+  final double reservedPanelHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = StageRoomLayout.of(
+      context,
+      count: 1,
+      reservedPanelHeight: reservedPanelHeight,
+    );
+    final rect = layout.figureAt(0);
+    return _FadeIn(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+            child: StageFigure(
+              name: lead?.name ?? 'You',
+              portraitUrl: lead?.portraitUrl,
+              side: StageSide.left,
+              rise: StageRise.speak,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WalkMeters extends StatelessWidget {
+  const _WalkMeters({required this.traits, required this.standing});
+
+  final WorldTraits? traits;
+  final List<({String id, String title, int value})> standing;
+
+  @override
+  Widget build(BuildContext context) {
+    final chips = <String>[
+      if (traits != null) 'Str ${traits!.strength}',
+      if (traits != null) 'Cha ${traits!.charisma}',
+      if (traits != null) 'Lead ${traits!.leadership}',
+      if (traits != null) 'Lv ${traits!.level}',
+      for (final track in standing.take(3)) '${track.title} ${track.value}',
+    ];
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        for (final chip in chips)
+          Text(
+            chip.toUpperCase(),
+            style: EverloreTheme.caption.copyWith(
+              color: StageMeasure.brassDeep,
+              fontSize: 10,
+              letterSpacing: 1.1,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _FadeIn extends StatelessWidget {
+  const _FadeIn({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 420),
+      builder: (context, value, child) => Opacity(opacity: value, child: child),
+      child: child,
+    );
+  }
 }
 
 /// A quarrel put in front of the player, and the ways of ending it.
@@ -869,94 +1289,98 @@ class _PetitionPanel extends StatelessWidget {
   final ValueChanged<String> onRule;
 
   @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-    padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, StageMeasure.roomPanelFoot),
     // Three parties, their claims, any rulings quoted back and three ways to
     // answer will not fit a phone. The panel takes at most two thirds of the
     // screen and scrolls inside that, so the scene behind it stays visible and
     // the buttons are always reachable.
-    constraints: BoxConstraints(
-      maxHeight: MediaQuery.sizeOf(context).height * 0.66,
-    ),
-    decoration: BoxDecoration(
-      color: const Color(0xF20D0A09),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(
-        color: EverloreTheme.goldDim.withValues(alpha: 0.42),
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight:
+            MediaQuery.sizeOf(context).height * StageMeasure.roomPanelCeiling,
       ),
-    ),
-    child: SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'BROUGHT BEFORE YOU',
-            style: EverloreTheme.sectionHeader,
-          ),
-          const SizedBox(height: 4),
-          Text(petition.title, style: EverloreTheme.cardTitle),
-          const SizedBox(height: 14),
-          for (final party in petition.parties) ...[
-            Text(
-              party.name,
-              style: EverloreTheme.ui(
-                size: 13,
-                color: EverloreTheme.gold,
-                weight: FontWeight.w600,
+      child: StagePanel(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'BROUGHT BEFORE YOU',
+                style: EverloreTheme.sectionHeader.copyWith(
+                  color: StageMeasure.brassDeep,
+                ),
               ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              party.claim,
-              style: EverloreTheme.aiText.copyWith(
-                color: EverloreTheme.parchment.withValues(alpha: 0.7),
-                height: 1.45,
+              const SizedBox(height: 4),
+              Text(
+                petition.title,
+                style: EverloreTheme.serifDisplay(
+                  size: 18,
+                  color: StageMeasure.ink,
+                  weight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          // Your own words, brought back by someone who has read them.
-          for (final principle in petition.cites) ...[
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              decoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.4),
-                    width: 2,
+              const SizedBox(height: 14),
+              for (final party in petition.parties) ...[
+                Text(
+                  party.name,
+                  style: EverloreTheme.ui(
+                    size: 13,
+                    color: StageMeasure.brassDeep,
+                    weight: FontWeight.w600,
                   ),
                 ),
-                color: EverloreTheme.gold.withValues(alpha: 0.08),
-              ),
-              child: Text(
-                'They quote you: $principle',
-                style: EverloreTheme.aiText.copyWith(
-                  color: EverloreTheme.parchment.withValues(alpha: 0.8),
-                  fontSize: 15,
-                  height: 1.4,
-                  fontStyle: FontStyle.italic,
+                const SizedBox(height: 3),
+                Text(
+                  party.claim,
+                  style: EverloreTheme.aiText.copyWith(
+                    color: StageMeasure.inkMuted,
+                    height: 1.45,
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          for (final resolution in petition.resolutions) ...[
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: busy ? null : () => onRule(resolution.id),
-                child: Text(
-                  resolution.label,
-                  textAlign: TextAlign.center,
-                  style: EverloreTheme.ui(size: 13, weight: FontWeight.w600),
+                const SizedBox(height: 12),
+              ],
+              // Your own words, brought back by someone who has read them.
+              for (final principle in petition.cites) ...[
+                Container(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: StageMeasure.brassDeep.withValues(alpha: 0.6),
+                        width: 2,
+                      ),
+                    ),
+                    color: StageMeasure.brass.withValues(alpha: 0.10),
+                  ),
+                  child: Text(
+                    'They quote you: $principle',
+                    style: EverloreTheme.aiText.copyWith(
+                      color: StageMeasure.inkMuted,
+                      fontSize: 15,
+                      height: 1.4,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ],
+                const SizedBox(height: 12),
+              ],
+              for (final resolution in petition.resolutions) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: StageChoice(
+                    label: resolution.label,
+                    busy: busy,
+                    onPressed: busy ? null : () => onRule(resolution.id),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ],
+          ),
+        ),
       ),
     ),
   );
@@ -971,11 +1395,7 @@ class _Title extends StatelessWidget {
   /// shadow holds the letters without dimming the land; without it the
   /// title vanishes into the painting.
   static const _overPaint = [
-    Shadow(
-      color: Color(0xCC0A0807),
-      blurRadius: 18,
-      offset: Offset(0, 2),
-    ),
+    Shadow(color: Color(0xCC0A0807), blurRadius: 18, offset: Offset(0, 2)),
   ];
 
   @override
@@ -997,9 +1417,8 @@ class _Title extends StatelessWidget {
         child: Text(
           title,
           maxLines: 1,
-          style: EverloreTheme.serifDisplay(size: 19).copyWith(
-            shadows: _overPaint,
-          ),
+          style: EverloreTheme.serifDisplay(size: 19)
+              .copyWith(shadows: _overPaint),
         ),
       ),
     ],

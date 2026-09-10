@@ -35,7 +35,9 @@ subprojects {
     if (state.executed) {
         forceCompileSdk36()
     } else {
-        afterEvaluate { forceCompileSdk36() }
+        afterEvaluate {
+            forceCompileSdk36()
+        }
     }
 }
 

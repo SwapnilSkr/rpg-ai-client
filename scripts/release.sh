@@ -23,10 +23,21 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Play Billing 8 + target API 36 need the pinned SDK, not whatever `flutter` is
-# on PATH.
-FLUTTER="${FLUTTER_SDK:-$HOME/Development/flutter-sdks/flutter-3.44.9}/bin/flutter"
-[ -x "$FLUTTER" ] || { echo "✗ pinned Flutter SDK not found at $FLUTTER" >&2; exit 1; }
+# Releases build with the Flutter on PATH. This used to pin an SDK directory
+# for Play Billing 8 + target API 36; the pin went stale — the pubspec now needs
+# a newer Dart than it shipped and dependency resolution just fails. A floor is
+# the control that actually holds, so check the version instead of the path.
+# Set FLUTTER_SDK to build with a specific SDK root.
+MIN_FLUTTER="3.47.2"
+FLUTTER="${FLUTTER_SDK:+$FLUTTER_SDK/bin/}flutter"
+command -v "$FLUTTER" >/dev/null 2>&1 || { echo "✗ Flutter not found: $FLUTTER" >&2; exit 1; }
+FLUTTER_VERSION="$("$FLUTTER" --version 2>/dev/null | sed -n '1s/^Flutter \([0-9.]*\).*/\1/p')"
+[ -n "$FLUTTER_VERSION" ] || { echo "✗ could not read the Flutter version from $FLUTTER" >&2; exit 1; }
+if [ "$(printf '%s\n%s\n' "$MIN_FLUTTER" "$FLUTTER_VERSION" | sort -V | head -1)" != "$MIN_FLUTTER" ]; then
+  echo "✗ Flutter $FLUTTER_VERSION is too old; this app needs $MIN_FLUTTER or newer" >&2
+  exit 1
+fi
+echo "• building with Flutter $FLUTTER_VERSION"
 
 API_BASE_URL="${API_BASE_URL:-https://api.everloreapp.com}"
 WS_BASE_URL="${WS_BASE_URL:-wss://api.everloreapp.com}"

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/world_template.dart';
 import '../../../shared/narrative_styles.dart';
 import '../data/template_repository.dart';
 import '../data/interest_ranking.dart';
+import '../../interactive/data/interactive_world_repository.dart';
+import '../../home/presentation/realm_entry_flow.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
@@ -29,7 +32,7 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
   int _page = 1;
   int _total = 0;
   String? _error;
-  String _kindFilter = 'all'; // 'all' | 'world' | 'character'
+  String _kindFilter = 'all'; // 'all' | 'world' | 'character' | 'walks'
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
 
@@ -53,7 +56,12 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
       return unblocked.where((t) => t.isCharacter).toList();
     }
     if (_kindFilter == 'world') {
-      return unblocked.where((t) => !t.isCharacter).toList();
+      return unblocked
+          .where((t) => !t.isCharacter && !t.isInteractiveWorld)
+          .toList();
+    }
+    if (_kindFilter == 'walks') {
+      return unblocked.where((t) => t.isInteractiveWorld).toList();
     }
     return unblocked;
   }
@@ -82,6 +90,19 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
       _error = null;
     });
     try {
+      if (_kindFilter == 'walks') {
+        const repo = InteractiveWorldRepository();
+        final walks = await orderTemplatesForFeed(
+          await repo.listPublished(search: search ?? ''),
+        );
+        setState(() {
+          _templates = walks;
+          _page = 1;
+          _total = walks.length;
+          _isLoading = false;
+        });
+        return;
+      }
       final result = await TemplateRepository.listPublished(
         page: 1,
         limit: 20,
@@ -113,6 +134,7 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
   }
 
   Future<void> _loadMore() async {
+    if (_kindFilter == 'walks') return;
     if (_isLoading || _isLoadingMore || _templates.length >= _total) return;
     setState(() => _isLoadingMore = true);
     try {
@@ -216,14 +238,19 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-        child: Row(
-          children: [
-            _segChip('all', 'All'),
-            const SizedBox(width: 8),
-            _segChip('world', 'Worlds'),
-            const SizedBox(width: 8),
-            _segChip('character', 'Characters'),
-          ],
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _segChip('all', 'All'),
+              const SizedBox(width: 8),
+              _segChip('world', 'Worlds'),
+              const SizedBox(width: 8),
+              _segChip('character', 'Characters'),
+              const SizedBox(width: 8),
+              _segChip('walks', 'Walks'),
+            ],
+          ),
         ),
       ),
     );
@@ -235,7 +262,11 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
         ? EverloreTheme.violetBright
         : EverloreTheme.gold;
     return GestureDetector(
-      onTap: () => setState(() => _kindFilter = value),
+      onTap: () {
+        if (_kindFilter == value) return;
+        setState(() => _kindFilter = value);
+        _loadTemplates(search: _searchController.text.trim());
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
@@ -424,9 +455,13 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
       );
     }
 
-    final label = _kindFilter == 'character'
-        ? '${visible.length} CHARACTER${visible.length == 1 ? '' : 'S'}'
-        : '${visible.length} WORLD${visible.length == 1 ? '' : 'S'} FOUND';
+    final label = switch (_kindFilter) {
+      'character' =>
+        '${visible.length} CHARACTER${visible.length == 1 ? '' : 'S'}',
+      'walks' =>
+        '${visible.length} WALK${visible.length == 1 ? '' : 'S'} FOUND',
+      _ => '${visible.length} WORLD${visible.length == 1 ? '' : 'S'} FOUND',
+    };
 
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 90),
@@ -441,7 +476,18 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
           final t = visible[index - 1];
           return _WorldCard(
             template: t,
-            onTap: () => context.push('/templates/${t.id}'),
+            onTap: () {
+              if (t.isInteractiveWorld) {
+                enterRealmFromTemplate(
+                  context,
+                  templateId: t.id,
+                  worldTitle: t.title,
+                  interactiveWorldKey: t.interactiveWorldKey,
+                );
+                return;
+              }
+              context.push('/templates/${t.id}');
+            },
           );
         }, childCount: visible.length + 1),
       ),

@@ -13,6 +13,7 @@ import 'package:everlore/features/chronicle/presentation/chronicle_screen.dart';
 import 'package:everlore/features/templates/presentation/browse_screen.dart';
 import 'package:everlore/features/templates/presentation/template_detail_screen.dart';
 import 'package:everlore/features/creator/presentation/my_worlds_screen.dart';
+import 'package:everlore/features/creator/presentation/my_walks_screen.dart';
 import 'package:everlore/features/creator/presentation/forge_world_route.dart';
 import 'package:everlore/features/creator/presentation/create_character_screen.dart';
 import 'package:everlore/features/personas/presentation/personas_screen.dart';
@@ -111,6 +112,11 @@ final router = GoRouter(
       builder: (context, state) => const MyWorldsScreen(),
     ),
     GoRoute(
+      path: '/my-walks',
+      name: 'my_walks',
+      builder: (context, state) => const MyWalksScreen(),
+    ),
+    GoRoute(
       path: '/my-worlds/forge',
       name: 'forge_world',
       builder: (context, state) => const ForgeWorldRoute(),
@@ -127,6 +133,11 @@ final router = GoRouter(
       path: '/membership',
       name: 'membership',
       builder: (context, state) => const BillingScreen(),
+    ),
+    GoRoute(
+      path: '/profile',
+      name: 'profile',
+      builder: (context, state) => const AuthScreen(),
     ),
     // The world key is a path PARAMETER, not a literal. Callers already build
     // this path from the template's own key, so a literal segment matched only
@@ -172,18 +183,18 @@ final router = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/personas',
-              name: 'personas',
-              builder: (context, state) => const PersonasScreen(),
+              path: '/walks',
+              name: 'walks',
+              builder: (context, state) => const HomeScreen(walks: true),
             ),
           ],
         ),
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/profile',
-              name: 'profile',
-              builder: (context, state) => const AuthScreen(),
+              path: '/personas',
+              name: 'personas',
+              builder: (context, state) => const PersonasScreen(),
             ),
           ],
         ),

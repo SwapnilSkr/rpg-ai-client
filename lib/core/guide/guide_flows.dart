@@ -30,7 +30,7 @@ abstract final class GuideFlows {
         title: 'Worlds and Souls',
         body:
             'Realms are places to live in. Characters are souls to meet. '
-            'Either one will open a story around you.',
+            'Walks are lands you travel. Any of them will open a story around you.',
       ),
       GuideBeat(
         anchor: GuideIds.discoverCard,

@@ -158,7 +158,7 @@ class _WorldMapViewState extends State<WorldMapView> {
     return widget.world.locations
         .where(
           (l) =>
-              widget.state.revealedIds.contains(l.id) ||
+              widget.state.revealedIds.contains(l.id) &&
               l.visibilityFor(flags) != WorldVisibility.rumoured,
         )
         .toList()
@@ -257,12 +257,19 @@ class _WorldMapViewState extends State<WorldMapView> {
           });
         }
         final visible = _visible;
+        final here = widget.world.byId(widget.state.currentLocationId);
+        final holeIds = {
+          widget.state.currentLocationId,
+          ...widget.state.seenSceneIds,
+          ...?here?.routes,
+        };
         final clearings = [
           for (final location in visible)
-            Offset(
-              location.sprite.x * canvas.width,
-              location.sprite.y * canvas.height,
-            ),
+            if (holeIds.contains(location.id))
+              Offset(
+                location.sprite.x * canvas.width,
+                location.sprite.y * canvas.height,
+              ),
         ];
 
         return ClipRect(
@@ -319,7 +326,7 @@ class _WorldMapViewState extends State<WorldMapView> {
                           painter: _FogPainter(
                             fog: _fog,
                             clearings: clearings,
-                            radius: canvas.width * .22,
+                            radius: canvas.width * .08,
                           ),
                         ),
                       ),

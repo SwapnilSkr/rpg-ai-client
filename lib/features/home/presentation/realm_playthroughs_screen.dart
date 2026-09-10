@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/realm_play_status.dart';
@@ -14,6 +15,8 @@ import 'realm_entry_flow.dart';
 import '../../../core/errors/user_message.dart';
 import '../../../shared/widgets/everlore_notice.dart';
 import '../../../shared/text_format.dart';
+import '../../../shared/models/world_template.dart';
+import 'playthrough_route.dart';
 
 class RealmPlaythroughsScreen extends StatefulWidget {
   final String templateId;
@@ -115,11 +118,26 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
 
   String get _title => _data?.template?['title'] as String? ?? 'Your stories';
 
+  bool get _isWalk => WorldTemplate.isInteractiveJson(_data?.template);
+
+  String? get _walkKey => interactiveWorldKeyOf(_data?.template);
+
   Future<void> _beginNewStory() async {
     await beginNewRealmStory(
       context,
       widget.templateId,
       isSentient: _data?.template?['is_sentient'] == true,
+      interactiveWorldKey: _walkKey,
+    );
+    if (mounted) unawaited(_load());
+  }
+
+  Future<void> _openStory(String instanceId) async {
+    await context.push(
+      playthroughLocation(
+        instanceId: instanceId,
+        interactiveWorldKey: _walkKey,
+      ),
     );
     if (mounted) unawaited(_load());
   }
@@ -182,7 +200,7 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                 child: NeuButton(
-                  label: 'Begin a new story',
+                  label: _isWalk ? 'Begin a new walk' : 'Begin a new story',
                   icon: Icons.auto_stories,
                   onTap: _beginNewStory,
                 ),
@@ -232,11 +250,14 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
     if (stories.isEmpty) {
       return EverloreEmptyState(
         icon: Icons.menu_book_rounded,
-        eyebrow: 'UNWRITTEN CHAPTER',
-        title: 'No stories in this realm yet',
-        message:
-            'Begin a fresh playthrough and this realm will keep every chapter here.',
-        actionLabel: 'Begin a story',
+        eyebrow: _isWalk ? 'UNWALKED LAND' : 'UNWRITTEN CHAPTER',
+        title: _isWalk
+            ? 'No walks in this world yet'
+            : 'No stories in this realm yet',
+        message: _isWalk
+            ? 'Begin a fresh walk and this world will keep every journey here.'
+            : 'Begin a fresh playthrough and this realm will keep every chapter here.',
+        actionLabel: _isWalk ? 'Begin a walk' : 'Begin a story',
         actionIcon: Icons.auto_stories_rounded,
         accent: EverloreTheme.gold,
         onAction: _beginNewStory,
@@ -267,7 +288,7 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '$totalLabel ${totalLabel == 1 ? 'story' : 'stories'} in progress',
+                  '$totalLabel ${totalLabel == 1 ? (_isWalk ? 'walk' : 'story') : (_isWalk ? 'walks' : 'stories')} in progress',
                   style: const TextStyle(
                     color: EverloreTheme.ash,
                     fontSize: 13,
@@ -287,10 +308,8 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _StoryCard(
                     story: story,
-                    onTap: () async {
-                      await context.push('/play/${story.summary.id}');
-                      if (mounted) unawaited(_load());
-                    },
+                    walks: _isWalk,
+                    onTap: () => _openStory(story.summary.id),
                     onArchive: () => _archive(story.summary.id),
                     onDelete: () => _delete(story.summary.id),
                   ),
@@ -355,12 +374,14 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
 
 class _StoryCard extends StatelessWidget {
   final RealmStoryDetail story;
+  final bool walks;
   final VoidCallback onTap;
   final VoidCallback onArchive;
   final VoidCallback onDelete;
 
   const _StoryCard({
     required this.story,
+    this.walks = false,
     required this.onTap,
     required this.onArchive,
     required this.onDelete,
@@ -403,7 +424,9 @@ class _StoryCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          'Story ${story.storyIndex}',
+                          walks
+                              ? 'Walk ${story.storyIndex}'
+                              : 'Story ${story.storyIndex}',
                           style: const TextStyle(
                             color: EverloreTheme.parchment,
                             fontSize: 16,
@@ -496,13 +519,18 @@ class _StoryCard extends StatelessWidget {
             children: [
               ListTile(
                 leading: const EvIcon(AppIcons.seal, size: 22),
-                title: const Text(
-                  'Seal this story',
-                  style: TextStyle(color: EverloreTheme.parchment),
+                title: Text(
+                  walks ? 'Seal this walk' : 'Seal this story',
+                  style: const TextStyle(color: EverloreTheme.parchment),
                 ),
-                subtitle: const Text(
-                  'Hide it from your active realms',
-                  style: TextStyle(color: EverloreTheme.ash, fontSize: 12),
+                subtitle: Text(
+                  walks
+                      ? 'Hide it from your active walks'
+                      : 'Hide it from your active realms',
+                  style: const TextStyle(
+                    color: EverloreTheme.ash,
+                    fontSize: 12,
+                  ),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -511,9 +539,9 @@ class _StoryCard extends StatelessWidget {
               ),
               ListTile(
                 leading: const EvIcon(AppIcons.destroy, size: 22),
-                title: const Text(
-                  'Destroy this story',
-                  style: TextStyle(color: EverloreTheme.crimson),
+                title: Text(
+                  walks ? 'Destroy this walk' : 'Destroy this story',
+                  style: const TextStyle(color: EverloreTheme.crimson),
                 ),
                 subtitle: const Text(
                   'Erase it and all its echoes forever',
@@ -536,13 +564,19 @@ class _StoryCard extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: EverloreTheme.void2,
-        title: const Text(
-          'Destroy this story?',
-          style: TextStyle(color: EverloreTheme.parchment, fontSize: 18),
+        title: Text(
+          walks ? 'Destroy this walk?' : 'Destroy this story?',
+          style: const TextStyle(color: EverloreTheme.parchment, fontSize: 18),
         ),
-        content: const Text(
-          'This will permanently erase this story and everything that happened in it.',
-          style: TextStyle(color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+        content: Text(
+          walks
+              ? 'This will permanently erase this walk and everything that happened in it.'
+              : 'This will permanently erase this story and everything that happened in it.',
+          style: const TextStyle(
+            color: EverloreTheme.ash,
+            fontSize: 14,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(

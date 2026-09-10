@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import '../core/guide/guide_anchor.dart';
 import '../core/guide/guide_flows.dart';
 import '../core/guide/guide_ids.dart';
@@ -6,6 +7,7 @@ import '../core/guide/guide_trigger.dart';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../app/theme/nexus_theme.dart';
 import '../core/auth/auth_service.dart';
 import '../shared/app_icons.dart';
@@ -20,13 +22,16 @@ import '../shared/widgets/neu.dart';
 import '../shared/widgets/realm_backdrop.dart';
 import '../features/templates/data/template_repository.dart';
 import '../features/templates/data/interest_ranking.dart';
+import '../features/interactive/data/interactive_world_repository.dart';
+import '../features/home/presentation/realm_entry_flow.dart';
 import '../features/moderation/data/moderation_repository.dart';
 import '../core/errors/user_message.dart';
 import '../app/layout/responsive.dart';
 
 /// The default landing after auth — an art-led, interest-ranked explore feed.
 /// Two-column masonry of forged cards, champagne pill tabs, and the primary
-/// bottom nav. Realms / creator / profile are reachable from the nav, not here.
+/// bottom nav. Realms / Walks / creator / profile are reachable from the nav
+/// and the top bar, not here.
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
 
@@ -35,10 +40,11 @@ class DiscoverScreen extends StatefulWidget {
 }
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
-  static const _tabs = ['For You', 'Worlds', 'Characters'];
+  static const _tabs = ['For You', 'Worlds', 'Characters', 'Walks'];
   int _tab = 0;
 
   List<WorldTemplate> _templates = [];
+  List<WorldTemplate> _walks = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
   int _page = 1;
@@ -78,22 +84,27 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     setState(() {
       // Preserve the visible feed while an inline search is resolving. The
       // initial load still uses the full-screen loader.
-      _isLoading = _templates.isEmpty;
+      _isLoading = _templates.isEmpty && _walks.isEmpty;
       _error = null;
     });
     try {
+      final query = search ?? _searchController.text.trim();
+      const walksRepo = InteractiveWorldRepository();
+      final walksFuture = walksRepo.listPublished(search: query);
       final result = await TemplateRepository.listPublished(
         page: 1,
         limit: 20,
-        search: search ?? _searchController.text.trim(),
+        search: query,
         forceRefresh: forceRefresh,
       );
       final ranked = await orderTemplatesForFeed(
         List<WorldTemplate>.from(result['templates']),
       );
+      final walks = await orderTemplatesForFeed(await walksFuture);
       if (!mounted) return;
       setState(() {
         _templates = ranked;
+        _walks = walks;
         _page = 1;
         _total = (result['total'] as num?)?.toInt() ?? ranked.length;
         _isLoading = false;
@@ -116,6 +127,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Future<void> _loadMore() async {
+    if (_tab == 3) {
+      await _loadMoreWalks();
+      return;
+    }
     if (_isLoading || _isLoadingMore || _templates.length >= _total) return;
     setState(() => _isLoadingMore = true);
     try {
@@ -139,6 +154,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
   }
 
+  Future<void> _loadMoreWalks() async {
+    return;
+  }
+
   void _onBlocksChanged() {
     if (mounted) setState(() {});
   }
@@ -159,10 +178,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final List<WorldTemplate> byTab;
     switch (_tab) {
       case 1:
-        byTab = unblocked.where((t) => !t.isCharacter).toList();
+        byTab = unblocked
+            .where((t) => !t.isCharacter && !t.isInteractiveWorld)
+            .toList();
         break;
       case 2:
         byTab = unblocked.where((t) => t.isCharacter).toList();
+        break;
+      case 3:
+        byTab = _walks
+            .where(
+              (t) => !ModerationRepository.isHidden(
+                worldId: t.id,
+                creatorId: t.creatorId,
+              ),
+            )
+            .toList();
         break;
       default:
         byTab = unblocked;
@@ -235,7 +266,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               children: [
                 EverloreTopBar(
                   title: 'Explore',
-                  subtitle: 'Find worlds and characters',
+                  subtitle: 'Find worlds, characters, and walks',
                   backgroundOpacity: 0.68,
                   actions: [
                     GuideAnchor(
@@ -389,22 +420,41 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final visible = _visible;
     if (visible.isEmpty) {
       final isCharacters = _tab == 2;
+      final isWalks = _tab == 3;
       return EverloreEmptyState(
         icon: isCharacters
             ? Icons.person_search_rounded
+            : isWalks
+            ? Icons.map_outlined
             : Icons.explore_outlined,
-        eyebrow: isCharacters ? 'CHARACTER SHELF' : 'WORLD SHELF',
-        title: isCharacters ? 'No characters to meet yet' : 'No worlds in view',
+        eyebrow: isCharacters
+            ? 'CHARACTER SHELF'
+            : isWalks
+            ? 'WALKS SHELF'
+            : 'WORLD SHELF',
+        title: isCharacters
+            ? 'No characters to meet yet'
+            : isWalks
+            ? 'No walks in view'
+            : 'No worlds in view',
         message: isCharacters
             ? 'New companions and characters will appear here as the collection grows.'
+            : isWalks
+            ? 'Published walkable worlds appear here. Release a draft from My Walks.'
             : 'Try another shelf or return soon—new realms are always being forged.',
-        actionLabel: isCharacters ? 'Browse worlds' : 'Show everything',
-        actionIcon: isCharacters
+        actionLabel: isWalks
+            ? 'My Walks'
+            : isCharacters
+            ? 'Browse worlds'
+            : 'Show everything',
+        actionIcon: isWalks
+            ? Icons.public_outlined
+            : isCharacters
             ? Icons.explore_rounded
             : Icons.auto_awesome_rounded,
         accent: isCharacters ? EverloreTheme.violetBright : EverloreTheme.gold,
-        onAction: isCharacters
-            ? () => setState(() => _tab = 0)
+        onAction: isWalks
+            ? () => context.push('/my-walks')
             : () => setState(() => _tab = 0),
       );
     }
@@ -481,7 +531,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               GuideIds.discoverCard,
               _DiscoverCard(
                 template: t,
-                onTap: () => context.push('/templates/${t.id}'),
+                onTap: () {
+                  if (t.isInteractiveWorld) {
+                    enterRealmFromTemplate(
+                      context,
+                      templateId: t.id,
+                      worldTitle: t.title,
+                      interactiveWorldKey: t.interactiveWorldKey,
+                    );
+                    return;
+                  }
+                  context.push('/templates/${t.id}');
+                },
               ),
             ),
           ),
@@ -491,7 +552,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 }
 
 InputDecoration _exploreSearchDecoration() => InputDecoration(
-  hintText: 'Search worlds and characters',
+  hintText: 'Search worlds, characters, and walks',
   hintStyle: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
   prefixIcon: const Icon(Icons.search_rounded, color: EverloreTheme.goldDim),
   filled: true,
@@ -526,7 +587,9 @@ class _DiscoverCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final genre = template.narrativeStyle.isNotEmpty
         ? narrativeStyleLabel(template.narrativeStyle)
-        : (template.isCharacter
+        : (template.isInteractiveWorld
+              ? 'Walks'
+              : template.isCharacter
               ? 'Character'
               : template.isSentient
               ? 'Sentient'
@@ -619,7 +682,12 @@ class _DiscoverCard extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          EvIcon(AppIcons.familyForStyle(template.narrativeStyle), size: 16),
+          EvIcon(
+            template.isInteractiveWorld
+                ? AppIcons.navWorlds
+                : AppIcons.familyForStyle(template.narrativeStyle),
+            size: 16,
+          ),
           const SizedBox(width: 5),
           Flexible(
             child: Text(
@@ -663,7 +731,11 @@ class _DiscoverCard extends StatelessWidget {
       ),
       child: Center(
         child: EvIcon(
-          template.isCharacter ? AppIcons.navProfile : AppIcons.chronicle,
+          template.isInteractiveWorld
+              ? AppIcons.navWorlds
+              : template.isCharacter
+              ? AppIcons.navProfile
+              : AppIcons.chronicle,
           size: 40,
         ),
       ),

@@ -255,7 +255,7 @@ class _AutofillSheetState extends State<_AutofillSheet> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'GENERATE WITH AI',
+                          'DRAFT IT FOR ME',
                           style: EverloreTheme.ui(
                             size: 13,
                             color: EverloreTheme.violetBright,
@@ -268,8 +268,8 @@ class _AutofillSheetState extends State<_AutofillSheet> {
                     const SizedBox(height: 10),
                     Text(
                       'What should this $subject be? Describe it however you like — a few '
-                      'words is plenty. The AI fills in every detail (including the image '
-                      'prompt), and you can edit all of it afterward.',
+                      'words is plenty. Every detail gets filled in for you, the picture with '
+                      'it, and you can edit all of it afterward.',
                       style: EverloreTheme.ui(
                         size: 13,
                         color: EverloreTheme.ash,
@@ -617,7 +617,7 @@ class _MatureRow extends StatelessWidget {
         Switch(
           value: value,
           onChanged: onChanged,
-          activeColor: EverloreTheme.crimson,
+          activeThumbColor: EverloreTheme.crimson,
         ),
       ],
     );

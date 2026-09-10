@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import '../core/config/env.dart';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../core/auth/auth_service.dart';
 import '../core/auth/google_auth_service.dart';
 import '../core/errors/user_message.dart';
@@ -664,6 +666,27 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
         const SizedBox(height: 16),
 
+        // Worlds belongs to the player's account space, not the primary play
+        // loop. Published worlds and drafts live here; walkable playthroughs
+        // have their own shelf on the Walks tab.
+        NeuButton(
+          label: 'My Worlds',
+          icon: Icons.public_rounded,
+          primary: false,
+          accent: EverloreTheme.gold,
+          onTap: () => context.push('/my-worlds'),
+        ),
+        const SizedBox(height: 16),
+
+        NeuButton(
+          label: 'My Walks',
+          icon: Icons.map_outlined,
+          primary: false,
+          accent: EverloreTheme.gold,
+          onTap: () => context.push('/my-walks'),
+        ),
+        const SizedBox(height: 16),
+
         NeuButton(
           label: 'Membership & Ink',
           icon: Icons.auto_awesome_rounded,
@@ -699,7 +722,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 onChanged: (_isUpdatingPreferences || _isPhoneLoading)
                     ? null
                     : _handleNsfwToggle,
-                activeColor: EverloreTheme.crimson,
+                activeThumbColor: EverloreTheme.crimson,
                 activeTrackColor: EverloreTheme.crimson.withValues(alpha: 0.35),
                 title: const Text(
                   'Enable Mature Content (NSFW)',
@@ -739,7 +762,7 @@ class _AuthScreenState extends State<AuthScreen> {
           accent: EverloreTheme.crimson,
           onTap: _isDeletingAccount ? null : _confirmDeleteAccount,
         ),
-        const SizedBox(height: 96), // clear the floating nav on the profile tab
+        const SizedBox(height: 32), // pushed over the shell; the nav is covered
       ],
     );
   }

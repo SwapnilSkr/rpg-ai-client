@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../shared/models/realm_play_status.dart';
@@ -12,6 +13,7 @@ import '../../../core/errors/user_message.dart';
 import '../../../shared/widgets/everlore_sheet.dart';
 import '../../../shared/widgets/everlore_notice.dart';
 import '../../../shared/text_format.dart';
+import 'playthrough_route.dart';
 
 enum RealmEntryChoice { continueStory, beginAnew }
 
@@ -29,6 +31,7 @@ Future<void> enterRealmFromTemplate(
   required String templateId,
   required String worldTitle,
   bool isSentient = false,
+  String? interactiveWorldKey,
 }) async {
   final loggedIn = await AuthService.isLoggedIn();
   if (!context.mounted) return;
@@ -46,7 +49,12 @@ Future<void> enterRealmFromTemplate(
   if (!context.mounted || status == null) return;
 
   if (!status.hasPlayed) {
-    await beginNewRealmStory(context, templateId, isSentient: isSentient);
+    await beginNewRealmStory(
+      context,
+      templateId,
+      isSentient: isSentient,
+      interactiveWorldKey: interactiveWorldKey,
+    );
     return;
   }
 
@@ -54,16 +62,29 @@ Future<void> enterRealmFromTemplate(
     context,
     worldTitle: worldTitle,
     status: status,
+    walks: interactiveWorldKey != null && interactiveWorldKey.isNotEmpty,
   );
   if (!context.mounted || result == null) return;
 
   switch (result.choice) {
     case RealmEntryChoice.continueStory:
       final id = result.instanceId ?? status.latestInstanceId;
-      if (id != null) context.push('/play/$id');
+      if (id != null) {
+        context.push(
+          playthroughLocation(
+            instanceId: id,
+            interactiveWorldKey: interactiveWorldKey,
+          ),
+        );
+      }
       break;
     case RealmEntryChoice.beginAnew:
-      await beginNewRealmStory(context, templateId, isSentient: isSentient);
+      await beginNewRealmStory(
+        context,
+        templateId,
+        isSentient: isSentient,
+        interactiveWorldKey: interactiveWorldKey,
+      );
       break;
   }
 }
@@ -72,10 +93,12 @@ Future<void> beginNewRealmStory(
   BuildContext context,
   String templateId, {
   bool isSentient = false,
+  String? interactiveWorldKey,
 }) async {
   try {
     String? personaId;
-    if (isSentient) {
+    if (isSentient &&
+        (interactiveWorldKey == null || interactiveWorldKey.isEmpty)) {
       final choice = await _chooseSentientPersona(context);
       if (!context.mounted || choice == null) return;
       personaId = choice.personaId;
@@ -83,19 +106,28 @@ Future<void> beginNewRealmStory(
     final instance = await showEverloreSessionLoading(
       context,
       message: 'Opening the gate',
-      task: () =>
-          HomeRepository.createInstance(templateId, personaId: personaId),
+      task: () => HomeRepository.createInstance(
+        templateId,
+        personaId: personaId,
+        interactiveWorldKey: interactiveWorldKey,
+      ),
     );
     if (!context.mounted || instance == null) return;
-    context.push('/play/${instance.id}');
+    context.push(
+      playthroughLocation(
+        instanceId: instance.id,
+        interactiveWorldKey: interactiveWorldKey,
+      ),
+    );
   } catch (e) {
     if (!context.mounted) return;
-    final msg = userFacingError(e, fallback: 'Could not enter that realm.');
-    showEverloreNotice(
-      context,
-      msg,
-      tone: NoticeTone.error,
+    final msg = userFacingError(
+      e,
+      fallback: interactiveWorldKey != null && interactiveWorldKey.isNotEmpty
+          ? 'Could not begin that walk.'
+          : 'Could not enter that realm.',
     );
+    showEverloreNotice(context, msg, tone: NoticeTone.error);
   }
 }
 
@@ -116,7 +148,7 @@ Future<_PersonaStartChoice?> _chooseSentientPersona(
   }
   if (!context.mounted) return null;
   return showModalBottomSheet<_PersonaStartChoice>(
-      useRootNavigator: true,
+    useRootNavigator: true,
     context: context,
     isScrollControlled: true,
     backgroundColor: EverloreTheme.void2,
@@ -331,9 +363,10 @@ Future<RealmEntryResult?> showRealmContinueSheet(
   BuildContext context, {
   required String worldTitle,
   required RealmPlayStatus status,
+  bool walks = false,
 }) {
   return showModalBottomSheet<RealmEntryResult>(
-      useRootNavigator: true,
+    useRootNavigator: true,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: status.count > 1,
@@ -341,6 +374,7 @@ Future<RealmEntryResult?> showRealmContinueSheet(
       return _RealmContinueSheet(
         worldTitle: worldTitle,
         status: status,
+        walks: walks,
         onContinueLatest: () => Navigator.pop(
           sheetCtx,
           RealmEntryResult(
@@ -367,6 +401,7 @@ Future<RealmEntryResult?> showRealmContinueSheet(
 class _RealmContinueSheet extends StatelessWidget {
   final String worldTitle;
   final RealmPlayStatus status;
+  final bool walks;
   final VoidCallback onContinueLatest;
   final VoidCallback onBeginAnew;
   final void Function(String id) onPickStory;
@@ -374,6 +409,7 @@ class _RealmContinueSheet extends StatelessWidget {
   const _RealmContinueSheet({
     required this.worldTitle,
     required this.status,
+    this.walks = false,
     required this.onContinueLatest,
     required this.onBeginAnew,
     required this.onPickStory,
@@ -413,8 +449,12 @@ class _RealmContinueSheet extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 multiple
-                    ? 'Your stories in $worldTitle are waiting. Pick one up or begin anew.'
-                    : 'Your story in $worldTitle awaits. Continue where you left off, or begin a fresh journey.',
+                    ? (walks
+                          ? 'Your walks in $worldTitle are waiting. Pick one up or begin anew.'
+                          : 'Your stories in $worldTitle are waiting. Pick one up or begin anew.')
+                    : (walks
+                          ? 'Your walk in $worldTitle awaits. Continue where you left off, or begin a fresh journey.'
+                          : 'Your story in $worldTitle awaits. Continue where you left off, or begin a fresh journey.'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: EverloreTheme.ash,
@@ -432,7 +472,9 @@ class _RealmContinueSheet extends StatelessWidget {
                     itemBuilder: (context, i) {
                       final story = status.stories[i];
                       return _StoryPickTile(
-                        label: 'Story ${status.stories.length - i}',
+                        label: walks
+                            ? 'Walk ${status.stories.length - i}'
+                            : 'Story ${status.stories.length - i}',
                         lastActiveAt: story.lastActiveAt,
                         turnCount: story.totalEvents,
                         onTap: () => onPickStory(story.id),
@@ -442,14 +484,14 @@ class _RealmContinueSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 NeuButton(
-                  label: 'Begin a new story',
+                  label: walks ? 'Begin a new walk' : 'Begin a new story',
                   icon: Icons.auto_stories,
                   primary: false,
                   onTap: onBeginAnew,
                 ),
               ] else ...[
                 NeuButton(
-                  label: 'Continue your story',
+                  label: walks ? 'Continue your walk' : 'Continue your story',
                   icon: Icons.play_arrow_rounded,
                   accent: EverloreTheme.aether,
                   onTap: onContinueLatest,
@@ -539,7 +581,8 @@ class _StoryPickTile extends StatelessWidget {
 
   String _subtitle() {
     final ago = _formatAgo(lastActiveAt);
-    if (turnCount > 0 && ago.isNotEmpty) return '${countLabel(turnCount, 'turn')} · $ago';
+    if (turnCount > 0 && ago.isNotEmpty)
+      return '${countLabel(turnCount, 'turn')} · $ago';
     if (turnCount > 0) return countLabel(turnCount, 'turn');
     if (ago.isNotEmpty) return 'Last visited $ago';
     return 'Ready to continue';

@@ -1,5 +1,5 @@
 import '../../../core/network/api_client.dart';
-import '../domain/interactive_world.dart';
+import '../../../shared/models/world_template.dart';
 
 /// Transport boundary for the illustrated-world renderer. Presentation code
 /// receives typed maps from here; it never constructs route unlocks itself.
@@ -11,20 +11,60 @@ class InteractiveWorldRepository {
     return Map<String, dynamic>.from(value as Map);
   }
 
-  /// The walkable worlds this player may enter.
-  ///
-  /// Asked for rather than known: the client used to name one world by hand,
-  /// so a second one would not have appeared. An empty list is an ordinary
-  /// answer — a player with no walkable world open to them is offered none.
-  Future<List<InteractiveWorldEntrance>> listPlayable() async {
-    final value = await ApiClient.get('/interactive-worlds');
-    if (value is! List) return const [];
-    return value
+  /// Published walkable worlds for Explore. No sign-in required.
+  Future<List<WorldTemplate>> listPublished({String search = ''}) async {
+    final query = search.trim().isEmpty
+        ? ''
+        : '?search=${Uri.encodeQueryComponent(search.trim())}';
+    final value = await ApiClient.get('/interactive-worlds$query');
+    final raw = value is List ? value : const [];
+    return raw
         .whereType<Map>()
-        .map((raw) =>
-            InteractiveWorldEntrance.fromJson(Map<String, dynamic>.from(raw)))
-        .where((world) => world.worldKey.isNotEmpty)
+        .map((row) => WorldTemplate.fromJson(Map<String, dynamic>.from(row)))
+        .where((world) => world.interactiveWorldKey != null)
         .toList();
+  }
+
+  Future<({List<WorldTemplate> worlds, int total, int page})> listMine({
+    int page = 1,
+    int limit = 20,
+    String search = '',
+  }) async {
+    final query = <String>['page=$page', 'limit=$limit'];
+    if (search.trim().isNotEmpty) {
+      query.add('search=${Uri.encodeQueryComponent(search.trim())}');
+    }
+    final response = await ApiClient.get(
+      '/interactive-worlds/mine?${query.join('&')}',
+    );
+    final raw = (response['templates'] as List?) ?? const [];
+    final worlds = raw
+        .map((e) => WorldTemplate.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    return (
+      worlds: worlds,
+      total: (response['total'] as num?)?.toInt() ?? worlds.length,
+      page: (response['page'] as num?)?.toInt() ?? page,
+    );
+  }
+
+  Future<void> publish(String worldKey) async {
+    await ApiClient.post('/interactive-worlds/$worldKey/publish');
+  }
+
+  Future<void> delete(String worldKey) async {
+    await ApiClient.delete('/interactive-worlds/$worldKey');
+  }
+
+  Future<String> createInstance(String worldKey) async {
+    final value = await ApiClient.post('/interactive-worlds/$worldKey/instances');
+    final map = Map<String, dynamic>.from(value as Map);
+    final instance = Map<String, dynamic>.from(map['instance'] as Map? ?? map);
+    final id = instance['_id']?.toString().trim() ?? '';
+    if (id.isEmpty) {
+      throw ApiException(statusCode: 502, message: 'Unknown error');
+    }
+    return id;
   }
 
   /// The player's save for this world, created on first walk.
@@ -61,6 +101,8 @@ class InteractiveWorldRepository {
     String? resolutionId,
     String? characterId,
     String? said,
+    String? checkpointId,
+    String? drillId,
   }) async {
     final value = await ApiClient.post(
       '/interactive-worlds/$worldKey/instances/$instanceId/actions',
@@ -72,6 +114,8 @@ class InteractiveWorldRepository {
         if (resolutionId != null) 'resolution_id': resolutionId,
         if (characterId != null) 'character_id': characterId,
         if (said != null) 'said': said,
+        if (checkpointId != null) 'checkpoint_id': checkpointId,
+        if (drillId != null) 'drill_id': drillId,
       },
     );
     return Map<String, dynamic>.from(value as Map);

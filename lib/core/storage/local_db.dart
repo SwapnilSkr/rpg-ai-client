@@ -138,5 +138,6 @@ class LocalDb {
       where: 'instance_id = ?',
       whereArgs: [instanceId],
     );
+    await db.delete('instances', where: 'id = ?', whereArgs: [instanceId]);
   }
 }

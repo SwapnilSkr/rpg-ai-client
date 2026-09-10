@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../shared/models/world_template.dart';
 import '../data/template_repository.dart';
 import '../../home/presentation/realm_entry_flow.dart';
@@ -101,6 +102,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
       templateId: widget.templateId,
       worldTitle: title,
       isSentient: _template?.isSentient ?? false,
+      interactiveWorldKey: _template?.interactiveWorldKey,
     );
   }
 
@@ -143,8 +145,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
         icon: Icons.auto_stories_outlined,
         eyebrow: 'LOST REALM',
         title: 'This world is beyond the veil',
-        message:
-            'It may have been moved or withdrawn. Return to the shelves to find another story.',
+        message: 'It may have been moved or withdrawn. Return to the shelves to find another story.',
         actionLabel: 'Explore worlds',
         actionIcon: Icons.explore_rounded,
         onAction: () => context.go('/discover'),
@@ -549,6 +550,9 @@ String _invitationFor(WorldTemplate template) {
 }
 
 String _scopeDescriptionFor(WorldTemplate template) {
+  if (template.isInteractiveWorld) {
+    return 'A walkable world on a living map — travel, choose, and leave a mark the land remembers.';
+  }
   if (template.isCharacter) {
     return 'A focused character-first story. Their backstory can naturally bring supporting characters and scenes into play.';
   }

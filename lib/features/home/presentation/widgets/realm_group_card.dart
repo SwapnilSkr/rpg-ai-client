@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../../../app/layout/responsive.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/app_icons.dart';
 import '../../../../shared/models/world_instance.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
+import '../../../../shared/widgets/everlore_sheet.dart';
 import '../../domain/realm_group.dart';
 import '../../../../shared/text_format.dart';
-import '../../../../app/layout/responsive.dart';
 
 /// A realm-level overview for the home feed. Stories deliberately live on the
 /// dedicated playthrough screen so a realm with a long history does not turn
@@ -15,13 +17,19 @@ class RealmGroupCard extends StatelessWidget {
   final RealmGroup group;
   final ValueChanged<WorldInstance> onContinue;
   final VoidCallback onViewStories;
+  final VoidCallback? onDelete;
+  final VoidCallback? onArchive;
 
   const RealmGroupCard({
     super.key,
     required this.group,
     required this.onContinue,
     required this.onViewStories,
+    this.onDelete,
+    this.onArchive,
   });
+
+  bool get _walks => group.isInteractiveWorld;
 
   @override
   Widget build(BuildContext context) {
@@ -52,28 +60,32 @@ class RealmGroupCard extends StatelessWidget {
         ),
         child: Material(
           color: Colors.transparent,
-          child: Column(
-            children: [
-              Stack(
-                children: [
-                  if (imageUrl.isNotEmpty)
-                    Positioned.fill(
-                      child: ColorFiltered(
-                        colorFilter: ColorFilter.mode(
-                          Colors.black.withValues(alpha: 0.56),
-                          BlendMode.darken,
-                        ),
-                        child: EverloreNetworkImage(
-                          imageUrl: imageUrl,
-                          memCacheWidth: 1080,
-                          errorWidget: const SizedBox.shrink(),
-                          semanticLabel: group.title,
+          child: InkWell(
+            onTap: () => onContinue(latest),
+            onLongPress: () {
+              HapticFeedback.mediumImpact();
+              _showActions(context);
+            },
+            child: Column(
+              children: [
+                Stack(
+                  children: [
+                    if (imageUrl.isNotEmpty)
+                      Positioned.fill(
+                        child: ColorFiltered(
+                          colorFilter: ColorFilter.mode(
+                            Colors.black.withValues(alpha: 0.56),
+                            BlendMode.darken,
+                          ),
+                          child: EverloreNetworkImage(
+                            imageUrl: imageUrl,
+                            memCacheWidth: 1080,
+                            errorWidget: const SizedBox.shrink(),
+                            semanticLabel: group.title,
+                          ),
                         ),
                       ),
-                    ),
-                  InkWell(
-                    onTap: () => onContinue(latest),
-                    child: Padding(
+                    Padding(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,7 +125,9 @@ class RealmGroupCard extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
-                                  isSentient
+                                  _walks
+                                      ? 'Walkable World'
+                                      : isSentient
                                       ? 'Sentient World'
                                       : 'Game Master World',
                                   style: EverloreTheme.ui(
@@ -140,13 +154,10 @@ class RealmGroupCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                  ),
-                ],
-              ),
-              Container(height: 1, color: EverloreTheme.white10),
-              InkWell(
-                onTap: () => onContinue(latest),
-                child: Padding(
+                  ],
+                ),
+                Container(height: 1, color: EverloreTheme.white10),
+                Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
                   child: Row(
                     children: [
@@ -170,7 +181,11 @@ class RealmGroupCard extends StatelessWidget {
                             Text(
                               [
                                 countLabel(latest.meta.totalEvents, 'event'),
-                                countLabel(latest.meta.totalMemories, 'echo', plural: 'echoes'),
+                                countLabel(
+                                  latest.meta.totalMemories,
+                                  'echo',
+                                  plural: 'echoes',
+                                ),
                                 if (last != null) _relative(last),
                               ].join(' • '),
                               maxLines: 1,
@@ -183,10 +198,6 @@ class RealmGroupCard extends StatelessWidget {
                           ],
                         ),
                       ),
-                      // On the narrowest phones the word costs about a third
-                      // of the line the scene and its tally have to share.
-                      // The chevron already says "continue", so spend the
-                      // width on the story instead.
                       if (!EvLayout.of(context).isCompact)
                         Text(
                           'Continue',
@@ -204,53 +215,97 @@ class RealmGroupCard extends StatelessWidget {
                     ],
                   ),
                 ),
-              ),
-              if (group.hasMultipleStories)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: onViewStories,
-                        borderRadius: BorderRadius.circular(20),
-                        child: Ink(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: accent.withValues(alpha: 0.32),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.layers_outlined,
-                                color: accent,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                countLabel(group.storyCount, 'story', plural: 'stories'),
-                                style: EverloreTheme.ui(
-                                  size: 11,
-                                  color: accent,
-                                  weight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showActions(BuildContext context) {
+    final latest = group.latest;
+    showEverloreSheet<void>(
+      context: context,
+      isScrollControlled: false,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SheetGrabHandle(),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    group.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: EverloreTheme.ui(
+                      size: 16,
+                      color: EverloreTheme.parchment,
+                      weight: FontWeight.w800,
                     ),
                   ),
                 ),
+              ),
+              _ActionTile(
+                icon: AppIcons.continueStory,
+                label: _walks ? 'Continue this walk' : 'Continue this story',
+                subtitle: _walks
+                    ? 'Pick up where you left the map'
+                    : 'Pick up where you left off',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  onContinue(latest);
+                },
+              ),
+              if (group.hasMultipleStories)
+                _ActionTile(
+                  iconWidget: Icon(
+                    Icons.layers_outlined,
+                    color: EverloreTheme.parchment,
+                    size: 22,
+                  ),
+                  label: _walks ? 'View all walks' : 'View all stories',
+                  subtitle: countLabel(
+                    group.storyCount,
+                    _walks ? 'walk' : 'story',
+                    plural: _walks ? 'walks' : 'stories',
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    onViewStories();
+                  },
+                )
+              else ...[
+                if (onArchive != null)
+                  _ActionTile(
+                    icon: AppIcons.seal,
+                    label: _walks ? 'Seal this walk' : 'Seal this story',
+                    subtitle: _walks
+                        ? 'Hide it from your active walks'
+                        : 'Hide it from your active realms',
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      onArchive!();
+                    },
+                  ),
+                if (onDelete != null)
+                  _ActionTile(
+                    icon: AppIcons.destroy,
+                    label: _walks ? 'Destroy this walk' : 'Destroy this story',
+                    subtitle: 'Erase it and all its echoes forever',
+                    isDestructive: true,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _confirmDelete(context);
+                    },
+                  ),
+              ],
             ],
           ),
         ),
@@ -258,10 +313,53 @@ class RealmGroupCard extends StatelessWidget {
     );
   }
 
+  void _confirmDelete(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: EverloreTheme.void2,
+        title: Text(
+          _walks ? 'Destroy this walk?' : 'Destroy this story?',
+          style: const TextStyle(color: EverloreTheme.parchment, fontSize: 18),
+        ),
+        content: Text(
+          _walks
+              ? 'This will permanently erase this walk and everything that happened in it.'
+              : 'This will permanently erase this story and everything that happened in it.',
+          style: const TextStyle(
+            color: EverloreTheme.ash,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Keep it',
+              style: TextStyle(color: EverloreTheme.ash),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              onDelete?.call();
+            },
+            child: const Text(
+              'Destroy forever',
+              style: TextStyle(color: EverloreTheme.crimson),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// The scene tag is an internal word, so this card headed a playthrough
   /// with "Dialogue". Same fix as the Chronicle's almanac.
-  String _sceneLabel(String tag) =>
-      tag.trim().isEmpty ? 'Continue the story' : sceneMomentLabel(tag, '');
+  String _sceneLabel(String tag) => tag.trim().isEmpty
+      ? (_walks ? 'Continue the walk' : 'Continue the story')
+      : sceneMomentLabel(tag, '');
 
   String _relative(DateTime date) {
     final diff = DateTime.now().difference(date);
@@ -269,5 +367,53 @@ class RealmGroupCard extends StatelessWidget {
     if (diff.inHours >= 1) return '${diff.inHours}h ago';
     if (diff.inMinutes >= 1) return '${diff.inMinutes}m ago';
     return 'now';
+  }
+}
+
+class _ActionTile extends StatelessWidget {
+  final String? icon;
+  final Widget? iconWidget;
+  final String label;
+  final String subtitle;
+  final bool isDestructive;
+  final VoidCallback onTap;
+
+  const _ActionTile({
+    this.icon,
+    this.iconWidget,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isDestructive
+        ? EverloreTheme.crimson
+        : EverloreTheme.parchment;
+    return ListTile(
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isDestructive
+              ? EverloreTheme.crimson.withValues(alpha: 0.1)
+              : EverloreTheme.void3,
+        ),
+        child: iconWidget ??
+            Opacity(
+              opacity: isDestructive ? 0.82 : 1,
+              child: EvIcon(icon!, size: 22),
+            ),
+      ),
+      title: Text(label, style: TextStyle(color: color, fontSize: 15)),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(color: EverloreTheme.ash, fontSize: 12),
+      ),
+      onTap: onTap,
+    );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import '../../../core/guide/guide_anchor.dart';
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_ids.dart';
@@ -7,6 +8,7 @@ import '../../../core/guide/guide_trigger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+
 import '../state/home_cubit.dart';
 import 'widgets/realm_group_card.dart';
 import '../../../../app/theme/nexus_theme.dart';
@@ -15,22 +17,29 @@ import '../../../../shared/widgets/everlore_session_loader.dart';
 import '../../../../shared/widgets/everlore_top_bar.dart';
 import '../../../../shared/widgets/neu.dart';
 import '../../../../shared/widgets/everlore_empty_state.dart';
+import '../../../../shared/widgets/everlore_notice.dart';
 import '../../../../shared/widgets/realm_backdrop.dart';
+import 'playthrough_route.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.walks = false});
+
+  /// The Walks shelf — map-world playthroughs, not chat realms.
+  final bool walks;
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => HomeCubit()..loadInstances(),
-      child: const _HomeView(),
+      create: (_) => HomeCubit(walks: walks)..loadInstances(),
+      child: _HomeView(walks: walks),
     );
   }
 }
 
 class _HomeView extends StatefulWidget {
-  const _HomeView();
+  const _HomeView({required this.walks});
+
+  final bool walks;
 
   @override
   State<_HomeView> createState() => _HomeViewState();
@@ -111,12 +120,13 @@ class _HomeViewState extends State<_HomeView> {
             // Two arcs, one surface. A shelf with stories on it explains the
             // stories; a shelf with none explains the shelf. Which one is
             // owed is not knowable until the first load has answered, so
-            // neither runs before it has.
+            // neither runs before it has. Walks is a sibling shelf and
+            // must not replay the Realms script.
             builder: (context, state) => GuideOnEnter(
               flow: state.realms.isEmpty
                   ? GuideFlows.homeEmpty
                   : GuideFlows.home,
-              enabled: !state.isLoading,
+              enabled: !widget.walks && !state.isLoading,
               child: Column(
                 children: [
                   BlocBuilder<HomeCubit, HomeState>(
@@ -126,12 +136,16 @@ class _HomeViewState extends State<_HomeView> {
                         previous.total != current.total,
                     builder: (context, state) {
                       return EverloreTopBar(
-                        title: 'Your Realms',
+                        title: widget.walks ? 'Your Walks' : 'Your Realms',
                         subtitle: state.realms.isEmpty
                             ? (_searchController.text.isNotEmpty
-                                  ? 'No matching realms'
-                                  : 'No realms yet')
-                            : '${state.total} ${state.total == 1 ? 'realm' : 'realms'}',
+                                  ? (widget.walks
+                                        ? 'No matching walks'
+                                        : 'No matching realms')
+                                  : (widget.walks
+                                        ? 'No walks yet'
+                                        : 'No realms yet'))
+                            : '${state.total} ${state.total == 1 ? (widget.walks ? 'walk' : 'realm') : (widget.walks ? 'walks' : 'realms')}',
                         backgroundOpacity: 0.68,
                         actions: [
                           EverloreTopBarIcon(
@@ -140,7 +154,9 @@ class _HomeViewState extends State<_HomeView> {
                                 : Icons.search_rounded,
                             tooltip: _searchOpen
                                 ? 'Close search'
-                                : 'Search realms',
+                                : (widget.walks
+                                      ? 'Search walks'
+                                      : 'Search realms'),
                             onTap: _toggleSearch,
                           ),
                         ],
@@ -162,7 +178,9 @@ class _HomeViewState extends State<_HomeView> {
                                 size: 14,
                                 color: EverloreTheme.parchment,
                               ),
-                              decoration: _realmSearchDecoration(),
+                              decoration: widget.walks
+                                  ? _walkSearchDecoration()
+                                  : _realmSearchDecoration(),
                             ),
                           )
                         : const SizedBox.shrink(),
@@ -181,21 +199,29 @@ class _HomeViewState extends State<_HomeView> {
                             physics: const AlwaysScrollableScrollPhysics(),
                             slivers: [
                               if (state.isLoading && state.realms.isEmpty)
-                                const SliverFillRemaining(child: _LoadingView())
+                                SliverFillRemaining(
+                                  child: _LoadingView(walks: widget.walks),
+                                )
                               else if (state.error != null &&
                                   state.error!.contains('Unauthorized') &&
                                   state.realms.isEmpty)
-                                const SliverFillRemaining(child: _UnauthView())
+                                SliverFillRemaining(
+                                  child: _UnauthView(walks: widget.walks),
+                                )
                               else if (state.error != null &&
                                   state.realms.isEmpty)
                                 SliverFillRemaining(
-                                  child: _ErrorView(message: state.error!),
+                                  child: _ErrorView(
+                                    message: state.error!,
+                                    walks: widget.walks,
+                                  ),
                                 )
                               else if (state.realms.isEmpty)
                                 SliverFillRemaining(
                                   child: _EmptyView(
                                     isSearchEmpty:
                                         _searchController.text.isNotEmpty,
+                                    walks: widget.walks,
                                   ),
                                 )
                               else
@@ -247,7 +273,14 @@ class _HomeViewState extends State<_HomeView> {
             RealmGroupCard(
               group: group,
               onContinue: (story) async {
-                await context.push('/play/${story.id}');
+                await context.push(
+                  playthroughLocation(
+                    instanceId: story.id,
+                    interactiveWorldKey: interactiveWorldKeyOf(
+                      group.template ?? story.template,
+                    ),
+                  ),
+                );
                 if (context.mounted) {
                   unawaited(
                     context.read<HomeCubit>().loadInstances(silent: true),
@@ -262,6 +295,34 @@ class _HomeViewState extends State<_HomeView> {
                   );
                 }
               },
+              onArchive: () async {
+                final cubit = context.read<HomeCubit>();
+                final ok = await cubit.archiveInstance(group.latest.id);
+                if (!ok && context.mounted) {
+                  showEverloreNotice(
+                    context,
+                    cubit.state.error ??
+                        (widget.walks
+                            ? 'Could not seal that walk.'
+                            : 'Could not seal that story.'),
+                    tone: NoticeTone.error,
+                  );
+                }
+              },
+              onDelete: () async {
+                final cubit = context.read<HomeCubit>();
+                final ok = await cubit.deleteInstance(group.latest.id);
+                if (!ok && context.mounted) {
+                  showEverloreNotice(
+                    context,
+                    cubit.state.error ??
+                        (widget.walks
+                            ? 'Could not delete that walk.'
+                            : 'Could not delete that story.'),
+                    tone: NoticeTone.error,
+                  );
+                }
+              },
             ),
           );
         }, childCount: groups.length + (state.isLoadingMore ? 1 : 0)),
@@ -271,18 +332,24 @@ class _HomeViewState extends State<_HomeView> {
 }
 
 class _LoadingView extends StatelessWidget {
-  const _LoadingView();
+  const _LoadingView({this.walks = false});
+
+  final bool walks;
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: EverloreSessionLoader(message: 'Summoning your realms'),
+    return Center(
+      child: EverloreSessionLoader(
+        message: walks ? 'Summoning your walks' : 'Summoning your realms',
+      ),
     );
   }
 }
 
 class _UnauthView extends StatelessWidget {
-  const _UnauthView();
+  const _UnauthView({this.walks = false});
+
+  final bool walks;
 
   @override
   Widget build(BuildContext context) {
@@ -305,20 +372,22 @@ class _UnauthView extends StatelessWidget {
               child: const EvIcon(AppIcons.lockedGate, size: 68),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'Your realms await',
+            Text(
+              walks ? 'Your walks await' : 'Your realms await',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: EverloreTheme.parchment,
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
-              'Sign in to access your adventures and continue your story.',
+            Text(
+              walks
+                  ? 'Sign in to step onto the map and continue a walkable world.'
+                  : 'Sign in to access your adventures and continue your story.',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: EverloreTheme.ash,
                 fontSize: 14,
                 height: 1.5,
@@ -347,26 +416,39 @@ class _UnauthView extends StatelessWidget {
 
 class _EmptyView extends StatelessWidget {
   final bool isSearchEmpty;
-  const _EmptyView({this.isSearchEmpty = false});
+  final bool walks;
+  const _EmptyView({this.isSearchEmpty = false, this.walks = false});
 
   @override
   Widget build(BuildContext context) {
     return EverloreEmptyState(
       icon: isSearchEmpty
           ? Icons.search_off_rounded
+          : walks
+          ? Icons.map_outlined
           : Icons.auto_stories_rounded,
-      eyebrow: isSearchEmpty ? 'NO MATCHES' : 'YOUR REALMS',
-      title: isSearchEmpty ? 'No realms found' : 'Your first realm awaits',
+      eyebrow: isSearchEmpty
+          ? 'NO MATCHES'
+          : (walks ? 'YOUR WALKS' : 'YOUR REALMS'),
+      title: isSearchEmpty
+          ? (walks ? 'No walks found' : 'No realms found')
+          : (walks ? 'Your first walk awaits' : 'Your first realm awaits'),
       message: isSearchEmpty
-          ? 'Try another title or clear the search to see all your realms.'
-          : 'Choose a world, step through its threshold, and let your story take its first breath.',
-      actionLabel: isSearchEmpty ? 'Clear search' : 'Explore worlds',
+          ? (walks
+                ? 'Try another title or clear the search to see all your walks.'
+                : 'Try another title or clear the search to see all your realms.')
+          : (walks
+                ? 'Choose a walkable world, step onto the map, and let the land remember you.'
+                : 'Choose a world, step through its threshold, and let your story take its first breath.'),
+      actionLabel: isSearchEmpty
+          ? 'Clear search'
+          : (walks ? 'Explore walks' : 'Explore worlds'),
       actionIcon: isSearchEmpty ? Icons.close_rounded : Icons.explore_rounded,
       accent: EverloreTheme.gold,
       // Only the genuinely-empty shelf is a first-run moment. A search that
       // matched nothing is a dead end the player made themselves, and the
       // Chronicler has nothing useful to say about it.
-      anchorId: isSearchEmpty ? null : GuideIds.homeEmpty,
+      anchorId: isSearchEmpty || walks ? null : GuideIds.homeEmpty,
       onAction: () => isSearchEmpty
           ? context.read<HomeCubit>().loadInstances(search: '')
           : context.go('/discover'),
@@ -399,9 +481,35 @@ InputDecoration _realmSearchDecoration() => InputDecoration(
   ),
 );
 
+InputDecoration _walkSearchDecoration() => InputDecoration(
+  hintText: 'Search your walks',
+  hintStyle: EverloreTheme.ui(size: 14, color: EverloreTheme.ash),
+  prefixIcon: const Icon(Icons.search_rounded, color: EverloreTheme.goldDim),
+  filled: true,
+  fillColor: EverloreTheme.void2,
+  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+  border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(
+      color: EverloreTheme.goldDim.withValues(alpha: 0.22),
+    ),
+  ),
+  enabledBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(
+      color: EverloreTheme.goldDim.withValues(alpha: 0.22),
+    ),
+  ),
+  focusedBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: const BorderSide(color: EverloreTheme.gold, width: 1.2),
+  ),
+);
+
 class _ErrorView extends StatelessWidget {
   final String message;
-  const _ErrorView({required this.message});
+  final bool walks;
+  const _ErrorView({required this.message, this.walks = false});
 
   @override
   Widget build(BuildContext context) {
@@ -413,10 +521,10 @@ class _ErrorView extends StatelessWidget {
           children: [
             const EvIcon(AppIcons.errorRune, size: 110),
             const SizedBox(height: 20),
-            const Text(
-              'Could not summon realms',
+            Text(
+              walks ? 'Could not summon walks' : 'Could not summon realms',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: EverloreTheme.parchment,
                 fontSize: 20,
                 fontWeight: FontWeight.w700,

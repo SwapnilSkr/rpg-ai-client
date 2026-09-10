@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
-
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_trigger.dart';
 
@@ -13,9 +11,6 @@ import '../state/my_worlds_cubit.dart';
 import 'widgets/my_world_card.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
-import '../../../core/errors/user_message.dart';
-import '../../interactive/data/interactive_world_repository.dart';
-import '../../interactive/domain/interactive_world.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
@@ -24,7 +19,6 @@ import '../../../shared/widgets/neu.dart';
 import '../../../shared/widgets/everlore_empty_state.dart';
 import '../../../shared/widgets/realm_backdrop.dart';
 import '../../../shared/widgets/everlore_notice.dart';
-import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../app/layout/responsive.dart';
 
 class MyWorldsScreen extends StatelessWidget {
@@ -128,7 +122,6 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
             body: Column(
               children: [
                 _worldsTopBar(context),
-                const _InteractivePlaythroughLink(),
                 Expanded(
                   child: Center(
                     child: EverloreSessionLoader(message: 'Opening your forge'),
@@ -154,7 +147,6 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _worldsTopBar(context),
-          const _InteractivePlaythroughLink(),
           Expanded(
             child: type == _GateType.unauth ? _UnauthGate() : _UpgradeGate(),
           ),
@@ -225,7 +217,6 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                         ),
                       ],
                     ),
-                    const _InteractivePlaythroughLink(),
                     AnimatedSize(
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOutCubic,
@@ -296,6 +287,7 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                                           '/my-worlds/${state.drafts[i].id}/forge',
                                           extra: state.drafts[i],
                                         ),
+                                        onTap: null,
                                         onPublish: () => _confirmPublish(
                                           context,
                                           state.drafts[i].id,
@@ -496,282 +488,6 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
 }
 
 enum _GateType { unauth, upgrade }
-
-/// The entrances to the walkable worlds this player may enter.
-///
-/// One world used to be written in here by hand — its title, its blurb and
-/// its key — so a second walkable world would have been invisible until
-/// somebody remembered to add another card, and the copy on it described the
-/// format rather than the world. It is asked for now.
-///
-/// The list is asked for on behalf of a player who may be entitled to none of
-/// them, and offering none is an ordinary answer: the section simply is not
-/// there. Only worlds the player can actually begin are returned, so an
-/// entrance here never refuses the moment it is taken.
-class _InteractivePlaythroughLink extends StatefulWidget {
-  const _InteractivePlaythroughLink();
-
-  @override
-  State<_InteractivePlaythroughLink> createState() =>
-      _InteractivePlaythroughLinkState();
-}
-
-class _InteractivePlaythroughLinkState
-    extends State<_InteractivePlaythroughLink> {
-  static const _repository = InteractiveWorldRepository();
-
-  List<InteractiveWorldEntrance>? _worlds;
-  bool _opening = false;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_load());
-  }
-
-  Future<void> _load() async {
-    List<InteractiveWorldEntrance> worlds;
-    try {
-      worlds = await _repository.listPlayable();
-    } catch (_) {
-      // A world nobody could fetch is not an error worth a notice on a screen
-      // the player came to for something else. They are shown no entrance,
-      // which is what they would see if there were none.
-      worlds = const [];
-    }
-    if (!mounted) return;
-    // Held until the paintings are ready, so a card does not arrive as an
-    // empty frame and fill in underneath the player's thumb.
-    await _warmCovers(worlds);
-    if (!mounted) return;
-    setState(() => _worlds = worlds);
-  }
-
-  /// Bounded on purpose: one unreachable painting must not keep every
-  /// entrance off the screen, and the card draws without a face perfectly
-  /// well.
-  Future<void> _warmCovers(List<InteractiveWorldEntrance> worlds) async {
-    final urls = worlds.map((w) => w.coverUrl).whereType<String>();
-    if (urls.isEmpty) return;
-    await Future.any([
-      Future.wait(
-        urls.map(
-          (url) => precacheImage(
-            CachedNetworkImageProvider(url),
-            context,
-            onError: (_, _) {},
-          ),
-        ),
-      ),
-      Future<void>.delayed(const Duration(milliseconds: 1800)),
-    ]);
-  }
-
-  Future<void> _openForPlay(InteractiveWorldEntrance world) async {
-    if (_opening) return;
-    _opening = true;
-    try {
-      final loggedIn = await AuthService.isLoggedIn();
-      if (!mounted) return;
-      if (!loggedIn) {
-        context.push('/auth');
-        return;
-      }
-
-      final instanceId = await showEverloreSessionLoading<String>(
-        context,
-        message: 'Opening the gate',
-        task: () => _repository.resolveInstance(world.worldKey),
-      );
-      if (!mounted) return;
-      if (instanceId == null || instanceId.isEmpty) {
-        showEverloreNotice(
-          context,
-          'The world could not be opened.',
-          tone: NoticeTone.error,
-        );
-        return;
-      }
-      context.push(
-        '/interactive/${world.worldKey}/lab?instanceId=$instanceId',
-      );
-    } catch (error) {
-      if (!mounted) return;
-      showEverloreNotice(
-        context,
-        userFacingError(error, fallback: 'The world could not be opened.'),
-        tone: NoticeTone.error,
-      );
-    } finally {
-      _opening = false;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final worlds = _worlds;
-    // Nothing is drawn while the answer is unknown. A placeholder card that
-    // resolves to no worlds would be an entrance that vanishes.
-    if (worlds == null || worlds.isEmpty) return const SizedBox.shrink();
-    return Column(
-      children: [
-        for (final world in worlds)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: _WorldEntranceCard(
-              world: world,
-              onTap: () => unawaited(_openForPlay(world)),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// One world's entrance: its own painting, its own name, its own invitation.
-class _WorldEntranceCard extends StatelessWidget {
-  const _WorldEntranceCard({required this.world, required this.onTap});
-
-  final InteractiveWorldEntrance world;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Enter ${world.title}',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Ink(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                colors: [
-                  EverloreTheme.ember.withValues(alpha: 0.26),
-                  EverloreTheme.void3.withValues(alpha: 0.94),
-                ],
-              ),
-              border: Border.all(
-                color: EverloreTheme.goldDim.withValues(alpha: 0.42),
-              ),
-            ),
-            child: Row(
-              children: [
-                _Cover(world: world),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        world.title.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: EverloreTheme.ui(
-                          size: 12,
-                          color: EverloreTheme.gold,
-                          weight: FontWeight.w800,
-                        ),
-                      ),
-                      if (world.chapterTitle.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          world.chapterTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: EverloreTheme.ui(
-                            size: 14,
-                            color: EverloreTheme.parchment,
-                            weight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                      if (world.blurb != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          world.blurb!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: EverloreTheme.ui(
-                            size: 11,
-                            color: EverloreTheme.ash,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(
-                  Icons.arrow_forward_rounded,
-                  color: EverloreTheme.gold,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The world's opening painting, cropped to a plate.
-///
-/// A world with no published painting keeps its shape on the card rather than
-/// collapsing the row, so an unpainted world does not read as a broken one.
-class _Cover extends StatelessWidget {
-  const _Cover({required this.world});
-
-  final InteractiveWorldEntrance world;
-
-  @override
-  Widget build(BuildContext context) {
-    const size = 48.0;
-    final url = world.coverUrl;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: url == null
-            ? DecoratedBox(
-                decoration: BoxDecoration(
-                  color: EverloreTheme.gold.withValues(alpha: 0.14),
-                ),
-                child: const Icon(
-                  Icons.travel_explore_rounded,
-                  color: EverloreTheme.gold,
-                  size: 22,
-                ),
-              )
-            : EverloreNetworkImage(
-                imageUrl: url,
-                fit: BoxFit.cover,
-                semanticLabel: world.title,
-                memCacheWidth:
-                    (size * MediaQuery.devicePixelRatioOf(context)).round(),
-                placeholder: ColoredBox(
-                  color: EverloreTheme.void4.withValues(alpha: 0.6),
-                ),
-                errorWidget: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: EverloreTheme.gold.withValues(alpha: 0.14),
-                  ),
-                  child: const Icon(
-                    Icons.travel_explore_rounded,
-                    color: EverloreTheme.gold,
-                    size: 22,
-                  ),
-                ),
-              ),
-      ),
-    );
-  }
-}
 
 class _UnauthGate extends StatelessWidget {
   @override

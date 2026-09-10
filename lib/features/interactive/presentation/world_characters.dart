@@ -1,11 +1,9 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/nexus_theme.dart';
-import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../shared/widgets/story_prose.dart';
 import '../domain/interactive_world.dart';
+import 'stage/stage.dart';
 import 'world_frame.dart';
 
 /// The world refuses a longer word. Matching the field to that bound
@@ -31,81 +29,25 @@ class VisitLine {
   final bool meeting;
 }
 
-/// A tall transparent cut-out standing in the painting.
+/// Who is in this room, standing the way a speaker already stands.
 ///
-/// These portraits are drawn on empty ground. A filled card or a cover-crop
-/// turns them back into icons, which is why they composite straight onto
-/// whatever is behind them.
-class CharacterCutout extends StatelessWidget {
-  const CharacterCutout({
-    super.key,
-    required this.name,
-    required this.portraitUrl,
-    this.height = 156,
-    this.onTap,
-    this.enabled = true,
-  });
-
-  /// How tall a figure stands in the painting. The opening warms this
-  /// decode size; any other height stocks a shelf these cut-outs will
-  /// not paint from.
-  static const standingHeight = 148.0;
-
-  /// A different height here stocks a shelf the cut-out will not paint from.
-  static int cacheHeightOf(
-    BuildContext context, {
-    double height = standingHeight,
-  }) => (height * MediaQuery.devicePixelRatioOf(context)).round();
-
-  final String name;
-  final String? portraitUrl;
-  final double height;
-  final VoidCallback? onTap;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final width = height * 2 / 3;
-    final face = SizedBox(
-      width: width,
-      height: height,
-      child: portraitUrl == null
-          ? _AbsentFace(name: name)
-          : EverloreNetworkImage(
-              imageUrl: portraitUrl!,
-              fit: BoxFit.contain,
-              memCacheHeight: cacheHeightOf(context, height: height),
-              semanticLabel: name,
-              placeholder: const ColoredBox(color: Colors.transparent),
-              errorWidget: _AbsentFace(name: name),
-            ),
-    );
-
-    if (onTap == null) return face;
-
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      label: name,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: enabled ? onTap : null,
-        child: Opacity(opacity: enabled ? 1 : 0.55, child: face),
-      ),
-    );
-  }
-}
-
-/// Who is in this room, standing in the painted place rather than listed.
+/// A fitted 2:3 cut-out in a short centred row is what put dolls on
+/// the painting with their feet showing. These people use the same
+/// speak rise, from rects against the screen.
 class SceneCast extends StatelessWidget {
   const SceneCast({
     super.key,
     required this.people,
+    required this.reservedPanelHeight,
     required this.onAddress,
     this.enabled = true,
   });
 
   final List<WorldPresence> people;
+
+  /// The parchment's own keep, in pixels. A guessed quarter against a
+  /// petition is how a face was read through the paper.
+  final double reservedPanelHeight;
   final ValueChanged<WorldPresence> onAddress;
   final bool enabled;
 
@@ -113,54 +55,80 @@ class SceneCast extends StatelessWidget {
   Widget build(BuildContext context) {
     if (people.isEmpty) return const SizedBox.shrink();
 
-    final figures = [
-      for (final who in people)
-        _StandingFigure(
-          person: who,
-          enabled: enabled,
-          onTap: () => onAddress(who),
-        ),
-    ];
+    final layout = StageRoomLayout.of(
+      context,
+      count: people.length,
+      reservedPanelHeight: reservedPanelHeight,
+    );
 
-    // A short gathering stands as a group. A scrolling strip is only for a
-    // crowd that will not fit the painting, so two people are not shoved to
-    // the leading edge like a roster.
-    if (people.length <= 3) {
-      return SizedBox(
-        height: 188,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (var i = 0; i < figures.length; i++) ...[
-              if (i > 0) const SizedBox(width: 14),
-              figures[i],
-            ],
-          ],
-        ),
+    // A crowd that cannot share the frame still has to be reachable.
+    // Fitting them into the width is the other doll.
+    if (people.length >= 3 && !layout.crowdFits) {
+      final width = layout.figureAt(0).width;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            width: layout.size.width,
+            height: layout.slotHeight,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemExtent: width,
+              itemCount: people.length,
+              itemBuilder: (context, index) => _RoomPerson(
+                person: people[index],
+                side: layout.sideAt(index),
+                enabled: enabled,
+                onTap: () => onAddress(people[index]),
+              ),
+            ),
+          ),
+        ],
       );
     }
 
-    return SizedBox(
-      height: 188,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: figures.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (context, index) => figures[index],
-      ),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (var i = 0; i < people.length; i++)
+          _band(
+            layout.figureAt(i),
+            _RoomPerson(
+              person: people[i],
+              side: layout.sideAt(i),
+              enabled: enabled,
+              onTap: () => onAddress(people[i]),
+            ),
+          ),
+      ],
     );
   }
 }
 
-class _StandingFigure extends StatelessWidget {
-  const _StandingFigure({
+/// A reserved standing place. Align in this stack is what sat two
+/// people on one spot.
+Positioned _band(Rect rect, Widget child) {
+  return Positioned(
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+    child: child,
+  );
+}
+
+class _RoomPerson extends StatelessWidget {
+  const _RoomPerson({
     required this.person,
+    required this.side,
     required this.enabled,
     required this.onTap,
   });
 
   final WorldPresence person;
+  final StageSide side;
   final bool enabled;
   final VoidCallback onTap;
 
@@ -175,31 +143,12 @@ class _StandingFigure extends StatelessWidget {
         onTap: enabled ? onTap : null,
         child: Opacity(
           opacity: enabled ? 1 : 0.55,
-          child: SizedBox(
-            width: 108,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CharacterCutout(
-                  name: person.name,
-                  portraitUrl: person.portraitUrl,
-                  height: CharacterCutout.standingHeight,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  person.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: EverloreTheme.ui(
-                    size: 12,
-                    color: EverloreTheme.parchment,
-                    height: 1.2,
-                    weight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
+          child: StageFigure(
+            key: ValueKey<String>(person.id),
+            name: person.name,
+            portraitUrl: person.portraitUrl,
+            side: side,
+            rise: StageRise.speak,
           ),
         ),
       ),
@@ -213,28 +162,33 @@ class ConversationPanel extends StatefulWidget {
     super.key,
     required this.person,
     required this.bearingUrl,
+    required this.backdropUrl,
     required this.lines,
     required this.busy,
     required this.onSpeak,
     required this.onLeave,
+    this.playerPortraitUrl,
   });
 
   final WorldPresence person;
   final String? bearingUrl;
+
+  /// The painting of the room. Null renders bare ground rather than a
+  /// broken frame, and is the same veil the fight stands in.
+  final String? backdropUrl;
   final List<VisitLine> lines;
   final bool busy;
   final ValueChanged<String> onSpeak;
   final VoidCallback onLeave;
+  final String? playerPortraitUrl;
 
   @override
   State<ConversationPanel> createState() => _ConversationPanelState();
 }
 
-class _ConversationPanelState extends State<ConversationPanel>
-    with SingleTickerProviderStateMixin {
+class _ConversationPanelState extends State<ConversationPanel> {
   final _said = TextEditingController();
   final _focus = FocusNode();
-  late final AnimationController _chevron;
   bool _hasText = false;
   bool _composing = false;
   int _page = 0;
@@ -243,10 +197,6 @@ class _ConversationPanelState extends State<ConversationPanel>
   void initState() {
     super.initState();
     _said.addListener(_onSaid);
-    _chevron = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
     // A visit already in progress must open on the latest beat. Starting
     // at zero would replay the meeting after they had already walked away.
     _page = widget.lines.isEmpty ? 0 : widget.lines.length - 1;
@@ -276,7 +226,6 @@ class _ConversationPanelState extends State<ConversationPanel>
     _said.removeListener(_onSaid);
     _said.dispose();
     _focus.dispose();
-    _chevron.dispose();
     super.dispose();
   }
 
@@ -286,9 +235,21 @@ class _ConversationPanelState extends State<ConversationPanel>
   }
 
   VisitLine? get _shown {
-    if (widget.lines.isEmpty) return null;
-    final i = _page.clamp(0, widget.lines.length - 1);
-    return widget.lines[i];
+    if (widget.lines.isNotEmpty) {
+      final i = _page.clamp(0, widget.lines.length - 1);
+      return widget.lines[i];
+    }
+    // Opening a character must show their authored entrance. An empty
+    // visit with first_met still on the person is how the rebuild left
+    // a blank parchment and only "Say something".
+    final meeting = widget.person.firstMet;
+    if (meeting == null) return null;
+    return VisitLine(
+      fromPlayer: false,
+      text: meeting,
+      portraitUrl: widget.person.portraitUrl,
+      meeting: true,
+    );
   }
 
   bool get _fromPlayer => _shown?.fromPlayer ?? false;
@@ -331,14 +292,35 @@ class _ConversationPanelState extends State<ConversationPanel>
     final shown = _shown;
     final fromPlayer = _fromPlayer;
     final speaker = fromPlayer ? 'You' : widget.person.name;
+    final size = MediaQuery.sizeOf(context);
+    final side = fromPlayer ? StageSide.right : StageSide.left;
+    final slot = StageMeasure.speakRect(size, side);
+    final contextCue = <String>{
+      widget.person.role.trim(),
+      widget.person.faction.trim(),
+    }.where((part) => part.isNotEmpty).join(' · ');
     return Stack(
       fit: StackFit.expand,
       children: [
-        const _PanelScrim(),
-        _VnSpeaker(
-          name: widget.person.name,
-          portraitUrl: _face,
-          onRight: fromPlayer,
+        StageBackdrop(url: widget.backdropUrl, veil: StageVeil.room),
+        Positioned(
+          left: slot.left,
+          top: slot.top,
+          width: slot.width,
+          height: slot.height,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 420),
+            builder: (context, value, child) =>
+                Opacity(opacity: value, child: child),
+            child: StageFigure(
+              key: ValueKey<String>(fromPlayer ? 'player' : widget.person.id),
+              name: speaker,
+              portraitUrl: fromPlayer ? widget.playerPortraitUrl : _face,
+              side: side,
+              rise: StageRise.speak,
+            ),
+          ),
         ),
         Positioned(
           top: 0,
@@ -359,20 +341,26 @@ class _ConversationPanelState extends State<ConversationPanel>
         ),
         Align(
           alignment: Alignment.bottomCenter,
-          child: _ParchmentStage(
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 420),
+            builder: (context, value, child) =>
+                Opacity(opacity: value, child: child),
+            child: _TalkingStage(
             speaker: speaker,
+            contextCue: contextCue,
             fromPlayer: fromPlayer,
             line: shown,
             busy: widget.busy,
             composing: _composing,
             canAdvance: _canAdvance,
             canSpeak: _hasText && !widget.busy,
-            chevron: _chevron,
             said: _said,
             focus: _focus,
             onAdvance: _advance,
             onCompose: _openCompose,
             onSubmit: _submit,
+            ),
           ),
         ),
       ],
@@ -380,118 +368,16 @@ class _ConversationPanelState extends State<ConversationPanel>
   }
 }
 
-/// Darkens only the band the parchment sits on. A full-frame veil would
-/// swallow the painting the figure is meant to stand in.
-class _PanelScrim extends StatelessWidget {
-  const _PanelScrim();
-
-  @override
-  Widget build(BuildContext context) {
-    return const IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0x00000000),
-              Color(0x00000000),
-              Color(0x59000000),
-            ],
-            stops: [0.0, 0.58, 1.0],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A 2:3 full-body cut-out framed as a half-body speaker.
-///
-/// Fitting the whole figure in this slot would put their feet on a phone
-/// that is taller than 3:2 at 60% width. Cover-scaling from the top keeps
-/// the head and lets the legs leave the frame.
-class _VnSpeaker extends StatelessWidget {
-  const _VnSpeaker({
-    required this.name,
-    required this.portraitUrl,
-    required this.onRight,
-  });
-
-  final String name;
-  final String? portraitUrl;
-  final bool onRight;
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    return AnimatedAlign(
-      duration: const Duration(milliseconds: 380),
-      curve: Curves.easeOutCubic,
-      alignment: onRight ? Alignment.centerRight : Alignment.centerLeft,
-      child: SizedBox(
-        width: size.width * 0.62,
-        height: size.height,
-        child: portraitUrl == null
-            ? _AbsentFace(name: name, large: true)
-            : _TopAnchoredCutout(name: name, portraitUrl: portraitUrl!),
-      ),
-    );
-  }
-}
-
-class _TopAnchoredCutout extends StatelessWidget {
-  const _TopAnchoredCutout({required this.name, required this.portraitUrl});
-
-  final String name;
-  final String portraitUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final slotH = constraints.maxHeight;
-        // 1.42× the slot makes a 2:3 body taller than the phone, so the
-        // bottom edge crops at the thigh instead of showing a figurine.
-        final paintedH = slotH * 1.42;
-        final paintedW = paintedH * 2 / 3;
-        final dpr = MediaQuery.devicePixelRatioOf(context);
-        return ClipRect(
-          child: OverflowBox(
-            alignment: Alignment.topCenter,
-            minWidth: paintedW,
-            maxWidth: paintedW,
-            minHeight: paintedH,
-            maxHeight: paintedH,
-            child: SizedBox(
-              width: paintedW,
-              height: paintedH,
-              child: EverloreNetworkImage(
-                imageUrl: portraitUrl,
-                fit: BoxFit.contain,
-                memCacheHeight: (paintedH * dpr).round(),
-                semanticLabel: name,
-                placeholder: const ColoredBox(color: Colors.transparent),
-                errorWidget: _AbsentFace(name: name, large: true),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _ParchmentStage extends StatelessWidget {
-  const _ParchmentStage({
+class _TalkingStage extends StatelessWidget {
+  const _TalkingStage({
     required this.speaker,
+    required this.contextCue,
     required this.fromPlayer,
     required this.line,
     required this.busy,
     required this.composing,
     required this.canAdvance,
     required this.canSpeak,
-    required this.chevron,
     required this.said,
     required this.focus,
     required this.onAdvance,
@@ -500,13 +386,13 @@ class _ParchmentStage extends StatelessWidget {
   });
 
   final String speaker;
+  final String contextCue;
   final bool fromPlayer;
   final VisitLine? line;
   final bool busy;
   final bool composing;
   final bool canAdvance;
   final bool canSpeak;
-  final Animation<double> chevron;
   final TextEditingController said;
   final FocusNode focus;
   final VoidCallback onAdvance;
@@ -525,18 +411,20 @@ class _ParchmentStage extends StatelessWidget {
     // space above the keys.
     final prose = scaler.scale(18) * 1.55;
     final field = scaler.scale(17) * 1.45;
-    final needed = composing
+    final readyToSpeak = line == null;
+    final needed = composing || readyToSpeak
         ? 22 + field * 4 + 24 + 10
         : 22 + prose * 3 + 48 + 10;
-    final floor = composing ? 148.0 : 168.0;
-    final ceiling = math.max(floor, size.height - keys - 88);
-    final panelH = math
-        .max(size.height * 0.26, needed)
-        .clamp(floor, math.min(ceiling, size.height * 0.48));
+    final panelH = StageMeasure.panelHeightFor(
+      screenHeight: size.height,
+      needed: needed,
+      keys: keys,
+      composing: composing,
+    );
     return Padding(
       padding: EdgeInsets.only(bottom: keys > 0 ? keys : 0),
       child: SizedBox(
-        height: panelH + pad.bottom + 18,
+        height: panelH + pad.bottom + StageMeasure.plateHeight / 2,
         width: double.infinity,
         child: Stack(
           clipBehavior: Clip.none,
@@ -545,28 +433,61 @@ class _ParchmentStage extends StatelessWidget {
               left: 0,
               right: 0,
               bottom: 0,
-              top: 18,
-              child: _ParchmentPanel(
-                fromPlayer: fromPlayer,
-                line: line,
-                busy: busy,
-                composing: composing,
-                canAdvance: canAdvance,
-                canSpeak: canSpeak,
-                chevron: chevron,
-                said: said,
-                focus: focus,
-                bottomInset: pad.bottom,
-                onAdvance: onAdvance,
-                onCompose: onCompose,
-                onSubmit: onSubmit,
+              top: StageMeasure.plateHeight / 2,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: canAdvance ? onAdvance : null,
+                  splashColor: StageMeasure.brass.withValues(alpha: 0.08),
+                  child: StagePanel(
+                    expand: true,
+                    padding: EdgeInsets.fromLTRB(
+                      StageMeasure.panelPadX,
+                      22,
+                      StageMeasure.panelPadX,
+                      10 + pad.bottom,
+                    ),
+                    child: Stack(
+                      children: [
+                        composing
+                            ? _SayField(
+                                said: said,
+                                focus: focus,
+                                canSpeak: canSpeak,
+                                onSubmit: onSubmit,
+                              )
+                            : readyToSpeak
+                            ? _ReturnInvitation(
+                                contextCue: contextCue,
+                                said: said,
+                                focus: focus,
+                                canSpeak: canSpeak,
+                                onSubmit: onSubmit,
+                              )
+                            : _PanelBody(
+                                fromPlayer: fromPlayer,
+                                line: line,
+                                busy: busy,
+                                canAdvance: canAdvance,
+                                onCompose: onCompose,
+                              ),
+                        if (canAdvance)
+                          const Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: StageAdvance(),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
             Positioned(
               top: 0,
-              left: fromPlayer ? null : 22,
-              right: fromPlayer ? 22 : null,
-              child: _NameRibbon(name: speaker),
+              left: fromPlayer ? null : StageMeasure.plateInset,
+              right: fromPlayer ? StageMeasure.plateInset : null,
+              child: StageNamePlate(name: speaker, seat: StagePlateSeat.panel),
             ),
           ],
         ),
@@ -575,157 +496,57 @@ class _ParchmentStage extends StatelessWidget {
   }
 }
 
-class _ParchmentPanel extends StatelessWidget {
-  const _ParchmentPanel({
-    required this.fromPlayer,
-    required this.line,
-    required this.busy,
-    required this.composing,
-    required this.canAdvance,
-    required this.canSpeak,
-    required this.chevron,
+class _ReturnInvitation extends StatelessWidget {
+  const _ReturnInvitation({
+    required this.contextCue,
     required this.said,
     required this.focus,
-    required this.bottomInset,
-    required this.onAdvance,
-    required this.onCompose,
+    required this.canSpeak,
     required this.onSubmit,
   });
 
-  final bool fromPlayer;
-  final VisitLine? line;
-  final bool busy;
-  final bool composing;
-  final bool canAdvance;
-  final bool canSpeak;
-  final Animation<double> chevron;
+  final String contextCue;
   final TextEditingController said;
   final FocusNode focus;
-  final double bottomInset;
-  final VoidCallback onAdvance;
-  final VoidCallback onCompose;
+  final bool canSpeak;
   final VoidCallback onSubmit;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: canAdvance ? onAdvance : null,
-        splashColor: const Color(0x14C8A96A),
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFFE8D5B0), Color(0xFFD4C09A)],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (contextCue.isNotEmpty) ...[
+          Text(
+            contextCue.toUpperCase(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: EverloreTheme.caption.copyWith(
+              color: StageMeasure.brassDeep,
+              fontSize: 11,
+              letterSpacing: 1.1,
             ),
-            border: Border(
-              top: BorderSide(color: Color(0x66C8A96A)),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x33000000),
-                blurRadius: 16,
-                offset: Offset(0, -4),
-              ),
-            ],
           ),
-          child: Stack(
-            children: [
-              const _PaperGrain(),
-              Padding(
-                padding: EdgeInsets.fromLTRB(22, 22, 22, 10 + bottomInset),
-                child: composing
-                    ? _SayField(
-                        said: said,
-                        focus: focus,
-                        canSpeak: canSpeak,
-                        onSubmit: onSubmit,
-                      )
-                    : _PanelBody(
-                        fromPlayer: fromPlayer,
-                        line: line,
-                        busy: busy,
-                        canAdvance: canAdvance,
-                        onCompose: onCompose,
-                      ),
-              ),
-              if (canAdvance)
-                Positioned(
-                  right: 14,
-                  bottom: 8 + bottomInset,
-                  child: _AdvanceChevron(animation: chevron),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PaperGrain extends StatelessWidget {
-  const _PaperGrain();
-
-  @override
-  Widget build(BuildContext context) {
-    return const IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0x33FFFFFF),
-              Color(0x00000000),
-              Color(0x14000000),
-            ],
-            stops: [0.0, 0.45, 1.0],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NameRibbon extends StatelessWidget {
-  const _NameRibbon({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            EverloreTheme.goldDeep,
-            EverloreTheme.ember,
-            EverloreTheme.gold,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(3),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x44000000),
-            blurRadius: 6,
-            offset: Offset(0, 2),
-          ),
+          const SizedBox(height: 4),
         ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-        child: Text(
-          name,
-          style: EverloreTheme.serifDisplay(
-            size: 13,
-            color: EverloreTheme.goldHot,
-            weight: FontWeight.w600,
-            spacing: 0.6,
+        Text(
+          'Speak in your own words.',
+          style: EverloreTheme.aiText.copyWith(
+            color: StageMeasure.inkMuted,
+            fontSize: 15,
+            fontStyle: FontStyle.italic,
           ),
         ),
-      ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: _SayField(
+            said: said,
+            focus: focus,
+            canSpeak: canSpeak,
+            onSubmit: onSubmit,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -753,7 +574,7 @@ class _PanelBody extends StatelessWidget {
         Expanded(
           child: line == null
               ? const SizedBox.shrink()
-              : _BeatText(line: line!, fromPlayer: fromPlayer),
+              : _ReadingRegion(line: line!, fromPlayer: fromPlayer),
         ),
         if (busy)
           const _Waiting()
@@ -764,26 +585,142 @@ class _PanelBody extends StatelessWidget {
   }
 }
 
+class _ReadingRegion extends StatefulWidget {
+  const _ReadingRegion({required this.line, required this.fromPlayer});
+
+  final VisitLine line;
+  final bool fromPlayer;
+
+  @override
+  State<_ReadingRegion> createState() => _ReadingRegionState();
+}
+
+class _ReadingRegionState extends State<_ReadingRegion> {
+  final _scroll = ScrollController();
+  bool _hasMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_syncAffordance);
+    _afterLayout();
+  }
+
+  @override
+  void didUpdateWidget(_ReadingRegion oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.line.text != widget.line.text) {
+      if (_scroll.hasClients) _scroll.jumpTo(0);
+      _afterLayout();
+    }
+  }
+
+  void _afterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncAffordance();
+    });
+  }
+
+  void _syncAffordance() {
+    if (!_scroll.hasClients) return;
+    final position = _scroll.position;
+    final hasMore = position.maxScrollExtent - position.pixels > 1;
+    if (hasMore != _hasMore && mounted) setState(() => _hasMore = hasMore);
+  }
+
+  @override
+  void dispose() {
+    _scroll
+      ..removeListener(_syncAffordance)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: (_) {
+        _afterLayout();
+        return false;
+      },
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Scrollbar(
+              controller: _scroll,
+              thumbVisibility: _hasMore,
+              child: SingleChildScrollView(
+                controller: _scroll,
+                child: _BeatText(
+                  line: widget.line,
+                  fromPlayer: widget.fromPlayer,
+                ),
+              ),
+            ),
+          ),
+          if (_hasMore)
+            Positioned(
+              left: 0,
+              bottom: 0,
+              child: Semantics(
+                label: 'More of this reply follows. Swipe up to keep reading.',
+                excludeSemantics: true,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x00F2E7D0), StageMeasure.paper],
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 12, 10, 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'READ ON',
+                            style: EverloreTheme.caption.copyWith(
+                              color: StageMeasure.brassDeep,
+                              fontSize: 10,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: StageMeasure.brassDeep,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BeatText extends StatelessWidget {
   const _BeatText({required this.line, required this.fromPlayer});
 
   final VisitLine line;
   final bool fromPlayer;
 
-  static const _ink = Color(0xFF2A2118);
-
   @override
   Widget build(BuildContext context) {
     final base = EverloreTheme.aiText.copyWith(
-      color: _ink,
+      color: StageMeasure.ink,
       fontSize: 18,
       height: 1.55,
     );
     if (fromPlayer) {
-      return Text(
-        line.text,
-        style: base.copyWith(fontStyle: FontStyle.italic),
-      );
+      return Text(line.text, style: base.copyWith(fontStyle: FontStyle.italic));
     }
     return Text.rich(
       TextSpan(
@@ -792,12 +729,12 @@ class _BeatText extends StatelessWidget {
           dialogueStyle: base.copyWith(
             fontStyle: FontStyle.normal,
             fontWeight: FontWeight.w600,
-            color: _ink,
+            color: StageMeasure.ink,
           ),
           narrationStyle: base.copyWith(
             fontStyle: FontStyle.italic,
             fontWeight: FontWeight.w400,
-            color: _ink.withValues(alpha: 0.78),
+            color: StageMeasure.ink.withValues(alpha: 0.78),
           ),
         ),
       ),
@@ -818,7 +755,7 @@ class _SayAffordance extends StatelessWidget {
       child: TextButton(
         onPressed: onTap,
         style: TextButton.styleFrom(
-          foregroundColor: EverloreTheme.goldDeep,
+          foregroundColor: StageMeasure.brassDeep,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           minimumSize: const Size(48, 48),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -827,7 +764,7 @@ class _SayAffordance extends StatelessWidget {
           'Say something',
           style: EverloreTheme.serifDisplay(
             size: 14,
-            color: EverloreTheme.goldDeep,
+            color: StageMeasure.brassDeep,
             weight: FontWeight.w600,
           ),
         ),
@@ -873,15 +810,15 @@ class _SayField extends StatelessWidget {
                 maxLines: fit,
                 textCapitalization: TextCapitalization.sentences,
                 style: EverloreTheme.aiText.copyWith(
-                  color: const Color(0xFF2A2118),
+                  color: StageMeasure.ink,
                   fontSize: 17,
                   height: 1.45,
                 ),
-                cursorColor: EverloreTheme.goldDeep,
+                cursorColor: StageMeasure.brassDeep,
                 decoration: InputDecoration(
                   hintText: 'What do you say?',
                   hintStyle: EverloreTheme.aiText.copyWith(
-                    color: const Color(0x992A2118),
+                    color: StageMeasure.inkSoft,
                     fontSize: 17,
                   ),
                   counterText: '',
@@ -894,19 +831,19 @@ class _SayField extends StatelessWidget {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                      color: EverloreTheme.goldDim.withValues(alpha: 0.4),
+                      color: StageMeasure.brassDim.withValues(alpha: 0.4),
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                      color: EverloreTheme.goldDim.withValues(alpha: 0.4),
+                      color: StageMeasure.brassDim.withValues(alpha: 0.4),
                     ),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: EverloreTheme.goldDeep,
+                  focusedBorder: const OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
+                    borderSide: BorderSide(
+                      color: StageMeasure.brassDeep,
                       width: 1.4,
                     ),
                   ),
@@ -918,12 +855,15 @@ class _SayField extends StatelessWidget {
             FilledButton(
               onPressed: canSpeak ? onSubmit : null,
               style: FilledButton.styleFrom(
-                backgroundColor: EverloreTheme.goldDeep,
-                foregroundColor: EverloreTheme.goldHot,
-                disabledBackgroundColor: EverloreTheme.goldDeep.withValues(
+                backgroundColor: StageMeasure.brassDeep,
+                foregroundColor: StageMeasure.brassHot,
+                disabledBackgroundColor: StageMeasure.brassDeep.withValues(
                   alpha: 0.35,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
               child: const Text('Speak'),
             ),
@@ -934,89 +874,35 @@ class _SayField extends StatelessWidget {
   }
 }
 
-class _AdvanceChevron extends StatelessWidget {
-  const _AdvanceChevron({required this.animation});
-
-  final Animation<double> animation;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(0, animation.value * 4 - 2),
-          child: child,
-        );
-      },
-      child: const Icon(
-        Icons.expand_more_rounded,
-        size: 26,
-        color: Color(0xCC6E5A2E),
-      ),
-    );
-  }
-}
-
 class _Waiting extends StatelessWidget {
   const _Waiting();
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
+    return const Padding(
+      padding: EdgeInsets.only(top: 6),
       child: Row(
         children: [
-          const WorldStill(size: 14, color: Color(0xCC6E5A2E)),
-          const SizedBox(width: 10),
-          Text(
-            'They hear you.',
-            style: EverloreTheme.aiText.copyWith(
-              color: const Color(0xCC2A2118),
-              fontSize: 14,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
+          WorldStill(size: 14, color: StageMeasure.inkFaint),
+          SizedBox(width: 10),
+          _WaitingLine(),
         ],
       ),
     );
   }
 }
 
-/// A missing face is still a person in the room. A broken-image glyph would
-/// say the painting failed, which is not what happened.
-class _AbsentFace extends StatelessWidget {
-  const _AbsentFace({required this.name, this.large = false});
-
-  final String name;
-  final bool large;
+class _WaitingLine extends StatelessWidget {
+  const _WaitingLine();
 
   @override
   Widget build(BuildContext context) {
-    final initial = name.trim().isEmpty ? '' : name.trim()[0].toUpperCase();
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0x332A2219), Color(0x00000000)],
-        ),
-        border: Border(
-          left: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.28)),
-          right: BorderSide(
-            color: EverloreTheme.goldDim.withValues(alpha: 0.28),
-          ),
-        ),
-      ),
-      child: Align(
-        alignment: large ? const Alignment(0, -0.35) : Alignment.center,
-        child: Text(
-          initial,
-          style: EverloreTheme.serifDisplay(
-            size: large ? 72 : 34,
-            color: EverloreTheme.goldDim.withValues(alpha: 0.7),
-          ),
-        ),
+    return Text(
+      'They hear you.',
+      style: EverloreTheme.aiText.copyWith(
+        color: StageMeasure.inkFaint,
+        fontSize: 14,
+        fontStyle: FontStyle.italic,
       ),
     );
   }

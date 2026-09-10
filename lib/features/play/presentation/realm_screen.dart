@@ -201,8 +201,8 @@ class RealmScreen extends StatelessWidget {
                         const SizedBox(height: 10),
                         _RealmAction(
                           icon: Icons.map_outlined,
-                          title: 'Enter Aldermere',
-                          subtitle: 'Explore your persistent interactive map, places, and quest paths.',
+                          title: 'Enter ${template.title}',
+                          subtitle: 'Explore your persistent map, places, and quest paths.',
                           onTap: () => context.push(
                             '/interactive/${template.interactiveWorldKey}/lab?instanceId=$instanceId',
                           ),
