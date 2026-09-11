@@ -1,12 +1,19 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/nexus_theme.dart';
+import '../../../shared/widgets/everlore_network_image.dart';
 import '../domain/interactive_world.dart';
 import 'stage/stage.dart';
 
-/// Pick who walks — three figures on a floor, not a list of cards.
+/// Pick who walks — a figure in the slot under the title, not a crop of
+/// the whole phone.
 ///
-/// Until this is bound, the map will not move.
+/// The paintings are tall cut-outs of different widths. Covering the
+/// screen with them pinned every head to the header on a long phone and
+/// blew a tablet out. The stage below the title is the frame; the card
+/// sits on the feet.
 class WorldIdentitySheet extends StatefulWidget {
   const WorldIdentitySheet({
     super.key,
@@ -26,7 +33,7 @@ class WorldIdentitySheet extends StatefulWidget {
 }
 
 class _WorldIdentitySheetState extends State<WorldIdentitySheet> {
-  late final PageController _pages = PageController(viewportFraction: 0.72);
+  late final PageController _pages = PageController();
   double _page = 0;
 
   @override
@@ -57,86 +64,145 @@ class _WorldIdentitySheetState extends State<WorldIdentitySheet> {
   @override
   Widget build(BuildContext context) {
     final selected = _selected;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        StageBackdrop(url: selected?.sceneUrl, veil: StageVeil.arena),
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0x66000000),
-                Color(0x00000000),
-                Color(0xCC0A0908),
-              ],
-              stops: [0, 0.42, 1],
+    final size = MediaQuery.sizeOf(context);
+    final sideBySide = size.width >= 700 || size.width > size.height + 48;
+    return ColoredBox(
+      color: const Color(0xFF0A0908),
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _LobbyHeader(onLeave: widget.onLeave),
+            Expanded(
+              child: sideBySide
+                  ? _wideStage(selected)
+                  : _tallStage(selected),
             ),
-          ),
+          ],
         ),
-        SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  onPressed: widget.onLeave,
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  color: EverloreTheme.parchment,
-                  tooltip: 'Back',
+      ),
+    );
+  }
+
+  Widget _figures() {
+    if (widget.leads.isEmpty) return const SizedBox.expand();
+    return PageView.builder(
+      controller: _pages,
+      physics: const BouncingScrollPhysics(parent: PageScrollPhysics()),
+      itemCount: widget.leads.length,
+      itemBuilder: (context, index) {
+        return _LobbyPortrait(lead: widget.leads[index]);
+      },
+    );
+  }
+
+  Widget _pips() {
+    if (widget.leads.length < 2) return const SizedBox.shrink();
+    return IgnorePointer(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (var i = 0; i < widget.leads.length; i++) ...[
+              Container(
+                width: i == _page.round() ? 16 : 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: StageMeasure.brass.withValues(
+                    alpha: i == _page.round() ? 0.95 : 0.32,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+              if (i < widget.leads.length - 1) const SizedBox(width: 6),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tallStage(WorldLeadCard? selected) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            _figures(),
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0x00000000),
+                      Color(0x00000000),
+                      Color(0xCC0A0908),
+                    ],
+                    stops: [0, 0.45, 1],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'WHO WALKS',
-                      style: EverloreTheme.caption.copyWith(
-                        color: StageMeasure.brass,
-                        letterSpacing: 1.6,
-                        fontSize: 11,
+                    _pips(),
+                    if (selected != null)
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: constraints.maxWidth,
+                          maxHeight: math.max(168, constraints.maxHeight * 0.44),
+                        ),
+                        child: _LobbyPlate(
+                          lead: selected,
+                          busy: widget.busy,
+                          compact: constraints.maxHeight < 520,
+                          onWalk: () => widget.onChoose(selected),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Turn them. Stand with one.',
-                      style: EverloreTheme.serifDisplay(
-                        size: 22,
-                        color: EverloreTheme.parchment,
-                        weight: FontWeight.w600,
-                      ),
-                    ),
                   ],
                 ),
               ),
-              Expanded(
-                child: widget.leads.isEmpty
-                    ? const SizedBox.shrink()
-                    : PageView.builder(
-                        controller: _pages,
-                        itemCount: widget.leads.length,
-                        itemBuilder: (context, index) {
-                          return _LobbyFigure(
-                            lead: widget.leads[index],
-                            delta: index - _page,
-                          );
-                        },
-                      ),
-              ),
-              if (selected != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  child: _LobbyPlate(
-                    lead: selected,
-                    busy: widget.busy,
-                    onWalk: () => widget.onChoose(selected),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _wideStage(WorldLeadCard? selected) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(flex: 3, child: _figures()),
+        Expanded(
+          flex: 2,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 16, 12),
+            child: Column(
+              children: [
+                _pips(),
+                if (selected != null)
+                  Expanded(
+                    child: _LobbyPlate(
+                      lead: selected,
+                      busy: widget.busy,
+                      compact: false,
+                      expand: true,
+                      onWalk: () => widget.onChoose(selected),
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
@@ -144,36 +210,117 @@ class _WorldIdentitySheetState extends State<WorldIdentitySheet> {
   }
 }
 
-class _LobbyFigure extends StatelessWidget {
-  const _LobbyFigure({required this.lead, required this.delta});
+class _LobbyHeader extends StatelessWidget {
+  const _LobbyHeader({required this.onLeave});
 
-  final WorldLeadCard lead;
-  final double delta;
+  final VoidCallback onLeave;
 
   @override
   Widget build(BuildContext context) {
-    final away = delta.abs().clamp(0.0, 1.0);
-    final scale = 1.0 - away * 0.22;
-    final yaw = delta * 0.62;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Transform(
-        alignment: Alignment.bottomCenter,
-        transform: Matrix4.identity()
-          ..setEntry(3, 2, 0.00115)
-          ..rotateY(yaw)
-          ..scaleByDouble(scale, scale, scale, 1),
-        child: Opacity(
-          opacity: (1.0 - away * 0.45).clamp(0.38, 1.0),
-          child: StageFigure(
-            name: lead.name,
-            portraitUrl: lead.portraitUrl,
-            side: delta >= 0 ? StageSide.left : StageSide.right,
-            rise: StageRise.speak,
-            active: away < 0.45,
+      padding: const EdgeInsets.fromLTRB(8, 4, 20, 8),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onLeave,
+            icon: const Icon(Icons.arrow_back_rounded),
+            color: EverloreTheme.parchment,
+            tooltip: 'Back',
           ),
-        ),
+          Expanded(
+            child: IgnorePointer(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'WHO WALKS',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: EverloreTheme.caption.copyWith(
+                      color: StageMeasure.brass,
+                      letterSpacing: 1.6,
+                      fontSize: 11,
+                    ),
+                  ),
+                  Text(
+                    'Turn them. Stand with one.',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: EverloreTheme.serifDisplay(
+                      size: 20,
+                      color: EverloreTheme.parchment,
+                      weight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _LobbyPortrait extends StatelessWidget {
+  const _LobbyPortrait({required this.lead});
+
+  final WorldLeadCard lead;
+
+  /// Width of the cut-out in this stage.
+  ///
+  /// The published faces are ~1:2.2, not 2:3, and not the same as each
+  /// other. Fitting the stage width on a tall phone stretched them until
+  /// the hair sat in the title; fitting height cropped Nara's sides off.
+  /// Cap by height so the head starts under the header and the extra
+  /// cloth runs under the card.
+  static double _columnWidth(double stageW, double stageH) {
+    final cap = math.max(220.0, stageH * 0.68);
+    return math.min(stageW, cap);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final url = lead.portraitUrl;
+        final width = _columnWidth(
+          constraints.maxWidth,
+          constraints.maxHeight,
+        );
+        if (url == null) {
+          return Align(
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: SizedBox(
+                width: math.min(width, 180),
+                height: math.min(constraints.maxHeight, 270),
+                child: StageStandard(name: lead.name),
+              ),
+            ),
+          );
+        }
+        return Align(
+          alignment: Alignment.topCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: ClipRect(
+              child: SizedBox(
+                width: width,
+                height: math.max(0, constraints.maxHeight - 12),
+                child: EverloreNetworkImage(
+                  imageUrl: url,
+                  fit: BoxFit.fitWidth,
+                  alignment: Alignment.topCenter,
+                  semanticLabel: lead.name,
+                  placeholder: const ColoredBox(color: Color(0xFF0A0908)),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -183,25 +330,48 @@ class _LobbyPlate extends StatelessWidget {
     required this.lead,
     required this.busy,
     required this.onWalk,
+    this.compact = false,
+    this.expand = false,
   });
 
   final WorldLeadCard lead;
   final bool busy;
   final VoidCallback onWalk;
+  final bool compact;
+  final bool expand;
 
   @override
   Widget build(BuildContext context) {
     final traits = lead.traits;
+    final titleSize = compact ? 20.0 : 22.0;
+    final want = Text(
+      lead.want,
+      style: EverloreTheme.aiText.copyWith(
+        color: StageMeasure.inkMuted,
+        fontSize: compact ? 13 : 14,
+        height: 1.35,
+      ),
+      maxLines: compact ? 2 : 3,
+      overflow: TextOverflow.ellipsis,
+    );
     return StagePanel(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      expand: expand,
+      padding: EdgeInsets.fromLTRB(
+        compact ? 16 : 20,
+        compact ? 12 : 14,
+        compact ? 16 : 20,
+        compact ? 12 : 14,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
         children: [
           Text(
             lead.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: EverloreTheme.serifDisplay(
-              size: 22,
+              size: titleSize,
               color: StageMeasure.ink,
               weight: FontWeight.w700,
             ),
@@ -209,6 +379,8 @@ class _LobbyPlate extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             lead.role.toUpperCase(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: EverloreTheme.caption.copyWith(
               color: StageMeasure.brassDeep,
               fontSize: 10,
@@ -216,7 +388,7 @@ class _LobbyPlate extends StatelessWidget {
             ),
           ),
           if (traits != null) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 10,
               runSpacing: 4,
@@ -227,16 +399,9 @@ class _LobbyPlate extends StatelessWidget {
               ],
             ),
           ],
-          const SizedBox(height: 10),
-          Text(
-            lead.want,
-            style: EverloreTheme.aiText.copyWith(
-              color: StageMeasure.inkMuted,
-              fontSize: 14,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
+          if (expand) Expanded(child: SingleChildScrollView(child: want)) else want,
+          SizedBox(height: compact ? 10 : 12),
           SizedBox(
             width: double.infinity,
             child: StageChoice(

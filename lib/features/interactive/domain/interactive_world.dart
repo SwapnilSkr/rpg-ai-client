@@ -732,6 +732,61 @@ class WorldPrologue {
   }
 }
 
+@immutable
+class WorldOvertureBeat {
+  const WorldOvertureBeat({
+    required this.mark,
+    required this.title,
+    required this.body,
+    required this.sceneUrl,
+  });
+
+  final String mark;
+  final String title;
+  final String body;
+  final String? sceneUrl;
+
+  factory WorldOvertureBeat.fromJson(Map<String, dynamic> json) =>
+      WorldOvertureBeat(
+        mark: json['mark'] as String? ?? '',
+        title: json['title'] as String? ?? '',
+        body: json['body'] as String? ?? '',
+        sceneUrl: switch (json['scene_url']) {
+          final String url when url.isNotEmpty => url,
+          _ => null,
+        },
+      );
+}
+
+@immutable
+class WorldOverture {
+  const WorldOverture({
+    required this.headline,
+    required this.kicker,
+    required this.beats,
+  });
+
+  final String headline;
+  final String kicker;
+  final List<WorldOvertureBeat> beats;
+
+  static WorldOverture? tryFrom(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    final beats = (json['beats'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => WorldOvertureBeat.fromJson(Map<String, dynamic>.from(row)))
+        .where((beat) => beat.title.isNotEmpty && beat.body.isNotEmpty)
+        .toList();
+    if (beats.isEmpty) return null;
+    return WorldOverture(
+      headline: json['headline'] as String? ?? '',
+      kicker: json['kicker'] as String? ?? '',
+      beats: beats,
+    );
+  }
+}
+
 /// A quarrel brought to the player to rule on, once the reign has begun.
 ///
 /// The parties state their own cases and disagree; what is actually true is

@@ -11,6 +11,7 @@ import 'loading_shimmer.dart';
 class EverloreNetworkImage extends StatelessWidget {
   final String imageUrl;
   final BoxFit fit;
+  final Alignment alignment;
   final Widget? placeholder;
   final Widget? errorWidget;
   final String? semanticLabel;
@@ -21,6 +22,7 @@ class EverloreNetworkImage extends StatelessWidget {
     super.key,
     required this.imageUrl,
     this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
     this.placeholder,
     this.errorWidget,
     this.semanticLabel,
@@ -33,6 +35,7 @@ class EverloreNetworkImage extends StatelessWidget {
     return CachedNetworkImage(
       imageUrl: imageUrl,
       fit: fit,
+      alignment: alignment,
       memCacheWidth: memCacheWidth,
       memCacheHeight: memCacheHeight,
       maxWidthDiskCache: memCacheWidth,
@@ -48,7 +51,11 @@ class EverloreNetworkImage extends StatelessWidget {
       imageBuilder: (context, imageProvider) => Semantics(
         image: true,
         label: semanticLabel,
-        child: Image(image: imageProvider, fit: fit),
+        child: Image(
+          image: imageProvider,
+          fit: fit,
+          alignment: alignment,
+        ),
       ),
     );
   }

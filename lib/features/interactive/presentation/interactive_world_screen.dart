@@ -16,6 +16,7 @@ import 'world_frame.dart';
 import 'world_identity.dart';
 import 'world_map_view.dart';
 import 'world_moments.dart';
+import 'world_overture.dart';
 import 'world_prologue.dart';
 
 /// An interactive world — a terrain plate with placed markers, not a chat UI
@@ -62,6 +63,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   List<WorldLeadCard> _playable = const [];
   WorldLeadCard? _lead;
   WorldPrologue? _prologue;
+  WorldOverture? _overture;
   WorldDeath? _death;
   List<WorldMoment> _moments = const [];
   List<WorldDrill> _drillsHere = const [];
@@ -106,14 +108,17 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
       _apply(payload);
       final world = _world;
       if (world != null) {
-        // The map is shown the moment the words arrive. The plates then
-        // fill in after, so a cold opening is an empty grid. Only the
-        // land under the camera belongs on this wait — the rest of the
-        // world would hold the gate for a minute.
+        // The first thing they see should already be painted. A new walk
+        // opens on the duchy tour, so those rooms and the people who walk
+        // them belong on this wait — not the whole map.
         await awaitWorldFrame(
           context,
           urls: [
-            for (final plateId in world.plateAssetIds) world.urlFor(plateId),
+            if (_overture != null)
+              for (final beat in _overture!.beats) beat.sceneUrl
+            else
+              for (final plateId in world.plateAssetIds) world.urlFor(plateId),
+            for (final lead in _playable) lead.portraitUrl,
           ],
         );
       }
@@ -227,6 +232,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
         ? WorldLeadCard.fromJson(Map<String, dynamic>.from(rawLead))
         : null;
     _prologue = WorldPrologue.tryFrom(payload['prologue']);
+    _overture = WorldOverture.tryFrom(payload['overture']);
     _death = WorldDeath.tryFrom(payload['death']);
     _moments = (payload['moments'] as List? ?? const [])
         .whereType<Map>()
@@ -547,14 +553,21 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   Widget build(BuildContext context) {
     final world = _world;
     final talking = !_loading && world != null && _inConversation;
+    final paintedOpening =
+        !_loading &&
+        world != null &&
+        (_overture != null ||
+            _needsIdentity ||
+            _prologue != null ||
+            talking);
     return Scaffold(
       backgroundColor: const Color(0xFF0A0908),
       // The painting must not shrink when the field opens. Only the
       // parchment is padded for the keyboard.
       resizeToAvoidBottomInset: !talking,
       body: SafeArea(
-        top: !talking,
-        bottom: !talking,
+        top: !paintedOpening,
+        bottom: !paintedOpening,
         child: _loading
             ? Center(child: EverloreSessionLoader(message: _waitingLine))
             : world == null
@@ -562,6 +575,12 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                 title: 'The way is closed',
                 message: _error ?? 'The way in is not open.',
                 onRetry: _load,
+              )
+            : _overture != null
+            ? WorldOvertureStage(
+                overture: _overture!,
+                onLeave: () => Navigator.of(context).maybePop(),
+                onFinished: () => unawaited(_act(type: 'tour')),
               )
             : _needsIdentity
             ? WorldIdentitySheet(
