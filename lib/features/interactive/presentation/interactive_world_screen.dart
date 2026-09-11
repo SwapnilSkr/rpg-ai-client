@@ -82,6 +82,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   bool _veiling = true;
   bool _lifting = false;
   bool _acting = false;
+  String? _actingKey;
   String? _error;
   String? _travellingTo;
 
@@ -305,11 +306,17 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     String? checkpointId,
     String? drillId,
     bool alreadyActing = false,
+    String? actingKey,
   }) async {
     if (!_isServerBacked) {
       // The road was held for a walk this glimpse cannot take. Leaving
       // the lock set would freeze every later action on a preview.
-      if (alreadyActing && mounted) setState(() => _acting = false);
+      if (alreadyActing && mounted) {
+        setState(() {
+          _acting = false;
+          _actingKey = null;
+        });
+      }
       _notice(
         'This glimpse has no memory of you. Come as one already walking these lands.',
       );
@@ -319,7 +326,12 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     // the lock to call this would let a second tap start a second move;
     // treating the hold as a refusal would swallow the walk that waited.
     if (_acting && !alreadyActing) return false;
-    if (!alreadyActing) setState(() => _acting = true);
+    if (!alreadyActing) {
+      setState(() {
+        _acting = true;
+        _actingKey = actingKey;
+      });
+    }
     try {
       final payload = await _repository.act(
         worldKey: widget.worldKey,
@@ -347,24 +359,30 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
       }
       setState(() {
         _apply(payload);
-        if (!alreadyActing) _acting = false;
+        if (!alreadyActing && fought == null) {
+          _acting = false;
+          _actingKey = null;
+        }
       });
       if (fought != null) await _watch(fought);
       if (!mounted) return true;
-      if (_death == null && initiated != null) {
-        WorldPresence? who;
-        for (final person in _cast) {
-          if (person.id == initiated.characterId) {
-            who = person;
-            break;
-          }
-        }
-        if (who != null) _address(who);
+      if (!alreadyActing) {
+        setState(() {
+          _acting = false;
+          _actingKey = null;
+        });
+      }
+      if (_death == null && _shouldApproach(type, initiated, fought != null)) {
+        final who = _personToAddress(initiated);
+        if (who != null) _address(who, fromTrigger: true);
       }
       return true;
     } catch (error) {
       if (!mounted) return false;
-      setState(() => _acting = false);
+      setState(() {
+        _acting = false;
+        _actingKey = null;
+      });
       // The server owns the refusal and its wording; surface it rather than
       // guessing a reason the fiction has not given.
       final reason = _reasonFrom(error);
@@ -406,8 +424,8 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     return null;
   }
 
-  void _address(WorldPresence who) {
-    if (_acting) return;
+  void _address(WorldPresence who, {bool fromTrigger = false}) {
+    if (_acting && !fromTrigger) return;
     final existing = _visit[who.id];
     if (existing == null || existing.isEmpty) {
       final echoed = _linesFromEchoes(who);
@@ -429,6 +447,21 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     }
     _metHere.add(who.id);
     setState(() => _addressingId = who.id);
+  }
+
+  bool _shouldApproach(String type, WorldSpoken? initiated, bool fought) {
+    if (initiated != null || fought) return true;
+    return type == 'choose' || type == 'rule' || type == 'move' || type == 'train';
+  }
+
+  WorldPresence? _personToAddress(WorldSpoken? initiated) {
+    if (initiated != null) {
+      for (final who in _cast) {
+        if (who.id == initiated.characterId) return who;
+      }
+    }
+    if (_cast.isEmpty) return null;
+    return _cast.first;
   }
 
   Future<void> _speak(String characterId, String said) async {
@@ -579,7 +612,12 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     } else {
       setState(() => _travellingTo = null);
     }
-    if (mounted) setState(() => _acting = false);
+    if (mounted) {
+      setState(() {
+        _acting = false;
+        _actingKey = null;
+      });
+    }
     await _liftVeil();
   }
 
@@ -905,6 +943,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                       type: 'rule',
                       petitionId: petition.id,
                       resolutionId: resolutionId,
+                      actingKey: 'rule:$resolutionId',
                     ),
                   )
                 : _StoryPanel(
@@ -919,6 +958,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                     traits: _state.traits,
                     standing: _progression.standing,
                     busy: _acting,
+                    actingKey: _actingKey,
                     onWay: _wayOn == null ? null : () => _followWay(_wayOn!),
                     onChoose: (choice) {
                       if (!choice.traitsMet(_state.traits)) {
@@ -928,10 +968,17 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                         );
                         return;
                       }
-                      _act(type: 'choose', choiceId: choice.id);
+                      _act(
+                        type: 'choose',
+                        choiceId: choice.id,
+                        actingKey: 'choice:${choice.id}',
+                      );
                     },
-                    onTrain: (drill) =>
-                        _act(type: 'train', drillId: drill.id),
+                    onTrain: (drill) => _act(
+                      type: 'train',
+                      drillId: drill.id,
+                      actingKey: 'drill:${drill.id}',
+                    ),
                     onAddress: _address,
                   ),
           ),
@@ -1212,6 +1259,7 @@ class _HingeChoice extends StatelessWidget {
     required this.traits,
     required this.contest,
     required this.busy,
+    required this.locked,
     required this.onChoose,
   });
 
@@ -1219,6 +1267,7 @@ class _HingeChoice extends StatelessWidget {
   final WorldTraits? traits;
   final WorldContest? contest;
   final bool busy;
+  final bool locked;
   final ValueChanged<WorldChoice> onChoose;
 
   @override
@@ -1263,7 +1312,7 @@ class _HingeChoice extends StatelessWidget {
           child: StageChoice(
             label: choice.label,
             busy: busy,
-            onPressed: busy ? null : () => onChoose(choice),
+            onPressed: locked ? null : () => onChoose(choice),
           ),
         ),
         if (hint != null && hint.isNotEmpty) ...[
@@ -1294,6 +1343,7 @@ class _StoryPanel extends StatelessWidget {
     required this.traits,
     required this.standing,
     required this.busy,
+    this.actingKey,
     required this.onChoose,
     required this.onTrain,
     required this.onAddress,
@@ -1310,6 +1360,7 @@ class _StoryPanel extends StatelessWidget {
   final WorldTraits? traits;
   final List<({String id, String title, int value})> standing;
   final bool busy;
+  final String? actingKey;
   final ValueChanged<WorldChoice> onChoose;
   final ValueChanged<WorldDrill> onTrain;
   final ValueChanged<WorldPresence> onAddress;
@@ -1370,7 +1421,7 @@ class _StoryPanel extends StatelessWidget {
                         label: who.met
                             ? 'Speak with ${who.name} again'
                             : 'Speak with ${who.name}',
-                        busy: busy,
+                        busy: false,
                         onPressed: busy ? null : () => onAddress(who),
                       ),
                     ),
@@ -1407,7 +1458,7 @@ class _StoryPanel extends StatelessWidget {
                       width: double.infinity,
                       child: StageChoice(
                         label: drill.label,
-                        busy: busy,
+                        busy: actingKey == 'drill:${drill.id}',
                         onPressed: busy ? null : () => onTrain(drill),
                       ),
                     ),
@@ -1422,7 +1473,8 @@ class _StoryPanel extends StatelessWidget {
                     contest: contests
                         .where((entry) => entry.choiceId == choice.id)
                         .firstOrNull,
-                    busy: busy,
+                    busy: actingKey == 'choice:${choice.id}',
+                    locked: busy,
                     onChoose: onChoose,
                   ),
                   const SizedBox(height: 8),

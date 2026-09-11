@@ -319,42 +319,52 @@ class _DuelStageState extends State<DuelStage> {
                       : StageSide.right,
                 ),
               ),
-            _band(
-              layout.topStrip,
-              StageMeter(
-                name: far.name,
-                role: far.role,
-                portraitUrl: _face(far),
-                vigour: _standing(far.side),
-                of: widget.duel.vigour,
-                seat: StageMeterSeat.far,
-              ),
-            ),
             if (_clashing)
               _band(
                 layout.skip,
                 StageSkip(label: 'Skip', onSkip: _skip),
               ),
-            if (_told)
+            if (!_told)
               _band(
-                layout.panel,
-                _OutcomePanel(
-                  herald: widget.duel.herald,
-                  outcome: widget.duel.outcome,
-                  onLeave: () => Navigator.of(context).maybePop(),
+                layout.topStrip,
+                StageMeter(
+                  name: far.name,
+                  role: far.role,
+                  portraitUrl: _face(far),
+                  vigour: _standing(far.side),
+                  of: widget.duel.vigour,
+                  seat: StageMeterSeat.far,
                 ),
               ),
-            _band(
-              layout.nearStrip,
-              StageMeter(
-                name: near.name,
-                role: near.role,
-                portraitUrl: _face(near),
-                vigour: _standing(near.side),
-                of: widget.duel.vigour,
-                seat: StageMeterSeat.near,
+            if (_told)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: SafeArea(
+                  minimum: const EdgeInsets.fromLTRB(
+                    StageMeasure.panelGutter,
+                    0,
+                    StageMeasure.panelGutter,
+                    12,
+                  ),
+                  child: _OutcomePanel(
+                    herald: widget.duel.herald,
+                    outcome: widget.duel.outcome,
+                    onLeave: () => Navigator.of(context).maybePop(),
+                  ),
+                ),
+              )
+            else
+              _band(
+                layout.nearStrip,
+                StageMeter(
+                  name: near.name,
+                  role: near.role,
+                  portraitUrl: _face(near),
+                  vigour: _standing(near.side),
+                  of: widget.duel.vigour,
+                  seat: StageMeterSeat.near,
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -375,75 +385,67 @@ class _OutcomePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
     return SizedBox(
+      height: size.height * 0.48,
       width: double.infinity,
       child: StagePanel(
         expand: true,
-        child: SingleChildScrollView(
-          child: Column(
+        child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
             children: [
-              if (herald.isNotEmpty) ...[
-                Text(
-                  herald,
-                  style: EverloreTheme.aiText.copyWith(
-                    fontSize: 16,
-                    color: StageMeasure.inkMuted,
-                    height: 1.5,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-              Text(
-                'WHAT WAS DECIDED',
-                style: EverloreTheme.caption.copyWith(
-                  color: StageMeasure.brassDeep,
-                  letterSpacing: 2.2,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                outcome.verdict,
-                style: EverloreTheme.aiText.copyWith(
-                  fontSize: 18,
-                  color: StageMeasure.ink,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                outcome.cost,
-                style: EverloreTheme.aiText.copyWith(
-                  fontSize: 16,
-                  color: StageMeasure.inkMuted,
-                  height: 1.5,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: onLeave,
-                  style: TextButton.styleFrom(
-                    foregroundColor: StageMeasure.brassDeep,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                  child: Text(
-                    'CONTINUE',
-                    style: EverloreTheme.caption.copyWith(
-                      color: StageMeasure.brassDeep,
-                      letterSpacing: 1.6,
-                    ),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (herald.isNotEmpty) ...[
+                        Text(
+                          herald,
+                          style: EverloreTheme.aiText.copyWith(
+                            fontSize: 16,
+                            color: StageMeasure.inkMuted,
+                            height: 1.5,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      Text(
+                        'WHAT WAS DECIDED',
+                        style: EverloreTheme.caption.copyWith(
+                          color: StageMeasure.brassDeep,
+                          letterSpacing: 2.2,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        outcome.verdict,
+                        style: EverloreTheme.aiText.copyWith(
+                          fontSize: 18,
+                          color: StageMeasure.ink,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        outcome.cost,
+                        style: EverloreTheme.aiText.copyWith(
+                          fontSize: 16,
+                          color: StageMeasure.inkMuted,
+                          height: 1.5,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              StageChoice(label: 'Continue', onPressed: onLeave),
             ],
           ),
         ),
-      ),
     );
   }
 }
