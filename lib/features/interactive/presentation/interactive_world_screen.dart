@@ -873,7 +873,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                         _addressingId = null;
                         _view = _View.map;
                       }),
-                      icon: const Icon(Icons.map_outlined),
+                      icon: const Icon(Icons.arrow_back_rounded),
                       color: EverloreTheme.parchment,
                       tooltip: 'World map',
                     ),
@@ -1340,7 +1340,7 @@ class _StoryPanel extends StatelessWidget {
                   _WalkMeters(traits: traits, standing: standing),
                   const SizedBox(height: 12),
                 ],
-                if (wayOn != null) ...[
+                if (wayOn != null && wayOn!.kind != 'choice') ...[
                   _WayChip(way: wayOn!, ink: true, onTap: busy ? null : onWay),
                   const SizedBox(height: 12),
                 ],

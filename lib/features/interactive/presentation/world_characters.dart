@@ -485,13 +485,31 @@ class _ConversationPanelState extends State<ConversationPanel> {
               right: 0,
               child: SafeArea(
                 bottom: false,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: IconButton(
-                    onPressed: widget.onLeave,
-                    icon: const Icon(Icons.close_rounded),
-                    color: EverloreTheme.parchment,
-                    tooltip: 'Step away',
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        onPressed: widget.onLeave,
+                        icon: const Icon(Icons.arrow_back_rounded),
+                        color: EverloreTheme.parchment,
+                        tooltip: 'Back to the room',
+                      ),
+                      Expanded(
+                        child: Text(
+                          widget.person.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: EverloreTheme.serifDisplay(
+                            size: 18,
+                            color: EverloreTheme.parchment,
+                            weight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 48),
+                    ],
                   ),
                 ),
               ),
