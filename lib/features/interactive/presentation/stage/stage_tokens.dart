@@ -64,6 +64,15 @@ abstract final class StageMeasure {
   /// dolls; this is the floor that keeps each one a person.
   static const double figureRoomCrowd = 0.32;
 
+  /// Title row under the status band. Standing a speaker from y=0 is
+  /// how a head ended up in THE VERDICT RING.
+  static const double roomChromeTop = 64;
+
+  /// Narrowest published cut-out (width / height). Sizing speak from
+  /// 2:3 made a taller painting wider than its slot, then clipped it
+  /// through the chest in every room.
+  static const double figureCutoutAspectFloor = 0.36;
+
   /// Petition copy, and the longest a scene's own parchment may climb.
   /// Written on the panels and on the standing band so a face cannot
   /// be reserved against a different ceiling than the paper uses.
@@ -176,6 +185,8 @@ abstract final class StageMeasure {
   static const Duration rise = Duration(milliseconds: 900);
   static const Duration pulse = Duration(milliseconds: 1100);
   static const Duration step = Duration(milliseconds: 260);
+  static const Duration arrive = Duration(milliseconds: 560);
+  static const Duration veil = Duration(milliseconds: 780);
 
   /// Panel height is the copy it holds, then clamped. Using the max
   /// fraction as a floor is how an empty meeting became a third of
@@ -199,41 +210,75 @@ abstract final class StageMeasure {
     return needed.clamp(floor, cap);
   }
 
-  /// Speaker slot hugging one edge. A full-bleed Align is what sat
-  /// the cut-out in the middle and then clipped it to empty canvas.
-  static Rect speakRect(Size size, StageSide side) {
-    final width = size.width * figureSpeak;
+  /// Speaker slot hugging one edge, under the title, hanging off the
+  /// parchment. Height-first 2:3 overflow is what sliced a champion
+  /// through the chest and left the painting as a strip down the side.
+  static Rect speakRect(
+    Size size,
+    StageSide side, {
+    double topInset = 0,
+  }) {
+    final top = topInset.clamp(0.0, math.max(0.0, size.height - 8)).toDouble();
+    final standingH = math.max(8.0, size.height - top);
+    final width = speakColumnWidth(
+      screenWidth: size.width,
+      standingHeight: standingH,
+      fraction: figureSpeak,
+    );
     return Rect.fromLTWH(
       side == StageSide.left ? 0 : size.width - width,
-      0,
+      top,
       width,
-      size.height,
+      standingH,
     );
   }
 
   /// Two people, one edge each. Speak-width on both sides is what
   /// left no painting between them.
-  static Rect pairRect(Size size, StageSide side) {
-    final width = size.width * figureRoomPair;
+  static Rect pairRect(
+    Size size,
+    StageSide side, {
+    double topInset = 0,
+  }) {
+    final top = topInset.clamp(0.0, math.max(0.0, size.height - 8)).toDouble();
+    final standingH = math.max(8.0, size.height - top);
+    final width = speakColumnWidth(
+      screenWidth: size.width,
+      standingHeight: standingH,
+      fraction: figureRoomPair,
+    );
     return Rect.fromLTWH(
       side == StageSide.left ? 0 : size.width - width,
-      0,
+      top,
       width,
-      size.height,
+      standingH,
     );
   }
 
-  /// Decode height for a speak-rise cut-out in [slotHeight]. A shorter
-  /// shelf is how a warmed face painted as a blur the room would not
-  /// own.
+  /// Width of a standing cut-out. Fraction of the room, then capped so
+  /// a tablet cannot print a torso wider than the person it belongs to.
+  static double speakColumnWidth({
+    required double screenWidth,
+    required double standingHeight,
+    required double fraction,
+  }) {
+    final want = screenWidth * fraction;
+    final cap = math.max(screenWidth * figureRoomCrowd, standingHeight * 0.70);
+    return math.min(want, cap).clamp(8.0, screenWidth).toDouble();
+  }
+
+  /// Decode height for a speak-rise cut-out. Height-first overflow is
+  /// the chest-crop; width against the tallest published face is the
+  /// shelf the room actually paints from.
   static int figureCacheHeight(
     BuildContext context, {
     required double slotHeight,
+    double? slotWidth,
   }) {
-    return (slotHeight *
-            figureOverflow *
-            MediaQuery.devicePixelRatioOf(context))
-        .round();
+    final paintedH = slotWidth == null
+        ? slotHeight * figureOverflow
+        : math.max(slotHeight, slotWidth / figureCutoutAspectFloor);
+    return (paintedH * MediaQuery.devicePixelRatioOf(context)).round();
   }
 
   /// What the scene parchment actually keeps at the foot. Guessing a
@@ -267,7 +312,7 @@ enum StageSide { left, right }
 
 /// Where a figure stands in the depth of the painting.
 enum StageRise {
-  /// Half-body speaker, cropped by the bottom edge.
+  /// Speaker cropped by the parchment, never by the title.
   speak,
 
   /// Further from the camera, in the upper half.
@@ -448,9 +493,13 @@ class StageRoomLayout {
     BuildContext context, {
     required int count,
     required double reservedPanelHeight,
+    Size? size,
+    double? topInset,
   }) {
+    final media = MediaQuery.of(context);
     return StageRoomLayout._(
-      size: MediaQuery.sizeOf(context),
+      size: size ?? media.size,
+      topInset: topInset ?? media.padding.top + StageMeasure.roomChromeTop,
       count: count,
       reservedPanelHeight: reservedPanelHeight,
     );
@@ -458,11 +507,13 @@ class StageRoomLayout {
 
   const StageRoomLayout._({
     required this.size,
+    required this.topInset,
     required this.count,
     required this.reservedPanelHeight,
   });
 
   final Size size;
+  final double topInset;
   final int count;
   final double reservedPanelHeight;
 
@@ -478,6 +529,11 @@ class StageRoomLayout {
     final band = size.height - reservedPanelHeight;
     return band > 0 ? band : standing;
   }
+
+  /// Title keep. Clamped so a short petition band still has a person
+  /// in it rather than a header and no one.
+  double get standingTop =>
+      topInset.clamp(0.0, math.max(0.0, slotHeight * 0.38)).toDouble();
 
   /// A Size whose height is the standing slot. Passing the screen
   /// itself to speakRect under a petition is the face-in-the-paper
@@ -497,21 +553,32 @@ class StageRoomLayout {
   }
 
   Rect figureAt(int index) {
+    final inset = standingTop;
     if (count <= 1) {
-      return StageMeasure.speakRect(_slotSize, StageSide.left);
+      return StageMeasure.speakRect(
+        _slotSize,
+        StageSide.left,
+        topInset: inset,
+      );
     }
     if (count == 2) {
       return StageMeasure.pairRect(
         _slotSize,
         index == 0 ? StageSide.left : StageSide.right,
+        topInset: inset,
       );
     }
-    final width = size.width * StageMeasure.figureRoomCrowd;
+    final standingH = math.max(8.0, slotHeight - inset);
+    final width = StageMeasure.speakColumnWidth(
+      screenWidth: size.width,
+      standingHeight: standingH,
+      fraction: StageMeasure.figureRoomCrowd,
+    );
     if (crowdFits) {
       final span = size.width - width;
       final left = span * (index / (count - 1));
-      return Rect.fromLTWH(left, 0, width, slotHeight);
+      return Rect.fromLTWH(left, inset, width, standingH);
     }
-    return Rect.fromLTWH(index * width, 0, width, slotHeight);
+    return Rect.fromLTWH(index * width, inset, width, standingH);
   }
 }

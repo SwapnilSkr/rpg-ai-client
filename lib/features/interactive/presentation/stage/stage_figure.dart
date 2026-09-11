@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
@@ -6,11 +8,10 @@ import 'stage_tokens.dart';
 
 /// A transparent cut-out standing in the painting.
 ///
-/// These portraits are full-body 2:3 drawings. Fitting the whole figure
-/// into a tall slot puts their feet on a phone taller than 3:2 and they
-/// read as a doll. The parent must give this a tight [Positioned] rect —
-/// an Align inside a full-bleed Stack is what sat both fighters on the
-/// same spot, and an unbounded slot is what painted a speaker as nothing.
+/// These portraits are full-body cut-outs of different widths, not a
+/// shared 2:3. Speak fills the slot's width and crops at the parchment.
+/// Fitting a fake 2:3 into the height is what sliced every room through
+/// the chest.
 ///
 /// A null portrait renders the hanging standard. The player has no
 /// painted face, so this is the ordinary case — a broken-image glyph
@@ -24,6 +25,8 @@ class StageFigure extends StatefulWidget {
     this.rise = StageRise.speak,
     this.active = true,
     this.fallen = false,
+    this.present = true,
+    this.arrive = false,
     this.flashKey,
   });
 
@@ -34,6 +37,14 @@ class StageFigure extends StatefulWidget {
   final bool active;
   final bool fallen;
 
+  /// False walks them back off the wing they came from.
+  final bool present;
+
+  /// First paint slides in from their own side. A parent that already
+  /// stages the entrance (a speaker switch) must leave this off or the
+  /// figure walks twice.
+  final bool arrive;
+
   /// Keys the hit-flash to an exchange, so it plays once per blow
   /// rather than every time the screen rebuilds.
   final Object? flashKey;
@@ -43,15 +54,36 @@ class StageFigure extends StatefulWidget {
 }
 
 class _StageFigureState extends State<StageFigure>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _flash = AnimationController(
     vsync: this,
     duration: StageMeasure.flash,
   );
+  late final AnimationController _wing = AnimationController(
+    vsync: this,
+    duration: StageMeasure.arrive,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.arrive && widget.present) {
+      _wing.forward();
+    } else {
+      _wing.value = widget.present ? 1 : 0;
+    }
+  }
 
   @override
   void didUpdateWidget(StageFigure oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.present != oldWidget.present) {
+      if (widget.present) {
+        _wing.forward();
+      } else {
+        _wing.reverse();
+      }
+    }
     if (widget.flashKey != null && widget.flashKey != oldWidget.flashKey) {
       if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
         _flash.value = 0;
@@ -66,6 +98,7 @@ class _StageFigureState extends State<StageFigure>
   @override
   void dispose() {
     _flash.dispose();
+    _wing.dispose();
     super.dispose();
   }
 
@@ -91,8 +124,21 @@ class _StageFigureState extends State<StageFigure>
               ? StageMeasure.duelLunge
               : -StageMeasure.duelLunge)
         : 0.0;
+    final fromWing = widget.side == StageSide.left ? -0.24 : 0.24;
 
-    return AnimatedSlide(
+    return AnimatedBuilder(
+      animation: _wing,
+      builder: (context, child) {
+        final t = reduceMotion ? (widget.present ? 1.0 : 0.0) : _wing.value;
+        return Opacity(
+          opacity: t,
+          child: FractionalTranslation(
+            translation: Offset(fromWing * (1 - t), 0),
+            child: child,
+          ),
+        );
+      },
+      child: AnimatedSlide(
       duration: reduceMotion ? Duration.zero : StageMeasure.step,
       curve: Curves.easeOutCubic,
       offset: Offset(reduceMotion ? 0 : lunge, reduceMotion ? 0 : slide),
@@ -144,6 +190,7 @@ class _StageFigureState extends State<StageFigure>
           ),
         ),
       ),
+    ),
     );
   }
 }
@@ -177,18 +224,29 @@ class _Cutout extends StatelessWidget {
         final slotH = constraints.maxHeight;
         final dpr = MediaQuery.devicePixelRatioOf(context);
 
-        // Speak sizes from the slot height so a 2:3 body becomes a
-        // half-body and the legs leave the frame. Fight sizes from the
-        // slot width so the cloth cannot grow past the half it was
-        // given — height-first overflow is what turned a standard into
-        // a translucent slab across the arena.
+        // Speak fills the slot's width and hangs extra height off the
+        // bottom, so a tall cut-out is a person cropped by the
+        // parchment. Height-first 2:3 overflow was wider than the slot
+        // and every room clipped a torso.
         final Size painted;
+        final Alignment overflowAlign;
+        final BoxFit fit;
         if (rise == StageRise.speak) {
-          final paintedH = slotH * StageMeasure.figureOverflow;
-          painted = Size(paintedH * StageMeasure.figureAspect, paintedH);
+          final paintedW = slotW;
+          final paintedH = math.max(
+            slotH,
+            slotW / StageMeasure.figureCutoutAspectFloor,
+          );
+          painted = Size(paintedW, paintedH);
+          overflowAlign = Alignment.topCenter;
+          fit = BoxFit.fitWidth;
         } else {
           final paintedH = slotW / StageMeasure.figureAspect;
           painted = Size(slotW, paintedH);
+          overflowAlign = side == StageSide.left
+              ? Alignment.topLeft
+              : Alignment.topRight;
+          fit = BoxFit.contain;
         }
 
         // Cloth is always the 2:3 that fits the slot. Speak portraits
@@ -210,15 +268,6 @@ class _Cutout extends StatelessWidget {
           );
         }
 
-        // Speak must stay centred in the slot: left/right alignment on a
-        // height-first overflow is what clipped a published face to the
-        // empty margin of the cut-out.
-        final overflowAlign = rise == StageRise.speak
-            ? const Alignment(0, -0.2)
-            : side == StageSide.left
-            ? Alignment.topLeft
-            : Alignment.topRight;
-
         return ClipRect(
           child: OverflowBox(
             alignment: overflowAlign,
@@ -231,7 +280,8 @@ class _Cutout extends StatelessWidget {
               height: painted.height,
               child: EverloreNetworkImage(
                 imageUrl: portraitUrl!,
-                fit: BoxFit.contain,
+                fit: fit,
+                alignment: Alignment.topCenter,
                 memCacheHeight: (painted.height * dpr).round(),
                 semanticLabel: name,
                 placeholder: const ColoredBox(

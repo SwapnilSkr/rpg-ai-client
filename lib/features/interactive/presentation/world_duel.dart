@@ -4,22 +4,17 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/nexus_theme.dart';
-import '../../../shared/widgets/everlore_session_loader.dart';
 import '../domain/interactive_world.dart';
 import 'stage/stage.dart';
 import 'world_frame.dart';
+import 'world_mist.dart';
 
-/// A VERDICT FOUGHT ON THE SAND.
+/// A fight already decided, staged so the player can see it happen.
 ///
-/// Everything on this screen has already happened. The fight arrives staged —
-/// who acts, what each exchange costs, where the bars stand afterwards and who
-/// is left standing — because the flags it settles are what the rest of the
-/// chapter is written against. Nothing here rolls, resolves or recomputes; a
-/// device that decided its own winner would show the player a fight they lost
-/// and then hand them a duchy.
-///
-/// So the only state this holds is how far through the reading the player has
-/// got.
+/// Nothing here rolls. The flags are already law. The sand is only a
+/// reading: the two people enter, the blows play, they leave, and then
+/// the parchment says what was decided. A box under their feet while
+/// they were still fighting is the old failure.
 class DuelStage extends StatefulWidget {
   const DuelStage({super.key, required this.duel, required this.backdropUrl});
 
@@ -33,23 +28,20 @@ class DuelStage extends StatefulWidget {
   State<DuelStage> createState() => _DuelStageState();
 }
 
-/// Before the first blow. The Herald reads the matter out, and the tiers are
-/// still sitting down.
-const _herald = -1;
+enum _DuelAct { veil, clash, part, told }
 
 class _DuelStageState extends State<DuelStage> {
-  int _step = _herald;
-  bool _ready = false;
+  _DuelAct _act = _DuelAct.veil;
+  int _step = 0;
+  Timer? _play;
 
   List<WorldDuelBeat> get _beats => widget.duel.beats;
-  bool get _over => _step >= _beats.length;
+  bool get _clashing => _act == _DuelAct.clash;
+  bool get _told => _act == _DuelAct.told;
+  bool get _onSand => _act == _DuelAct.clash || _act == _DuelAct.part;
   WorldDuelBeat? get _beat =>
-      _step >= 0 && _step < _beats.length ? _beats[_step] : null;
+      _clashing && _step >= 0 && _step < _beats.length ? _beats[_step] : null;
 
-  /// The champion closer to the camera. [WorldDuelFighter.isPlayer] marks
-  /// the player's own side — themselves, or a blade hired for the afternoon.
-  /// Treating the two as a symmetrical pair is what made them portraits
-  /// in slots instead of two people in the same space.
   WorldDuelFighter get _near {
     final duel = widget.duel;
     if (duel.defender.isPlayer && !duel.challenger.isPlayer) {
@@ -68,15 +60,17 @@ class _DuelStageState extends State<DuelStage> {
   @override
   void initState() {
     super.initState();
-    // precacheImage reads the configuration off the tree. Asking from
-    // initState, before the first frame, is a wait that never completes.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_unveil());
     });
   }
 
-  /// The Herald reads before the first blow. Waiting on every exchange's
-  /// bearing would hold the sand for faces that have not entered yet.
+  @override
+  void dispose() {
+    _play?.cancel();
+    super.dispose();
+  }
+
   Future<void> _unveil() async {
     if (!mounted) return;
     await awaitWorldFrame(
@@ -87,33 +81,57 @@ class _DuelStageState extends State<DuelStage> {
         widget.duel.defender.portraitUrl,
       ],
     );
-    if (mounted) setState(() => _ready = true);
+    if (!mounted) return;
+    setState(() => _act = _DuelAct.clash);
+    _arm();
+  }
+
+  void _arm() {
+    _play?.cancel();
+    if (!_clashing) return;
+    _play = Timer(const Duration(milliseconds: 1700), _advance);
   }
 
   void _advance() {
-    if (_over) return;
+    if (_act == _DuelAct.told || _act == _DuelAct.part) return;
+    if (_act == _DuelAct.veil) return;
+    if (_beats.isEmpty || _step >= _beats.length - 1) {
+      unawaited(_part());
+      return;
+    }
     setState(() => _step += 1);
+    _arm();
   }
 
-  /// Reading the fight is optional; the outcome is not. Skipping lands on the
-  /// Verdict itself rather than closing the screen, so nobody leaves the sand
-  /// without being told what was decided on it.
-  void _skip() => setState(() => _step = _beats.length);
+  /// Reading is optional; the outcome is not. Skip still lands on the
+  /// telling, after the fighters have left.
+  void _skip() => unawaited(_part());
 
-  /// The bars stand where the last exchange left them. Before the first, both
-  /// fighters are whole.
+  Future<void> _part() async {
+    _play?.cancel();
+    if (_act == _DuelAct.told || _act == _DuelAct.part) return;
+    setState(() {
+      _step = _beats.length;
+      _act = _DuelAct.part;
+    });
+    await Future<void>.delayed(StageMeasure.arrive);
+    if (!mounted) return;
+    setState(() => _act = _DuelAct.told);
+  }
+
   int _standing(String side) {
     final beat = _beat;
     if (beat == null) {
-      if (_step == _herald) return widget.duel.vigour;
+      if (_act == _DuelAct.veil || (_clashing && _beats.isEmpty)) {
+        return widget.duel.vigour;
+      }
+      if (_beats.isEmpty) return widget.duel.vigour;
       final last = _beats.last;
       return side == 'challenger' ? last.challengerVigour : last.defenderVigour;
     }
     return side == 'challenger' ? beat.challengerVigour : beat.defenderVigour;
   }
 
-  /// The face a fighter wears right now. An exchange may change the actor's
-  /// bearing; the other fighter keeps the one they came in with.
   String? _face(WorldDuelFighter fighter) {
     final beat = _beat;
     if (beat != null &&
@@ -124,8 +142,6 @@ class _DuelStageState extends State<DuelStage> {
     return fighter.portraitUrl;
   }
 
-  /// Who the blow landed on. The actor struck; the other side is who
-  /// the number and the flash belong to.
   String? get _struckSide {
     final beat = _beat;
     if (beat == null || beat.toll <= 0) return null;
@@ -148,10 +164,10 @@ class _DuelStageState extends State<DuelStage> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_ready) {
+    if (_act == _DuelAct.veil) {
       return const Scaffold(
         backgroundColor: StageMeasure.ground,
-        body: Center(child: EverloreSessionLoader(message: 'The sand is set')),
+        body: WorldMist(),
       );
     }
     final size = MediaQuery.sizeOf(context);
@@ -164,11 +180,6 @@ class _DuelStageState extends State<DuelStage> {
       1.0,
       size.width - StageMeasure.panelGutter * 2 - StageMeasure.panelPadX * 2,
     );
-    final beatStyle = EverloreTheme.aiText.copyWith(
-      fontSize: 18,
-      height: 1.55,
-      fontStyle: beat == null ? FontStyle.italic : FontStyle.normal,
-    );
     final verdictStyle = EverloreTheme.aiText.copyWith(
       fontSize: 18,
       height: 1.5,
@@ -178,11 +189,22 @@ class _DuelStageState extends State<DuelStage> {
       height: 1.5,
       fontStyle: FontStyle.italic,
     );
-    // Counting an exchange as three lines overflowed as soon as the Herald
-    // needed five. Measure the words that will actually be painted; the cap
-    // still protects the arena when another world authors a longer reading.
-    final needed = _over
+    final heraldStyle = EverloreTheme.aiText.copyWith(
+      fontSize: 16,
+      height: 1.5,
+      fontStyle: FontStyle.italic,
+    );
+    final needed = _told
         ? StageMeasure.panelChrome +
+              (widget.duel.herald.isEmpty
+                  ? 0
+                  : 8 +
+                        _textHeight(
+                          text: widget.duel.herald,
+                          style: heraldStyle,
+                          width: textWidth,
+                          scaler: scaler,
+                        )) +
               22 +
               8 +
               _textHeight(
@@ -200,21 +222,15 @@ class _DuelStageState extends State<DuelStage> {
               ) +
               14 +
               36
-        : StageMeasure.panelPadY * 2 +
-              _textHeight(
-                text: beat?.action ?? widget.duel.herald,
-                style: beatStyle,
-                width: textWidth,
-                scaler: scaler,
-              ) +
-              8 +
-              StageMeasure.advanceGlyph;
-    final panelH = StageMeasure.panelHeightFor(
-      screenHeight: size.height,
-      needed: needed,
-      keys: 0,
-      composing: false,
-    );
+        : 8.0;
+    final panelH = _told
+        ? StageMeasure.panelHeightFor(
+            screenHeight: size.height,
+            needed: needed,
+            keys: 0,
+            composing: false,
+          )
+        : 8.0;
     final layout = StageDuelLayout.of(context, panelHeight: panelH);
     final farSlot = layout.farFigure;
     final nearSlot = layout.nearFigure;
@@ -232,7 +248,7 @@ class _DuelStageState extends State<DuelStage> {
       backgroundColor: StageMeasure.ground,
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _advance,
+        onTap: _clashing ? _advance : null,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -244,6 +260,8 @@ class _DuelStageState extends State<DuelStage> {
                 portraitUrl: _face(far),
                 side: StageSide.right,
                 rise: StageRise.far,
+                arrive: true,
+                present: _onSand,
                 active: beat?.actor == far.side,
                 fallen: _standing(far.side) <= 0,
                 flashKey: struck == far.side ? _step : null,
@@ -256,19 +274,23 @@ class _DuelStageState extends State<DuelStage> {
                 portraitUrl: _face(near),
                 side: StageSide.left,
                 rise: StageRise.near,
+                arrive: true,
+                present: _onSand,
                 active: beat?.actor == near.side,
                 fallen: _standing(near.side) <= 0,
                 flashKey: struck == near.side ? _step : null,
               ),
             ),
-            _band(
-              layout.farPlate,
-              Center(child: StageNamePlate(name: far.name)),
-            ),
-            _band(
-              layout.nearPlate,
-              Center(child: StageNamePlate(name: near.name)),
-            ),
+            if (_onSand) ...[
+              _band(
+                layout.farPlate,
+                Center(child: StageNamePlate(name: far.name)),
+              ),
+              _band(
+                layout.nearPlate,
+                Center(child: StageNamePlate(name: near.name)),
+              ),
+            ],
             _band(
               layout.question,
               StageInscription(text: widget.duel.question),
@@ -308,26 +330,20 @@ class _DuelStageState extends State<DuelStage> {
                 seat: StageMeterSeat.far,
               ),
             ),
-            if (!_over)
+            if (_clashing)
               _band(
                 layout.skip,
-                StageSkip(
-                  label: beat == null ? 'Hear the Verdict' : 'Look away',
-                  onSkip: _skip,
+                StageSkip(label: 'Skip', onSkip: _skip),
+              ),
+            if (_told)
+              _band(
+                layout.panel,
+                _OutcomePanel(
+                  herald: widget.duel.herald,
+                  outcome: widget.duel.outcome,
+                  onLeave: () => Navigator.of(context).maybePop(),
                 ),
               ),
-            _band(
-              layout.panel,
-              _over
-                  ? _VerdictPanel(
-                      outcome: widget.duel.outcome,
-                      onLeave: () => Navigator.of(context).maybePop(),
-                    )
-                  : _BeatPanel(
-                      text: beat?.action ?? widget.duel.herald,
-                      opening: beat == null,
-                    ),
-            ),
             _band(
               layout.nearStrip,
               StageMeter(
@@ -346,91 +362,14 @@ class _DuelStageState extends State<DuelStage> {
   }
 }
 
-/// The exchange as it is read. Tapping anywhere advances; the fight does not
-/// run on its own, so nobody loses a blow to looking away.
-class _BeatPanel extends StatefulWidget {
-  const _BeatPanel({required this.text, required this.opening});
+class _OutcomePanel extends StatelessWidget {
+  const _OutcomePanel({
+    required this.herald,
+    required this.outcome,
+    required this.onLeave,
+  });
 
-  final String text;
-  final bool opening;
-
-  @override
-  State<_BeatPanel> createState() => _BeatPanelState();
-}
-
-class _BeatPanelState extends State<_BeatPanel> {
-  final _scroll = ScrollController();
-  bool _hasMore = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _scroll.addListener(_sync);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _sync());
-  }
-
-  @override
-  void didUpdateWidget(_BeatPanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text) {
-      if (_scroll.hasClients) _scroll.jumpTo(0);
-      WidgetsBinding.instance.addPostFrameCallback((_) => _sync());
-    }
-  }
-
-  void _sync() {
-    if (!_scroll.hasClients) return;
-    final hasMore = _scroll.position.maxScrollExtent - _scroll.position.pixels > 1;
-    if (hasMore != _hasMore && mounted) setState(() => _hasMore = hasMore);
-  }
-
-  @override
-  void dispose() {
-    _scroll
-      ..removeListener(_sync)
-      ..dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: StagePanel(
-        expand: true,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: SingleChildScrollView(
-                controller: _scroll,
-                child: Text(
-                  widget.text,
-                  style: EverloreTheme.aiText.copyWith(
-                    fontSize: 18,
-                    color: StageMeasure.ink,
-                    height: 1.55,
-                    fontStyle: widget.opening ? FontStyle.italic : FontStyle.normal,
-                  ),
-                ),
-              ),
-            ),
-            if (_hasMore)
-              const Positioned(
-                right: 0,
-                bottom: 0,
-                child: StageAdvance(),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// What the Ring now holds to be true, and what it cost.
-class _VerdictPanel extends StatelessWidget {
-  const _VerdictPanel({required this.outcome, required this.onLeave});
-
+  final String herald;
   final WorldDuelOutcome outcome;
   final VoidCallback onLeave;
 
@@ -445,8 +384,20 @@ class _VerdictPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (herald.isNotEmpty) ...[
+                Text(
+                  herald,
+                  style: EverloreTheme.aiText.copyWith(
+                    fontSize: 16,
+                    color: StageMeasure.inkMuted,
+                    height: 1.5,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               Text(
-                'THE VERDICT',
+                'WHAT WAS DECIDED',
                 style: EverloreTheme.caption.copyWith(
                   color: StageMeasure.brassDeep,
                   letterSpacing: 2.2,
@@ -481,7 +432,7 @@ class _VerdictPanel extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                   child: Text(
-                    'LEAVE THE SAND',
+                    'CONTINUE',
                     style: EverloreTheme.caption.copyWith(
                       color: StageMeasure.brassDeep,
                       letterSpacing: 1.6,
@@ -497,8 +448,6 @@ class _VerdictPanel extends StatelessWidget {
   }
 }
 
-/// A reserved band. Align and Row are how both fighters sat on one
-/// spot; every chrome piece on the sand is a rect against the screen.
 Positioned _band(Rect rect, Widget child) {
   return Positioned(
     left: rect.left,

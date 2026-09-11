@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/widgets/everlore_empty_state.dart';
 import '../../../shared/widgets/everlore_notice.dart';
-import '../../../shared/widgets/everlore_session_loader.dart';
 import '../data/interactive_world_repository.dart';
 import '../domain/interactive_world.dart';
 import 'stage/stage.dart';
@@ -15,6 +14,7 @@ import 'world_duel.dart';
 import 'world_frame.dart';
 import 'world_identity.dart';
 import 'world_map_view.dart';
+import 'world_mist.dart';
 import 'world_moments.dart';
 import 'world_overture.dart';
 import 'world_prologue.dart';
@@ -68,6 +68,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   List<WorldMoment> _moments = const [];
   List<WorldDrill> _drillsHere = const [];
   List<WorldContest> _contests = const [];
+  WorldWayOn? _wayOn;
   bool _showMoments = false;
   bool _needsIdentity = false;
   String? _sceneHeadline;
@@ -78,10 +79,11 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   _View _view = _View.map;
   String? _selectedId;
   bool _loading = true;
+  bool _veiling = true;
+  bool _lifting = false;
   bool _acting = false;
   String? _error;
   String? _travellingTo;
-  String _waitingLine = 'The land unfolds';
 
   bool get _isServerBacked => widget.instanceId != null;
 
@@ -94,8 +96,9 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   Future<void> _load() async {
     setState(() {
       _loading = true;
+      _veiling = true;
+      _lifting = false;
       _error = null;
-      _waitingLine = 'The land unfolds';
     });
     try {
       final payload = _isServerBacked
@@ -124,6 +127,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
       }
       if (!mounted) return;
       setState(() => _loading = false);
+      await _liftVeil();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -131,6 +135,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
         _error = 'The world could not be reached.';
       });
       debugPrint('interactive world load failed: $error');
+      await _liftVeil();
     }
   }
 
@@ -177,14 +182,15 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                         WorldVisibility.open,
                   )
                   .toSet(),
+        quickTravelLocationIds: const {},
       );
     }
-    // A word can unseal a door or walk the player on. Keeping the last room's
-    // exchange would put those sentences in a place that never heard them.
+    // A word can unseal a door or walk the player on. The talk itself is
+    // kept on the save; wiping it here is how a return to the Herald
+    // became a first meeting again.
     if (previousAt.isNotEmpty && previousAt != _state.currentLocationId) {
-      _visit.clear();
-      _metHere.clear();
       _addressingId = null;
+      _metHere.clear();
     }
     final rawProgression = payload['progression'];
     if (rawProgression is Map) {
@@ -203,21 +209,27 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     if (_addressingId != null && !_cast.any((who) => who.id == _addressingId)) {
       _addressingId = null;
     }
+    _hydrateEchoes();
     // Talk is not a side channel. The rest of the payload is applied the
     // same way a choice is; this only keeps the line they just answered.
     final rawSpoken = payload['spoken'];
     if (rawSpoken is Map) {
       final spoken = WorldSpoken.fromJson(Map<String, dynamic>.from(rawSpoken));
       if (spoken.characterId.isNotEmpty && spoken.line.isNotEmpty) {
-        _visit
-            .putIfAbsent(spoken.characterId, () => [])
-            .add(
-              VisitLine(
-                fromPlayer: false,
-                text: spoken.line,
-                portraitUrl: spoken.portraitUrl,
-              ),
-            );
+        final lines = _visit[spoken.characterId] ?? const <VisitLine>[];
+        final already = lines.isNotEmpty &&
+            !lines.last.fromPlayer &&
+            lines.last.text == spoken.line;
+        if (!already) {
+          _visit[spoken.characterId] = [
+            ...lines,
+            VisitLine(
+              fromPlayer: false,
+              text: spoken.line,
+              portraitUrl: spoken.portraitUrl,
+            ),
+          ];
+        }
       }
     }
     _selectedId ??= _state.currentLocationId;
@@ -249,11 +261,34 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
         .map((raw) => WorldContest.fromJson(Map<String, dynamic>.from(raw)))
         .where((contest) => contest.choiceId.isNotEmpty)
         .toList();
+    _wayOn = WorldWayOn.tryFrom(payload['way_on']);
     final rawScene = payload['scene'];
     if (rawScene is Map) {
       _sceneHeadline = rawScene['headline'] as String?;
       _sceneBody = rawScene['body'] as String?;
     }
+  }
+
+  void _hydrateEchoes() {
+    for (final who in _cast) {
+      final incoming = _linesFromEchoes(who);
+      if (incoming.isEmpty) continue;
+      _visit[who.id] = incoming;
+    }
+  }
+
+  List<VisitLine> _linesFromEchoes(WorldPresence who) {
+    return [
+      for (final echo in who.echoes) ...[
+        if (echo.said.isNotEmpty) VisitLine(fromPlayer: true, text: echo.said),
+        if (echo.replied.isNotEmpty)
+          VisitLine(
+            fromPlayer: false,
+            text: echo.replied,
+            portraitUrl: who.portraitUrl,
+          ),
+      ],
+    ];
   }
 
   WorldLocation? get _selected => _world?.byId(_selectedId ?? '');
@@ -304,11 +339,28 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
       // moves the player on: by the time the room has changed, the fight that
       // changed it is no longer the turn we are holding.
       final fought = WorldDuel.tryFrom(payload['duel']);
+      WorldSpoken? initiated;
+      final rawSpoken = payload['spoken'];
+      if (rawSpoken is Map) {
+        final spoken = WorldSpoken.fromJson(Map<String, dynamic>.from(rawSpoken));
+        if (spoken.initiated) initiated = spoken;
+      }
       setState(() {
         _apply(payload);
-        _acting = false;
+        if (!alreadyActing) _acting = false;
       });
       if (fought != null) await _watch(fought);
+      if (!mounted) return true;
+      if (_death == null && initiated != null) {
+        WorldPresence? who;
+        for (final person in _cast) {
+          if (person.id == initiated.characterId) {
+            who = person;
+            break;
+          }
+        }
+        if (who != null) _address(who);
+      }
       return true;
     } catch (error) {
       if (!mounted) return false;
@@ -356,23 +408,26 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
 
   void _address(WorldPresence who) {
     if (_acting) return;
-    // first_met is the entrance, not a title. Putting it under their feet
-    // every time the player walked in made a meeting into a caption.
-    final meeting = who.firstMet;
-    if (!_metHere.contains(who.id) && meeting != null) {
-      final lines = _visit.putIfAbsent(who.id, () => []);
-      if (lines.isEmpty) {
-        lines.add(
-          VisitLine(
-            fromPlayer: false,
-            text: meeting,
-            portraitUrl: who.portraitUrl,
-            meeting: true,
-          ),
-        );
+    final existing = _visit[who.id];
+    if (existing == null || existing.isEmpty) {
+      final echoed = _linesFromEchoes(who);
+      if (echoed.isNotEmpty) {
+        _visit[who.id] = echoed;
+      } else {
+        final meeting = who.firstMet;
+        if (meeting != null) {
+          _visit[who.id] = [
+            VisitLine(
+              fromPlayer: false,
+              text: meeting,
+              portraitUrl: who.portraitUrl,
+              meeting: true,
+            ),
+          ];
+        }
       }
-      _metHere.add(who.id);
     }
+    _metHere.add(who.id);
     setState(() => _addressingId = who.id);
   }
 
@@ -384,9 +439,8 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     if (text.isEmpty || text.length > 500) return;
     if (!_cast.any((who) => who.id == characterId)) return;
     setState(() {
-      _visit
-          .putIfAbsent(characterId, () => [])
-          .add(VisitLine(fromPlayer: true, text: text));
+      final current = _visit[characterId] ?? const <VisitLine>[];
+      _visit[characterId] = [...current, VisitLine(fromPlayer: true, text: text)];
     });
     final reached = await _act(
       type: 'talk',
@@ -400,7 +454,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
           lines.isNotEmpty &&
           lines.last.fromPlayer &&
           lines.last.text == text) {
-        lines.removeLast();
+        _visit[characterId] = lines.sublist(0, lines.length - 1);
       }
     });
   }
@@ -464,38 +518,69 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
     showEverloreNotice(context, message, tone: tone);
   }
 
-  Future<void> _travel(WorldLocation destination) async {
+  void _followWay(WorldWayOn way) {
     if (_acting) return;
-    setState(() => _acting = true);
+    final world = _world;
+    if (way.kind == 'talk') {
+      if (_view != _View.scene) unawaited(_enterScene());
+      final id = way.characterId;
+      if (id != null) {
+        for (final who in _cast) {
+          if (who.id == id) {
+            _address(who);
+            return;
+          }
+        }
+      }
+      return;
+    }
+    if (way.kind == 'travel') {
+      final place = world?.byId(way.at);
+      if (place == null) return;
+      setState(() => _selectedId = place.id);
+      if (place.id == _state.currentLocationId) {
+        if (place.isEnterable) unawaited(_enterScene());
+        return;
+      }
+      final haste = _state.quickTravelLocationIds.contains(place.id);
+      final walk = _state.travelLocationIds.contains(place.id);
+      if (walk || haste) unawaited(_travel(place, haste: haste));
+      return;
+    }
+    if (_view != _View.scene) unawaited(_enterScene());
+  }
+
+  Future<void> _travel(WorldLocation destination, {bool haste = false}) async {
+    if (_acting) return;
+    setState(() {
+      _acting = true;
+      _veiling = true;
+      _lifting = false;
+      _travellingTo = haste ? null : destination.id;
+    });
     final world = _world;
     if (world != null) {
-      // The walk eases the destination in. Starting it before that
-      // painting can be drawn is arriving in a room that is not there.
       await awaitWorldFrame(
         context,
         urls: [world.urlFor(destination.sceneAssetId)],
       );
     }
     if (!mounted) return;
-    setState(() => _travellingTo = destination.id);
     await _act(type: 'move', locationId: destination.id, alreadyActing: true);
     if (!mounted) return;
     final arrived = _state.currentLocationId == destination.id;
     if (arrived && destination.isEnterable) {
-      setState(() {
-        _travellingTo = null;
-        _loading = true;
-        _waitingLine = 'You cross the threshold';
-      });
       await _awaitSceneFrame();
       if (!mounted) return;
       setState(() {
-        _loading = false;
+        _travellingTo = null;
         _view = _View.scene;
       });
     } else {
       setState(() => _travellingTo = null);
     }
+    if (mounted) setState(() => _acting = false);
+    await _liftVeil();
   }
 
   /// The room is shown the moment they tap Enter. The painting and the
@@ -504,14 +589,25 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   Future<void> _enterScene() async {
     if (_acting || _loading) return;
     setState(() {
-      _loading = true;
-      _waitingLine = 'You cross the threshold';
+      _veiling = true;
+      _lifting = false;
     });
     await _awaitSceneFrame();
     if (!mounted) return;
+    setState(() => _view = _View.scene);
+    await _liftVeil();
+  }
+
+  Future<void> _liftVeil() async {
+    if (!mounted || !_veiling || _lifting) return;
+    setState(() => _lifting = true);
+  }
+
+  void _onVeilLifted() {
+    if (!mounted) return;
     setState(() {
-      _loading = false;
-      _view = _View.scene;
+      _veiling = false;
+      _lifting = false;
     });
   }
 
@@ -543,6 +639,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
           screenHeight: size.height,
           reservedPanelHeight: reserved,
         ),
+        slotWidth: size.width * StageMeasure.figureSpeak,
       ),
     );
   }
@@ -552,61 +649,74 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   @override
   Widget build(BuildContext context) {
     final world = _world;
-    final talking = !_loading && world != null && _inConversation;
+    final talking = world != null && _inConversation;
     final paintedOpening =
-        !_loading &&
         world != null &&
         (_overture != null ||
             _needsIdentity ||
             _prologue != null ||
-            talking);
+            talking ||
+            _view == _View.scene);
     return Scaffold(
       backgroundColor: const Color(0xFF0A0908),
       // The painting must not shrink when the field opens. Only the
       // parchment is padded for the keyboard.
       resizeToAvoidBottomInset: !talking,
-      body: SafeArea(
-        top: !paintedOpening,
-        bottom: !paintedOpening,
-        child: _loading
-            ? Center(child: EverloreSessionLoader(message: _waitingLine))
-            : world == null
-            ? _Failure(
-                title: 'The way is closed',
-                message: _error ?? 'The way in is not open.',
-                onRetry: _load,
-              )
-            : _overture != null
-            ? WorldOvertureStage(
-                overture: _overture!,
-                onLeave: () => Navigator.of(context).maybePop(),
-                onFinished: () => unawaited(_act(type: 'tour')),
-              )
-            : _needsIdentity
-            ? WorldIdentitySheet(
-                leads: _playable,
-                busy: _acting,
-                onLeave: () => Navigator.of(context).maybePop(),
-                onChoose: (lead) => unawaited(
-                  _act(type: 'bind', characterId: lead.characterId),
-                ),
-              )
-            : _death != null
-            ? WorldDeathSheet(
-                death: _death!,
-                busy: _acting,
-                onLeave: () => Navigator.of(context).maybePop(),
-                onRestore: _restore,
-                onRebind: _rebind,
-              )
-            : _prologue != null
-            ? WorldPrologueStage(
-                prologue: _prologue!,
-                onFinished: () => unawaited(_act(type: 'begin')),
-              )
-            : _view == _View.map
-            ? _buildMap(world)
-            : _buildScene(world),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          SafeArea(
+            top: !paintedOpening,
+            bottom: !paintedOpening,
+            child: world == null
+                ? (_loading
+                      ? const SizedBox.expand()
+                      : _Failure(
+                          title: 'The way is closed',
+                          message: _error ?? 'The way in is not open.',
+                          onRetry: _load,
+                        ))
+                : _overture != null
+                ? WorldOvertureStage(
+                    overture: _overture!,
+                    onLeave: () => Navigator.of(context).maybePop(),
+                    onFinished: () => unawaited(_act(type: 'tour')),
+                  )
+                : _needsIdentity
+                ? WorldIdentitySheet(
+                    leads: _playable,
+                    busy: _acting,
+                    onLeave: () => Navigator.of(context).maybePop(),
+                    onChoose: (lead) => unawaited(
+                      _act(type: 'bind', characterId: lead.characterId),
+                    ),
+                  )
+                : _death != null
+                ? WorldDeathSheet(
+                    death: _death!,
+                    busy: _acting,
+                    onLeave: () => Navigator.of(context).maybePop(),
+                    onRestore: _restore,
+                    onRebind: _rebind,
+                  )
+                : _prologue != null
+                ? WorldPrologueStage(
+                    prologue: _prologue!,
+                    onFinished: () => unawaited(_act(type: 'begin')),
+                  )
+                : _view == _View.map
+                ? _buildMap(world)
+                : _buildScene(world),
+          ),
+          if (_travellingTo != null && world != null)
+            TravelTransition(
+              backgroundUrl: world.urlFor(
+                world.byId(_travellingTo!)?.sceneAssetId,
+              ),
+            ),
+          if (_veiling)
+            WorldMist(lifting: _lifting, onLifted: _onVeilLifted),
+        ],
       ),
     );
   }
@@ -647,6 +757,13 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
             ],
           ),
         ),
+        if (_wayOn != null)
+          Positioned(
+            top: 64,
+            left: 16,
+            right: 16,
+            child: _WayChip(way: _wayOn!, onTap: () => _followWay(_wayOn!)),
+          ),
         if (selected != null)
           Positioned(
             left: 16,
@@ -658,17 +775,11 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
               visibility: selected.visibilityFor(_state.flags),
               isHere: selected.id == _state.currentLocationId,
               canTravel: _state.travelLocationIds.contains(selected.id),
+              canHaste: _state.quickTravelLocationIds.contains(selected.id),
               busy: _acting,
               onTravel: () => _travel(selected),
+              onHaste: () => _travel(selected, haste: true),
               onEnter: () => unawaited(_enterScene()),
-            ),
-          ),
-        if (_travellingTo != null)
-          Positioned.fill(
-            child: TravelTransition(
-              backgroundUrl: world.urlFor(
-                world.byId(_travellingTo!)?.sceneAssetId,
-              ),
             ),
           ),
         if (_showMoments)
@@ -748,31 +859,37 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
           ),
         if (addressing == null)
           Positioned(
-            top: 8,
-            left: 12,
-            right: 12,
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: () => setState(() {
-                    _addressingId = null;
-                    _view = _View.map;
-                  }),
-                  icon: const Icon(Icons.map_outlined),
-                  color: EverloreTheme.parchment,
-                  tooltip: 'World map',
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => setState(() {
+                        _addressingId = null;
+                        _view = _View.map;
+                      }),
+                      icon: const Icon(Icons.map_outlined),
+                      color: EverloreTheme.parchment,
+                      tooltip: 'World map',
+                    ),
+                    Expanded(
+                      child: _Title(
+                        subtitle: location.realm.toUpperCase(),
+                        title: location.title,
+                      ),
+                    ),
+                    _HingesButton(
+                      count: _moments.length,
+                      onPressed: () => setState(() => _showMoments = true),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  child: _Title(
-                    subtitle: location.realm.toUpperCase(),
-                    title: location.title,
-                  ),
-                ),
-                _HingesButton(
-                  count: _moments.length,
-                  onPressed: () => setState(() => _showMoments = true),
-                ),
-              ],
+              ),
             ),
           ),
         if (addressing != null)
@@ -794,6 +911,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                     headline:
                         _sceneHeadline ?? sceneCopy.headline,
                     body: _sceneBody ?? sceneCopy.body,
+                    wayOn: _wayOn,
                     choices: choices,
                     drills: _drillsHere,
                     contests: _contests,
@@ -801,6 +919,7 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
                     traits: _state.traits,
                     standing: _progression.standing,
                     busy: _acting,
+                    onWay: _wayOn == null ? null : () => _followWay(_wayOn!),
                     onChoose: (choice) {
                       if (!choice.traitsMet(_state.traits)) {
                         _notice(
@@ -853,6 +972,85 @@ class _InteractiveWorldScreenState extends State<InteractiveWorldScreen> {
   }
 }
 
+class _WayChip extends StatelessWidget {
+  const _WayChip({required this.way, this.onTap, this.ink = false});
+
+  final WorldWayOn way;
+  final VoidCallback? onTap;
+  final bool ink;
+
+  @override
+  Widget build(BuildContext context) {
+    final mark = switch (way.kind) {
+      'talk' => 'SPEAK',
+      'train' => 'WORK',
+      'travel' => 'THE ROAD',
+      _ => 'HERE',
+    };
+    final color = ink ? StageMeasure.brassDeep : EverloreTheme.gold;
+    final body = ink ? StageMeasure.ink : EverloreTheme.parchment;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+          decoration: BoxDecoration(
+            color: ink ? const Color(0x33FFFFFF) : const Color(0xCC100C0A),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.45)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      mark,
+                      style: EverloreTheme.caption.copyWith(
+                        color: color,
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      way.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: EverloreTheme.ui(
+                        size: 14,
+                        color: body,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
+                    if (way.blurb.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        way.blurb,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: EverloreTheme.aiText.copyWith(
+                          color: body.withValues(alpha: 0.72),
+                          fontSize: 12,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Icon(Icons.north_east_rounded, size: 16, color: color),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SelectionCard extends StatelessWidget {
   const _SelectionCard({
     required this.artUrl,
@@ -860,8 +1058,10 @@ class _SelectionCard extends StatelessWidget {
     required this.visibility,
     required this.isHere,
     required this.canTravel,
+    required this.canHaste,
     required this.busy,
     required this.onTravel,
+    required this.onHaste,
     required this.onEnter,
   });
 
@@ -870,8 +1070,10 @@ class _SelectionCard extends StatelessWidget {
   final WorldVisibility visibility;
   final bool isHere;
   final bool canTravel;
+  final bool canHaste;
   final bool busy;
   final VoidCallback onTravel;
+  final VoidCallback onHaste;
   final VoidCallback onEnter;
 
   @override
@@ -930,6 +1132,9 @@ class _SelectionCard extends StatelessWidget {
           ] else if (!sealed && canTravel) ...[
             const SizedBox(height: 14),
             _Action(label: 'Travel here', busy: busy, onTap: onTravel),
+          ] else if (!sealed && canHaste) ...[
+            const SizedBox(height: 14),
+            _Action(label: 'The road is known', busy: busy, onTap: onHaste),
           ],
         ],
       ),
@@ -1081,6 +1286,7 @@ class _StoryPanel extends StatelessWidget {
   const _StoryPanel({
     required this.headline,
     required this.body,
+    required this.wayOn,
     required this.choices,
     required this.drills,
     required this.contests,
@@ -1091,10 +1297,12 @@ class _StoryPanel extends StatelessWidget {
     required this.onChoose,
     required this.onTrain,
     required this.onAddress,
+    this.onWay,
   });
 
   final String headline;
   final String body;
+  final WorldWayOn? wayOn;
   final List<WorldChoice> choices;
   final List<WorldDrill> drills;
   final List<WorldContest> contests;
@@ -1105,10 +1313,16 @@ class _StoryPanel extends StatelessWidget {
   final ValueChanged<WorldChoice> onChoose;
   final ValueChanged<WorldDrill> onTrain;
   final ValueChanged<WorldPresence> onAddress;
+  final VoidCallback? onWay;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 0, 16, StageMeasure.roomPanelFoot),
+    padding: EdgeInsets.fromLTRB(
+      16,
+      0,
+      16,
+      StageMeasure.roomPanelFoot + MediaQuery.paddingOf(context).bottom,
+    ),
     child: ConstrainedBox(
       constraints: BoxConstraints(
         maxHeight:
@@ -1124,6 +1338,10 @@ class _StoryPanel extends StatelessWidget {
               children: [
                 if (traits != null || standing.isNotEmpty) ...[
                   _WalkMeters(traits: traits, standing: standing),
+                  const SizedBox(height: 12),
+                ],
+                if (wayOn != null) ...[
+                  _WayChip(way: wayOn!, ink: true, onTap: busy ? null : onWay),
                   const SizedBox(height: 12),
                 ],
                 Text(
@@ -1149,13 +1367,27 @@ class _StoryPanel extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       child: StageChoice(
-                        label: who.disposition == null
-                            ? 'Speak with ${who.name}'
-                            : 'Speak with ${who.name}  ·  ${who.disposition}',
+                        label: who.met
+                            ? 'Speak with ${who.name} again'
+                            : 'Speak with ${who.name}',
                         busy: busy,
                         onPressed: busy ? null : () => onAddress(who),
                       ),
                     ),
+                    if (who.echoes.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        who.echoes.last.replied,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: EverloreTheme.aiText.copyWith(
+                          color: StageMeasure.inkMuted,
+                          fontSize: 13,
+                          height: 1.35,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                   ],
                 ],
@@ -1212,30 +1444,38 @@ class _ChoiceFigure extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final layout = StageRoomLayout.of(
-      context,
-      count: 1,
-      reservedPanelHeight: reservedPanelHeight,
-    );
-    final rect = layout.figureAt(0);
-    return _FadeIn(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned(
-            left: rect.left,
-            top: rect.top,
-            width: rect.width,
-            height: rect.height,
-            child: StageFigure(
-              name: lead?.name ?? 'You',
-              portraitUrl: lead?.portraitUrl,
-              side: StageSide.left,
-              rise: StageRise.speak,
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final layout = StageRoomLayout.of(
+          context,
+          count: 1,
+          reservedPanelHeight: reservedPanelHeight,
+          size: constraints.biggest,
+          topInset:
+              MediaQuery.paddingOf(context).top + StageMeasure.roomChromeTop,
+        );
+        final rect = layout.figureAt(0);
+        return _FadeIn(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned(
+                left: rect.left,
+                top: rect.top,
+                width: rect.width,
+                height: rect.height,
+                child: StageFigure(
+                  name: lead?.name ?? 'You',
+                  portraitUrl: lead?.portraitUrl,
+                  side: StageSide.left,
+                  rise: StageRise.speak,
+                  arrive: true,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -1309,7 +1549,12 @@ class _PetitionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 0, 16, StageMeasure.roomPanelFoot),
+    padding: EdgeInsets.fromLTRB(
+      16,
+      0,
+      16,
+      StageMeasure.roomPanelFoot + MediaQuery.paddingOf(context).bottom,
+    ),
     // Three parties, their claims, any rulings quoted back and three ways to
     // answer will not fit a phone. The panel takes at most two thirds of the
     // screen and scrolls inside that, so the scene behind it stays visible and

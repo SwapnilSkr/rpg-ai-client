@@ -288,7 +288,7 @@ class _PlayerBubble extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 12, 17, 12),
                 child: Text.rich(
                   TextSpan(
-                    children: _playerInputSpans(
+                    children: playerInputSpans(
                       text,
                       // The player's voice uses the UI font; their *actions* italic, speech upright.
                       dialogueStyle: EverloreTheme.ui(
@@ -333,47 +333,6 @@ class _PlayerBubble extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Player bubble renderer: text wrapped in *...* (or **...**) is treated as
-/// action/narration and styled in italics; text outside markers is spoken text.
-/// This makes mixed inputs like `*I step closer* Tell me the truth` visually
-/// separable without extra punctuation.
-List<InlineSpan> _playerInputSpans(
-  String text, {
-  required TextStyle dialogueStyle,
-  required TextStyle narrationStyle,
-}) {
-  final spans = <InlineSpan>[];
-  final buf = StringBuffer();
-  var inNarration = false;
-
-  TextStyle styleNow() => inNarration ? narrationStyle : dialogueStyle;
-
-  void flush() {
-    if (buf.isEmpty) return;
-    spans.add(TextSpan(text: buf.toString(), style: styleNow()));
-    buf.clear();
-  }
-
-  for (var i = 0; i < text.length; i++) {
-    final c = text[i];
-    // Accept either *...* or **...** as the player's narration markers.
-    if (c == '*') {
-      final isDouble = i + 1 < text.length && text[i + 1] == '*';
-      flush();
-      inNarration = !inNarration;
-      if (isDouble) i++;
-      continue;
-    }
-    buf.write(c);
-  }
-  flush();
-
-  if (spans.isEmpty) {
-    spans.add(TextSpan(text: text, style: dialogueStyle));
-  }
-  return spans;
 }
 
 class _NarratorPanel extends StatelessWidget {

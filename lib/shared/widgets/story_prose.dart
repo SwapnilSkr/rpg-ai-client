@@ -94,6 +94,48 @@ List<InlineSpan> storyProseSpans(
   return spans;
 }
 
+/// How the player writes a turn: unmarked words are spoken; `*a beat*` or
+/// `**a beat**` is action. Mixed lines such as `*I step closer* Tell me`
+/// have to read as two registers, not one italic block.
+///
+/// The narrator's own `*prose*` is the inverse — unmarked is narration —
+/// so this is a separate pass, not a flag on [storyProseSpans].
+List<InlineSpan> playerInputSpans(
+  String text, {
+  required TextStyle dialogueStyle,
+  required TextStyle narrationStyle,
+}) {
+  final spans = <InlineSpan>[];
+  final buf = StringBuffer();
+  var inNarration = false;
+
+  TextStyle styleNow() => inNarration ? narrationStyle : dialogueStyle;
+
+  void flush() {
+    if (buf.isEmpty) return;
+    spans.add(TextSpan(text: buf.toString(), style: styleNow()));
+    buf.clear();
+  }
+
+  for (var i = 0; i < text.length; i++) {
+    final c = text[i];
+    if (c == '*') {
+      final isDouble = i + 1 < text.length && text[i + 1] == '*';
+      flush();
+      inNarration = !inNarration;
+      if (isDouble) i++;
+      continue;
+    }
+    buf.write(c);
+  }
+  flush();
+
+  if (spans.isEmpty) {
+    spans.add(TextSpan(text: text, style: dialogueStyle));
+  }
+  return spans;
+}
+
 /// Prose that is cut to [collapsedLines] until the reader asks for the rest.
 ///
 /// A world's lore entry is written by its author and has no length the app can

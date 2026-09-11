@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/nexus_theme.dart';
@@ -55,54 +57,61 @@ class SceneCast extends StatelessWidget {
   Widget build(BuildContext context) {
     if (people.isEmpty) return const SizedBox.shrink();
 
-    final layout = StageRoomLayout.of(
-      context,
-      count: people.length,
-      reservedPanelHeight: reservedPanelHeight,
-    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final layout = StageRoomLayout.of(
+          context,
+          count: people.length,
+          reservedPanelHeight: reservedPanelHeight,
+          size: constraints.biggest,
+          topInset:
+              MediaQuery.paddingOf(context).top + StageMeasure.roomChromeTop,
+        );
 
-    // A crowd that cannot share the frame still has to be reachable.
-    // Fitting them into the width is the other doll.
-    if (people.length >= 3 && !layout.crowdFits) {
-      final width = layout.figureAt(0).width;
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned(
-            left: 0,
-            top: 0,
-            width: layout.size.width,
-            height: layout.slotHeight,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemExtent: width,
-              itemCount: people.length,
-              itemBuilder: (context, index) => _RoomPerson(
-                person: people[index],
-                side: layout.sideAt(index),
-                enabled: enabled,
-                onTap: () => onAddress(people[index]),
+        // A crowd that cannot share the frame still has to be reachable.
+        // Fitting them into the width is the other doll.
+        if (people.length >= 3 && !layout.crowdFits) {
+          final first = layout.figureAt(0);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned(
+                left: 0,
+                top: first.top,
+                width: layout.size.width,
+                height: first.height,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemExtent: first.width,
+                  itemCount: people.length,
+                  itemBuilder: (context, index) => _RoomPerson(
+                    person: people[index],
+                    side: layout.sideAt(index),
+                    enabled: enabled,
+                    onTap: () => onAddress(people[index]),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ],
-      );
-    }
+            ],
+          );
+        }
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        for (var i = 0; i < people.length; i++)
-          _band(
-            layout.figureAt(i),
-            _RoomPerson(
-              person: people[i],
-              side: layout.sideAt(i),
-              enabled: enabled,
-              onTap: () => onAddress(people[i]),
-            ),
-          ),
-      ],
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            for (var i = 0; i < people.length; i++)
+              _band(
+                layout.figureAt(i),
+                _RoomPerson(
+                  person: people[i],
+                  side: layout.sideAt(i),
+                  enabled: enabled,
+                  onTap: () => onAddress(people[i]),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -149,6 +158,7 @@ class _RoomPerson extends StatelessWidget {
             portraitUrl: person.portraitUrl,
             side: side,
             rise: StageRise.speak,
+            arrive: true,
           ),
         ),
       ),
@@ -189,59 +199,85 @@ class ConversationPanel extends StatefulWidget {
 class _ConversationPanelState extends State<ConversationPanel> {
   final _said = TextEditingController();
   final _focus = FocusNode();
+  final _scroll = ScrollController();
   bool _hasText = false;
   bool _composing = false;
-  int _page = 0;
+  bool _followLatest = true;
+  String _revealed = '';
+  String _target = '';
+  bool _revealing = false;
+  Timer? _reveal;
+  double _lastKeys = 0;
 
   @override
   void initState() {
     super.initState();
     _said.addListener(_onSaid);
-    // A visit already in progress must open on the latest beat. Starting
-    // at zero would replay the meeting after they had already walked away.
-    _page = widget.lines.isEmpty ? 0 : widget.lines.length - 1;
+    _scroll.addListener(_onScroll);
+    final last = _lastLine;
+    if (last != null && !last.fromPlayer) {
+      _revealed = last.text;
+      _target = last.text;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToEnd(force: true);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final keys = MediaQuery.viewInsetsOf(context).bottom;
+    if (keys == _lastKeys) return;
+    _lastKeys = keys;
+    if (_composing) _scrollToEnd(force: true);
   }
 
   @override
   void didUpdateWidget(ConversationPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.person.id != widget.person.id) {
-      _page = widget.lines.isEmpty ? 0 : widget.lines.length - 1;
+      _stopReveal();
       _composing = false;
+      _followLatest = true;
+      final last = _lastLine;
+      _revealed = last == null || last.fromPlayer ? '' : last.text;
+      _target = _revealed;
+      _scrollToEnd(force: true);
       return;
     }
-    if (widget.lines.length != oldWidget.lines.length) {
-      // New speech is the beat they must see. Leaving _page behind would
-      // hide their own line until they tapped, and the reply would land
-      // on a panel that still held the previous voice.
-      setState(() {
-        _page = widget.lines.isEmpty ? 0 : widget.lines.length - 1;
-        _composing = false;
-      });
+    final next = _lastLine;
+    final previous = oldWidget.lines.isEmpty ? null : oldWidget.lines.last;
+    final grew = widget.lines.length != oldWidget.lines.length;
+    if (next != null &&
+        !next.fromPlayer &&
+        next.text.isNotEmpty &&
+        next.text != previous?.text) {
+      // The reply is here. Turn to them at once and let the line arrive
+      // the way a narrator turn does, instead of waiting for a tap.
+      _beginReveal(next.text);
+      return;
+    }
+    if (grew) {
+      _scrollToEnd(force: true, animated: true);
     }
   }
 
   @override
   void dispose() {
+    _stopReveal();
     _said.removeListener(_onSaid);
+    _scroll.removeListener(_onScroll);
     _said.dispose();
     _focus.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  void _onSaid() {
-    final has = _said.text.trim().isNotEmpty;
-    if (has != _hasText) setState(() => _hasText = has);
-  }
+  VisitLine? get _lastLine =>
+      widget.lines.isEmpty ? _opening : widget.lines.last;
 
-  VisitLine? get _shown {
-    if (widget.lines.isNotEmpty) {
-      final i = _page.clamp(0, widget.lines.length - 1);
-      return widget.lines[i];
-    }
-    // Opening a character must show their authored entrance. An empty
-    // visit with first_met still on the person is how the rebuild left
-    // a blank parchment and only "Say something".
+  VisitLine? get _opening {
     final meeting = widget.person.firstMet;
     if (meeting == null) return null;
     return VisitLine(
@@ -252,118 +288,238 @@ class _ConversationPanelState extends State<ConversationPanel> {
     );
   }
 
-  bool get _fromPlayer => _shown?.fromPlayer ?? false;
+  List<VisitLine> get _transcript {
+    if (widget.lines.isNotEmpty) return widget.lines;
+    final opening = _opening;
+    return opening == null ? const [] : [opening];
+  }
 
-  bool get _canAdvance =>
-      !_composing && widget.lines.isNotEmpty && _page < widget.lines.length - 1;
+  bool get _fromPlayer {
+    if (_revealing) return false;
+    return _lastLine?.fromPlayer ?? false;
+  }
 
   String? get _face {
-    final line = _shown;
-    if (line != null && !line.fromPlayer && line.portraitUrl != null) {
-      return line.portraitUrl;
+    for (var i = widget.lines.length - 1; i >= 0; i--) {
+      final line = widget.lines[i];
+      if (!line.fromPlayer && line.portraitUrl != null) return line.portraitUrl;
     }
     return widget.bearingUrl;
   }
 
-  void _advance() {
-    if (!_canAdvance) return;
-    setState(() => _page += 1);
+  void _onSaid() {
+    final has = _said.text.trim().isNotEmpty;
+    if (has != _hasText) setState(() => _hasText = has);
+  }
+
+  void _stopReveal() {
+    _reveal?.cancel();
+    _reveal = null;
+    _revealing = false;
+  }
+
+  void _beginReveal(String target) {
+    _reveal?.cancel();
+    _target = target;
+    final first = target.isEmpty
+        ? ''
+        : target.substring(0, target.length < 8 ? target.length : 8);
+    _revealed = first;
+    _revealing = true;
+    _composing = false;
+    _followLatest = true;
+    if (first.length >= target.length) {
+      _revealing = false;
+      _scrollToEnd(force: true, animated: true);
+      return;
+    }
+    _reveal = Timer.periodic(const Duration(milliseconds: 18), (_) {
+      if (!mounted) return;
+      if (_revealed.length >= _target.length) {
+        _reveal?.cancel();
+        _reveal = null;
+        setState(() => _revealing = false);
+        _scrollToEnd(force: true);
+        return;
+      }
+      final remaining = _target.length - _revealed.length;
+      final step = remaining <= 18
+          ? remaining
+          : (remaining / 3).ceil().clamp(8, 36);
+      setState(() {
+        _revealed = _target.substring(0, _revealed.length + step);
+      });
+      _scrollToEnd();
+    });
+    _scrollToEnd(force: true);
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final position = _scroll.position;
+    _followLatest = position.maxScrollExtent - position.pixels < 96;
+  }
+
+  /// Keep the latest beat on screen the way a playthrough does: jump to
+  /// the current tail, then chase it across the frames a lazy list needs
+  /// to learn its true extent.
+  void _scrollToEnd({bool force = false, bool animated = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final pos = _scroll.position;
+      final isNearBottom = pos.maxScrollExtent - pos.pixels < 120;
+      if (!force && !_followLatest && !isNearBottom) return;
+      _followLatest = true;
+      if (animated) {
+        _scroll.animateTo(
+          pos.maxScrollExtent,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _scroll.jumpTo(pos.maxScrollExtent);
+      }
+      _settleAtBottom();
+    });
+  }
+
+  void _settleAtBottom({int remaining = 8}) {
+    if (remaining <= 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients || !_followLatest) return;
+      final position = _scroll.position;
+      if (position.maxScrollExtent - position.pixels <= 1) return;
+      _scroll.jumpTo(position.maxScrollExtent);
+      _settleAtBottom(remaining: remaining - 1);
+    });
   }
 
   void _openCompose() {
-    if (widget.busy || _composing) return;
+    if (widget.busy || _composing || _revealing) return;
     setState(() => _composing = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focus.requestFocus();
+      if (!mounted) return;
+      _focus.requestFocus();
+      _scrollToEnd(force: true);
     });
   }
 
   void _submit() {
-    if (widget.busy) return;
+    if (widget.busy || _revealing) return;
     final text = _said.text.trim();
     if (text.isEmpty || text.length > _speakLimit) return;
     widget.onSpeak(text);
     _said.clear();
-    setState(() => _composing = false);
+    _focus.unfocus();
+    setState(() {
+      _composing = false;
+      _followLatest = true;
+    });
+    _scrollToEnd(force: true, animated: true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final shown = _shown;
     final fromPlayer = _fromPlayer;
     final speaker = fromPlayer ? 'You' : widget.person.name;
-    final size = MediaQuery.sizeOf(context);
-    final side = fromPlayer ? StageSide.right : StageSide.left;
-    final slot = StageMeasure.speakRect(size, side);
+    final padding = MediaQuery.paddingOf(context);
     final contextCue = <String>{
       widget.person.role.trim(),
       widget.person.faction.trim(),
     }.where((part) => part.isNotEmpty).join(' · ');
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        StageBackdrop(url: widget.backdropUrl, veil: StageVeil.room),
-        Positioned(
-          left: slot.left,
-          top: slot.top,
-          width: slot.width,
-          height: slot.height,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 420),
-            builder: (context, value, child) =>
-                Opacity(opacity: value, child: child),
-            child: StageFigure(
-              key: ValueKey<String>(fromPlayer ? 'player' : widget.person.id),
-              name: speaker,
-              portraitUrl: fromPlayer ? widget.playerPortraitUrl : _face,
-              side: side,
-              rise: StageRise.speak,
-            ),
-          ),
-        ),
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: SafeArea(
-            bottom: false,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: IconButton(
-                onPressed: widget.onLeave,
-                icon: const Icon(Icons.close_rounded),
-                color: EverloreTheme.parchment,
-                tooltip: 'Step away',
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final side = fromPlayer ? StageSide.right : StageSide.left;
+        final slot = StageMeasure.speakRect(
+          constraints.biggest,
+          side,
+          topInset: padding.top + StageMeasure.roomChromeTop,
+        );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            StageBackdrop(url: widget.backdropUrl, veil: StageVeil.room),
+            Positioned(
+              left: slot.left,
+              top: slot.top,
+              width: slot.width,
+              height: slot.height,
+              child: AnimatedSwitcher(
+                duration: StageMeasure.arrive,
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                layoutBuilder: (current, previous) => Stack(
+                  fit: StackFit.expand,
+                  clipBehavior: Clip.none,
+                  children: [
+                    ...previous,
+                    if (current != null) current,
+                  ],
+                ),
+                transitionBuilder: (child, animation) {
+                  final player = child.key == const ValueKey<String>('player');
+                  final from = Offset(player ? 0.22 : -0.22, 0);
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(begin: from, end: Offset.zero)
+                          .animate(animation),
+                      child: child,
+                    ),
+                  );
+                },
+                child: StageFigure(
+                  key: ValueKey<String>(
+                    fromPlayer ? 'player' : widget.person.id,
+                  ),
+                  name: speaker,
+                  portraitUrl: fromPlayer ? widget.playerPortraitUrl : _face,
+                  side: side,
+                  rise: StageRise.speak,
+                ),
               ),
             ),
-          ),
-        ),
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 420),
-            builder: (context, value, child) =>
-                Opacity(opacity: value, child: child),
-            child: _TalkingStage(
-            speaker: speaker,
-            contextCue: contextCue,
-            fromPlayer: fromPlayer,
-            line: shown,
-            busy: widget.busy,
-            composing: _composing,
-            canAdvance: _canAdvance,
-            canSpeak: _hasText && !widget.busy,
-            said: _said,
-            focus: _focus,
-            onAdvance: _advance,
-            onCompose: _openCompose,
-            onSubmit: _submit,
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
+                    onPressed: widget.onLeave,
+                    icon: const Icon(Icons.close_rounded),
+                    color: EverloreTheme.parchment,
+                    tooltip: 'Step away',
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ],
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: _TalkingStage(
+                speaker: speaker,
+                contextCue: contextCue,
+                fromPlayer: fromPlayer,
+                lines: _transcript,
+                revealed: _revealing || _revealed.isNotEmpty
+                    ? _revealed
+                    : null,
+                revealing: _revealing,
+                busy: widget.busy,
+                composing: _composing,
+                canSpeak: _hasText && !widget.busy && !_revealing,
+                said: _said,
+                focus: _focus,
+                scroll: _scroll,
+                onCompose: _openCompose,
+                onSubmit: _submit,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -373,14 +529,15 @@ class _TalkingStage extends StatelessWidget {
     required this.speaker,
     required this.contextCue,
     required this.fromPlayer,
-    required this.line,
+    required this.lines,
+    required this.revealed,
+    required this.revealing,
     required this.busy,
     required this.composing,
-    required this.canAdvance,
     required this.canSpeak,
     required this.said,
     required this.focus,
-    required this.onAdvance,
+    required this.scroll,
     required this.onCompose,
     required this.onSubmit,
   });
@@ -388,14 +545,15 @@ class _TalkingStage extends StatelessWidget {
   final String speaker;
   final String contextCue;
   final bool fromPlayer;
-  final VisitLine? line;
+  final List<VisitLine> lines;
+  final String? revealed;
+  final bool revealing;
   final bool busy;
   final bool composing;
-  final bool canAdvance;
   final bool canSpeak;
   final TextEditingController said;
   final FocusNode focus;
-  final VoidCallback onAdvance;
+  final ScrollController scroll;
   final VoidCallback onCompose;
   final VoidCallback onSubmit;
 
@@ -404,22 +562,12 @@ class _TalkingStage extends StatelessWidget {
     final size = MediaQuery.sizeOf(context);
     final pad = MediaQuery.paddingOf(context);
     final keys = MediaQuery.viewInsetsOf(context).bottom;
-    final scaler = MediaQuery.textScalerOf(context);
-    // Eighteen-point prose plus the say control used to clip inside a
-    // clamp that never asked the reader's scaler. The panel grows with
-    // the type, and when the field opens it cannot be taller than the
-    // space above the keys.
-    final prose = scaler.scale(18) * 1.55;
-    final field = scaler.scale(17) * 1.45;
-    final readyToSpeak = line == null;
-    final needed = composing || readyToSpeak
-        ? 22 + field * 4 + 24 + 10
-        : 22 + prose * 3 + 48 + 10;
+    final waiting = busy && (lines.isEmpty || lines.last.fromPlayer);
     final panelH = StageMeasure.panelHeightFor(
       screenHeight: size.height,
-      needed: needed,
+      needed: size.height * 0.42,
       keys: keys,
-      composing: composing,
+      composing: true,
     );
     return Padding(
       padding: EdgeInsets.only(bottom: keys > 0 ? keys : 0),
@@ -434,52 +582,56 @@ class _TalkingStage extends StatelessWidget {
               right: 0,
               bottom: 0,
               top: StageMeasure.plateHeight / 2,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: canAdvance ? onAdvance : null,
-                  splashColor: StageMeasure.brass.withValues(alpha: 0.08),
-                  child: StagePanel(
-                    expand: true,
-                    padding: EdgeInsets.fromLTRB(
-                      StageMeasure.panelPadX,
-                      22,
-                      StageMeasure.panelPadX,
-                      10 + pad.bottom,
+              child: StagePanel(
+                expand: true,
+                padding: EdgeInsets.fromLTRB(
+                  StageMeasure.panelPadX,
+                  22,
+                  StageMeasure.panelPadX,
+                  10 + pad.bottom,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: lines.isEmpty
+                          ? _EmptyCue(contextCue: contextCue)
+                          : _Transcript(
+                              lines: lines,
+                              revealed: revealed,
+                              scroll: scroll,
+                            ),
                     ),
-                    child: Stack(
-                      children: [
-                        composing
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.topCenter,
+                      child: KeyedSubtree(
+                        key: ValueKey(
+                          waiting
+                              ? 'wait'
+                              : composing
+                              ? 'field'
+                              : revealing
+                              ? 'reveal'
+                              : 'say',
+                        ),
+                        child: waiting
+                            ? const _Waiting()
+                            : composing
                             ? _SayField(
                                 said: said,
                                 focus: focus,
                                 canSpeak: canSpeak,
+                                enabled: !busy && !revealing,
                                 onSubmit: onSubmit,
                               )
-                            : readyToSpeak
-                            ? _ReturnInvitation(
-                                contextCue: contextCue,
-                                said: said,
-                                focus: focus,
-                                canSpeak: canSpeak,
-                                onSubmit: onSubmit,
-                              )
-                            : _PanelBody(
-                                fromPlayer: fromPlayer,
-                                line: line,
-                                busy: busy,
-                                canAdvance: canAdvance,
-                                onCompose: onCompose,
-                              ),
-                        if (canAdvance)
-                          const Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: StageAdvance(),
-                          ),
-                      ],
+                            : revealing
+                            ? const SizedBox.shrink()
+                            : _SayAffordance(onTap: onCompose),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -496,20 +648,10 @@ class _TalkingStage extends StatelessWidget {
   }
 }
 
-class _ReturnInvitation extends StatelessWidget {
-  const _ReturnInvitation({
-    required this.contextCue,
-    required this.said,
-    required this.focus,
-    required this.canSpeak,
-    required this.onSubmit,
-  });
+class _EmptyCue extends StatelessWidget {
+  const _EmptyCue({required this.contextCue});
 
   final String contextCue;
-  final TextEditingController said;
-  final FocusNode focus;
-  final bool canSpeak;
-  final VoidCallback onSubmit;
 
   @override
   Widget build(BuildContext context) {
@@ -527,7 +669,7 @@ class _ReturnInvitation extends StatelessWidget {
               letterSpacing: 1.1,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
         ],
         Text(
           'Speak in your own words.',
@@ -537,171 +679,51 @@ class _ReturnInvitation extends StatelessWidget {
             fontStyle: FontStyle.italic,
           ),
         ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: _SayField(
-            said: said,
-            focus: focus,
-            canSpeak: canSpeak,
-            onSubmit: onSubmit,
-          ),
-        ),
       ],
     );
   }
 }
 
-class _PanelBody extends StatelessWidget {
-  const _PanelBody({
-    required this.fromPlayer,
-    required this.line,
-    required this.busy,
-    required this.canAdvance,
-    required this.onCompose,
+class _Transcript extends StatelessWidget {
+  const _Transcript({
+    required this.lines,
+    required this.revealed,
+    required this.scroll,
   });
 
-  final bool fromPlayer;
-  final VisitLine? line;
-  final bool busy;
-  final bool canAdvance;
-  final VoidCallback onCompose;
+  final List<VisitLine> lines;
+  final String? revealed;
+  final ScrollController scroll;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: line == null
-              ? const SizedBox.shrink()
-              : _ReadingRegion(line: line!, fromPlayer: fromPlayer),
-        ),
-        if (busy)
-          const _Waiting()
-        else if (!canAdvance)
-          _SayAffordance(onTap: onCompose),
-      ],
-    );
-  }
-}
-
-class _ReadingRegion extends StatefulWidget {
-  const _ReadingRegion({required this.line, required this.fromPlayer});
-
-  final VisitLine line;
-  final bool fromPlayer;
-
-  @override
-  State<_ReadingRegion> createState() => _ReadingRegionState();
-}
-
-class _ReadingRegionState extends State<_ReadingRegion> {
-  final _scroll = ScrollController();
-  bool _hasMore = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _scroll.addListener(_syncAffordance);
-    _afterLayout();
-  }
-
-  @override
-  void didUpdateWidget(_ReadingRegion oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.line.text != widget.line.text) {
-      if (_scroll.hasClients) _scroll.jumpTo(0);
-      _afterLayout();
-    }
-  }
-
-  void _afterLayout() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _syncAffordance();
-    });
-  }
-
-  void _syncAffordance() {
-    if (!_scroll.hasClients) return;
-    final position = _scroll.position;
-    final hasMore = position.maxScrollExtent - position.pixels > 1;
-    if (hasMore != _hasMore && mounted) setState(() => _hasMore = hasMore);
-  }
-
-  @override
-  void dispose() {
-    _scroll
-      ..removeListener(_syncAffordance)
-      ..dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return NotificationListener<ScrollMetricsNotification>(
-      onNotification: (_) {
-        _afterLayout();
-        return false;
-      },
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Scrollbar(
-              controller: _scroll,
-              thumbVisibility: _hasMore,
-              child: SingleChildScrollView(
-                controller: _scroll,
-                child: _BeatText(
-                  line: widget.line,
-                  fromPlayer: widget.fromPlayer,
-                ),
+    return ListView.builder(
+      controller: scroll,
+      padding: const EdgeInsets.only(bottom: 8),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      itemCount: lines.length,
+      itemBuilder: (context, index) {
+        final line = lines[index];
+        final last = index == lines.length - 1;
+        final text = last && revealed != null && !line.fromPlayer
+            ? revealed!
+            : line.text;
+        return Padding(
+          padding: EdgeInsets.only(bottom: last ? 0 : 14),
+          child: Opacity(
+            opacity: last ? 1 : 0.72,
+            child: _BeatText(
+              line: VisitLine(
+                fromPlayer: line.fromPlayer,
+                text: text,
+                portraitUrl: line.portraitUrl,
+                meeting: line.meeting,
               ),
+              fromPlayer: line.fromPlayer,
             ),
           ),
-          if (_hasMore)
-            Positioned(
-              left: 0,
-              bottom: 0,
-              child: Semantics(
-                label: 'More of this reply follows. Swipe up to keep reading.',
-                excludeSemantics: true,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0x00F2E7D0), StageMeasure.paper],
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 12, 10, 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'READ ON',
-                            style: EverloreTheme.caption.copyWith(
-                              color: StageMeasure.brassDeep,
-                              fontSize: 10,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          const SizedBox(width: 2),
-                          const Icon(
-                            Icons.keyboard_arrow_down_rounded,
-                            size: 18,
-                            color: StageMeasure.brassDeep,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -720,7 +742,24 @@ class _BeatText extends StatelessWidget {
       height: 1.55,
     );
     if (fromPlayer) {
-      return Text(line.text, style: base.copyWith(fontStyle: FontStyle.italic));
+      return Text.rich(
+        TextSpan(
+          children: playerInputSpans(
+            line.text,
+            dialogueStyle: base.copyWith(
+              fontStyle: FontStyle.normal,
+              fontWeight: FontWeight.w600,
+              color: StageMeasure.ink,
+            ),
+            narrationStyle: base.copyWith(
+              fontStyle: FontStyle.italic,
+              fontWeight: FontWeight.w400,
+              color: StageMeasure.ink.withValues(alpha: kNarrationMutedAlpha),
+            ),
+          ),
+        ),
+        style: base,
+      );
     }
     return Text.rich(
       TextSpan(
@@ -734,7 +773,7 @@ class _BeatText extends StatelessWidget {
           narrationStyle: base.copyWith(
             fontStyle: FontStyle.italic,
             fontWeight: FontWeight.w400,
-            color: StageMeasure.ink.withValues(alpha: 0.78),
+            color: StageMeasure.ink.withValues(alpha: kNarrationMutedAlpha),
           ),
         ),
       ),
@@ -773,103 +812,269 @@ class _SayAffordance extends StatelessWidget {
   }
 }
 
-class _SayField extends StatelessWidget {
+class _SayField extends StatefulWidget {
   const _SayField({
     required this.said,
     required this.focus,
     required this.canSpeak,
+    required this.enabled,
     required this.onSubmit,
   });
 
   final TextEditingController said;
   final FocusNode focus;
   final bool canSpeak;
+  final bool enabled;
   final VoidCallback onSubmit;
 
   @override
+  State<_SayField> createState() => _SayFieldState();
+}
+
+class _SayFieldState extends State<_SayField> {
+  final _focused = ValueNotifier(false);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focus.addListener(_onFocus);
+    _focused.value = widget.focus.hasFocus;
+  }
+
+  @override
+  void didUpdateWidget(_SayField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.focus, widget.focus)) {
+      oldWidget.focus.removeListener(_onFocus);
+      widget.focus.addListener(_onFocus);
+      _focused.value = widget.focus.hasFocus;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.focus.removeListener(_onFocus);
+    _focused.dispose();
+    super.dispose();
+  }
+
+  void _onFocus() {
+    final focused = widget.focus.hasFocus;
+    if (_focused.value != focused) _focused.value = focused;
+  }
+
+  void _insertNarrationMarkers() {
+    if (!widget.enabled) return;
+
+    void insert() {
+      final value = widget.said.value;
+      final text = value.text;
+      final selection = value.selection;
+      final start = selection.isValid ? selection.start : text.length;
+      final end = selection.isValid ? selection.end : text.length;
+      final lo = start < end ? start : end;
+      final hi = start < end ? end : start;
+      final selected = text.substring(lo, hi);
+      final markerText = selected.isEmpty ? '**' : '*$selected*';
+      final next = text.replaceRange(lo, hi, markerText);
+      final cursor = selected.isEmpty ? lo + 1 : lo + markerText.length;
+      widget.said.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: cursor),
+        composing: TextRange.empty,
+      );
+    }
+
+    if (!widget.focus.hasFocus) {
+      widget.focus.requestFocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) insert();
+      });
+      return;
+    }
+    insert();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final scaler = MediaQuery.textScalerOf(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Four lines at the reader's scale will not fit once the keys
-        // are up. Cap what is shown to the height actually left, so
-        // the field scrolls instead of clipping the Speak control.
-        final line = scaler.scale(17) * 1.45;
-        final fit = constraints.hasBoundedHeight
-            ? ((constraints.maxHeight - 20) / line).floor().clamp(1, 4)
-            : 4;
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: TextField(
-                controller: said,
-                focusNode: focus,
-                maxLength: _speakLimit,
-                minLines: 1,
-                maxLines: fit,
-                textCapitalization: TextCapitalization.sentences,
-                style: EverloreTheme.aiText.copyWith(
-                  color: StageMeasure.ink,
-                  fontSize: 17,
-                  height: 1.45,
-                ),
-                cursorColor: StageMeasure.brassDeep,
-                decoration: InputDecoration(
-                  hintText: 'What do you say?',
-                  hintStyle: EverloreTheme.aiText.copyWith(
-                    color: StageMeasure.inkSoft,
-                    fontSize: 17,
-                  ),
-                  counterText: '',
-                  filled: true,
-                  fillColor: const Color(0x33FFFFFF),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  border: OutlineInputBorder(
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _focused,
+              builder: (context, focused, child) {
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  decoration: BoxDecoration(
+                    color: const Color(0x33FFFFFF),
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: StageMeasure.brassDim.withValues(alpha: 0.4),
+                    border: Border.all(
+                      color: focused
+                          ? StageMeasure.brassDeep
+                          : StageMeasure.brassDim.withValues(alpha: 0.4),
+                      width: focused ? 1.4 : 1,
                     ),
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: StageMeasure.brassDim.withValues(alpha: 0.4),
-                    ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      _NarrationMarkerButton(
+                        enabled: widget.enabled,
+                        focused: focused,
+                        onTap: _insertNarrationMarkers,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Container(
+                          width: 1,
+                          height: 18,
+                          color: StageMeasure.brassDim.withValues(
+                            alpha: focused ? 0.45 : 0.28,
+                          ),
+                        ),
+                      ),
+                      Expanded(child: child!),
+                    ],
                   ),
-                  focusedBorder: const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(10)),
-                    borderSide: BorderSide(
-                      color: StageMeasure.brassDeep,
-                      width: 1.4,
-                    ),
-                  ),
-                ),
-                onSubmitted: (_) => onSubmit(),
+                );
+              },
+              child: _ComposerField(
+                controller: widget.said,
+                focusNode: widget.focus,
+                enabled: widget.enabled,
+                onSubmit: widget.enabled ? widget.onSubmit : null,
               ),
             ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: canSpeak ? onSubmit : null,
-              style: FilledButton.styleFrom(
-                backgroundColor: StageMeasure.brassDeep,
-                foregroundColor: StageMeasure.brassHot,
-                disabledBackgroundColor: StageMeasure.brassDeep.withValues(
-                  alpha: 0.35,
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: widget.canSpeak ? widget.onSubmit : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: StageMeasure.brassDeep,
+              foregroundColor: StageMeasure.brassHot,
+              disabledBackgroundColor: StageMeasure.brassDeep.withValues(
+                alpha: 0.35,
               ),
-              child: const Text('Speak'),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
-          ],
-        );
-      },
+            child: const Text('Speak'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Kept out of focus-driven rebuilds so a tap places a cursor instead of
+/// wedging selection on a `*` marker.
+class _ComposerField extends StatefulWidget {
+  const _ComposerField({
+    required this.controller,
+    required this.focusNode,
+    required this.enabled,
+    this.onSubmit,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool enabled;
+  final VoidCallback? onSubmit;
+
+  @override
+  State<_ComposerField> createState() => _ComposerFieldState();
+}
+
+class _ComposerFieldState extends State<_ComposerField> {
+  void _onTap() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.focusNode.hasFocus) return;
+      final sel = widget.controller.selection;
+      if (!sel.isValid || sel.isCollapsed) return;
+      if (sel.end - sel.start != 1) return;
+      widget.controller.selection = TextSelection.collapsed(offset: sel.end);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      focusNode: widget.focusNode,
+      enabled: widget.enabled,
+      maxLength: _speakLimit,
+      minLines: 1,
+      maxLines: 4,
+      textCapitalization: TextCapitalization.sentences,
+      style: EverloreTheme.aiText.copyWith(
+        color: StageMeasure.ink,
+        fontSize: 17,
+        height: 1.45,
+      ),
+      cursorColor: StageMeasure.brassDeep,
+      decoration: InputDecoration(
+        isCollapsed: true,
+        filled: false,
+        hintText: 'What do you say?',
+        hintMaxLines: 1,
+        hintStyle: EverloreTheme.aiText.copyWith(
+          color: StageMeasure.inkSoft,
+          fontSize: 16,
+          fontStyle: FontStyle.italic,
+        ),
+        counterText: '',
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
+        contentPadding: const EdgeInsets.fromLTRB(8, 10, 12, 10),
+      ),
+      textInputAction: TextInputAction.newline,
+      onTap: _onTap,
+      onSubmitted: widget.onSubmit != null ? (_) => widget.onSubmit!() : null,
+    );
+  }
+}
+
+class _NarrationMarkerButton extends StatelessWidget {
+  const _NarrationMarkerButton({
+    required this.enabled,
+    required this.focused,
+    required this.onTap,
+  });
+
+  final bool enabled;
+  final bool focused;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Wrap selection in *action* markers',
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
+        splashColor: StageMeasure.brassDeep.withValues(alpha: 0.08),
+        highlightColor: StageMeasure.brassDeep.withValues(alpha: 0.04),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
+          child: Text(
+            '**',
+            style: EverloreTheme.ui(
+              size: 16,
+              weight: FontWeight.w800,
+              color: !enabled
+                  ? StageMeasure.ink.withValues(alpha: 0.28)
+                  : focused
+                  ? StageMeasure.brassDeep
+                  : StageMeasure.brassDeep.withValues(alpha: 0.7),
+              spacing: 0.4,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

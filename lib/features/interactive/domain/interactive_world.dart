@@ -570,6 +570,7 @@ class InteractiveWorldState {
     required this.revealedIds,
     required this.flags,
     required this.travelLocationIds,
+    this.quickTravelLocationIds = const {},
     this.seenSceneIds = const {},
     this.takenChoiceIds = const {},
     this.protagonistId,
@@ -582,6 +583,7 @@ class InteractiveWorldState {
       revealedIds = const {},
       flags = const {},
       travelLocationIds = const {},
+      quickTravelLocationIds = const {},
       seenSceneIds = const {},
       takenChoiceIds = const {},
       protagonistId = null,
@@ -595,6 +597,9 @@ class InteractiveWorldState {
   /// Open authored neighbours the server will accept as one move.
   /// The map may show other open places, but visibility is not adjacency.
   final Set<String> travelLocationIds;
+
+  /// Walked places that are not a neighbour. Haste, not a second hop.
+  final Set<String> quickTravelLocationIds;
   final Set<String> seenSceneIds;
   final Set<String> takenChoiceIds;
   final String? protagonistId;
@@ -621,6 +626,9 @@ class InteractiveWorldState {
           .map((entry) => entry.key)
           .toSet(),
       travelLocationIds: (json['travel_location_ids'] as List? ?? const [])
+          .whereType<String>()
+          .toSet(),
+      quickTravelLocationIds: (json['quick_travel_location_ids'] as List? ?? const [])
           .whereType<String>()
           .toSet(),
       seenSceneIds: (json['seen_scene_ids'] as List? ?? const [])
@@ -939,6 +947,19 @@ class WorldProgression {
   }
 }
 
+@immutable
+class WorldEcho {
+  const WorldEcho({required this.said, required this.replied});
+
+  final String said;
+  final String replied;
+
+  factory WorldEcho.fromJson(Map<String, dynamic> json) => WorldEcho(
+    said: json['said'] as String? ?? '',
+    replied: json['replied'] as String? ?? '',
+  );
+}
+
 /// Someone standing where the player is. The server has already filtered this
 /// to the room; the client must not invent a second list from world data.
 ///
@@ -956,6 +977,7 @@ class WorldPresence {
     required this.met,
     required this.firstMet,
     this.disposition,
+    this.echoes = const [],
   });
 
   final String id;
@@ -965,6 +987,7 @@ class WorldPresence {
   final String? portraitUrl;
   final bool met;
   final int? disposition;
+  final List<WorldEcho> echoes;
 
   /// Authored entrance, present only while [met] is false. It is the meeting
   /// itself, not a caption to keep under their feet.
@@ -987,6 +1010,11 @@ class WorldPresence {
       final String prose when prose.isNotEmpty => prose,
       _ => null,
     },
+    echoes: (json['echoes'] as List? ?? const [])
+        .whereType<Map>()
+        .map((raw) => WorldEcho.fromJson(Map<String, dynamic>.from(raw)))
+        .where((echo) => echo.said.isNotEmpty || echo.replied.isNotEmpty)
+        .toList(),
   );
 }
 
@@ -1002,12 +1030,17 @@ class WorldSpoken {
     required this.name,
     required this.line,
     required this.portraitUrl,
+    this.initiated = false,
   });
 
   final String characterId;
   final String name;
   final String line;
   final String? portraitUrl;
+
+  /// The world spoke first — after a hinge or a fight, not because the
+  /// player tapped Speak.
+  final bool initiated;
 
   factory WorldSpoken.fromJson(Map<String, dynamic> json) => WorldSpoken(
     characterId: json['character_id'] as String? ?? '',
@@ -1017,7 +1050,46 @@ class WorldSpoken {
       final String url when url.isNotEmpty => url,
       _ => null,
     },
+    initiated: json['initiated'] == true,
   );
+}
+
+/// The next thing this walk still asks. Derived on the server from what
+/// is actually open — a choice here, a person unmet, a road that still
+/// has work on it — never a quest id authored for one chapter.
+@immutable
+class WorldWayOn {
+  const WorldWayOn({
+    required this.kind,
+    required this.at,
+    required this.label,
+    required this.blurb,
+    this.characterId,
+  });
+
+  final String kind;
+  final String at;
+  final String label;
+  final String blurb;
+  final String? characterId;
+
+  factory WorldWayOn.fromJson(Map<String, dynamic> json) => WorldWayOn(
+    kind: json['kind'] as String? ?? '',
+    at: json['at'] as String? ?? '',
+    label: json['label'] as String? ?? '',
+    blurb: json['blurb'] as String? ?? '',
+    characterId: switch (json['character_id']) {
+      final String id when id.isNotEmpty => id,
+      _ => null,
+    },
+  );
+
+  static WorldWayOn? tryFrom(Object? raw) {
+    if (raw is! Map) return null;
+    final way = WorldWayOn.fromJson(Map<String, dynamic>.from(raw));
+    if (way.at.isEmpty || way.label.isEmpty) return null;
+    return way;
+  }
 }
 
 /// One side of a Verdict fought on the sand.

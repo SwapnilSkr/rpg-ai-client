@@ -57,6 +57,39 @@ void main() {
     });
   });
 
+  group('playerInputSpans', () {
+    List<InlineSpan> input(String text) => playerInputSpans(
+      text,
+      dialogueStyle: _dialogue,
+      narrationStyle: _narration,
+    );
+
+    test('unmarked words are spoken, starred beats are action', () {
+      final spans = input('*I step closer* Tell me the truth');
+      expect(_texts(spans).join(), 'I step closer Tell me the truth');
+      expect(_texts(spans).join(), isNot(contains('*')));
+      final action = spans
+          .cast<TextSpan>()
+          .where((s) => (s.text ?? '').contains('I step closer'))
+          .single;
+      final spoken = spans
+          .cast<TextSpan>()
+          .where((s) => (s.text ?? '').contains('Tell me'))
+          .single;
+      expect(action.style, _narration);
+      expect(spoken.style, _dialogue);
+    });
+
+    test('double asterisks are the same marker as a single pair', () {
+      final spans = input('**bows** Your name?');
+      expect(_texts(spans).join(), 'bows Your name?');
+      expect(
+        spans.cast<TextSpan>().first.style,
+        _narration,
+      );
+    });
+  });
+
   group('ExpandableProse', () {
     testWidgets('prose that fits is shown whole, with nothing to dismiss', (
       tester,
