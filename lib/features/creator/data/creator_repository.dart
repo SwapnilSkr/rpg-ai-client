@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart';
 
 import '../../../core/auth/auth_service.dart';
 import '../../../core/network/api_client.dart';
@@ -25,6 +26,10 @@ class CreatorWorldPage {
 class CreatorRepository {
   static List<WorldTemplate>? _mineCache;
   static int _cacheEpoch = AuthService.sessionEpoch.value;
+
+  /// Bumped whenever creator templates are created, updated, published, or deleted,
+  /// so listeners like [MyWorldsCubit] can reload without waiting for manual pull-to-refresh.
+  static final ValueNotifier<int> changes = ValueNotifier<int>(0);
 
   static void _syncSessionCache() {
     final epoch = AuthService.sessionEpoch.value;
@@ -88,6 +93,7 @@ class CreatorRepository {
     _cacheEpoch = AuthService.sessionEpoch.value;
     _mineCache = null;
     TemplateRepository.invalidate();
+    changes.value++;
   }
 
   static Future<WorldTemplate> create(Map<String, dynamic> body) async {

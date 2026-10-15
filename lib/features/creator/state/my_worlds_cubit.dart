@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../shared/models/world_template.dart';
@@ -72,15 +73,51 @@ class MyWorldsState extends Equatable {
 }
 
 class MyWorldsCubit extends Cubit<MyWorldsState> {
-  MyWorldsCubit() : super(const MyWorldsState());
+  final Future<CreatorWorldPage> Function({int page, int limit, String search})
+  _fetchPage;
+  final Future<Map<String, dynamic>> Function(String id, {String? visibility})
+  _publishFn;
+  final Future<void> Function(String id) _deleteFn;
+  final ValueNotifier<int> _changesNotifier;
+  late final VoidCallback _repoListener;
+
+  MyWorldsCubit({
+    Future<CreatorWorldPage> Function({int page, int limit, String search})?
+    fetchPage,
+    Future<Map<String, dynamic>> Function(String id, {String? visibility})?
+    publishFn,
+    Future<void> Function(String id)? deleteFn,
+    ValueNotifier<int>? changesNotifier,
+  }) : _fetchPage = fetchPage ?? CreatorRepository.listMinePage,
+       _publishFn = publishFn ?? CreatorRepository.publish,
+       _deleteFn = deleteFn ?? CreatorRepository.delete,
+       _changesNotifier = changesNotifier ?? CreatorRepository.changes,
+       super(const MyWorldsState()) {
+    _repoListener = _onRepoChanged;
+    _changesNotifier.addListener(_repoListener);
+  }
 
   String _search = '';
+  int _ignoreRepoSignals = 0;
+
+  void _onRepoChanged() {
+    if (isClosed || _ignoreRepoSignals > 0) return;
+    load(search: _search, forceRefresh: true);
+  }
+
+  @override
+  Future<void> close() {
+    _changesNotifier.removeListener(_repoListener);
+    return super.close();
+  }
 
   Future<void> load({bool forceRefresh = false, String search = ''}) async {
+    if (isClosed) return;
     _search = search;
     emit(state.copyWith(isLoading: true, clearError: true));
     try {
-      final result = await CreatorRepository.listMinePage(search: search);
+      final result = await _fetchPage(search: search);
+      if (isClosed) return;
       emit(
         state.copyWith(
           worlds: result.worlds,
@@ -91,18 +128,19 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
         ),
       );
     } catch (e) {
+      if (isClosed) return;
       emit(state.copyWith(isLoading: false, error: _friendly(e)));
     }
   }
 
   Future<void> loadMore() async {
-    if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
+    if (isClosed || state.isLoading || state.isLoadingMore || !state.hasMore) {
+      return;
+    }
     emit(state.copyWith(isLoadingMore: true));
     try {
-      final result = await CreatorRepository.listMinePage(
-        page: state.page + 1,
-        search: _search,
-      );
+      final result = await _fetchPage(page: state.page + 1, search: _search);
+      if (isClosed) return;
       final known = state.worlds.map((w) => w.id).toSet();
       emit(
         state.copyWith(
@@ -117,6 +155,7 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
         ),
       );
     } catch (e) {
+      if (isClosed) return;
       emit(state.copyWith(isLoadingMore: false, error: _friendly(e)));
     }
   }
@@ -125,8 +164,9 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
     if (state.publishingIds.contains(templateId)) return false;
     final ids = Set<String>.from(state.publishingIds)..add(templateId);
     emit(state.copyWith(publishingIds: ids));
+    _ignoreRepoSignals++;
     try {
-      await CreatorRepository.publish(templateId, visibility: visibility);
+      await _publishFn(templateId, visibility: visibility);
       await load(search: _search, forceRefresh: true);
       final done = Set<String>.from(state.publishingIds)..remove(templateId);
       emit(state.copyWith(publishingIds: done));
@@ -135,6 +175,8 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
       final cleaned = Set<String>.from(state.publishingIds)..remove(templateId);
       emit(state.copyWith(publishingIds: cleaned, error: _friendly(e)));
       return false;
+    } finally {
+      _ignoreRepoSignals--;
     }
   }
 
@@ -142,8 +184,9 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
     if (state.deletingIds.contains(templateId)) return false;
     final ids = Set<String>.from(state.deletingIds)..add(templateId);
     emit(state.copyWith(deletingIds: ids, clearError: true));
+    _ignoreRepoSignals++;
     try {
-      await CreatorRepository.delete(templateId);
+      await _deleteFn(templateId);
       emit(
         state.copyWith(
           worlds: state.worlds.where((w) => w.id != templateId).toList(),
@@ -159,6 +202,8 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
         ),
       );
       return false;
+    } finally {
+      _ignoreRepoSignals--;
     }
   }
 

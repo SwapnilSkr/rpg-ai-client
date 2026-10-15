@@ -205,7 +205,8 @@ class ForgeWorldState extends Equatable {
       title.trim().length >= 2 && description.trim().length >= 10;
   bool get step1Valid => seedPrompt.trim().length >= 10;
   bool get step2Valid => globalLore.trim().length >= 10;
-  bool get step3Valid => stats.isNotEmpty;
+  bool get step3Valid =>
+      stats.isNotEmpty && stats.every((s) => s.description.trim().isNotEmpty);
 
   bool get canProceed {
     switch (step) {
@@ -349,10 +350,13 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   final String? existingId;
   final WorldTemplate? existing;
 
-  ForgeWorldCubit({this.existing})
+  ForgeWorldCubit({this.existing, ForgeWorldState? initialState})
     : existingId = existing?.id,
       super(
-        existing != null ? _fromTemplate(existing) : const ForgeWorldState(),
+        initialState ??
+            (existing != null
+                ? _fromTemplate(existing)
+                : const ForgeWorldState()),
       );
 
   static ForgeWorldState _fromTemplate(WorldTemplate t) {
@@ -566,6 +570,10 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
               'Define at least one Vital Force — adventurers need measurable attributes.',
         ),
       );
+      return;
+    }
+    if (state.stats.any((s) => s.description.trim().isEmpty)) {
+      emit(state.copyWith(error: 'Each Vital Force needs a description.'));
       return;
     }
     emit(state.copyWith(isSubmitting: true, clearError: true));

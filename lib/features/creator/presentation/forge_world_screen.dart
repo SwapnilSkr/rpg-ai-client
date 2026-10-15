@@ -391,10 +391,7 @@ class _ForgeHeader extends StatelessWidget {
                 ),
                 if (isEditing && existing != null) ...[
                   const SizedBox(width: 8),
-                  WorldStatusChip(
-                    template: existing!,
-                    showNote: false,
-                  ),
+                  WorldStatusChip(template: existing!, showNote: false),
                 ],
               ],
             ),
@@ -1207,7 +1204,9 @@ class _Step1Voice extends StatelessWidget {
                       'Describe the narrator\'s tone (grim, whimsical, epic...)',
                 ),
                 _Tip(text: 'State the genre and setting explicitly'),
-                _Tip(text: 'Say what this voice lingers on, and what it refuses'),
+                _Tip(
+                  text: 'Say what this voice lingers on, and what it refuses',
+                ),
                 _Tip(text: 'Name any law of the land the voice must keep'),
               ],
             ),
@@ -1628,7 +1627,7 @@ class _Step3Stats extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             ...state.stats.asMap().entries.map(
-              (e) => _StatCard(entry: e.value, index: e.key, cubit: cubit),
+              (e) => StatCard(entry: e.value, index: e.key, cubit: cubit),
             ),
             const SizedBox(height: 12),
           ],
@@ -1743,7 +1742,7 @@ class _Step3Stats extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => _StatEditorSheet(
+      builder: (ctx) => StatEditorSheet(
         existing: existing,
         onSave: (stat) {
           if (index != null) {
@@ -2033,20 +2032,100 @@ class _FlagEditorSheetState extends State<_FlagEditorSheet> {
   }
 }
 
+class ForgeStatPreset {
+  final String key;
+  final String label;
+  final IconData icon;
+  final num defaultValue;
+  final num min;
+  final num max;
+  final String description;
+
+  const ForgeStatPreset({
+    required this.key,
+    required this.label,
+    required this.icon,
+    required this.defaultValue,
+    required this.min,
+    required this.max,
+    required this.description,
+  });
+
+  StatEntry toEntry() => StatEntry(
+    name: key,
+    defaultValue: defaultValue,
+    min: min,
+    max: max,
+    description: description,
+  );
+}
+
+class ForgePresets {
+  static const List<ForgeStatPreset> stats = [
+    ForgeStatPreset(
+      key: 'health',
+      label: 'Health',
+      icon: Icons.favorite_outline,
+      defaultValue: 100,
+      min: 0,
+      max: 100,
+      description: 'How much harm you can take before you fall.',
+    ),
+    ForgeStatPreset(
+      key: 'mana',
+      label: 'Mana',
+      icon: Icons.bolt,
+      defaultValue: 100,
+      min: 0,
+      max: 100,
+      description: 'The magic you can still draw on.',
+    ),
+    ForgeStatPreset(
+      key: 'sanity',
+      label: 'Sanity',
+      icon: Icons.psychology,
+      defaultValue: 100,
+      min: 0,
+      max: 100,
+      description: 'How firmly your mind holds together.',
+    ),
+    ForgeStatPreset(
+      key: 'honour',
+      label: 'Honour',
+      icon: Icons.shield_outlined,
+      defaultValue: 50,
+      min: 0,
+      max: 100,
+      description: 'How others judge your word and deeds.',
+    ),
+    ForgeStatPreset(
+      key: 'gold',
+      label: 'Gold',
+      icon: Icons.monetization_on_outlined,
+      defaultValue: 0,
+      min: 0,
+      max: 999,
+      description: 'The coin you carry.',
+    ),
+    ForgeStatPreset(
+      key: 'strength',
+      label: 'Strength',
+      icon: Icons.fitness_center,
+      defaultValue: 10,
+      min: 1,
+      max: 20,
+      description: 'Your raw physical might.',
+    ),
+  ];
+}
+
 class _PresetButtons extends StatelessWidget {
   final ForgeWorldCubit cubit;
   final List<StatEntry> existing;
 
   const _PresetButtons({required this.cubit, required this.existing});
 
-  static const _presets = [
-    ('health', 'Health', Icons.favorite_outline, 100, 0, 100),
-    ('mana', 'Mana', Icons.bolt, 100, 0, 100),
-    ('sanity', 'Sanity', Icons.psychology, 100, 0, 100),
-    ('honour', 'Honour', Icons.shield_outlined, 50, 0, 100),
-    ('gold', 'Gold', Icons.monetization_on_outlined, 0, 0, 999),
-    ('strength', 'Strength', Icons.fitness_center, 10, 1, 20),
-  ];
+  static List<ForgeStatPreset> get presets => ForgePresets.stats;
 
   @override
   Widget build(BuildContext context) {
@@ -2054,20 +2133,10 @@ class _PresetButtons extends StatelessWidget {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: _presets.map((p) {
-        final alreadyAdded = existingNames.contains(p.$1);
+      children: presets.map((p) {
+        final alreadyAdded = existingNames.contains(p.key);
         return GestureDetector(
-          onTap: alreadyAdded
-              ? null
-              : () => cubit.addStat(
-                  StatEntry(
-                    name: p.$1,
-                    defaultValue: p.$4,
-                    min: p.$5,
-                    max: p.$6,
-                    description: '',
-                  ),
-                ),
+          onTap: alreadyAdded ? null : () => cubit.addStat(p.toEntry()),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -2086,7 +2155,7 @@ class _PresetButtons extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  alreadyAdded ? Icons.check : p.$3,
+                  alreadyAdded ? Icons.check : p.icon,
                   size: 14,
                   color: alreadyAdded
                       ? EverloreTheme.verdant
@@ -2094,7 +2163,7 @@ class _PresetButtons extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  p.$2,
+                  p.label,
                   style: TextStyle(
                     color: alreadyAdded
                         ? EverloreTheme.verdant
@@ -2111,12 +2180,13 @@ class _PresetButtons extends StatelessWidget {
   }
 }
 
-class _StatCard extends StatelessWidget {
+class StatCard extends StatelessWidget {
   final StatEntry entry;
   final int index;
   final ForgeWorldCubit cubit;
 
-  const _StatCard({
+  const StatCard({
+    super.key,
     required this.entry,
     required this.index,
     required this.cubit,
@@ -2163,7 +2233,7 @@ class _StatCard extends StatelessWidget {
                     fontSize: 11,
                   ),
                 ),
-                if (entry.description.isNotEmpty)
+                if (entry.description.trim().isNotEmpty)
                   Text(
                     entry.description,
                     style: const TextStyle(
@@ -2172,6 +2242,11 @@ class _StatCard extends StatelessWidget {
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                  )
+                else
+                  const Text(
+                    'Add a description',
+                    style: TextStyle(color: EverloreTheme.ember, fontSize: 11),
                   ),
               ],
             ),
@@ -2211,17 +2286,17 @@ class _StatCard extends StatelessWidget {
 // Stat editor bottom sheet
 // ─────────────────────────────────────────────
 
-class _StatEditorSheet extends StatefulWidget {
+class StatEditorSheet extends StatefulWidget {
   final StatEntry? existing;
   final ValueChanged<StatEntry> onSave;
 
-  const _StatEditorSheet({this.existing, required this.onSave});
+  const StatEditorSheet({super.key, this.existing, required this.onSave});
 
   @override
-  State<_StatEditorSheet> createState() => _StatEditorSheetState();
+  State<StatEditorSheet> createState() => _StatEditorSheetState();
 }
 
-class _StatEditorSheetState extends State<_StatEditorSheet> {
+class _StatEditorSheetState extends State<StatEditorSheet> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _defaultCtrl;
   late final TextEditingController _minCtrl;
@@ -2240,10 +2315,14 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
     _minCtrl = TextEditingController(text: (e?.min ?? 0).toString());
     _maxCtrl = TextEditingController(text: (e?.max ?? 100).toString());
     _descCtrl = TextEditingController(text: e?.description ?? '');
+    _descCtrl.addListener(_onDescChanged);
   }
+
+  void _onDescChanged() => setState(() {});
 
   @override
   void dispose() {
+    _descCtrl.removeListener(_onDescChanged);
     _nameCtrl.dispose();
     _defaultCtrl.dispose();
     _minCtrl.dispose();
@@ -2258,6 +2337,10 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
       setState(() => _nameError = 'Name is required');
       return;
     }
+    final desc = _descCtrl.text.trim();
+    if (desc.isEmpty) {
+      return;
+    }
     final defaultVal = num.tryParse(_defaultCtrl.text) ?? 50;
     final min = num.tryParse(_minCtrl.text) ?? 0;
     final max = num.tryParse(_maxCtrl.text) ?? 100;
@@ -2267,7 +2350,7 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
         defaultValue: defaultVal,
         min: min,
         max: max,
-        description: _descCtrl.text.trim(),
+        description: desc,
       ),
     );
     Navigator.pop(context);
@@ -2388,7 +2471,7 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
           const SizedBox(height: 16),
           _FormLabel(
             label: 'Description',
-            hint: 'Optional',
+            required: true,
             maxLength: 120,
             counterFor: _descCtrl,
           ),
@@ -2409,7 +2492,7 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _save,
+              onPressed: _descCtrl.text.trim().isNotEmpty ? _save : null,
               child: Text(
                 widget.existing != null ? 'Update Force' : 'Add Force',
               ),
@@ -2476,10 +2559,7 @@ class _ForgeSummary extends StatelessWidget {
             value: state.title.isNotEmpty ? state.title : '—',
           ),
           if (existing != null)
-            _SummaryRow(
-              label: 'Status',
-              value: existing!.reviewStateLabel,
-            ),
+            _SummaryRow(label: 'Status', value: existing!.reviewStateLabel),
           _SummaryRow(
             label: 'Type',
             value: state.isSentient ? 'Conscious Soul' : 'Game Master',
