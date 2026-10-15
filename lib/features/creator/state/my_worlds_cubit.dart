@@ -128,6 +128,8 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
     try {
       await CreatorRepository.publish(templateId, visibility: visibility);
       await load(search: _search, forceRefresh: true);
+      final done = Set<String>.from(state.publishingIds)..remove(templateId);
+      emit(state.copyWith(publishingIds: done));
       return true;
     } catch (e) {
       final cleaned = Set<String>.from(state.publishingIds)..remove(templateId);

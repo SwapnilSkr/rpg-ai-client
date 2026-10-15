@@ -49,7 +49,7 @@ class WorldStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = template.reviewState;
     final color = _statusColor(state);
-    final label = isWorking ? 'RELEASING' : template.reviewStateLabel;
+    final label = isWorking ? 'Publishing…' : template.reviewStateLabel;
     final note = template.reviewNote?.trim();
     final hasNote = showNote &&
         state == WorldReviewState.changesRequested &&
