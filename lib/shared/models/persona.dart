@@ -7,6 +7,7 @@ class Persona {
   final String otherInfo;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String? portraitUrl;
 
   const Persona({
     required this.id,
@@ -17,6 +18,7 @@ class Persona {
     this.otherInfo = '',
     this.createdAt,
     this.updatedAt,
+    this.portraitUrl,
   });
 
   factory Persona.fromJson(Map<String, dynamic> json) {
@@ -33,6 +35,11 @@ class Persona {
       updatedAt: json['updated_at'] != null
           ? DateTime.tryParse(json['updated_at'].toString())
           : null,
+      portraitUrl: json['portrait_url']?.toString() ??
+          (json['portrait'] is Map
+              ? (json['portrait']['url']?.toString() ??
+                  json['portrait']['asset_key']?.toString())
+              : null),
     );
   }
 }

@@ -14,6 +14,11 @@ import '../../../shared/models/memory.dart';
 import '../../../shared/models/character_profile.dart';
 import '../../../shared/models/relation_candidate.dart';
 import '../../billing/data/billing_repository.dart';
+import 'package:flutter/services.dart';
+import '../../media/models/spoken_line.dart';
+import '../../media/models/turn_media.dart';
+import '../../media/data/media_repository.dart';
+import '../../media/services/audio_playback_controller.dart';
 
 /// Socket error codes whose `message` was written for a player to read.
 ///
@@ -141,6 +146,17 @@ class PlayState extends Equatable {
 
   final String? restingResetAt;
 
+  /// Whether the media feature switch is enabled for this session (GET /media/usage returned 200).
+  final bool isMediaAvailable;
+
+  /// Set of "${eventId}:${lineId}" marked 422 unvoiceable this session.
+  final Set<String> unvoiceableLines;
+
+  final String? playingVoiceEventId;
+  final String? playingVoiceLineId;
+  final String? loadingVoiceEventId;
+  final String? loadingVoiceLineId;
+
   const PlayState({
     this.instance,
     this.template,
@@ -168,6 +184,12 @@ class PlayState extends Equatable {
     this.milestoneStamp = 0,
     this.milestones = const [],
     this.restingResetAt,
+    this.isMediaAvailable = false,
+    this.unvoiceableLines = const {},
+    this.playingVoiceEventId,
+    this.playingVoiceLineId,
+    this.loadingVoiceEventId,
+    this.loadingVoiceLineId,
   });
 
   PlayState copyWith({
@@ -197,6 +219,12 @@ class PlayState extends Equatable {
     int? milestoneStamp,
     List<Milestone>? milestones,
     Object? restingResetAt = _kUnset,
+    bool? isMediaAvailable,
+    Set<String>? unvoiceableLines,
+    Object? playingVoiceEventId = _kUnset,
+    Object? playingVoiceLineId = _kUnset,
+    Object? loadingVoiceEventId = _kUnset,
+    Object? loadingVoiceLineId = _kUnset,
   }) {
     return PlayState(
       instance: instance ?? this.instance,
@@ -237,6 +265,20 @@ class PlayState extends Equatable {
       restingResetAt: identical(restingResetAt, _kUnset)
           ? this.restingResetAt
           : restingResetAt as String?,
+      isMediaAvailable: isMediaAvailable ?? this.isMediaAvailable,
+      unvoiceableLines: unvoiceableLines ?? this.unvoiceableLines,
+      playingVoiceEventId: identical(playingVoiceEventId, _kUnset)
+          ? this.playingVoiceEventId
+          : playingVoiceEventId as String?,
+      playingVoiceLineId: identical(playingVoiceLineId, _kUnset)
+          ? this.playingVoiceLineId
+          : playingVoiceLineId as String?,
+      loadingVoiceEventId: identical(loadingVoiceEventId, _kUnset)
+          ? this.loadingVoiceEventId
+          : loadingVoiceEventId as String?,
+      loadingVoiceLineId: identical(loadingVoiceLineId, _kUnset)
+          ? this.loadingVoiceLineId
+          : loadingVoiceLineId as String?,
     );
   }
 
@@ -268,6 +310,12 @@ class PlayState extends Equatable {
     milestoneStamp,
     milestones,
     restingResetAt,
+    isMediaAvailable,
+    unvoiceableLines,
+    playingVoiceEventId,
+    playingVoiceLineId,
+    loadingVoiceEventId,
+    loadingVoiceLineId,
   ];
 
   /// Composer is only locked while prose is still appearing, during rewind,
@@ -300,6 +348,12 @@ class PlayCubit extends Cubit<PlayState> {
   late StreamSubscription _replayDeltaSub;
   late StreamSubscription _replayCompleteSub;
   late StreamSubscription _milestoneSub;
+  final MediaRepository _mediaRepo;
+  final AudioPlaybackController audioController;
+  late StreamSubscription _spokenLinesSub;
+  late StreamSubscription _mediaReadySub;
+  late StreamSubscription _mediaUnseenSub;
+  late StreamSubscription _mediaFailedSub;
 
   /// Accumulates streamed narrative tokens for the in-progress turn.
   String _streamBuffer = '';
@@ -359,9 +413,15 @@ class PlayCubit extends Cubit<PlayState> {
   String? _pendingVariantEventId;
   int? _pendingVariantIndex;
 
-  PlayCubit({required this.instanceId, WsManager? ws})
-    : _ws = ws ?? WsManager(),
-      super(const PlayState()) {
+  PlayCubit({
+    required this.instanceId,
+    WsManager? ws,
+    MediaRepository? mediaRepo,
+    AudioPlaybackController? audio,
+  })  : _ws = ws ?? WsManager(),
+        _mediaRepo = mediaRepo ?? MediaRepository(),
+        audioController = audio ?? AudioPlaybackController.instance,
+        super(const PlayState()) {
     _init();
   }
 
@@ -991,6 +1051,136 @@ class PlayCubit extends Cubit<PlayState> {
     _connectionSub = _ws.onConnectionState.listen((connected) {
       emit(state.copyWith(isConnected: connected));
       if (connected && _queuedMessage != null) _ws.loadInstance(instanceId);
+    });
+
+    unawaited(_checkMediaUsage());
+
+    _spokenLinesSub = _ws.onSpokenLines.listen((msg) {
+      if (msg['instanceId'] != instanceId) return;
+      final eventId = (msg['eventId'] ?? '').toString();
+      final lines = SpokenLine.listFromAny(msg['lines']);
+      final events = [...state.events];
+      final idx = events.indexWhere((e) => e.id == eventId);
+      if (idx >= 0) {
+        events[idx] = events[idx].copyWith(spokenLines: lines);
+        LocalDb.insertEvent(events[idx]);
+        emit(state.copyWith(events: events));
+      }
+    });
+
+    _mediaReadySub = _ws.onMediaReady.listen((msg) {
+      if (msg['instanceId'] != instanceId) return;
+      final eventId = (msg['eventId'] ?? '').toString();
+      final mediaId = (msg['media_id'] ?? msg['mediaId'] ?? '').toString();
+      final kindStr = (msg['kind'] ?? '').toString();
+      final url = msg['url']?.toString();
+      final lineId = (msg['line_id'] ?? msg['lineId'])?.toString();
+      final characterId =
+          (msg['character_id'] ?? msg['characterId'])?.toString();
+
+      if (kindStr == 'voice') {
+        if (state.loadingVoiceEventId == eventId &&
+            state.loadingVoiceLineId == lineId &&
+            url != null &&
+            url.isNotEmpty) {
+          audioController.play(eventId: eventId, lineId: lineId!, url: url);
+          emit(
+            state.copyWith(
+              playingVoiceEventId: eventId,
+              playingVoiceLineId: lineId,
+              loadingVoiceEventId: null,
+              loadingVoiceLineId: null,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Portraits show on cards, which fetch them when the chronicle opens.
+      if (kindStr == 'portrait') return;
+
+      final kind = kindStr == 'video' ? MediaKind.video : MediaKind.picture;
+      final events = [...state.events];
+      final idx = events.indexWhere((e) => e.id == eventId);
+      if (idx >= 0) {
+        final ev = events[idx];
+        final mediaList = [...ev.media];
+        final mIdx = mediaList.indexWhere(
+          (m) =>
+              m.mediaId == mediaId ||
+              (m.isQueued &&
+                  m.kind == kind &&
+                  (lineId == null || m.lineId == lineId)),
+        );
+
+        final readyItem = TurnMedia(
+          mediaId: mediaId,
+          kind: kind,
+          status: MediaStatus.ready,
+          url: url,
+          lineId: lineId,
+          characterId: characterId,
+          justRequested: true,
+        );
+
+        if (mIdx >= 0) {
+          mediaList[mIdx] = readyItem;
+        } else {
+          mediaList.add(readyItem);
+        }
+
+        events[idx] = ev.copyWith(media: mediaList);
+        LocalDb.insertEvent(events[idx]);
+        emit(state.copyWith(events: events));
+      }
+    });
+
+    _mediaUnseenSub = _ws.onMediaUnseen.listen((msg) {
+      if (msg['instanceId'] != instanceId) return;
+      final eventId = (msg['eventId'] ?? '').toString();
+      final mediaId = (msg['media_id'] ?? msg['mediaId'] ?? '').toString();
+      final events = [...state.events];
+      final idx = events.indexWhere((e) => e.id == eventId);
+      if (idx >= 0) {
+        final ev = events[idx];
+        final mediaList = ev.media.where((m) => m.mediaId != mediaId).toList();
+        events[idx] = ev.copyWith(media: mediaList);
+        LocalDb.insertEvent(events[idx]);
+        emit(
+          state.copyWith(
+            events: events,
+            notice: 'This moment stays unseen.',
+          ),
+        );
+      } else {
+        emit(state.copyWith(notice: 'This moment stays unseen.'));
+      }
+    });
+
+    _mediaFailedSub = _ws.onMediaFailed.listen((msg) {
+      if (msg['instanceId'] != instanceId) return;
+      final eventId = (msg['eventId'] ?? '').toString();
+      final mediaId = (msg['media_id'] ?? msg['mediaId'] ?? '').toString();
+      final lineId = (msg['line_id'] ?? msg['lineId'])?.toString();
+      if (state.loadingVoiceEventId == eventId &&
+          state.loadingVoiceLineId == lineId) {
+        audioController.setLoading(null, null);
+        emit(
+          state.copyWith(
+            loadingVoiceEventId: null,
+            loadingVoiceLineId: null,
+          ),
+        );
+      }
+      final events = [...state.events];
+      final idx = events.indexWhere((e) => e.id == eventId);
+      if (idx >= 0) {
+        final ev = events[idx];
+        final mediaList = ev.media.where((m) => m.mediaId != mediaId).toList();
+        events[idx] = ev.copyWith(media: mediaList);
+        LocalDb.insertEvent(events[idx]);
+        emit(state.copyWith(events: events));
+      }
     });
   }
 
@@ -2021,7 +2211,240 @@ class PlayCubit extends Cubit<PlayState> {
     await _replayDeltaSub.cancel();
     await _replayCompleteSub.cancel();
     await _milestoneSub.cancel();
+    await _spokenLinesSub.cancel();
+    await _mediaReadySub.cancel();
+    await _mediaUnseenSub.cancel();
+    await _mediaFailedSub.cancel();
     await _ws.disconnect();
     await super.close();
+  }
+
+  Future<void> _checkMediaUsage() async {
+    try {
+      final usage = await _mediaRepo.getUsage();
+      emit(state.copyWith(isMediaAvailable: usage != null));
+    } catch (_) {
+      emit(state.copyWith(isMediaAvailable: false));
+    }
+  }
+
+  Future<void> playVoiceLine(String eventId, String lineId) async {
+    final lineKey = '$eventId:$lineId';
+    if (state.unvoiceableLines.contains(lineKey)) {
+      return;
+    }
+
+    if (audioController.isLinePlaying(eventId, lineId)) {
+      await audioController.stop();
+      emit(
+        state.copyWith(
+          playingVoiceEventId: null,
+          playingVoiceLineId: null,
+          loadingVoiceEventId: null,
+          loadingVoiceLineId: null,
+        ),
+      );
+      return;
+    }
+
+    emit(
+      state.copyWith(
+        loadingVoiceEventId: eventId,
+        loadingVoiceLineId: lineId,
+      ),
+    );
+    audioController.setLoading(eventId, lineId);
+
+    try {
+      final res = await _mediaRepo.requestVoice(
+        instanceId: instanceId,
+        eventId: eventId,
+        lineId: lineId,
+      );
+
+      if (res.isReady) {
+        await audioController.play(
+          eventId: eventId,
+          lineId: lineId,
+          url: res.url!,
+        );
+        emit(
+          state.copyWith(
+            playingVoiceEventId: eventId,
+            playingVoiceLineId: lineId,
+            loadingVoiceEventId: null,
+            loadingVoiceLineId: null,
+          ),
+        );
+      }
+    } on MediaUnvoiceableException {
+      HapticFeedback.lightImpact();
+      final updated = Set<String>.from(state.unvoiceableLines)..add(lineKey);
+      audioController.setLoading(null, null);
+      emit(
+        state.copyWith(
+          unvoiceableLines: updated,
+          loadingVoiceEventId: null,
+          loadingVoiceLineId: null,
+        ),
+      );
+    } on MediaRestingException catch (e) {
+      audioController.setLoading(null, null);
+      emit(
+        state.copyWith(
+          notice: e.restingCopy,
+          loadingVoiceEventId: null,
+          loadingVoiceLineId: null,
+        ),
+      );
+    } catch (_) {
+      audioController.setLoading(null, null);
+      emit(
+        state.copyWith(
+          loadingVoiceEventId: null,
+          loadingVoiceLineId: null,
+        ),
+      );
+    }
+  }
+
+  Future<void> stopVoicePlayback() async {
+    await audioController.stop();
+    emit(
+      state.copyWith(
+        playingVoiceEventId: null,
+        playingVoiceLineId: null,
+        loadingVoiceEventId: null,
+        loadingVoiceLineId: null,
+      ),
+    );
+  }
+
+  Future<void> requestPicture(String eventId) async {
+    final tempId = 'temp_pic_${DateTime.now().millisecondsSinceEpoch}';
+    final placeholder = TurnMedia(
+      mediaId: tempId,
+      kind: MediaKind.picture,
+      status: MediaStatus.queued,
+    );
+
+    final events = [...state.events];
+    final idx = events.indexWhere((e) => e.id == eventId);
+    if (idx >= 0) {
+      final ev = events[idx];
+      events[idx] = ev.copyWith(media: [...ev.media, placeholder]);
+      emit(state.copyWith(events: events));
+    }
+
+    try {
+      final res = await _mediaRepo.requestPicture(
+        instanceId: instanceId,
+        eventId: eventId,
+      );
+
+      final nextEvents = [...state.events];
+      final nIdx = nextEvents.indexWhere((e) => e.id == eventId);
+      if (nIdx >= 0) {
+        final ev = nextEvents[nIdx];
+        final mediaList = [...ev.media];
+        final pIdx = mediaList.indexWhere((m) => m.mediaId == tempId);
+        if (pIdx >= 0) {
+          if (res.isReady) {
+            mediaList[pIdx] = TurnMedia(
+              mediaId: res.mediaId ?? tempId,
+              kind: MediaKind.picture,
+              status: MediaStatus.ready,
+              url: res.url,
+            );
+          } else {
+            mediaList[pIdx] = TurnMedia(
+              mediaId: res.mediaId ?? tempId,
+              kind: MediaKind.picture,
+              status: MediaStatus.queued,
+            );
+          }
+          nextEvents[nIdx] = ev.copyWith(media: mediaList);
+          LocalDb.insertEvent(nextEvents[nIdx]);
+          emit(state.copyWith(events: nextEvents));
+        }
+      }
+    } on MediaRestingException catch (e) {
+      _removeTempMedia(eventId, tempId);
+      emit(state.copyWith(notice: e.restingCopy));
+    } catch (_) {
+      _removeTempMedia(eventId, tempId);
+    }
+  }
+
+  Future<void> requestVideo(String eventId, String lineId) async {
+    final tempId = 'temp_vid_${DateTime.now().millisecondsSinceEpoch}';
+    final placeholder = TurnMedia(
+      mediaId: tempId,
+      kind: MediaKind.video,
+      status: MediaStatus.queued,
+      lineId: lineId,
+    );
+
+    final events = [...state.events];
+    final idx = events.indexWhere((e) => e.id == eventId);
+    if (idx >= 0) {
+      final ev = events[idx];
+      events[idx] = ev.copyWith(media: [...ev.media, placeholder]);
+      emit(state.copyWith(events: events));
+    }
+
+    try {
+      final res = await _mediaRepo.requestVideo(
+        instanceId: instanceId,
+        eventId: eventId,
+        lineId: lineId,
+      );
+
+      final nextEvents = [...state.events];
+      final nIdx = nextEvents.indexWhere((e) => e.id == eventId);
+      if (nIdx >= 0) {
+        final ev = nextEvents[nIdx];
+        final mediaList = [...ev.media];
+        final pIdx = mediaList.indexWhere((m) => m.mediaId == tempId);
+        if (pIdx >= 0) {
+          if (res.isReady) {
+            mediaList[pIdx] = TurnMedia(
+              mediaId: res.mediaId ?? tempId,
+              kind: MediaKind.video,
+              status: MediaStatus.ready,
+              url: res.url,
+              lineId: lineId,
+              justRequested: true,
+            );
+          } else {
+            mediaList[pIdx] = TurnMedia(
+              mediaId: res.mediaId ?? tempId,
+              kind: MediaKind.video,
+              status: MediaStatus.queued,
+              lineId: lineId,
+            );
+          }
+          nextEvents[nIdx] = ev.copyWith(media: mediaList);
+          LocalDb.insertEvent(nextEvents[nIdx]);
+          emit(state.copyWith(events: nextEvents));
+        }
+      }
+    } on MediaRestingException catch (e) {
+      _removeTempMedia(eventId, tempId);
+      emit(state.copyWith(notice: e.restingCopy));
+    } catch (_) {
+      _removeTempMedia(eventId, tempId);
+    }
+  }
+
+  void _removeTempMedia(String eventId, String tempId) {
+    final events = [...state.events];
+    final idx = events.indexWhere((e) => e.id == eventId);
+    if (idx >= 0) {
+      final ev = events[idx];
+      final mediaList = ev.media.where((m) => m.mediaId != tempId).toList();
+      events[idx] = ev.copyWith(media: mediaList);
+      emit(state.copyWith(events: events));
+    }
   }
 }

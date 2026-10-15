@@ -413,6 +413,21 @@ abstract final class GuideFlows {
     ],
   );
 
+  /// Fired the first time a turn with spoken lines appears.
+  static const spokenLine = GuideFlow(
+    id: 'play.spoken_line',
+    label: 'Spoken Words',
+    route: '/play',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.playSpokenLine,
+        fallbackAnchor: GuideIds.playNarrative,
+        title: 'Spoken Words',
+        body: 'Tap what they say to hear it.',
+      ),
+    ],
+  );
+
   /// Registry for lookup, replay, and the settings list. Order is the order
   /// a player would meet them.
   static const all = <GuideFlow>[
@@ -420,6 +435,7 @@ abstract final class GuideFlows {
     worldDetail,
     playFirst,
     playTools,
+    spokenLine,
     realm,
     sceneSettings,
     chronicle,

@@ -105,6 +105,7 @@ class CharacterProfile {
   final RelationshipMeters? relationship;
   final List<RelationshipMoment> relationshipMoments;
   final RelationshipState? relationshipState;
+  final String? portraitUrl;
 
   const CharacterProfile({
     required this.id,
@@ -123,6 +124,7 @@ class CharacterProfile {
     this.relationship,
     this.relationshipMoments = const [],
     this.relationshipState,
+    this.portraitUrl,
   });
 
   factory CharacterProfile.fromJson(Map<String, dynamic> json) {
@@ -178,6 +180,11 @@ class CharacterProfile {
               Map<String, dynamic>.from(json['relationship_state'] as Map),
             )
           : null,
+      portraitUrl: json['portrait_url']?.toString() ??
+          (json['portrait'] is Map
+              ? (json['portrait']['url']?.toString() ??
+                  json['portrait']['asset_key']?.toString())
+              : null),
     );
   }
 }

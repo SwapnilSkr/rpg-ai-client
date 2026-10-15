@@ -68,6 +68,14 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _milestoneUnlockedController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _spokenLinesController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _mediaReadyController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _mediaUnseenController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _mediaFailedController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   /// Fired when the server reports this account was deleted (e.g. from another
   /// device). A live session must drop to the auth screen rather than keep
@@ -105,6 +113,14 @@ class WsManager {
       _worldProjectionUpdatedController.stream;
   Stream<Map<String, dynamic>> get onMilestoneUnlocked =>
       _milestoneUnlockedController.stream;
+  Stream<Map<String, dynamic>> get onSpokenLines =>
+      _spokenLinesController.stream;
+  Stream<Map<String, dynamic>> get onMediaReady =>
+      _mediaReadyController.stream;
+  Stream<Map<String, dynamic>> get onMediaUnseen =>
+      _mediaUnseenController.stream;
+  Stream<Map<String, dynamic>> get onMediaFailed =>
+      _mediaFailedController.stream;
 
   bool get isConnected => _isConnected;
 
@@ -283,6 +299,18 @@ class WsManager {
       case 'milestone_unlocked':
         _milestoneUnlockedController.add(msg);
         break;
+      case 'spoken_lines':
+        _spokenLinesController.add(msg);
+        break;
+      case 'media_ready':
+        _mediaReadyController.add(msg);
+        break;
+      case 'media_unseen':
+        _mediaUnseenController.add(msg);
+        break;
+      case 'media_failed':
+        _mediaFailedController.add(msg);
+        break;
       case 'account_deleted':
         _accountDeletedController.add(null);
         break;
@@ -432,5 +460,9 @@ class WsManager {
     _replayCompleteController.close();
     _worldProjectionUpdatedController.close();
     _milestoneUnlockedController.close();
+    _spokenLinesController.close();
+    _mediaReadyController.close();
+    _mediaUnseenController.close();
+    _mediaFailedController.close();
   }
 }

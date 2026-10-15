@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../../shared/models/event.dart';
@@ -8,10 +9,13 @@ import '../../../../../shared/app_icons.dart';
 import '../../../../../shared/widgets/story_prose.dart';
 import '../../../../shared/text_format.dart';
 import '../../../../shared/widgets/everlore_notice.dart';
+import '../../../media/models/spoken_line.dart';
+import '../../../media/models/turn_media.dart';
+import '../../../media/presentation/media_thumbnail.dart';
 
 const _kNarrationMutedAlpha = kNarrationMutedAlpha;
 
-class NarrativeBubble extends StatelessWidget {
+class NarrativeBubble extends StatefulWidget {
   final GameEvent event;
   final VoidCallback? onLongPress;
   final VoidCallback? onReplay;
@@ -34,6 +38,13 @@ class NarrativeBubble extends StatelessWidget {
   final List<String> loreEntities;
   final ValueChanged<String>? onEntityTap;
 
+  final List<SpokenLine> spokenLines;
+  final ValueChanged<SpokenLine>? onSpokenLineTap;
+  final ValueChanged<SpokenLine>? onSpokenLineLongPress;
+  final String? loadingVoiceLineId;
+  final String? playingVoiceLineId;
+  final Set<String> unvoiceableLines;
+
   const NarrativeBubble({
     super.key,
     required this.event,
@@ -47,12 +58,54 @@ class NarrativeBubble extends StatelessWidget {
     this.onCharacterTap,
     this.loreEntities = const [],
     this.onEntityTap,
+    this.spokenLines = const [],
+    this.onSpokenLineTap,
+    this.onSpokenLineLongPress,
+    this.loadingVoiceLineId,
+    this.playingVoiceLineId,
+    this.unvoiceableLines = const {},
   });
 
   @override
+  State<NarrativeBubble> createState() => _NarrativeBubbleState();
+}
+
+class _NarrativeBubbleState extends State<NarrativeBubble> {
+  final GlobalKey<_ProseTextState> _proseKey = GlobalKey<_ProseTextState>();
+
+  void _handleLongPressStart(LongPressStartDetails details) {
+    final effectiveSpokenLines = widget.event.spokenLines.isNotEmpty
+        ? widget.event.spokenLines
+        : widget.spokenLines;
+
+    final spokenLine = _proseKey.currentState?.findSpokenLineAt(details.globalPosition);
+
+    if (spokenLine != null) {
+      final isUnvoiceable = spokenLine.unvoiceable ||
+          widget.unvoiceableLines.contains(spokenLine.lineId) ||
+          effectiveSpokenLines.any(
+            (l) => l.lineId == spokenLine.lineId && l.unvoiceable,
+          );
+
+      if (!isUnvoiceable && widget.onSpokenLineLongPress != null) {
+        widget.onSpokenLineLongPress!(spokenLine);
+        return;
+      }
+    }
+
+    widget.onLongPress?.call();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final event = widget.event;
     final ai = event.aiResponse ?? '';
     final hasProse = ai.isNotEmpty;
+    final effectiveSpokenLines =
+        event.spokenLines.isNotEmpty ? event.spokenLines : widget.spokenLines;
+
+    final canLongPress = widget.onLongPress != null ||
+        (effectiveSpokenLines.isNotEmpty && widget.onSpokenLineLongPress != null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -63,7 +116,7 @@ class NarrativeBubble extends StatelessWidget {
         // While re-weaving, show the weaving indicator until the first token,
         // then stream the variant into a plain narrator panel (no replay/arrow
         // actions until it settles) — the same feel as a fresh turn.
-        if (isReplaying)
+        if (widget.isReplaying)
           hasProse
               ? _NarratorPanel(
                   text: ai,
@@ -71,10 +124,17 @@ class NarrativeBubble extends StatelessWidget {
                   isEdited: event.isUserEdited,
                   replayVariants: event.replayVariants,
                   selectedReplayIndex: event.selectedReplayIndex,
-                  onContinue: onContinue,
+                  onContinue: widget.onContinue,
                   onReplay: null,
-                  onSelectReplayVariant: onSelectReplayVariant,
+                  onSelectReplayVariant: widget.onSelectReplayVariant,
                   isStreaming: true,
+                  spokenLines: effectiveSpokenLines,
+                  media: event.media,
+                  loadingVoiceLineId: widget.loadingVoiceLineId,
+                  playingVoiceLineId: widget.playingVoiceLineId,
+                  unvoiceableLines: widget.unvoiceableLines,
+                  onSpokenLineTap: widget.onSpokenLineTap,
+                  onSpokenLineLongPress: widget.onSpokenLineLongPress,
                 )
               : const _GeneratingIndicator(label: 'Re-weaving this turn')
         else if (hasProse) ...[
@@ -91,27 +151,36 @@ class NarrativeBubble extends StatelessWidget {
               timeAdvanced: event.timeAdvanced,
             ),
           GestureDetector(
-            onLongPress: onLongPress,
+            behavior: HitTestBehavior.translucent,
+            onLongPressStart: canLongPress ? _handleLongPressStart : null,
             child: _NarratorPanel(
+              proseKey: _proseKey,
               text: ai,
               sceneTag: event.sceneTag,
               isEdited: event.isUserEdited,
               replayVariants: event.replayVariants,
               selectedReplayIndex: event.selectedReplayIndex,
-              onContinue: onContinue,
-              onReplay: onReplay,
-              onSelectReplayVariant: onSelectReplayVariant,
-              isStreaming: isStreaming,
+              onContinue: widget.onContinue,
+              onReplay: widget.onReplay,
+              onSelectReplayVariant: widget.onSelectReplayVariant,
+              isStreaming: widget.isStreaming,
               // The action row is a post-turn affordance — hide it while the turn
               // is still in flight (optimistic) so the prose-settled-but-not-yet-
               // complete bubble stays tight instead of opening an empty gap.
               showActions: !event.isOptimistic,
               // Entity links only on settled prose: streaming text rebuilds
               // every frame and would churn gesture recognizers.
-              characterNames: isStreaming ? const [] : characterNames,
-              onCharacterTap: isStreaming ? null : onCharacterTap,
-              loreEntities: isStreaming ? const [] : loreEntities,
-              onEntityTap: isStreaming ? null : onEntityTap,
+              characterNames: widget.isStreaming ? const [] : widget.characterNames,
+              onCharacterTap: widget.isStreaming ? null : widget.onCharacterTap,
+              loreEntities: widget.isStreaming ? const [] : widget.loreEntities,
+              onEntityTap: widget.isStreaming ? null : widget.onEntityTap,
+              spokenLines: effectiveSpokenLines,
+              media: event.media,
+              loadingVoiceLineId: widget.loadingVoiceLineId,
+              playingVoiceLineId: widget.playingVoiceLineId,
+              unvoiceableLines: widget.unvoiceableLines,
+              onSpokenLineTap: widget.onSpokenLineTap,
+              onSpokenLineLongPress: widget.onSpokenLineLongPress,
             ),
           ),
         ] else if (event.isOptimistic)
@@ -378,6 +447,7 @@ List<InlineSpan> _playerInputSpans(
 }
 
 class _NarratorPanel extends StatelessWidget {
+  final GlobalKey<_ProseTextState>? proseKey;
   final String text;
   final String? sceneTag;
   final bool isEdited;
@@ -398,7 +468,16 @@ class _NarratorPanel extends StatelessWidget {
   final List<String> loreEntities;
   final ValueChanged<String>? onEntityTap;
 
+  final List<SpokenLine> spokenLines;
+  final List<TurnMedia> media;
+  final String? loadingVoiceLineId;
+  final String? playingVoiceLineId;
+  final Set<String> unvoiceableLines;
+  final ValueChanged<SpokenLine>? onSpokenLineTap;
+  final ValueChanged<SpokenLine>? onSpokenLineLongPress;
+
   const _NarratorPanel({
+    this.proseKey,
     required this.text,
     this.sceneTag,
     this.isEdited = false,
@@ -413,6 +492,13 @@ class _NarratorPanel extends StatelessWidget {
     this.onCharacterTap,
     this.loreEntities = const [],
     this.onEntityTap,
+    this.spokenLines = const [],
+    this.media = const [],
+    this.loadingVoiceLineId,
+    this.playingVoiceLineId,
+    this.unvoiceableLines = const {},
+    this.onSpokenLineTap,
+    this.onSpokenLineLongPress,
   });
 
   @override
@@ -457,12 +543,21 @@ class _NarratorPanel extends StatelessWidget {
                     ],
                   ),
                   _ProseText(
+                    key: proseKey,
                     text: text,
                     characterNames: characterNames,
                     onCharacterTap: onCharacterTap,
                     loreEntities: loreEntities,
                     onEntityTap: onEntityTap,
+                    spokenLines: spokenLines,
+                    loadingLineId: loadingVoiceLineId,
+                    playingLineId: playingVoiceLineId,
+                    unvoiceableLines: unvoiceableLines,
+                    onSpokenLineTap: onSpokenLineTap,
+                    onSpokenLineLongPress: onSpokenLineLongPress,
                   ),
+                  if (media.isNotEmpty)
+                    MediaThumbnailRow(media: media),
                   if (isStreaming) ...[
                     const SizedBox(height: 10),
                     const _InlineStreamingIndicator(),
@@ -758,14 +853,39 @@ class _CopyButton extends StatelessWidget {
   }
 }
 
+/// Tap only: long-press is routed by position at the turn level in
+/// [NarrativeBubble], because an ancestor long-press wins the gesture arena.
+class SpokenLineGestureRecognizer extends TapGestureRecognizer {
+  SpokenLineGestureRecognizer({
+    super.debugOwner,
+    super.supportedDevices,
+  });
+
+  @override
+  String get debugDescription => 'spokenLine';
+}
+
+class _RenderedLineSpan {
+  final SpokenLine line;
+  final int start;
+  final int end;
+
+  const _RenderedLineSpan({
+    required this.line,
+    required this.start,
+    required this.end,
+  });
+}
+
 /// Renders narrative prose with quote and asterisk boundaries:
 /// - `"spoken words"` are dialogue (bright, upright)
 /// - `*narration/actions/attributions*` are narration (italic, muted)
 /// - malformed unmarked text defaults to narration, not dialogue.
 /// This is a single streaming-stable pass: trailing unclosed quote/asterisk
 /// reads as the in-progress span type.
-/// Narrative prose with optional tappable character names. Owns the tap
-/// recognizers so they are reliably disposed (spans alone would leak them).
+/// Narrative prose with optional tappable character names and spoken dialogue
+/// lines. Owns the tap recognizers so they are reliably disposed (spans alone
+/// would leak them).
 class _ProseText extends StatefulWidget {
   final String text;
   final List<String> characterNames;
@@ -773,23 +893,112 @@ class _ProseText extends StatefulWidget {
   final List<String> loreEntities;
   final ValueChanged<String>? onEntityTap;
 
+  final List<SpokenLine> spokenLines;
+  final String? loadingLineId;
+  final String? playingLineId;
+  final Set<String> unvoiceableLines;
+  final ValueChanged<SpokenLine>? onSpokenLineTap;
+  final ValueChanged<SpokenLine>? onSpokenLineLongPress;
+
   const _ProseText({
+    super.key,
     required this.text,
     this.characterNames = const [],
     this.onCharacterTap,
     this.loreEntities = const [],
     this.onEntityTap,
+    this.spokenLines = const [],
+    this.loadingLineId,
+    this.playingLineId,
+    this.unvoiceableLines = const {},
+    this.onSpokenLineTap,
+    this.onSpokenLineLongPress,
   });
 
   @override
   State<_ProseText> createState() => _ProseTextState();
 }
 
-class _ProseTextState extends State<_ProseText> {
-  final List<TapGestureRecognizer> _recognizers = [];
+class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMixin {
+  late final AnimationController _shimmerController;
+  final List<GestureRecognizer> _recognizers = [];
+  final GlobalKey _richTextKey = GlobalKey();
+  List<_RenderedLineSpan> _renderedLines = const [];
+
+  SpokenLine? findSpokenLineAt(Offset globalPosition) {
+    if (_renderedLines.isEmpty) return null;
+    final renderObject = _richTextKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderParagraph) return null;
+
+    final localOffset = renderObject.globalToLocal(globalPosition);
+    if (!renderObject.paintBounds.contains(localOffset)) {
+      return null;
+    }
+
+    final textPosition = renderObject.getPositionForOffset(localOffset);
+    final offset = textPosition.offset;
+
+    for (final rl in _renderedLines) {
+      final boxes = renderObject.getBoxesForSelection(
+        TextSelection(baseOffset: rl.start, extentOffset: rl.end),
+      );
+
+      // Geometric hit check: the press is within or immediately adjacent to
+      // the bounding boxes of the rendered glyphs for this spoken line.
+      if (boxes.any((box) => box.toRect().inflate(6.0).contains(localOffset))) {
+        return rl.line;
+      }
+
+      // Logical check: position resolved to an offset in this line and is
+      // within vertical bounds of the line's glyphs.
+      if (offset >= rl.start && offset <= rl.end) {
+        if (boxes.isEmpty) return rl.line;
+        double top = double.infinity;
+        double bottom = double.negativeInfinity;
+        double left = double.infinity;
+        double right = double.negativeInfinity;
+        for (final box in boxes) {
+          if (box.top < top) top = box.top;
+          if (box.bottom > bottom) bottom = box.bottom;
+          if (box.left < left) left = box.left;
+          if (box.right > right) right = box.right;
+        }
+        if (localOffset.dy >= top - 6.0 &&
+            localOffset.dy <= bottom + 6.0 &&
+            localOffset.dx >= left - 12.0 &&
+            localOffset.dx <= right + 12.0) {
+          return rl.line;
+        }
+      }
+    }
+    return null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    if (widget.loadingLineId != null) {
+      _shimmerController.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_ProseText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.loadingLineId != null && !_shimmerController.isAnimating) {
+      _shimmerController.repeat(reverse: true);
+    } else if (widget.loadingLineId == null && _shimmerController.isAnimating) {
+      _shimmerController.stop();
+    }
+  }
 
   @override
   void dispose() {
+    _shimmerController.dispose();
     _disposeRecognizers();
     super.dispose();
   }
@@ -844,13 +1053,22 @@ class _ProseTextState extends State<_ProseText> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.loadingLineId != null) {
+      return AnimatedBuilder(
+        animation: _shimmerController,
+        builder: (context, _) => _buildRichText(context),
+      );
+    }
+    return _buildRichText(context);
+  }
+
+  Widget _buildRichText(BuildContext context) {
     // Recognizers are rebuilt with the spans every build; retire the old set.
     _disposeRecognizers();
 
-    var spans = _narrativeSpans(widget.text);
-
     // Characters take priority over lore when a term appears in both sets —
     // a known card always wins.
+
     final charLower = <String>{
       for (final n in widget.characterNames)
         if (n.trim().length >= 3) n.toLowerCase(),
@@ -863,6 +1081,9 @@ class _ProseTextState extends State<_ProseText> {
 
     final linkChars = charLower.isNotEmpty && widget.onCharacterTap != null;
     final linkLore = loreLower.isNotEmpty && widget.onEntityTap != null;
+
+    RegExp? csPattern;
+    ({VoidCallback? onTap, TextStyle style}) Function(String matched)? resolve;
 
     if (linkChars || linkLore) {
       // Case-sensitive: known character names + lore entities. These are proper
@@ -877,7 +1098,7 @@ class _ProseTextState extends State<_ProseText> {
           ),
       ]..sort((a, b) => b.length.compareTo(a.length));
       final csEscaped = caseSensitiveTerms.map(RegExp.escape).join('|');
-      final csPattern = RegExp('\\b(?:$csEscaped)\\b');
+      csPattern = RegExp('\\b(?:$csEscaped)\\b');
 
       final charStyle = TextStyle(
         color: EverloreTheme.gold.withValues(alpha: 0.95),
@@ -893,7 +1114,7 @@ class _ProseTextState extends State<_ProseText> {
         decorationThickness: 1,
       );
 
-      ({VoidCallback? onTap, TextStyle style}) resolve(String matched) {
+      resolve = (String matched) {
         final m = matched.toLowerCase();
         if (charLower.contains(m)) {
           return (
@@ -905,12 +1126,120 @@ class _ProseTextState extends State<_ProseText> {
           onTap: () => widget.onEntityTap?.call(matched),
           style: loreStyle,
         );
+      };
+    }
+
+    List<InlineSpan> spans;
+
+    if (widget.spokenLines.isEmpty) {
+      spans = _narrativeSpans(widget.text);
+      if (csPattern != null && resolve != null) {
+        spans = [
+          for (final s in spans)
+            if (s is TextSpan) ..._linkEntities(s, csPattern, resolve) else s,
+        ];
+      }
+    } else {
+      final sortedLines = [...widget.spokenLines]
+        ..sort((a, b) => a.start.compareTo(b.start));
+
+      final validLines = sortedLines.where((l) =>
+        l.start >= 0 && l.end <= widget.text.length && l.start < l.end
+      ).toList();
+
+      final List<InlineSpan> builtSpans = [];
+      final List<_RenderedLineSpan> renderedLines = [];
+      var lastIndex = 0;
+      var currentRenderedLength = 0;
+
+      for (final line in validLines) {
+        if (line.start < lastIndex) continue;
+
+        if (line.start > lastIndex) {
+          final beforeText = widget.text.substring(lastIndex, line.start);
+          var beforeSpans = _narrativeSpans(beforeText);
+          if (csPattern != null && resolve != null) {
+            beforeSpans = [
+              for (final s in beforeSpans)
+                if (s is TextSpan) ..._linkEntities(s, csPattern, resolve) else s,
+            ];
+          }
+          builtSpans.addAll(beforeSpans);
+          for (final s in beforeSpans) {
+            currentRenderedLength += s.toPlainText().length;
+          }
+        }
+
+        final lineText = widget.text.substring(line.start, line.end);
+        final rawLineSpans = _narrativeSpans(lineText);
+
+        final isLoading = widget.loadingLineId == line.lineId;
+        final isUnvoiceable =
+            line.unvoiceable || widget.unvoiceableLines.contains(line.lineId);
+
+        final recognizer = SpokenLineGestureRecognizer()
+          ..onTap = () {
+            if (isUnvoiceable) {
+              HapticFeedback.lightImpact();
+            } else {
+              widget.onSpokenLineTap?.call(line);
+            }
+          };
+        _recognizers.add(recognizer);
+
+        final lineStartRendered = currentRenderedLength;
+        for (final s in rawLineSpans) {
+          if (s is TextSpan) {
+            TextStyle effectiveStyle = s.style ?? const TextStyle();
+            if (isLoading) {
+              final shimmerColor = Color.lerp(
+                EverloreTheme.parchment,
+                EverloreTheme.goldGlow,
+                _shimmerController.value,
+              );
+              effectiveStyle = effectiveStyle.copyWith(color: shimmerColor);
+            }
+            builtSpans.add(
+              TextSpan(
+                text: s.text,
+                children: s.children,
+                style: effectiveStyle,
+                recognizer: recognizer,
+              ),
+            );
+            currentRenderedLength += s.toPlainText().length;
+          } else {
+            builtSpans.add(s);
+            currentRenderedLength += s.toPlainText().length;
+          }
+        }
+        final lineEndRendered = currentRenderedLength;
+
+        renderedLines.add(
+          _RenderedLineSpan(
+            line: line,
+            start: lineStartRendered,
+            end: lineEndRendered,
+          ),
+        );
+
+        lastIndex = line.end;
       }
 
-      spans = [
-        for (final s in spans)
-          if (s is TextSpan) ..._linkEntities(s, csPattern, resolve) else s,
-      ];
+      if (lastIndex < widget.text.length) {
+        final afterText = widget.text.substring(lastIndex);
+        var afterSpans = _narrativeSpans(afterText);
+        if (csPattern != null && resolve != null) {
+          afterSpans = [
+            for (final s in afterSpans)
+              if (s is TextSpan) ..._linkEntities(s, csPattern, resolve) else s,
+          ];
+        }
+        builtSpans.addAll(afterSpans);
+      }
+
+      _renderedLines = renderedLines;
+      spans = builtSpans;
     }
 
     // Narrator turns use long-press for their action sheet (rewind, replay,
@@ -918,7 +1247,7 @@ class _ProseTextState extends State<_ProseText> {
     // selection, making the menu unreliable on touch devices. This stays a
     // RichText so the enclosing NarrativeBubble receives the long-press while
     // inline character and lore links retain their tap recognizers.
-    return RichText(text: TextSpan(children: spans));
+    return RichText(key: _richTextKey, text: TextSpan(children: spans));
   }
 }
 

@@ -3,6 +3,9 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../data/relationship_ledger.dart';
 import '../character_memory_screen.dart';
 import '../../../../shared/widgets/everlore_empty_state.dart';
+import '../../../../shared/widgets/everlore_network_image.dart';
+import '../../../../shared/widgets/everlore_notice.dart';
+import '../../../media/data/media_repository.dart';
 
 /// Relationship Ledger: where each member of the cast stands toward the
 /// player. Meters (trust/affection/fear/rivalry, 0-100) come straight from the
@@ -33,6 +36,7 @@ class BondsView extends StatelessWidget {
       itemCount: entries.length,
       itemBuilder: (context, i) => _BondCard(
         entry: entries[i],
+        instanceId: instanceId,
         onMemories: () {
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -51,9 +55,14 @@ class BondsView extends StatelessWidget {
 
 class _BondCard extends StatelessWidget {
   final RelationshipEntry entry;
+  final String instanceId;
   final VoidCallback onMemories;
 
-  const _BondCard({required this.entry, required this.onMemories});
+  const _BondCard({
+    required this.entry,
+    required this.instanceId,
+    required this.onMemories,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -78,17 +87,92 @@ class _BondCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (entry.portraitUrl != null &&
+                        entry.portraitUrl!.trim().isNotEmpty) ...[
+                      SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: EverloreNetworkImage(
+                            imageUrl: entry.portraitUrl!,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            entry.name,
-                            style: const TextStyle(
-                              color: EverloreTheme.parchment,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  entry.name,
+                                  style: const TextStyle(
+                                    color: EverloreTheme.parchment,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              if (MediaRepository.isMediaEnabledSession) ...[
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () async {
+                                    try {
+                                      await MediaRepository.instance
+                                          .repaintCharacterPortrait(
+                                            instanceId: instanceId,
+                                            characterId: entry.id,
+                                          );
+                                      if (context.mounted) {
+                                        showEverloreNotice(
+                                          context,
+                                          'Taking shape…',
+                                        );
+                                      }
+                                    } on MediaRestingException catch (e) {
+                                      if (context.mounted) {
+                                        showEverloreNotice(
+                                          context,
+                                          e.restingCopy,
+                                        );
+                                      }
+                                    } catch (_) {}
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.auto_awesome_rounded,
+                                          size: 12,
+                                          color: EverloreTheme.goldGlow
+                                              .withValues(alpha: 0.85),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Repaint',
+                                          style: EverloreTheme.ui(
+                                            size: 11,
+                                            color: EverloreTheme.goldGlow
+                                                .withValues(alpha: 0.85),
+                                            weight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                           if (entry.role != null &&
                               entry.role!.trim().isNotEmpty) ...[

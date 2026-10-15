@@ -55,6 +55,7 @@ class RelationshipEntry extends Equatable {
   final int mentionCount;
   final List<BondMoment> moments;
   final List<RelationshipMoment> observations;
+  final String? portraitUrl;
 
   const RelationshipEntry({
     required this.id,
@@ -66,6 +67,7 @@ class RelationshipEntry extends Equatable {
     this.mentionCount = 0,
     this.moments = const [],
     this.observations = const [],
+    this.portraitUrl,
   });
 
   factory RelationshipEntry.fromJson(Map<String, dynamic> json) =>
@@ -97,6 +99,11 @@ class RelationshipEntry extends Equatable {
                 )
                 .toList() ??
             const [],
+        portraitUrl: json['portrait_url']?.toString() ??
+            (json['portrait'] is Map
+                ? (json['portrait']['url']?.toString() ??
+                    json['portrait']['asset_key']?.toString())
+                : null),
       );
 
   @override
@@ -110,6 +117,7 @@ class RelationshipEntry extends Equatable {
     mentionCount,
     moments,
     observations,
+    portraitUrl,
   ];
 }
 

@@ -13,6 +13,9 @@ import '../../../shared/widgets/everlore_empty_state.dart';
 import '../../../shared/widgets/realm_backdrop.dart';
 import '../data/persona_repository.dart';
 import '../../../shared/widgets/everlore_sheet.dart';
+import '../../../shared/widgets/everlore_network_image.dart';
+import '../../../shared/widgets/everlore_notice.dart';
+import '../../media/data/media_repository.dart';
 
 const _genderOptions = [
   ('male', 'Male'),
@@ -410,6 +413,20 @@ class _PersonaCard extends StatelessWidget {
       ),
       child: ListTile(
         onTap: onTap,
+        leading: (persona.portraitUrl != null &&
+                persona.portraitUrl!.trim().isNotEmpty)
+            ? SizedBox(
+                width: 44,
+                height: 44,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: EverloreNetworkImage(
+                    imageUrl: persona.portraitUrl!,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              )
+            : null,
         title: Text(
           persona.name,
           style: EverloreTheme.ui(
@@ -418,18 +435,68 @@ class _PersonaCard extends StatelessWidget {
             color: EverloreTheme.parchment,
           ),
         ),
-        subtitle: Text(
-          [
-            meta,
-            if (persona.description.trim().isNotEmpty) persona.description,
-          ].join('\n'),
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: EverloreTheme.ui(
-            size: 12,
-            color: EverloreTheme.ash,
-            height: 1.35,
-          ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              [
+                meta,
+                if (persona.description.trim().isNotEmpty) persona.description,
+              ].join('\n'),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: EverloreTheme.ui(
+                size: 12,
+                color: EverloreTheme.ash,
+                height: 1.35,
+              ),
+            ),
+            if (MediaRepository.isMediaEnabledSession &&
+                (persona.portraitUrl == null ||
+                    persona.portraitUrl!.trim().isEmpty)) ...[
+              const SizedBox(height: 6),
+              InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () async {
+                  try {
+                    await MediaRepository.instance.paintPersonaPortrait(
+                      personaId: persona.id,
+                    );
+                    if (context.mounted) {
+                      showEverloreNotice(context, 'Taking shape…');
+                    }
+                  } on MediaRestingException catch (e) {
+                    if (context.mounted) {
+                      showEverloreNotice(context, e.restingCopy);
+                    }
+                  } catch (_) {}
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.face_retouching_natural_rounded,
+                        size: 14,
+                        color: EverloreTheme.goldGlow,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Give yourself a face',
+                        style: EverloreTheme.ui(
+                          size: 12,
+                          color: EverloreTheme.goldGlow,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         trailing: IconButton(
           onPressed: onDelete,

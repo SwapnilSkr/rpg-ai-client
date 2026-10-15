@@ -36,6 +36,8 @@ import '../../chronicle/data/chronicle_repository.dart';
 import 'realm_screen.dart';
 import '../../../shared/widgets/everlore_sheet.dart';
 import '../../../shared/text_format.dart';
+import '../../media/presentation/floating_mini_player.dart';
+import '../../media/presentation/spoken_line_menu.dart';
 
 /// Whether [c] should be treated as in the current scene. [presence] is the set
 /// of lowercased names the latest turn reported present, or null when presence
@@ -538,6 +540,17 @@ class _PlayViewState extends State<_PlayView> {
       guide.maybeStart(
         GuideFlows.playFirst,
         delay: const Duration(milliseconds: 900),
+      );
+      return;
+    }
+    // Only the newest passage carries the anchor, so the coachmark waits for a
+    // newest turn that has something to tap.
+    final hasSpokenLines = state.events.isNotEmpty &&
+        state.events.last.spokenLines.isNotEmpty;
+    if (hasSpokenLines && guide.canAutoStart(GuideFlows.spokenLine)) {
+      guide.maybeStart(
+        GuideFlows.spokenLine,
+        delay: const Duration(milliseconds: 600),
       );
       return;
     }
@@ -1095,6 +1108,31 @@ class _PlayViewState extends State<_PlayView> {
               ),
             if ((event.aiResponse ?? '').trim().isNotEmpty)
               const Divider(color: EverloreTheme.white10, height: 1),
+            if (cubit.state.isMediaAvailable &&
+                (event.aiResponse ?? '').trim().isNotEmpty) ...[
+              ListTile(
+                leading: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: EverloreTheme.goldGlow,
+                ),
+                title: Text(
+                  'Picture this',
+                  style: EverloreTheme.ui(
+                    size: 15,
+                    color: EverloreTheme.parchment,
+                  ),
+                ),
+                subtitle: Text(
+                  'Paint a scene of this moment.',
+                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  cubit.requestPicture(event.id);
+                },
+              ),
+              const Divider(color: EverloreTheme.white10, height: 1),
+            ],
             if ((event.aiResponse ?? '').trim().isNotEmpty)
               ListTile(
                 leading: const Icon(
@@ -1769,13 +1807,43 @@ class _PlayViewState extends State<_PlayView> {
                                       onSelectReplayVariant: (index) => context
                                           .read<PlayCubit>()
                                           .selectReplayVariant(event, index),
+                                      loadingVoiceLineId: state.loadingVoiceEventId == event.id
+                                          ? state.loadingVoiceLineId
+                                          : null,
+                                      playingVoiceLineId: state.playingVoiceEventId == event.id
+                                          ? state.playingVoiceLineId
+                                          : null,
+                                      unvoiceableLines: {
+                                        for (final key in state.unvoiceableLines)
+                                          if (key.startsWith('${event.id}:'))
+                                            key.substring('${event.id}:'.length),
+                                      },
+                                      onSpokenLineTap: (line) {
+                                        context.read<PlayCubit>().playVoiceLine(event.id, line.lineId);
+                                      },
+                                      onSpokenLineLongPress: (line) {
+                                        showSpokenLineMenu(
+                                          context: context,
+                                          onHearIt: () {
+                                            context.read<PlayCubit>().playVoiceLine(event.id, line.lineId);
+                                          },
+                                          onSeeThemSayIt: () {
+                                            context.read<PlayCubit>().requestVideo(event.id, line.lineId);
+                                          },
+                                        );
+                                      },
                                     );
                                     // Only the newest passage is a guide target —
                                     // spotlighting the whole scroll would say
                                     // nothing about where the story is now.
-                                    return isLatest
+                                    final anchorId = !isLatest
+                                        ? null
+                                        : event.spokenLines.isNotEmpty
+                                            ? GuideIds.playSpokenLine
+                                            : GuideIds.playNarrative;
+                                    return anchorId != null
                                         ? GuideAnchor(
-                                            id: GuideIds.playNarrative,
+                                            id: anchorId,
                                             child: bubble,
                                           )
                                         : bubble;
@@ -1846,6 +1914,11 @@ class _PlayViewState extends State<_PlayView> {
 
               if (state.isRewinding)
                 const Positioned.fill(child: _RewindVeil()),
+
+              // Floating mini-player for currently playing voice line
+              FloatingMiniPlayer(
+                controller: context.read<PlayCubit>().audioController,
+              ),
 
               // Brass-seal milestone toast — one-shot, auto-dismissing.
               if (state.lastMilestone != null)

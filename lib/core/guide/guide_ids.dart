@@ -15,6 +15,7 @@ abstract final class GuideIds {
   static const playNarrationMarker = 'play.narration_marker';
   static const playWorldActions = 'play.world_actions';
   static const playSend = 'play.send';
+  static const playSpokenLine = 'play.spoken_line';
 
   // ── Realm screen (the story's own menu) ──
   static const realmTomes = 'realm.tomes';

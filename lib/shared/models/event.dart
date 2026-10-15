@@ -1,4 +1,6 @@
 import 'dart:convert';
+import '../../features/media/models/spoken_line.dart';
+import '../../features/media/models/turn_media.dart';
 
 /// A tap-to-play suggestion under the latest narrator turn.
 ///
@@ -169,6 +171,12 @@ class GameEvent {
   /// empty) = authoritative backend list.
   final List<TrackableMention>? trackableMentions;
 
+  /// Quoted spoken lines detected in the prose.
+  final List<SpokenLine> spokenLines;
+
+  /// Generated media (pictures, videos) attached to this turn.
+  final List<TurnMedia> media;
+
   const GameEvent({
     required this.id,
     required this.instanceId,
@@ -194,6 +202,8 @@ class GameEvent {
     this.presentCharacters = const [],
     this.presenceKnown = false,
     this.trackableMentions,
+    this.spokenLines = const [],
+    this.media = const [],
   });
 
   /// True for time-skip turns, which render as interstitial passage cards.
@@ -213,6 +223,8 @@ class GameEvent {
     List<String>? presentCharacters,
     bool? presenceKnown,
     List<TrackableMention>? trackableMentions,
+    List<SpokenLine>? spokenLines,
+    List<TurnMedia>? media,
   }) {
     return GameEvent(
       id: id,
@@ -239,6 +251,8 @@ class GameEvent {
       presentCharacters: presentCharacters ?? this.presentCharacters,
       presenceKnown: presenceKnown ?? this.presenceKnown,
       trackableMentions: trackableMentions ?? this.trackableMentions,
+      spokenLines: spokenLines ?? this.spokenLines,
+      media: media ?? this.media,
     );
   }
 
@@ -300,6 +314,12 @@ class GameEvent {
           json.containsKey('present_characters'),
       trackableMentions: TrackableMention.listFromAny(
         data?['trackable_mentions'] ?? json['trackable_mentions'],
+      ),
+      spokenLines: SpokenLine.listFromAny(
+        data?['spoken_lines'] ?? json['spoken_lines'],
+      ),
+      media: TurnMedia.listFromAny(
+        data?['media'] ?? json['media'],
       ),
     );
   }
@@ -370,6 +390,8 @@ class GameEvent {
       trackableMentions: TrackableMention.listFromAny(
         meta?['trackable_mentions'],
       ),
+      spokenLines: SpokenLine.listFromAny(meta?['spoken_lines']),
+      media: TurnMedia.listFromAny(meta?['media']),
     );
   }
 
@@ -407,6 +429,8 @@ class GameEvent {
     'presence_known': presenceKnown,
     if (trackableMentions != null)
       'trackable_mentions': trackableMentions!.map((m) => m.toJson()).toList(),
+    'spoken_lines': spokenLines.map((l) => l.toJson()).toList(),
+    'media': media.map((m) => m.toJson()).toList(),
   };
 
   Map<String, dynamic> toSqlite() => {
