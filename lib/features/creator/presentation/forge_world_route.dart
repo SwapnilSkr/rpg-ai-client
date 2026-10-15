@@ -45,7 +45,7 @@ class ForgeWorldRoute extends StatelessWidget {
             onPressed: () => context.push('/auth'),
           );
         }
-        if (!AuthService.canAccessForge(user.tier)) {
+        if (!AuthService.canAccessForge(user)) {
           return _gateScaffold(
             context,
             title: 'Ascend to forge',

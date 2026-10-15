@@ -347,8 +347,9 @@ List<FlagEntry>? _flagsFromDraft(dynamic raw) {
 
 class ForgeWorldCubit extends Cubit<ForgeWorldState> {
   final String? existingId;
+  final WorldTemplate? existing;
 
-  ForgeWorldCubit({WorldTemplate? existing})
+  ForgeWorldCubit({this.existing})
     : existingId = existing?.id,
       super(
         existing != null ? _fromTemplate(existing) : const ForgeWorldState(),
@@ -578,6 +579,8 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       emit(state.copyWith(isSubmitting: false, error: _friendly(e)));
     }
   }
+
+  Map<String, dynamic> buildPayload() => _buildPayload();
 
   Map<String, dynamic> _buildPayload() {
     final statsMap = <String, dynamic>{};

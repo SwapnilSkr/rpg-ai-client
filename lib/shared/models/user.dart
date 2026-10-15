@@ -101,6 +101,7 @@ class User {
   final String tier;
   final UserPreferences preferences;
   final int? tokenBalance;
+  final bool? canForge;
 
   const User({
     required this.id,
@@ -110,7 +111,33 @@ class User {
     required this.tier,
     this.preferences = const UserPreferences(),
     this.tokenBalance,
+    this.canForge,
   });
+
+  bool get canAccessForge =>
+      canForge ?? (tier == 'premium' || tier == 'creator');
+
+  User copyWith({
+    String? id,
+    String? email,
+    String? phone,
+    String? username,
+    String? tier,
+    UserPreferences? preferences,
+    int? tokenBalance,
+    bool? canForge,
+  }) {
+    return User(
+      id: id ?? this.id,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      username: username ?? this.username,
+      tier: tier ?? this.tier,
+      preferences: preferences ?? this.preferences,
+      tokenBalance: tokenBalance ?? this.tokenBalance,
+      canForge: canForge ?? this.canForge,
+    );
+  }
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
@@ -123,6 +150,7 @@ class User {
           ? UserPreferences.fromJson(json['preferences'])
           : const UserPreferences(),
       tokenBalance: json['token_balance'],
+      canForge: json['can_forge'] as bool?,
     );
   }
 
@@ -134,5 +162,6 @@ class User {
     'tier': tier,
     'preferences': preferences.toJson(),
     'token_balance': tokenBalance,
+    if (canForge != null) 'can_forge': canForge,
   };
 }

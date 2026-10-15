@@ -28,6 +28,14 @@ class StatDefinition {
   };
 }
 
+enum WorldReviewState {
+  unpublished,
+  private,
+  pending,
+  approved,
+  changesRequested,
+}
+
 class WorldTemplate {
   final String id;
   final String creatorId;
@@ -53,6 +61,9 @@ class WorldTemplate {
   final int maxContextMemories;
   final int maxLoreResults;
   final DateTime? createdAt;
+  final String? visibility;
+  final String? reviewStatus;
+  final String? reviewNote;
 
   const WorldTemplate({
     required this.id,
@@ -79,9 +90,93 @@ class WorldTemplate {
     this.maxContextMemories = 25,
     this.maxLoreResults = 10,
     this.createdAt,
+    this.visibility,
+    this.reviewStatus,
+    this.reviewNote,
   });
 
   bool get isCharacter => kind == 'character';
+
+  WorldReviewState get reviewState {
+    if (!isPublished) return WorldReviewState.unpublished;
+    if (visibility == 'private') return WorldReviewState.private;
+    return switch (reviewStatus) {
+      'pending' => WorldReviewState.pending,
+      'changes_requested' => WorldReviewState.changesRequested,
+      'approved' || null => WorldReviewState.approved,
+      _ => WorldReviewState.approved,
+    };
+  }
+
+  String get reviewStateLabel {
+    return switch (reviewState) {
+      WorldReviewState.unpublished => 'Draft',
+      WorldReviewState.private => 'Just for you',
+      WorldReviewState.pending => 'Awaiting the seal',
+      WorldReviewState.approved => 'Shared with all',
+      WorldReviewState.changesRequested => 'Needs changes',
+    };
+  }
+
+  WorldTemplate copyWith({
+    String? id,
+    String? creatorId,
+    String? title,
+    String? slug,
+    String? description,
+    String? kind,
+    bool? isPublished,
+    bool? isSentient,
+    bool? isNsfwCapable,
+    int? version,
+    String? seedPrompt,
+    String? globalLore,
+    String? narrativeStyle,
+    String? styleNotes,
+    String? imageUrl,
+    String? imagePrompt,
+    String? openingLine,
+    Map<String, StatDefinition>? baseStatsTemplate,
+    Map<String, dynamic>? flagDefinitions,
+    List<String>? sceneTags,
+    Map<String, String>? modelPreferences,
+    int? maxContextMemories,
+    int? maxLoreResults,
+    DateTime? createdAt,
+    String? visibility,
+    String? reviewStatus,
+    String? reviewNote,
+  }) {
+    return WorldTemplate(
+      id: id ?? this.id,
+      creatorId: creatorId ?? this.creatorId,
+      title: title ?? this.title,
+      slug: slug ?? this.slug,
+      description: description ?? this.description,
+      kind: kind ?? this.kind,
+      isPublished: isPublished ?? this.isPublished,
+      isSentient: isSentient ?? this.isSentient,
+      isNsfwCapable: isNsfwCapable ?? this.isNsfwCapable,
+      version: version ?? this.version,
+      seedPrompt: seedPrompt ?? this.seedPrompt,
+      globalLore: globalLore ?? this.globalLore,
+      narrativeStyle: narrativeStyle ?? this.narrativeStyle,
+      styleNotes: styleNotes ?? this.styleNotes,
+      imageUrl: imageUrl ?? this.imageUrl,
+      imagePrompt: imagePrompt ?? this.imagePrompt,
+      openingLine: openingLine ?? this.openingLine,
+      baseStatsTemplate: baseStatsTemplate ?? this.baseStatsTemplate,
+      flagDefinitions: flagDefinitions ?? this.flagDefinitions,
+      sceneTags: sceneTags ?? this.sceneTags,
+      modelPreferences: modelPreferences ?? this.modelPreferences,
+      maxContextMemories: maxContextMemories ?? this.maxContextMemories,
+      maxLoreResults: maxLoreResults ?? this.maxLoreResults,
+      createdAt: createdAt ?? this.createdAt,
+      visibility: visibility ?? this.visibility,
+      reviewStatus: reviewStatus ?? this.reviewStatus,
+      reviewNote: reviewNote ?? this.reviewNote,
+    );
+  }
 
   factory WorldTemplate.fromJson(Map<String, dynamic> json) {
     final statsMap = <String, StatDefinition>{};
@@ -122,6 +217,9 @@ class WorldTemplate {
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'])
           : null,
+      visibility: json['visibility'] as String?,
+      reviewStatus: json['review_status'] as String?,
+      reviewNote: json['review_note'] as String?,
     );
   }
 }

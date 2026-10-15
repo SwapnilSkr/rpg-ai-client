@@ -7,6 +7,7 @@ import '../../../../../shared/models/world_template.dart';
 import '../../../../../shared/widgets/mature_content_chip.dart';
 import '../../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/text_format.dart';
+import 'world_status_chip.dart';
 
 class MyWorldCard extends StatelessWidget {
   final WorldTemplate template;
@@ -15,6 +16,8 @@ class MyWorldCard extends StatelessWidget {
   final VoidCallback? onPublish;
   final VoidCallback? onTap;
   final Future<bool> Function()? onDelete;
+  final VoidCallback? onMakePrivate;
+  final VoidCallback? onShareWithAll;
 
   const MyWorldCard({
     super.key,
@@ -24,6 +27,8 @@ class MyWorldCard extends StatelessWidget {
     this.onPublish,
     this.onTap,
     this.onDelete,
+    this.onMakePrivate,
+    this.onShareWithAll,
   });
 
   @override
@@ -38,11 +43,6 @@ class MyWorldCard extends StatelessWidget {
         : isDraft
         ? EverloreTheme.ember
         : EverloreTheme.verdant;
-    final statusLabel = isPublishing
-        ? 'RELEASING'
-        : isDraft
-        ? 'DRAFT'
-        : 'LIVE';
 
     return GestureDetector(
       onTap: isWorking ? null : (onTap ?? onEdit),
@@ -177,48 +177,10 @@ class MyWorldCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         // Status badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: statusColor.withValues(alpha: 0.35),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (isWorking)
-                                SizedBox(
-                                  width: 11,
-                                  height: 11,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 1.4,
-                                    color: statusColor,
-                                  ),
-                                )
-                              else
-                                Icon(
-                                  isDraft ? Icons.edit_note : Icons.public,
-                                  size: 11,
-                                  color: statusColor,
-                                ),
-                              const SizedBox(width: 4),
-                              Text(
-                                statusLabel,
-                                style: TextStyle(
-                                  color: statusColor,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                            ],
-                          ),
+                        WorldStatusChip(
+                          template: template,
+                          isWorking: isWorking,
+                          showNote: true,
                         ),
                       ],
                     ),
@@ -311,7 +273,7 @@ class MyWorldCard extends StatelessWidget {
                           else if (onPublish != null)
                             _ActionButton(
                               assetIcon: AppIcons.publish,
-                              label: 'Release to Realm',
+                              label: 'Publish',
                               color: EverloreTheme.gold,
                               onTap: onPublish!,
                             ),
@@ -319,7 +281,9 @@ class MyWorldCard extends StatelessWidget {
                       ),
                     ] else if (onEdit != null ||
                         onTap != null ||
-                        onDelete != null) ...[
+                        onDelete != null ||
+                        onMakePrivate != null ||
+                        onShareWithAll != null) ...[
                       const SizedBox(height: 12),
                       const Divider(color: EverloreTheme.white10, height: 1),
                       const SizedBox(height: 10),
@@ -349,6 +313,75 @@ class MyWorldCard extends StatelessWidget {
                               color: EverloreTheme.verdant,
                               onTap: onTap!,
                             ),
+                          if (onMakePrivate != null || onShareWithAll != null) ...[
+                            const SizedBox(width: 6),
+                            PopupMenuButton<String>(
+                              tooltip: 'World options',
+                              color: EverloreTheme.void2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(
+                                  color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              icon: const Icon(
+                                Icons.more_horiz,
+                                size: 18,
+                                color: EverloreTheme.ash,
+                              ),
+                              onSelected: (action) {
+                                if (action == 'make_private') {
+                                  onMakePrivate?.call();
+                                } else if (action == 'share_with_all') {
+                                  onShareWithAll?.call();
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                if (onMakePrivate != null)
+                                  PopupMenuItem(
+                                    value: 'make_private',
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.lock_outline,
+                                          size: 16,
+                                          color: EverloreTheme.ash,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Make it just for you',
+                                          style: EverloreTheme.ui(
+                                            size: 13,
+                                            color: EverloreTheme.parchment,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                if (onShareWithAll != null)
+                                  PopupMenuItem(
+                                    value: 'share_with_all',
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.public,
+                                          size: 16,
+                                          color: EverloreTheme.gold,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Share with every traveller',
+                                          style: EverloreTheme.ui(
+                                            size: 13,
+                                            color: EverloreTheme.parchment,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ],

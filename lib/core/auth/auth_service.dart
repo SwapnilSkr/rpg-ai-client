@@ -142,8 +142,10 @@ class AuthService {
     return getCachedUser();
   }
 
-  static bool canAccessForge(String tier) =>
-      tier == 'premium' || tier == 'creator';
+  static bool canAccessForge(User? user) {
+    if (user == null) return false;
+    return user.canAccessForge;
+  }
 
   /// Permanently deletes the signed-in account and all associated server data.
   static Future<void> deleteAccount() async {

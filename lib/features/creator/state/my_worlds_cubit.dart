@@ -121,13 +121,13 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
     }
   }
 
-  Future<bool> publish(String templateId) async {
+  Future<bool> publish(String templateId, {String? visibility}) async {
     if (state.publishingIds.contains(templateId)) return false;
     final ids = Set<String>.from(state.publishingIds)..add(templateId);
     emit(state.copyWith(publishingIds: ids));
     try {
-      await CreatorRepository.publish(templateId);
-      await load(search: _search);
+      await CreatorRepository.publish(templateId, visibility: visibility);
+      await load(search: _search, forceRefresh: true);
       return true;
     } catch (e) {
       final cleaned = Set<String>.from(state.publishingIds)..remove(templateId);

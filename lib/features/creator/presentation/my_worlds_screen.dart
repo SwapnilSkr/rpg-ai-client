@@ -11,6 +11,7 @@ import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/user.dart';
+import '../../../shared/models/world_template.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/everlore_top_bar.dart';
 import '../../../shared/widgets/neu.dart';
@@ -18,6 +19,9 @@ import '../../../shared/widgets/everlore_empty_state.dart';
 import '../../../shared/widgets/realm_backdrop.dart';
 import '../../../shared/widgets/everlore_notice.dart';
 import '../../../app/layout/responsive.dart';
+import '../data/world_review_notice_store.dart';
+import 'widgets/publish_world_sheet.dart';
+import 'widgets/world_review_notice_card.dart';
 
 class MyWorldsScreen extends StatelessWidget {
   const MyWorldsScreen({super.key});
@@ -41,6 +45,9 @@ class _MyWorldsView extends StatefulWidget {
 class _MyWorldsViewState extends State<_MyWorldsView> {
   final _scrollController = ScrollController();
   final _searchController = TextEditingController();
+  final _noticeStore = const WorldReviewNoticeStore();
+  List<WorldTemplate> _noticeWorlds = [];
+  String _checkedNoticeFingerprint = '';
   Timer? _searchDebounce;
   bool _searchOpen = false;
 
@@ -48,6 +55,49 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
   // on every setState (e.g. toggling search) resets it to waiting and flashes
   // the whole screen back to the forge loader.
   late final Future<User?> _sessionUser;
+
+  Future<void> _updateNotices(List<WorldTemplate> worlds) async {
+    final fingerprint = worlds
+        .map((w) => '${w.id}:${w.reviewStatus}')
+        .join(',');
+    if (fingerprint == _checkedNoticeFingerprint) return;
+    _checkedNoticeFingerprint = fingerprint;
+
+    final pending = <WorldTemplate>[];
+    for (final w in worlds) {
+      if (w.reviewStatus == 'changes_requested') {
+        final seen = await _noticeStore.hasSeenNotice(
+          w.id,
+          'changes_requested',
+        );
+        if (!seen) pending.add(w);
+      } else if (w.isPublished &&
+          (w.reviewStatus == 'approved' ||
+              (w.visibility == 'public' && w.reviewStatus == null))) {
+        final seen = await _noticeStore.hasSeenNotice(w.id, 'approved');
+        if (!seen) pending.add(w);
+      }
+    }
+    if (mounted) {
+      setState(() => _noticeWorlds = pending);
+    }
+  }
+
+  void _openPublishSheet(
+    BuildContext context,
+    WorldTemplate template, {
+    String initialVisibility = 'private',
+  }) {
+    PublishWorldSheet.show(
+      context,
+      template,
+      initialVisibility: initialVisibility,
+      onPublish: (visibility) => context.read<MyWorldsCubit>().publish(
+        template.id,
+        visibility: visibility,
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -107,7 +157,7 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
           );
         }
         if (user == null) return _buildGate(context, _GateType.unauth);
-        if (!AuthService.canAccessForge(user.tier)) {
+        if (!AuthService.canAccessForge(user)) {
           return _buildGate(context, _GateType.upgrade);
         }
         return _buildCreatorView(context);
@@ -166,6 +216,7 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                 );
                 context.read<MyWorldsCubit>().clearError();
               }
+              _updateNotices(state.worlds);
             },
             builder: (context, state) {
               return GuideOnEnter(
@@ -239,6 +290,56 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                                 ),
                               )
                             else ...[
+                              if (_noticeWorlds.isNotEmpty)
+                                SliverToBoxAdapter(
+                                  child: Column(
+                                    children: _noticeWorlds
+                                        .map(
+                                          (w) => WorldReviewNoticeCard(
+                                            template: w,
+                                            onDismiss: () async {
+                                              final reviewKey =
+                                                  w.reviewStatus ==
+                                                      'changes_requested'
+                                                  ? 'changes_requested'
+                                                  : 'approved';
+                                              await _noticeStore.markNoticeSeen(
+                                                w.id,
+                                                reviewKey,
+                                              );
+                                              setState(() {
+                                                _noticeWorlds.removeWhere(
+                                                  (item) => item.id == w.id,
+                                                );
+                                              });
+                                            },
+                                            onEdit: () async {
+                                              final reviewKey =
+                                                  w.reviewStatus ==
+                                                      'changes_requested'
+                                                  ? 'changes_requested'
+                                                  : 'approved';
+                                              await _noticeStore.markNoticeSeen(
+                                                w.id,
+                                                reviewKey,
+                                              );
+                                              setState(() {
+                                                _noticeWorlds.removeWhere(
+                                                  (item) => item.id == w.id,
+                                                );
+                                              });
+                                              if (context.mounted) {
+                                                context.push(
+                                                  '/my-worlds/${w.id}/forge',
+                                                  extra: w,
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                                ),
                               if (state.drafts.isNotEmpty) ...[
                                 _sectionHeader(
                                   '${state.drafts.length} DRAFTS',
@@ -262,10 +363,10 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                                           '/my-worlds/${state.drafts[i].id}/forge',
                                           extra: state.drafts[i],
                                         ),
-                                        onPublish: () => _confirmPublish(
+                                        onPublish: () => _openPublishSheet(
                                           context,
-                                          state.drafts[i].id,
-                                          state.drafts[i].title,
+                                          state.drafts[i],
+                                          initialVisibility: 'private',
                                         ),
                                         onDelete: () => context
                                             .read<MyWorldsCubit>()
@@ -293,7 +394,8 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                                     delegate: SliverChildBuilderDelegate(
                                       (ctx, i) => MyWorldCard(
                                         template: state.published[i],
-                                        isPublishing: false,
+                                        isPublishing: state.publishingIds
+                                            .contains(state.published[i].id),
                                         onEdit: () => context.push(
                                           '/my-worlds/${state.published[i].id}/forge',
                                           extra: state.published[i],
@@ -304,6 +406,32 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                                         onDelete: () => context
                                             .read<MyWorldsCubit>()
                                             .delete(state.published[i].id),
+                                        // Only offer the move the world can
+                                        // actually make from where it stands.
+                                        onMakePrivate:
+                                            state.published[i].reviewState ==
+                                                WorldReviewState.private
+                                            ? null
+                                            : () => context
+                                                  .read<MyWorldsCubit>()
+                                                  .publish(
+                                                    state.published[i].id,
+                                                    visibility: 'private',
+                                                  ),
+                                        onShareWithAll:
+                                            state.published[i].reviewState ==
+                                                    WorldReviewState.private ||
+                                                state
+                                                        .published[i]
+                                                        .reviewState ==
+                                                    WorldReviewState
+                                                        .changesRequested
+                                            ? () => _openPublishSheet(
+                                                context,
+                                                state.published[i],
+                                                initialVisibility: 'public',
+                                              )
+                                            : null,
                                       ),
                                       childCount: state.published.length,
                                     ),
@@ -360,104 +488,6 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
           ],
         ),
       ),
-    );
-  }
-
-  void _confirmPublish(BuildContext context, String id, String title) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        var isReleasing = false;
-        String? releaseError;
-        return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            backgroundColor: EverloreTheme.void2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: BorderSide(
-                color: EverloreTheme.goldDim.withValues(alpha: 0.3),
-              ),
-            ),
-            title: const Row(
-              children: [
-                EvIcon(AppIcons.publish, size: 22),
-                SizedBox(width: 8),
-                Text(
-                  'Release This World?',
-                  style: TextStyle(
-                    color: EverloreTheme.parchment,
-                    fontSize: 17,
-                  ),
-                ),
-              ],
-            ),
-            content: Text(
-              releaseError ??
-                  '"$title" will be revealed to all adventurers across the realm. You can still edit it later from My Worlds.',
-              style: TextStyle(
-                color: releaseError == null
-                    ? EverloreTheme.ash
-                    : EverloreTheme.crimson,
-                fontSize: 14,
-                height: 1.5,
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: isReleasing ? null : () => Navigator.pop(ctx),
-                child: const Text(
-                  'Keep Hidden',
-                  style: TextStyle(color: EverloreTheme.ash),
-                ),
-              ),
-              TextButton(
-                onPressed: isReleasing
-                    ? null
-                    : () async {
-                        setDialogState(() => isReleasing = true);
-                        final released = await context
-                            .read<MyWorldsCubit>()
-                            .publish(id);
-                        if (!ctx.mounted) return;
-                        if (released) {
-                          Navigator.pop(ctx);
-                        } else {
-                          setDialogState(() {
-                            isReleasing = false;
-                            releaseError =
-                                'The release could not be completed. Nothing changed — try again.';
-                          });
-                        }
-                      },
-                child: isReleasing
-                    ? const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.8,
-                              color: EverloreTheme.gold,
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Releasing…',
-                            style: TextStyle(color: EverloreTheme.gold),
-                          ),
-                        ],
-                      )
-                    : const Text(
-                        'Release to the Realm',
-                        style: TextStyle(color: EverloreTheme.gold),
-                      ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

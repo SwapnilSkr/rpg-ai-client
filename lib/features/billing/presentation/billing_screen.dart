@@ -5,19 +5,25 @@ import 'package:go_router/go_router.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
 import '../../../app/theme/nexus_theme.dart';
+import '../../../shared/models/user.dart';
+import '../../../core/auth/auth_service.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/ink_mark.dart';
 import '../data/billing_repository.dart';
 import '../../../shared/widgets/everlore_notice.dart';
 
 class BillingScreen extends StatefulWidget {
-  const BillingScreen({super.key});
+  final User? user;
+  final BillingWallet? wallet;
+
+  const BillingScreen({super.key, this.user, this.wallet});
 
   @override
   State<BillingScreen> createState() => _BillingScreenState();
 }
 
 class _BillingScreenState extends State<BillingScreen> {
+  User? _user;
   BillingWallet? _wallet;
   List<ProductDetails> _products = const [];
   String? _error;
@@ -29,6 +35,11 @@ class _BillingScreenState extends State<BillingScreen> {
   @override
   void initState() {
     super.initState();
+    _user = widget.user;
+    if (widget.wallet != null) {
+      _wallet = widget.wallet;
+      _loading = false;
+    }
     _walletSub = BillingRepository.instance.walletChanges.listen((wallet) {
       if (mounted) setState(() => _wallet = wallet);
     });
@@ -37,7 +48,9 @@ class _BillingScreenState extends State<BillingScreen> {
         showEverloreNotice(context, message, tone: NoticeTone.error);
       }
     });
-    _load();
+    if (widget.wallet == null || _user == null) {
+      _load();
+    }
   }
 
   @override
@@ -49,24 +62,28 @@ class _BillingScreenState extends State<BillingScreen> {
 
   Future<void> _load() async {
     setState(() {
-      _loading = true;
+      _loading = widget.wallet == null;
       _error = null;
     });
     try {
-      // Always reconcile on entry so admin grants, another device, and a
-      // completed Play purchase are reflected before showing the balance.
-      final wallet = await BillingRepository.instance.wallet(
-        forceRefresh: true,
-      );
-      final products = wallet.purchasesEnabled
-          ? await BillingRepository.instance.products()
-          : const <ProductDetails>[];
-      if (mounted) {
-        setState(() {
-          _wallet = wallet;
-          _products = products;
-          _loading = false;
-        });
+      _user ??= await AuthService.getCachedUser() ??
+          await AuthService.getCurrentUser();
+      if (widget.wallet == null) {
+        final wallet = await BillingRepository.instance.wallet(
+          forceRefresh: true,
+        );
+        final products = wallet.purchasesEnabled
+            ? await BillingRepository.instance.products()
+            : const <ProductDetails>[];
+        if (mounted) {
+          setState(() {
+            _wallet = wallet;
+            _products = products;
+            _loading = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _loading = false);
       }
     } catch (e) {
       if (mounted) {
@@ -108,6 +125,7 @@ class _BillingScreenState extends State<BillingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isPromo = _wallet?.unlimitedInk == true;
     return Scaffold(
       backgroundColor: EverloreTheme.void0,
       body: Stack(
@@ -123,12 +141,22 @@ class _BillingScreenState extends State<BillingScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  EverloreTheme.void0.withValues(alpha: 0.24),
-                  EverloreTheme.void0.withValues(alpha: 0.58),
-                  EverloreTheme.void0.withValues(alpha: 0.8),
-                ],
-                stops: const [0, 0.4, 1],
+                colors: isPromo
+                    ? [
+                        EverloreTheme.void0.withValues(alpha: 0.06),
+                        EverloreTheme.void0.withValues(alpha: 0.18),
+                        EverloreTheme.void0.withValues(alpha: 0.68),
+                        EverloreTheme.void0.withValues(alpha: 0.96),
+                        EverloreTheme.void0,
+                      ]
+                    : [
+                        EverloreTheme.void0.withValues(alpha: 0.24),
+                        EverloreTheme.void0.withValues(alpha: 0.58),
+                        EverloreTheme.void0.withValues(alpha: 0.8),
+                      ],
+                stops: isPromo
+                    ? const [0, 0.34, 0.6, 0.78, 1]
+                    : const [0, 0.4, 1],
               ),
             ),
           ),
@@ -184,71 +212,127 @@ class _BillingScreenState extends State<BillingScreen> {
                             ),
                           ),
                         )
-                      : ListView(
-                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 40),
-                          children: [
-                            _InkBalance(wallet: _wallet!),
-                            if (!_wallet!.unlimitedInk) ...[
-                              const SizedBox(height: 26),
-                              Text(
-                                'MEMBERSHIPS',
-                                style: EverloreTheme.sectionHeader,
-                              ),
-                              const SizedBox(height: 10),
-                              _plan(
-                                'everlore_premium',
-                                'Premium',
-                                '3,000 Ink each month · generous everyday play · forge access',
-                                EverloreTheme.gold,
-                              ),
-                              const SizedBox(height: 12),
-                              _plan(
-                                'everlore_creator',
-                                'Creator',
-                                '6,000 Ink each month · larger forge allowance · publish worlds',
-                                EverloreTheme.violet,
-                              ),
-                              const SizedBox(height: 26),
-                              Text('ADD INK', style: EverloreTheme.sectionHeader),
-                              const SizedBox(height: 10),
-                              _pack('everlore_ink_100', 'Small refill'),
-                              _pack('everlore_ink_350', 'Most popular'),
-                              _pack('everlore_ink_900', 'Deep reserves'),
-                              if (_wallet!.simulationEnabled) ...[
-                                const SizedBox(height: 24),
-                                Text(
-                                  'TEST CHECKOUT · NO CHARGE\nThis internal QA mode grants Ink through the same ledger used by normal play.',
-                                  style: EverloreTheme.ui(
-                                    size: 13,
-                                    color: EverloreTheme.gold,
-                                    height: 1.45,
-                                  ),
-                                ),
-                              ] else if (!_wallet!.purchasesEnabled) ...[
-                                const SizedBox(height: 24),
-                                Text(
-                                  // Player-facing: no store, no catalogue, no
-                                  // plumbing. They only need to know it is not
-                                  // available to them yet.
-                                  'Ink refills are not available yet. Your '
-                                  'balance and everything you have written stay '
-                                  'exactly as they are.',
-                                  style: EverloreTheme.ui(
-                                    size: 13,
-                                    color: EverloreTheme.ash,
-                                    height: 1.45,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ],
-                        ),
+                      : isPromo
+                      ? _buildPromoBody(context, _user?.canAccessForge ?? false)
+                      : _buildNormalBody(context),
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPromoBody(BuildContext context, bool canForge) {
+    return CustomScrollView(
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Spacer(),
+                _InkBalance(wallet: _wallet!),
+                const SizedBox(height: 24),
+                Text(
+                  'WHILE THE INK FLOWS FREE',
+                  style: EverloreTheme.sectionHeader,
+                ),
+                const SizedBox(height: 14),
+                const _PromoFeatureRow(
+                  icon: Icons.auto_stories_outlined,
+                  title: 'Every story, without counting',
+                  description: 'Write as many turns as you like.',
+                ),
+                if (canForge) ...[
+                  const SizedBox(height: 14),
+                  const _PromoFeatureRow(
+                    icon: Icons.auto_fix_high_rounded,
+                    title: 'Forge your own worlds',
+                    description:
+                        'Make worlds and characters, whatever your membership.',
+                  ),
+                ],
+                const SizedBox(height: 14),
+                const _PromoFeatureRow(
+                  icon: Icons.palette_outlined,
+                  title: 'Portraits and drafts, free',
+                  description: 'Cover art and story drafts cost no ink.',
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Memberships return when the promotion ends. Everything you write now stays yours.',
+                  style: EverloreTheme.ui(
+                    size: 13,
+                    color: EverloreTheme.ash,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNormalBody(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 40),
+      children: [
+        _InkBalance(wallet: _wallet!),
+        const SizedBox(height: 26),
+        Text('MEMBERSHIPS', style: EverloreTheme.sectionHeader),
+        const SizedBox(height: 10),
+        _plan(
+          'everlore_premium',
+          'Premium',
+          '3,000 Ink each month · generous everyday play · forge access',
+          EverloreTheme.gold,
+        ),
+        const SizedBox(height: 12),
+        _plan(
+          'everlore_creator',
+          'Creator',
+          '6,000 Ink each month · larger forge allowance · publish worlds',
+          EverloreTheme.violet,
+        ),
+        const SizedBox(height: 26),
+        Text('ADD INK', style: EverloreTheme.sectionHeader),
+        const SizedBox(height: 10),
+        _pack('everlore_ink_100', 'Small refill'),
+        _pack('everlore_ink_350', 'Most popular'),
+        _pack('everlore_ink_900', 'Deep reserves'),
+        if (_wallet!.simulationEnabled) ...[
+          const SizedBox(height: 24),
+          Text(
+            'TEST CHECKOUT · NO CHARGE\nThis internal QA mode grants Ink through the same ledger used by normal play.',
+            style: EverloreTheme.ui(
+              size: 13,
+              color: EverloreTheme.gold,
+              height: 1.45,
+            ),
+          ),
+        ] else if (!_wallet!.purchasesEnabled) ...[
+          const SizedBox(height: 24),
+          Text(
+            // Player-facing: no store, no catalogue, no
+            // plumbing. They only need to know it is not
+            // available to them yet.
+            'Ink refills are not available yet. Your '
+            'balance and everything you have written stay '
+            'exactly as they are.',
+            style: EverloreTheme.ui(
+              size: 13,
+              color: EverloreTheme.ash,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -469,4 +553,67 @@ class _PurchaseCard extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _PromoFeatureRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String description;
+
+  const _PromoFeatureRow({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: EverloreTheme.void2.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: EverloreTheme.goldDim.withValues(alpha: 0.25),
+            ),
+          ),
+          child: Icon(
+            icon,
+            size: 18,
+            color: EverloreTheme.gold,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: EverloreTheme.ui(
+                  size: 15,
+                  color: EverloreTheme.parchment,
+                  weight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                description,
+                style: EverloreTheme.ui(
+                  size: 13,
+                  color: EverloreTheme.ash,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

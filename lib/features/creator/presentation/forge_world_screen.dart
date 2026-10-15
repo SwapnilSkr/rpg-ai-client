@@ -5,9 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../state/forge_world_cubit.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/models/world_template.dart';
+import '../data/meaningful_edit_detector.dart';
 import 'widgets/voice_picker.dart';
 import 'widgets/image_forge.dart';
 import 'widgets/autofill_card.dart';
+import 'widgets/world_status_chip.dart';
 import '../../../shared/widgets/everlore_sheet.dart';
 
 // ─────────────────────────────────────────────
@@ -136,6 +138,7 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
                         _ForgeHeader(
                           step: state.step,
                           isEditing: widget.existing != null,
+                          existing: widget.existing,
                           onBack: () async {
                             if (state.step > 0) {
                               _cubit.prevStep();
@@ -170,7 +173,7 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
                           canProceed: state.canProceed,
                           isSubmitting: state.isSubmitting,
                           onNext: () => _cubit.nextStep(),
-                          onForge: () => _cubit.forge(),
+                          onForge: () => _handleSave(context),
                         ),
                       ],
                     ),
@@ -182,6 +185,61 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _handleSave(BuildContext context) async {
+    final existing = widget.existing;
+    if (existing != null &&
+        MeaningfulEditDetector.shouldConfirmResubmit(
+          existing,
+          _cubit.buildPayload(),
+        )) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: EverloreTheme.void2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+            ),
+          ),
+          title: Text(
+            'Send it to be read again?',
+            style: EverloreTheme.serifDisplay(
+              size: 18,
+              color: EverloreTheme.parchment,
+            ),
+          ),
+          content: const Text(
+            'Changes to a shared world are read again before it returns to Discover. You can keep playing it meanwhile.',
+            style: TextStyle(
+              color: EverloreTheme.ash,
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text(
+                'Keep editing',
+                style: TextStyle(color: EverloreTheme.ash),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text(
+                'Save and resubmit',
+                style: TextStyle(color: EverloreTheme.gold),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true) return;
+    }
+    _cubit.forge();
   }
 
   /// Shared by the system back gesture and the header arrow, so both routes
@@ -285,11 +343,13 @@ final _stepCount = _stepNames.length;
 class _ForgeHeader extends StatelessWidget {
   final int step;
   final bool isEditing;
+  final WorldTemplate? existing;
   final VoidCallback onBack;
 
   const _ForgeHeader({
     required this.step,
     required this.isEditing,
+    this.existing,
     required this.onBack,
   });
 
@@ -313,18 +373,33 @@ class _ForgeHeader extends StatelessWidget {
           // 2.5 of letter-spacing at large system text is enough to push the
           // step counter off a 320pt screen.
           Expanded(
-            child: Text(
-              isEditing ? 'EDIT WORLD' : 'FORGE WORLD',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: EverloreTheme.gold,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2.5,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    isEditing ? 'EDIT WORLD' : 'FORGE WORLD',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: EverloreTheme.gold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2.5,
+                    ),
+                  ),
+                ),
+                if (isEditing && existing != null) ...[
+                  const SizedBox(width: 8),
+                  WorldStatusChip(
+                    template: existing!,
+                    showNote: false,
+                  ),
+                ],
+              ],
             ),
           ),
+          const SizedBox(width: 8),
           Text(
             '${step + 1} / $_stepCount',
             style: const TextStyle(color: EverloreTheme.ash, fontSize: 13),
@@ -1647,7 +1722,7 @@ class _Step3Stats extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 28),
-          _ForgeSummary(state: state),
+          _ForgeSummary(state: state, existing: cubit.existing),
           const SizedBox(height: 24),
         ],
       ),
@@ -2352,7 +2427,8 @@ class _StatEditorSheetState extends State<_StatEditorSheet> {
 
 class _ForgeSummary extends StatelessWidget {
   final ForgeWorldState state;
-  const _ForgeSummary({required this.state});
+  final WorldTemplate? existing;
+  const _ForgeSummary({required this.state, this.existing});
 
   @override
   Widget build(BuildContext context) {
@@ -2399,6 +2475,11 @@ class _ForgeSummary extends StatelessWidget {
             label: 'World',
             value: state.title.isNotEmpty ? state.title : '—',
           ),
+          if (existing != null)
+            _SummaryRow(
+              label: 'Status',
+              value: existing!.reviewStateLabel,
+            ),
           _SummaryRow(
             label: 'Type',
             value: state.isSentient ? 'Conscious Soul' : 'Game Master',
@@ -2423,9 +2504,11 @@ class _ForgeSummary extends StatelessWidget {
           const SizedBox(height: 8),
           const Divider(color: Color(0xFF252548), height: 1),
           const SizedBox(height: 10),
-          const Text(
-            'Your world will be saved as a draft. You can review and publish it from My Worlds.',
-            style: TextStyle(
+          Text(
+            existing == null
+                ? 'Your world will be saved as a draft. You can review and publish it from My Worlds.'
+                : 'Your changes will be saved to your world.',
+            style: const TextStyle(
               color: EverloreTheme.ash,
               fontSize: 12,
               height: 1.4,

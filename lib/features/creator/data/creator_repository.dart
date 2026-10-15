@@ -111,9 +111,16 @@ class CreatorRepository {
     return WorldTemplate.fromJson(json);
   }
 
-  static Future<void> publish(String id) async {
-    await ApiClient.post('/templates/$id/publish');
+  static Future<Map<String, dynamic>> publish(
+    String id, {
+    String? visibility,
+  }) async {
+    final response = await ApiClient.post(
+      '/templates/$id/publish',
+      body: visibility != null ? {'visibility': visibility} : null,
+    );
     invalidate();
+    return response is Map ? Map<String, dynamic>.from(response) : const {};
   }
 
   static Future<void> delete(String id) async {
