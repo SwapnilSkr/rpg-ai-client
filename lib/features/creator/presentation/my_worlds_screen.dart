@@ -601,12 +601,12 @@ class _UpgradeGate extends StatelessWidget {
                 ),
                 _UpgradeFeature(
                   icon: Icons.psychology_alt,
-                  title: 'Custom AI Personalities',
-                  subtitle: 'Define the Oracle\'s Voice and soul',
+                  title: 'Custom Voices',
+                  subtitle: 'Define the Oracle\'s voice and soul',
                 ),
                 _UpgradeFeature(
                   icon: Icons.bar_chart,
-                  title: 'Design Stat Systems',
+                  title: 'Shape what the world measures',
                   subtitle: 'Health, mana, honour — your rules',
                 ),
                 _UpgradeFeature(

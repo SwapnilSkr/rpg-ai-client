@@ -56,7 +56,6 @@ void layoutMatrix(String description, Widget Function() build) {
             ),
             child: MaterialApp(
               theme: EverloreTheme.dark,
-              useInheritedMediaQuery: true,
               home: Scaffold(
                 backgroundColor: EverloreTheme.void0,
                 body: build(),

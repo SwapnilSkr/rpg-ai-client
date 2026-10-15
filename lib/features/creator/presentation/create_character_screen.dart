@@ -587,7 +587,7 @@ class _MatureToggle extends StatelessWidget {
             Switch(
               value: value,
               onChanged: onChanged,
-              activeColor: EverloreTheme.crimson,
+              activeThumbColor: EverloreTheme.crimson,
             ),
           ],
         ),

@@ -169,14 +169,12 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _currentUser = user);
       await _routeAfterAuth();
     } catch (e) {
-      // The code is ours, not the transport's — a fixed vocabulary written in
-      // this repo, safe to show. It is the difference between a player saying
-      // "it doesn't work" and a player telling us which step broke on a phone
-      // we cannot reach.
-      final fallback = e is GoogleSignInFailure
-          ? 'Could not sign in with Google (${e.code}). Please try again.'
-          : 'Could not sign in with Google. Please try again.';
-      setState(() => _errorMessage = userFacingError(e, fallback: fallback));
+      setState(
+        () => _errorMessage = userFacingError(
+          e,
+          fallback: 'Could not sign in with Google. Please try again.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isGoogleLoading = false);
     }
@@ -699,10 +697,10 @@ class _AuthScreenState extends State<AuthScreen> {
                 onChanged: (_isUpdatingPreferences || _isPhoneLoading)
                     ? null
                     : _handleNsfwToggle,
-                activeColor: EverloreTheme.crimson,
+                activeThumbColor: EverloreTheme.crimson,
                 activeTrackColor: EverloreTheme.crimson.withValues(alpha: 0.35),
                 title: const Text(
-                  'Enable Mature Content (NSFW)',
+                  'Allow mature themes',
                   style: TextStyle(
                     color: EverloreTheme.parchment,
                     fontWeight: FontWeight.w600,
@@ -710,8 +708,8 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
                 subtitle: Text(
                   _isUpdatingPreferences
-                      ? 'Updating...'
-                      : 'Required to play mature, NSFW-capable worlds.',
+                       ? 'Updating...'
+                       : 'Needed before a world with mature themes will open.',
                   style: const TextStyle(
                     color: EverloreTheme.ash,
                     fontSize: 12,
@@ -856,7 +854,7 @@ class _AuthScreenState extends State<AuthScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Text(
-              'Google sign-in is not configured for this build.',
+              'Google sign-in is not available right now.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: EverloreTheme.uiFamily,

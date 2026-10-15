@@ -311,7 +311,7 @@ class WorldActionsButton extends StatelessWidget {
               ),
               _FieldLabel('RELATION TO YOU'),
               DropdownButtonFormField<String>(
-                value: relation,
+                initialValue: relation,
                 dropdownColor: EverloreTheme.void3,
                 style: EverloreTheme.ui(
                   size: 14,
@@ -1144,7 +1144,7 @@ class WorldActionsButton extends StatelessWidget {
                       if (correction) ...[
                         _FieldLabel('REPLACE'),
                         DropdownButtonFormField<String>(
-                          value: replacesRelation,
+                          initialValue: replacesRelation,
                           dropdownColor: EverloreTheme.void3,
                           style: EverloreTheme.ui(
                             size: 14,

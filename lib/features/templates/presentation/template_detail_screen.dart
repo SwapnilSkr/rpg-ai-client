@@ -16,6 +16,7 @@ import '../../../core/guide/guide_ids.dart';
 import '../../../core/guide/guide_trigger.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../moderation/presentation/content_actions_sheet.dart';
+import '../../../shared/narrative_styles.dart';
 import '../../../shared/text_format.dart';
 import '../../../shared/widgets/status_bar_scrim.dart';
 
@@ -290,8 +291,8 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                                   t.isCharacter
                                       ? 'Character Story'
                                       : t.isSentient
-                                      ? 'Sentient World'
-                                      : 'Game Master World',
+                                      ? 'Led by one soul'
+                                      : 'Told by a narrator',
                                   style: TextStyle(
                                     color: accentColor,
                                     fontSize: 10,
@@ -372,7 +373,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                         icon: Icons.auto_awesome_outlined,
                         label: t.narrativeStyle.trim().isEmpty
                             ? 'Open-ended story'
-                            : t.narrativeStyle,
+                            : narrativeStyleLabel(t.narrativeStyle),
                         accent: accentColor,
                       ),
                       _WorldFact(
@@ -411,7 +412,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                   // Stats section
                   if (t.baseStatsTemplate.isNotEmpty) ...[
                     const SizedBox(height: 28),
-                    _SectionHeader(label: 'STARTING STATS'),
+                    _SectionHeader(label: 'WHERE YOU BEGIN'),
                     const SizedBox(height: 14),
                     ...t.baseStatsTemplate.entries.map((e) {
                       final max = e.value.max;
@@ -434,7 +435,7 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
                   // Scene types
                   if (t.sceneTags.isNotEmpty) ...[
                     const SizedBox(height: 28),
-                    _SectionHeader(label: 'SCENE TYPES'),
+                    _SectionHeader(label: 'KINDS OF SCENES'),
                     const SizedBox(height: 14),
                     Wrap(
                       spacing: 8,
@@ -553,9 +554,9 @@ String _scopeDescriptionFor(WorldTemplate template) {
     return 'A focused character-first story. Their backstory can naturally bring supporting characters and scenes into play.';
   }
   if (template.isSentient) {
-    return 'A complete RPG setting guided by a lead AI character, with room for lore, cast, and scene threads.';
+    return 'A whole world, guided by one character, with room for lore, company, and the scenes you walk.';
   }
-  return 'A complete RPG setting narrated by a neutral AI Game Master.';
+  return 'A whole world, told by a narrator who is not one of its people.';
 }
 
 class _SectionHeader extends StatelessWidget {

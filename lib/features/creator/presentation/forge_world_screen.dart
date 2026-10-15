@@ -1132,15 +1132,15 @@ class _Step1Voice extends StatelessWidget {
                       'Describe the narrator\'s tone (grim, whimsical, epic...)',
                 ),
                 _Tip(text: 'State the genre and setting explicitly'),
-                _Tip(text: 'List what the narrator should and should not do'),
-                _Tip(text: 'Include any special rules or game mechanics'),
+                _Tip(text: 'Say what this voice lingers on, and what it refuses'),
+                _Tip(text: 'Name any law of the land the voice must keep'),
               ],
             ),
           ),
           const SizedBox(height: 20),
           _FormLabel(
             label: "Oracle's Voice",
-            hint: 'Your narrator reads this before every scene',
+            hint: 'The voice they keep, from the first line to the last',
             required: true,
             maxLength: 1500,
             counterFor: seedCtrl,
@@ -1156,7 +1156,7 @@ class _Step1Voice extends StatelessWidget {
               height: 1.6,
             ),
             decoration: _fieldDecoration(
-              'You are the narrator of [World Name], a dark fantasy realm where...\n\nYour tone is grim and foreboding. You describe actions with visceral detail. You never...',
+              'Grim, sparing, and never cruel for sport. The land is old and the fires are low.',
             ),
             maxLines: 14,
             minLines: 10,
@@ -1589,7 +1589,7 @@ class _Step3Stats extends StatelessWidget {
           ),
           const SizedBox(height: 28),
           const Text(
-            'REALM FLAGS',
+            'THINGS REMEMBERED',
             style: TextStyle(
               color: EverloreTheme.gold,
               fontSize: 11,
@@ -1599,7 +1599,7 @@ class _Step3Stats extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Boolean, numeric, or text flags for quests and story state (optional).',
+            'Optional marks the story can set and later ask about — a door opened, a debt owed, a name learned.',
             style: TextStyle(
               color: EverloreTheme.ash.withValues(alpha: 0.9),
               fontSize: 12,
@@ -1635,7 +1635,7 @@ class _Step3Stats extends StatelessWidget {
                   ),
                   SizedBox(width: 8),
                   Text(
-                    'Add Realm Flag',
+                    'Add something to remember',
                     style: TextStyle(
                       color: EverloreTheme.violet,
                       fontSize: 14,
@@ -1852,7 +1852,7 @@ class _FlagEditorSheetState extends State<_FlagEditorSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Realm flag',
+            'Something to remember',
             style: TextStyle(
               color: EverloreTheme.parchment,
               fontSize: 18,
@@ -1865,14 +1865,14 @@ class _FlagEditorSheetState extends State<_FlagEditorSheet> {
             maxLength: 32,
             style: const TextStyle(color: EverloreTheme.parchment),
             decoration: const InputDecoration(
-              labelText: 'Key (e.g. dragon_slayer)',
+              labelText: 'Name (a short phrase is enough)',
               labelStyle: TextStyle(color: EverloreTheme.ash),
               counterText: '',
             ),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<RealmFlagKind>(
-            value: _kind,
+            initialValue: _kind,
             dropdownColor: EverloreTheme.void2,
             decoration: const InputDecoration(
               labelText: 'Type',
@@ -1882,21 +1882,21 @@ class _FlagEditorSheetState extends State<_FlagEditorSheet> {
               DropdownMenuItem(
                 value: RealmFlagKind.boolean,
                 child: Text(
-                  'Boolean',
+                  'Yes or no',
                   style: TextStyle(color: EverloreTheme.parchment),
                 ),
               ),
               DropdownMenuItem(
                 value: RealmFlagKind.integer,
                 child: Text(
-                  'Integer',
+                  'A number',
                   style: TextStyle(color: EverloreTheme.parchment),
                 ),
               ),
               DropdownMenuItem(
                 value: RealmFlagKind.string,
                 child: Text(
-                  'String',
+                  'Words',
                   style: TextStyle(color: EverloreTheme.parchment),
                 ),
               ),
@@ -1911,7 +1911,7 @@ class _FlagEditorSheetState extends State<_FlagEditorSheet> {
             style: const TextStyle(color: EverloreTheme.parchment),
             decoration: InputDecoration(
               labelText: _kind == RealmFlagKind.boolean
-                  ? 'Default (true/false)'
+                  ? 'Starts as yes or no'
                   : 'Default value',
               labelStyle: const TextStyle(color: EverloreTheme.ash),
               counterText: '',
@@ -1949,7 +1949,7 @@ class _FlagEditorSheetState extends State<_FlagEditorSheet> {
                 );
                 Navigator.pop(context);
               },
-              child: const Text('Save flag'),
+              child: const Text('Keep this'),
             ),
           ),
         ],

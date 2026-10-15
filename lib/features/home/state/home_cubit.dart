@@ -7,6 +7,7 @@ import '../../../shared/models/world_instance.dart';
 import '../data/home_repository.dart';
 import '../domain/realm_group.dart';
 import '../../../core/errors/user_message.dart';
+import '../../../core/network/api_client.dart';
 
 class HomeState extends Equatable {
   final List<WorldInstance> instances;
@@ -18,6 +19,10 @@ class HomeState extends Equatable {
   final int page;
   final String? error;
 
+  /// The load was refused for want of a sign-in. Read off the status, not the
+  /// message: the server words that refusal for the player and may reword it.
+  final bool needsSignIn;
+
   const HomeState({
     this.instances = const [],
     this.realms = const [],
@@ -27,6 +32,7 @@ class HomeState extends Equatable {
     this.total = 0,
     this.page = 1,
     this.error,
+    this.needsSignIn = false,
   });
 
   HomeState copyWith({
@@ -38,6 +44,7 @@ class HomeState extends Equatable {
     int? total,
     int? page,
     String? error,
+    bool? needsSignIn,
   }) {
     return HomeState(
       instances: instances ?? this.instances,
@@ -48,6 +55,8 @@ class HomeState extends Equatable {
       total: total ?? this.total,
       page: page ?? this.page,
       error: error,
+      // Like `error`, cleared by any update that does not restate it.
+      needsSignIn: needsSignIn ?? false,
     );
   }
 
@@ -61,6 +70,7 @@ class HomeState extends Equatable {
     total,
     page,
     error,
+    needsSignIn,
   ];
 }
 
@@ -110,6 +120,7 @@ class HomeCubit extends Cubit<HomeState> {
         emit(
           state.copyWith(
             isLoading: false,
+            needsSignIn: e is ApiException && e.statusCode == 401,
             error: userFacingError(e, fallback: 'Could not load your realms.'),
           ),
         );

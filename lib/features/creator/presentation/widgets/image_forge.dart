@@ -129,7 +129,7 @@ class ImageForge extends StatelessWidget {
             height: 1.5,
           ),
           decoration: InputDecoration(
-            labelText: 'Visual prompt',
+            labelText: 'How it should look',
             labelStyle: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
             hintText:
                 'Describe the look, or use “Summon a draft” to fill it in.',

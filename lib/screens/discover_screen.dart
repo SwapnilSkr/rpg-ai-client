@@ -529,7 +529,7 @@ class _DiscoverCard extends StatelessWidget {
         : (template.isCharacter
               ? 'Character'
               : template.isSentient
-              ? 'Sentient'
+              ? 'Led by a soul'
               : 'World');
 
     return GestureDetector(

@@ -6,6 +6,7 @@ import '../../../../../shared/models/event.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
 import '../../../../../shared/widgets/story_prose.dart';
+import '../../../../shared/text_format.dart';
 import '../../../../shared/widgets/everlore_notice.dart';
 
 const _kNarrationMutedAlpha = kNarrationMutedAlpha;
@@ -698,7 +699,7 @@ class _SceneTagBadge extends StatelessWidget {
         border: Border.all(color: accent.withValues(alpha: 0.3)),
       ),
       child: Text(
-        tag.toUpperCase(),
+        humanizeTag(tag),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: EverloreTheme.ui(
@@ -725,7 +726,7 @@ class _CopyButton extends StatelessWidget {
         Clipboard.setData(ClipboardData(text: text));
         showEverloreNotice(
           context,
-          'Copied to clipboard',
+          'Copied',
           tone: NoticeTone.info,
         );
       },

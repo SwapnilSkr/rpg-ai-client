@@ -268,7 +268,7 @@ class _AutofillSheetState extends State<_AutofillSheet> {
                     const SizedBox(height: 10),
                     Text(
                       'What should this $subject be? Describe it however you like — a few '
-                      'words is plenty. The AI fills in every detail (including the image '
+                      'words is plenty. The draft fills in every detail (including the image '
                       'prompt), and you can edit all of it afterward.',
                       style: EverloreTheme.ui(
                         size: 13,
@@ -602,7 +602,7 @@ class _MatureRow extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 value
-                    ? 'The draft may explore mature, NSFW-capable themes for this $subject.'
+                    ? 'The draft may explore mature themes for this $subject.'
                     : 'The draft stays within safe-for-all themes.',
                 style: EverloreTheme.ui(
                   size: 11.5,
@@ -617,7 +617,7 @@ class _MatureRow extends StatelessWidget {
         Switch(
           value: value,
           onChanged: onChanged,
-          activeColor: EverloreTheme.crimson,
+          activeThumbColor: EverloreTheme.crimson,
         ),
       ],
     );

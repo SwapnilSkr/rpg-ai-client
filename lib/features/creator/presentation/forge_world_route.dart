@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
+import '../../../core/errors/user_message.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/models/world_template.dart';
 import '../data/creator_repository.dart';
@@ -102,7 +103,10 @@ class ForgeWorldRoute extends StatelessWidget {
               return _gateScaffold(
                 context,
                 title: 'Could not load world',
-                body: templateSnap.error.toString(),
+                body: userFacingError(
+                  templateSnap.error,
+                  fallback: 'Could not open this world for forging.',
+                ),
                 buttonLabel: 'Back',
                 onPressed: () => context.go('/my-worlds'),
               );

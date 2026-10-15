@@ -122,7 +122,7 @@ class _SplashScreenState extends State<SplashScreen>
         remoteOptOut: user.preferences.guideOptOut,
       );
       if (!mounted) return;
-      const debugPlay = const String.fromEnvironment('DEBUG_OPEN_PLAY');
+      const debugPlay = String.fromEnvironment('DEBUG_OPEN_PLAY');
       if (kDebugMode && debugPlay.isNotEmpty) {
         context.go('/play/$debugPlay');
         return;

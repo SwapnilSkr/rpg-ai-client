@@ -182,9 +182,7 @@ class _HomeViewState extends State<_HomeView> {
                             slivers: [
                               if (state.isLoading && state.realms.isEmpty)
                                 const SliverFillRemaining(child: _LoadingView())
-                              else if (state.error != null &&
-                                  state.error!.contains('Unauthorized') &&
-                                  state.realms.isEmpty)
+                              else if (state.needsSignIn && state.realms.isEmpty)
                                 const SliverFillRemaining(child: _UnauthView())
                               else if (state.error != null &&
                                   state.realms.isEmpty)
