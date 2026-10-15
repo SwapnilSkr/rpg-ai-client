@@ -11,6 +11,7 @@ import 'widgets/milestone_toast.dart';
 import 'widgets/bond_meters.dart';
 import 'widgets/bond_rail.dart';
 import 'widgets/story_timeline_sheet.dart';
+import 'widgets/the_ink_rests_dialog.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/event.dart';
@@ -94,6 +95,7 @@ class _PlayViewState extends State<_PlayView> {
   double? _olderLoadAnchorPixels;
   double? _olderLoadAnchorExtent;
   bool _inkModalVisible = false;
+  bool _restModalVisible = false;
 
   /// One-shot composer prefill consumed by [PlayerInput] (bond actions).
   final _composerDraft = ValueNotifier<String?>(null);
@@ -187,6 +189,47 @@ class _PlayViewState extends State<_PlayView> {
       },
     ).whenComplete(() {
       if (mounted) _inkModalVisible = false;
+    });
+  }
+
+  void _showTheInkRests(BuildContext context, String? resetsAt) {
+    if (_restModalVisible || !mounted) return;
+    _restModalVisible = true;
+    final cubit = context.read<PlayCubit>();
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierLabel: 'The Ink Rests',
+      barrierColor: Colors.black.withValues(alpha: 0.76),
+      transitionDuration: const Duration(milliseconds: 360),
+      pageBuilder: (dialogContext, _, __) => TheInkRestsDialog(
+        resetsAt: resetsAt,
+        onBackToWorlds: () {
+          cubit.clearResting();
+          Navigator.of(dialogContext).pop();
+          if (mounted && context.mounted) {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          }
+        },
+      ),
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            ),
+            child: child,
+          ),
+        );
+      },
+    ).whenComplete(() {
+      _restModalVisible = false;
+      cubit.clearResting();
     });
   }
 
@@ -959,11 +1002,13 @@ class _PlayViewState extends State<_PlayView> {
                 await LocalDb.clearInstanceCache(instanceId);
                 router.go('/'); // home route is '/', not '/home'
               } catch (_) {
-                showEverloreNotice(
-                  context,
-                  'Could not delete this playthrough. Try again.',
-                  tone: NoticeTone.error,
-                );
+                if (context.mounted) {
+                  showEverloreNotice(
+                    context,
+                    'Could not delete this playthrough. Try again.',
+                    tone: NoticeTone.error,
+                  );
+                }
               }
             },
             child: Text(
@@ -1033,7 +1078,7 @@ class _PlayViewState extends State<_PlayView> {
                   ),
                 ),
                 subtitle: Text(
-                  'Copy this AI turn to the clipboard.',
+                  'Copy this turn to the clipboard.',
                   style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
                 ),
                 onTap: () {
@@ -1043,7 +1088,7 @@ class _PlayViewState extends State<_PlayView> {
                   );
                   showEverloreNotice(
                     context,
-                    'Copied to clipboard',
+                    'Copied',
                     tone: NoticeTone.info,
                   );
                 },
@@ -1064,7 +1109,7 @@ class _PlayViewState extends State<_PlayView> {
                   ),
                 ),
                 subtitle: Text(
-                  'Rewrite this AI turn and re-curate its memories.',
+                  'Rewrite this turn, and what it left in memory.',
                   style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
                 ),
                 onTap: () {
@@ -1113,7 +1158,7 @@ class _PlayViewState extends State<_PlayView> {
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: EverloreTheme.void2,
         title: Text(
-          'Edit AI response',
+          'Edit this turn',
           style: EverloreTheme.serifDisplay(
             size: 18,
             color: EverloreTheme.parchment,
@@ -1132,7 +1177,7 @@ class _PlayViewState extends State<_PlayView> {
               height: 1.45,
             ),
             decoration: InputDecoration(
-              hintText: 'Rewrite the response...',
+              hintText: 'Rewrite this passage...',
               hintStyle: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
               filled: true,
               fillColor: EverloreTheme.void3,
@@ -1348,7 +1393,11 @@ class _PlayViewState extends State<_PlayView> {
         _lastSeenEventCount = state.events.length;
         _lastSeenLoading = state.isLoading;
         _lastSeenTemplate = state.template;
-        if (_isInkLimitMessage(state.error)) _showInkReserve(ctx);
+        if (state.restingResetAt != null) {
+          _showTheInkRests(ctx, state.restingResetAt);
+        } else if (_isInkLimitMessage(state.error)) {
+          _showInkReserve(ctx);
+        }
         // An authored failure told the player what to change. Give their words
         // back so they can change them, rather than making them retype from
         // memory a line the server just rejected.
@@ -2821,7 +2870,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   DropdownButtonFormField<String?>(
-                                    value: _voiceOverride,
+                                    initialValue: _voiceOverride,
                                     isExpanded: true,
                                     dropdownColor: EverloreTheme.void2,
                                     decoration: InputDecoration(
@@ -2981,7 +3030,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                               GuideAnchor(
                                 id: GuideIds.settingsPersonaControl,
                                 child: DropdownButtonFormField<String?>(
-                                  value: _personaId,
+                                  initialValue: _personaId,
                                   isExpanded: true,
                                   dropdownColor: EverloreTheme.void2,
                                   decoration: InputDecoration(
@@ -3021,8 +3070,8 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'This is your reusable player identity. It is copied into this '
-                                'story, so later persona edits do not rewrite past turns.',
+                                'This is who you are when you step in. Changing it later '
+                                'does not rewrite what has already been told.',
                                 style: EverloreTheme.ui(
                                   size: 11,
                                   color: EverloreTheme.ash,
@@ -3609,7 +3658,7 @@ class _ThoughtsSheet extends StatelessWidget {
           children: [
             if (!isPlayerProtagonist && c.dispositionToPlayer.trim().isNotEmpty)
               Text(
-                'Disposition: ${c.dispositionToPlayer}',
+                'Toward you: ${c.dispositionToPlayer}',
                 style: EverloreTheme.ui(size: 12, color: EverloreTheme.goldDim),
               ),
             if (!isPlayerProtagonist && c.hiddenThought.trim().isNotEmpty)
@@ -4380,7 +4429,7 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
               const SizedBox(height: 4),
               Text(
                 'Your edits are canon — the story honors them next turn. '
-                'Removing a fact also clears stale memories about it.',
+                'Removing a fact also lets go of echoes that only existed because of it.',
                 style: EverloreTheme.ui(
                   size: 12,
                   color: EverloreTheme.ash,
@@ -4395,8 +4444,8 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
               _field('Facts (one per line)', _facts, maxLines: 5),
               _field('Current state (one per line)', _state, maxLines: 3),
               if (!isProtagonist) ...[
-                _field('Disposition toward you', _disposition, maxLines: 2),
-                _field('Hidden thought', _thought, maxLines: 2),
+                _field('How they stand toward you', _disposition, maxLines: 2),
+                _field('What they do not say', _thought, maxLines: 2),
               ],
               const SizedBox(height: 18),
               Row(

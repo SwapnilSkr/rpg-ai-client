@@ -11,6 +11,7 @@ class BillingWallet {
   final int dailyStorySafetyCap;
   final bool purchasesEnabled;
   final bool simulationEnabled;
+  final bool unlimitedInk;
 
   const BillingWallet({
     required this.tier,
@@ -19,6 +20,7 @@ class BillingWallet {
     required this.dailyStorySafetyCap,
     required this.purchasesEnabled,
     required this.simulationEnabled,
+    this.unlimitedInk = false,
   });
 
   factory BillingWallet.fromJson(Map<String, dynamic> json) {
@@ -31,6 +33,7 @@ class BillingWallet {
           (profile['daily_story_safety_cap'] as num?)?.toInt() ?? 0,
       purchasesEnabled: json['purchases_enabled'] == true,
       simulationEnabled: json['simulation_enabled'] == true,
+      unlimitedInk: json['unlimited_ink'] == true,
     );
   }
 }
@@ -151,8 +154,9 @@ class BillingRepository {
     _started = true;
     _purchaseSub = _play.purchaseStream.listen(
       _handlePurchases,
-      onError: (Object error) =>
-          _errors.add('Google Play is unavailable: $error'),
+      onError: (Object _) => _errors.add(
+        'The store could not be reached. Try again in a moment.',
+      ),
     );
     return _play.isAvailable();
   }
@@ -176,7 +180,7 @@ class BillingRepository {
     if (!started) {
       throw ApiException(
         statusCode: 503,
-        message: 'Google Play could not start this purchase.',
+        message: 'The store could not start this purchase.',
       );
     }
   }
@@ -189,7 +193,7 @@ class BillingRepository {
         if (purchase.status == PurchaseStatus.error) {
           _errors.add(
             purchase.error?.message ??
-                'Google Play could not complete the purchase.',
+                'The store could not finish this purchase.',
           );
         } else if (purchase.status == PurchaseStatus.purchased ||
             purchase.status == PurchaseStatus.restored) {

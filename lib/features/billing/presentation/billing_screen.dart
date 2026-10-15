@@ -188,56 +188,58 @@ class _BillingScreenState extends State<BillingScreen> {
                           padding: const EdgeInsets.fromLTRB(20, 14, 20, 40),
                           children: [
                             _InkBalance(wallet: _wallet!),
-                            const SizedBox(height: 26),
-                            Text(
-                              'MEMBERSHIPS',
-                              style: EverloreTheme.sectionHeader,
-                            ),
-                            const SizedBox(height: 10),
-                            _plan(
-                              'everlore_premium',
-                              'Premium',
-                              '3,000 Ink each month · generous everyday play · forge access',
-                              EverloreTheme.gold,
-                            ),
-                            const SizedBox(height: 12),
-                            _plan(
-                              'everlore_creator',
-                              'Creator',
-                              '6,000 Ink each month · larger forge allowance · publish worlds',
-                              EverloreTheme.violet,
-                            ),
-                            const SizedBox(height: 26),
-                            Text('ADD INK', style: EverloreTheme.sectionHeader),
-                            const SizedBox(height: 10),
-                            _pack('everlore_ink_100', 'Small refill'),
-                            _pack('everlore_ink_350', 'Most popular'),
-                            _pack('everlore_ink_900', 'Deep reserves'),
-                            if (_wallet!.simulationEnabled) ...[
-                              const SizedBox(height: 24),
+                            if (!_wallet!.unlimitedInk) ...[
+                              const SizedBox(height: 26),
                               Text(
-                                'TEST CHECKOUT · NO CHARGE\nThis internal QA mode grants Ink through the same ledger used by normal play.',
-                                style: EverloreTheme.ui(
-                                  size: 13,
-                                  color: EverloreTheme.gold,
-                                  height: 1.45,
-                                ),
+                                'MEMBERSHIPS',
+                                style: EverloreTheme.sectionHeader,
                               ),
-                            ] else if (!_wallet!.purchasesEnabled) ...[
-                              const SizedBox(height: 24),
-                              Text(
-                                // Player-facing: no store, no catalogue, no
-                                // plumbing. They only need to know it is not
-                                // available to them yet.
-                                'Ink refills are not available yet. Your '
-                                'balance and everything you have written stay '
-                                'exactly as they are.',
-                                style: EverloreTheme.ui(
-                                  size: 13,
-                                  color: EverloreTheme.ash,
-                                  height: 1.45,
-                                ),
+                              const SizedBox(height: 10),
+                              _plan(
+                                'everlore_premium',
+                                'Premium',
+                                '3,000 Ink each month · generous everyday play · forge access',
+                                EverloreTheme.gold,
                               ),
+                              const SizedBox(height: 12),
+                              _plan(
+                                'everlore_creator',
+                                'Creator',
+                                '6,000 Ink each month · larger forge allowance · publish worlds',
+                                EverloreTheme.violet,
+                              ),
+                              const SizedBox(height: 26),
+                              Text('ADD INK', style: EverloreTheme.sectionHeader),
+                              const SizedBox(height: 10),
+                              _pack('everlore_ink_100', 'Small refill'),
+                              _pack('everlore_ink_350', 'Most popular'),
+                              _pack('everlore_ink_900', 'Deep reserves'),
+                              if (_wallet!.simulationEnabled) ...[
+                                const SizedBox(height: 24),
+                                Text(
+                                  'TEST CHECKOUT · NO CHARGE\nThis internal QA mode grants Ink through the same ledger used by normal play.',
+                                  style: EverloreTheme.ui(
+                                    size: 13,
+                                    color: EverloreTheme.gold,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ] else if (!_wallet!.purchasesEnabled) ...[
+                                const SizedBox(height: 24),
+                                Text(
+                                  // Player-facing: no store, no catalogue, no
+                                  // plumbing. They only need to know it is not
+                                  // available to them yet.
+                                  'Ink refills are not available yet. Your '
+                                  'balance and everything you have written stay '
+                                  'exactly as they are.',
+                                  style: EverloreTheme.ui(
+                                    size: 13,
+                                    color: EverloreTheme.ash,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ],
                             ],
                           ],
                         ),
@@ -341,7 +343,9 @@ class _InkBalance extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '${_grouped(wallet.balance)} Ink',
+                    wallet.unlimitedInk
+                        ? 'Unlimited Ink'
+                        : '${_grouped(wallet.balance)} Ink',
                     maxLines: 1,
                     style: EverloreTheme.serifDisplay(
                       size: 30,
@@ -351,7 +355,9 @@ class _InkBalance extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  '${wallet.tier.toUpperCase()} · Standard turns cost 1 Ink. Failed generations never consume it.',
+                  wallet.unlimitedInk
+                      ? 'Write as much as you like — for a limited time.'
+                      : '${wallet.tier.toUpperCase()} · Standard turns cost 1 Ink. A turn that fails never spends it.',
                   style: EverloreTheme.ui(
                     size: 12,
                     color: EverloreTheme.ash,

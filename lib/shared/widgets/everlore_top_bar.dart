@@ -130,7 +130,9 @@ String compactInk(int? balance) {
 /// The repository broadcasts ledger changes after turns and purchases, while
 /// resume/open refreshes cover grants made from another device or admin panel.
 class EverloreInkBalanceChip extends StatefulWidget {
-  const EverloreInkBalanceChip({super.key});
+  final BillingWallet? previewWallet;
+
+  const EverloreInkBalanceChip({super.key, this.previewWallet});
 
   @override
   State<EverloreInkBalanceChip> createState() => _InkBalanceChipState();
@@ -145,15 +147,31 @@ class _InkBalanceChipState extends State<EverloreInkBalanceChip>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _walletSub = BillingRepository.instance.walletChanges.listen((wallet) {
-      if (mounted) setState(() => _wallet = wallet);
-    });
-    _loadWallet(forceRefresh: true);
+    _wallet = widget.previewWallet ?? BillingRepository.instance.cachedWallet;
+    if (widget.previewWallet != null) {
+      _loading = false;
+    } else {
+      WidgetsBinding.instance.addObserver(this);
+      _walletSub = BillingRepository.instance.walletChanges.listen((wallet) {
+        if (mounted) setState(() => _wallet = wallet);
+      });
+      _loadWallet(forceRefresh: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(EverloreInkBalanceChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.previewWallet != oldWidget.previewWallet &&
+        widget.previewWallet != null) {
+      _wallet = widget.previewWallet;
+      _loading = false;
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (widget.previewWallet != null) return;
     if (state == AppLifecycleState.resumed) {
       _loadWallet(forceRefresh: true);
     }
@@ -174,17 +192,30 @@ class _InkBalanceChipState extends State<EverloreInkBalanceChip>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _walletSub?.cancel();
+    if (widget.previewWallet == null) {
+      WidgetsBinding.instance.removeObserver(this);
+      _walletSub?.cancel();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final balance = _wallet?.balance;
+    final wallet = _wallet;
+    final isUnlimited = wallet?.unlimitedInk == true;
+    final balance = wallet?.balance;
+    final String semanticsLabel;
+    if (isUnlimited) {
+      semanticsLabel = 'Unlimited Story Ink';
+    } else if (balance == null) {
+      semanticsLabel = 'Story Ink balance';
+    } else {
+      semanticsLabel = '$balance Story Ink';
+    }
     return Semantics(
       button: true,
-      label: balance == null ? 'Story Ink balance' : '$balance Story Ink',
+      label: semanticsLabel,
+      excludeSemantics: true,
       child: Tooltip(
         message: 'Story Ink · open Membership',
         child: GestureDetector(
@@ -214,7 +245,7 @@ class _InkBalanceChipState extends State<EverloreInkBalanceChip>
                       const InkMark(size: 19, color: EverloreTheme.gold),
                 ),
                 const SizedBox(width: 5),
-                if (_loading && balance == null)
+                if (_loading && wallet == null)
                   const SizedBox(
                     width: 12,
                     height: 12,
@@ -222,6 +253,12 @@ class _InkBalanceChipState extends State<EverloreInkBalanceChip>
                       strokeWidth: 1.5,
                       color: EverloreTheme.goldDim,
                     ),
+                  )
+                else if (isUnlimited)
+                  const Icon(
+                    Icons.all_inclusive,
+                    size: 16,
+                    color: EverloreTheme.parchment,
                   )
                 else
                   Text(

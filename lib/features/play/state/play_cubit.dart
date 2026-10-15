@@ -139,6 +139,8 @@ class PlayState extends Equatable {
   /// from instance meta on load, appended live as milestones unlock.
   final List<Milestone> milestones;
 
+  final String? restingResetAt;
+
   const PlayState({
     this.instance,
     this.template,
@@ -165,6 +167,7 @@ class PlayState extends Equatable {
     this.lastMilestone,
     this.milestoneStamp = 0,
     this.milestones = const [],
+    this.restingResetAt,
   });
 
   PlayState copyWith({
@@ -193,6 +196,7 @@ class PlayState extends Equatable {
     Object? lastMilestone = _kUnset,
     int? milestoneStamp,
     List<Milestone>? milestones,
+    Object? restingResetAt = _kUnset,
   }) {
     return PlayState(
       instance: instance ?? this.instance,
@@ -230,6 +234,9 @@ class PlayState extends Equatable {
           : lastMilestone as String?,
       milestoneStamp: milestoneStamp ?? this.milestoneStamp,
       milestones: milestones ?? this.milestones,
+      restingResetAt: identical(restingResetAt, _kUnset)
+          ? this.restingResetAt
+          : restingResetAt as String?,
     );
   }
 
@@ -260,6 +267,7 @@ class PlayState extends Equatable {
     lastMilestone,
     milestoneStamp,
     milestones,
+    restingResetAt,
   ];
 
   /// Composer is only locked while prose is still appearing, during rewind,
@@ -818,6 +826,55 @@ class PlayCubit extends Cubit<PlayState> {
       // Reservations are released on failed turns; refresh the header so it
       // reflects the settled/refunded ledger immediately.
       unawaited(_refreshInk());
+
+      if (msg['code'] == 'STORY_RESTING') {
+        final replayId = _replayEventId;
+        final replayOriginal = _replayOriginalResponse;
+        _replayWatchdog?.cancel();
+        _replayWatchdog = null;
+        _replayRevealTimer?.cancel();
+        _replayRevealTimer = null;
+        _replayEventId = null;
+        _replayBuffer = '';
+        _replayOriginalResponse = null;
+
+        _streamBuffer = '';
+        _streamTarget = '';
+        _awaitingRetryReplacement = false;
+        _clearGenerationTimers();
+        final events = [...state.events];
+        if (replayId != null && replayOriginal != null) {
+          final idx = events.indexWhere((e) => e.id == replayId);
+          if (idx >= 0) {
+            events[idx] = events[idx].copyWith(aiResponse: replayOriginal);
+          }
+        }
+        final droppedOptimistic = events
+            .where((e) => e.isOptimistic)
+            .toList();
+        final droppedInput = droppedOptimistic.isNotEmpty
+            ? droppedOptimistic.last.playerInput
+            : null;
+        final cleanEvents = events.where((e) => !e.isOptimistic).toList();
+        emit(
+          state.copyWith(
+            events: cleanEvents,
+            isGenerating: false,
+            narrativeStreaming: false,
+            choicesPreview: false,
+            replayingEventId: null,
+            notice: null,
+            error: null,
+            canRetry: false,
+            lastFailedInput: droppedInput,
+            hasQueuedSend: false,
+            restoreComposerText: _takeQueuedSend(),
+            restingResetAt: msg['resets_at']?.toString() ?? '',
+          ),
+        );
+        return;
+      }
+
       // An authored failure explains itself and is not worth resending; an
       // internal one is the only kind a verbatim retry can fix. This single
       // question decides both the copy and whether the bar offers an action.
@@ -1211,7 +1268,18 @@ class PlayCubit extends Cubit<PlayState> {
 
   void clearError() {
     // Dismissing the error also abandons the retry — drop the held input.
-    emit(state.copyWith(error: null, lastFailedInput: null, canRetry: false));
+    emit(state.copyWith(
+      error: null,
+      lastFailedInput: null,
+      canRetry: false,
+      restingResetAt: null,
+    ));
+  }
+
+  void clearResting() {
+    if (state.restingResetAt != null) {
+      emit(state.copyWith(restingResetAt: null));
+    }
   }
 
   bool _protagonistPrompted = false;
