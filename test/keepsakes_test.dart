@@ -1026,7 +1026,7 @@ void main() {
     });
 
     testWidgets(
-      'regression test: turn-menu sheet opens through PlayScreen long-press with no hand-wrapped provider and Picture this works',
+      'regression test: media button opens Picture this through PlayScreen with no hand-wrapped provider and works',
       (tester) async {
         _setTallViewport(tester, 800);
         FlutterSecureStorage.setMockInitialValues({'auth_token': 'token'});
@@ -1056,8 +1056,8 @@ void main() {
         ));
 
         // Note: No BlocProvider<PlayCubit> wraps _buildTestApp or PlayScreen here.
-        // PlayScreen provides PlayCubit to its own children, but the modal sheet
-        // is pushed on the root navigator.
+        // PlayScreen provides PlayCubit to its own children, but the modal popup
+        // is pushed on the navigator.
         await tester.pumpWidget(
           _buildTestApp(
             child: PlayScreen(
@@ -1074,16 +1074,18 @@ void main() {
         );
         expect(turnTextFinder, findsOneWidget);
 
-        await tester.longPress(turnTextFinder);
+        final mediaButtonFinder = find.byTooltip('Picture or film this moment');
+        expect(mediaButtonFinder, findsOneWidget);
+
+        await tester.tap(mediaButtonFinder);
         await _pumpIt(tester, 5);
 
-        expect(find.byType(TurnMenuSheet), findsOneWidget);
         expect(find.text('Picture this'), findsOneWidget);
 
         await tester.tap(find.text('Picture this'));
         await _pumpIt(tester, 5);
 
-        expect(find.byType(TurnMenuSheet), findsNothing);
+        expect(find.text('Picture this'), findsNothing);
         expect(mediaRepo.pictureRequests, [
           (instanceId: 'inst_regression_turn_menu', eventId: 'turn_menu_evt_1'),
         ]);

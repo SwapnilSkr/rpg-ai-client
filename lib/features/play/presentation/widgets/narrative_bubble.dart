@@ -7,6 +7,7 @@ import '../../../../../shared/models/event.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
 import '../../../../../shared/widgets/story_prose.dart';
+import '../../../../core/guide/guide_anchor.dart';
 import '../../../../shared/text_format.dart';
 import '../../../../shared/widgets/everlore_notice.dart';
 import '../../../media/models/spoken_line.dart';
@@ -17,7 +18,8 @@ const _kNarrationMutedAlpha = kNarrationMutedAlpha;
 
 class NarrativeBubble extends StatefulWidget {
   final GameEvent event;
-  final VoidCallback? onLongPress;
+  final ValueChanged<Rect>? onLongPress;
+  final ValueChanged<Rect>? onMedia;
   final VoidCallback? onReplay;
   final VoidCallback? onContinue;
   final ValueChanged<int>? onSelectReplayVariant;
@@ -40,15 +42,17 @@ class NarrativeBubble extends StatefulWidget {
 
   final List<SpokenLine> spokenLines;
   final ValueChanged<SpokenLine>? onSpokenLineTap;
-  final ValueChanged<SpokenLine>? onSpokenLineLongPress;
+  final void Function(SpokenLine line, Rect rect)? onSpokenLineLongPress;
   final String? loadingVoiceLineId;
   final String? playingVoiceLineId;
   final Set<String> unvoiceableLines;
+  final String? mediaAnchorId;
 
   const NarrativeBubble({
     super.key,
     required this.event,
     this.onLongPress,
+    this.onMedia,
     this.onReplay,
     this.onContinue,
     this.onSelectReplayVariant,
@@ -64,6 +68,7 @@ class NarrativeBubble extends StatefulWidget {
     this.loadingVoiceLineId,
     this.playingVoiceLineId,
     this.unvoiceableLines = const {},
+    this.mediaAnchorId,
   });
 
   @override
@@ -72,16 +77,18 @@ class NarrativeBubble extends StatefulWidget {
 
 class _NarrativeBubbleState extends State<NarrativeBubble> {
   final GlobalKey<_ProseTextState> _proseKey = GlobalKey<_ProseTextState>();
+  final GlobalKey _narratorPanelKey = GlobalKey();
 
   void _handleTapUp(TapUpDetails details) {
     final effectiveSpokenLines = widget.event.spokenLines.isNotEmpty
         ? widget.event.spokenLines
         : widget.spokenLines;
 
-    final spokenLine =
+    final spokenResult =
         _proseKey.currentState?.findSpokenLineAt(details.globalPosition);
 
-    if (spokenLine != null) {
+    if (spokenResult != null) {
+      final spokenLine = spokenResult.line;
       final isUnvoiceable = spokenLine.unvoiceable ||
           widget.unvoiceableLines.contains(spokenLine.lineId) ||
           effectiveSpokenLines.any(
@@ -106,22 +113,32 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
         ? widget.event.spokenLines
         : widget.spokenLines;
 
-    final spokenLine = _proseKey.currentState?.findSpokenLineAt(details.globalPosition);
+    final spokenResult =
+        _proseKey.currentState?.findSpokenLineAt(details.globalPosition);
 
-    if (spokenLine != null) {
+    if (spokenResult != null) {
+      final spokenLine = spokenResult.line;
       final isUnvoiceable = spokenLine.unvoiceable ||
           widget.unvoiceableLines.contains(spokenLine.lineId) ||
           effectiveSpokenLines.any(
             (l) => l.lineId == spokenLine.lineId && l.unvoiceable,
           );
 
-      if (!isUnvoiceable && widget.onSpokenLineLongPress != null) {
-        widget.onSpokenLineLongPress!(spokenLine);
+      if (!isUnvoiceable) {
+        widget.onSpokenLineLongPress?.call(spokenLine, spokenResult.rect);
         return;
       }
     }
 
-    widget.onLongPress?.call();
+    final panelBox =
+        _narratorPanelKey.currentContext?.findRenderObject() as RenderBox?;
+    final panelRect = panelBox != null && panelBox.hasSize
+        ? (panelBox.localToGlobal(Offset.zero) & panelBox.size)
+        : null;
+
+    if (panelRect != null) {
+      widget.onLongPress?.call(panelRect);
+    }
   }
 
   @override
@@ -133,7 +150,8 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
         event.spokenLines.isNotEmpty ? event.spokenLines : widget.spokenLines;
 
     final canLongPress = widget.onLongPress != null ||
-        (effectiveSpokenLines.isNotEmpty && widget.onSpokenLineLongPress != null);
+        (effectiveSpokenLines.isNotEmpty &&
+            widget.onSpokenLineLongPress != null);
     final canTap =
         effectiveSpokenLines.isNotEmpty && widget.onSpokenLineTap != null;
 
@@ -149,6 +167,7 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
         if (widget.isReplaying)
           hasProse
               ? _NarratorPanel(
+                  panelKey: _narratorPanelKey,
                   text: ai,
                   sceneTag: event.sceneTag,
                   isEdited: event.isUserEdited,
@@ -164,7 +183,6 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
                   playingVoiceLineId: widget.playingVoiceLineId,
                   unvoiceableLines: widget.unvoiceableLines,
                   onSpokenLineTap: widget.onSpokenLineTap,
-                  onSpokenLineLongPress: widget.onSpokenLineLongPress,
                 )
               : const _GeneratingIndicator(label: 'Re-weaving this turn')
         else if (hasProse) ...[
@@ -185,6 +203,7 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
             onLongPressStart: canLongPress ? _handleLongPressStart : null,
             onTapUp: canTap ? _handleTapUp : null,
             child: _NarratorPanel(
+              panelKey: _narratorPanelKey,
               proseKey: _proseKey,
               text: ai,
               sceneTag: event.sceneTag,
@@ -194,6 +213,8 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
               onContinue: widget.onContinue,
               onReplay: widget.onReplay,
               onSelectReplayVariant: widget.onSelectReplayVariant,
+              onMedia: widget.onMedia,
+              mediaAnchorId: widget.mediaAnchorId,
               isStreaming: widget.isStreaming,
               // The action row is a post-turn affordance — hide it while the turn
               // is still in flight (optimistic) so the prose-settled-but-not-yet-
@@ -211,7 +232,6 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
               playingVoiceLineId: widget.playingVoiceLineId,
               unvoiceableLines: widget.unvoiceableLines,
               onSpokenLineTap: widget.onSpokenLineTap,
-              onSpokenLineLongPress: widget.onSpokenLineLongPress,
             ),
           ),
         ] else if (event.isOptimistic)
@@ -478,6 +498,7 @@ List<InlineSpan> _playerInputSpans(
 }
 
 class _NarratorPanel extends StatelessWidget {
+  final Key? panelKey;
   final GlobalKey<_ProseTextState>? proseKey;
   final String text;
   final String? sceneTag;
@@ -487,6 +508,8 @@ class _NarratorPanel extends StatelessWidget {
   final VoidCallback? onContinue;
   final VoidCallback? onReplay;
   final ValueChanged<int>? onSelectReplayVariant;
+  final ValueChanged<Rect>? onMedia;
+  final String? mediaAnchorId;
   final bool isStreaming;
 
   /// Whether to show the post-turn action row (continue / replay / copy / scene
@@ -505,9 +528,9 @@ class _NarratorPanel extends StatelessWidget {
   final String? playingVoiceLineId;
   final Set<String> unvoiceableLines;
   final ValueChanged<SpokenLine>? onSpokenLineTap;
-  final ValueChanged<SpokenLine>? onSpokenLineLongPress;
 
   const _NarratorPanel({
+    this.panelKey,
     this.proseKey,
     required this.text,
     this.sceneTag,
@@ -517,6 +540,8 @@ class _NarratorPanel extends StatelessWidget {
     this.onContinue,
     this.onReplay,
     this.onSelectReplayVariant,
+    this.onMedia,
+    this.mediaAnchorId,
     this.isStreaming = false,
     this.showActions = true,
     this.characterNames = const [],
@@ -529,143 +554,160 @@ class _NarratorPanel extends StatelessWidget {
     this.playingVoiceLineId,
     this.unvoiceableLines = const {},
     this.onSpokenLineTap,
-    this.onSpokenLineLongPress,
   });
+
+  Widget _buildMediaButton({required bool compact}) {
+    if (onMedia == null) return const SizedBox.shrink();
+    Widget btn = _MediaButton(
+      onTap: onMedia!,
+      compact: compact,
+    );
+    if (mediaAnchorId != null) {
+      btn = GuideAnchor(id: mediaAnchorId!, child: btn);
+    }
+    return btn;
+  }
 
   @override
   Widget build(BuildContext context) {
     final accent = EverloreTheme.sceneAccent(sceneTag);
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 6, 40, 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: const Color(0xFF13132A).withValues(alpha: 0.72),
-        border: Border.all(
-          color: EverloreTheme.goldDim.withValues(alpha: 0.16),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 40, 10),
+      child: Container(
+        key: panelKey,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: const Color(0xFF13132A).withValues(alpha: 0.72),
+          border: Border.all(
+            color: EverloreTheme.goldDim.withValues(alpha: 0.16),
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(17, 14, 16, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      if (isEdited) ...[
-                        const SizedBox(width: 6),
-                        Icon(
-                          Icons.edit,
-                          size: 9,
-                          color: EverloreTheme.ash.withValues(alpha: 0.4),
-                        ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(17, 14, 16, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (isEdited) ...[
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.edit,
+                            size: 9,
+                            color: EverloreTheme.ash.withValues(alpha: 0.4),
+                          ),
+                        ],
                       ],
+                    ),
+                    _ProseText(
+                      key: proseKey,
+                      text: text,
+                      characterNames: characterNames,
+                      onCharacterTap: onCharacterTap,
+                      loreEntities: loreEntities,
+                      onEntityTap: onEntityTap,
+                      spokenLines: spokenLines,
+                      loadingLineId: loadingVoiceLineId,
+                      playingLineId: playingVoiceLineId,
+                      unvoiceableLines: unvoiceableLines,
+                      onSpokenLineTap: onSpokenLineTap,
+                    ),
+                    if (media.isNotEmpty)
+                      MediaThumbnailRow(media: media),
+                    if (isStreaming) ...[
+                      const SizedBox(height: 10),
+                      const _InlineStreamingIndicator(),
                     ],
-                  ),
-                  _ProseText(
-                    key: proseKey,
-                    text: text,
-                    characterNames: characterNames,
-                    onCharacterTap: onCharacterTap,
-                    loreEntities: loreEntities,
-                    onEntityTap: onEntityTap,
-                    spokenLines: spokenLines,
-                    loadingLineId: loadingVoiceLineId,
-                    playingLineId: playingVoiceLineId,
-                    unvoiceableLines: unvoiceableLines,
-                    onSpokenLineTap: onSpokenLineTap,
-                    onSpokenLineLongPress: onSpokenLineLongPress,
-                  ),
-                  if (media.isNotEmpty)
-                    MediaThumbnailRow(media: media),
-                  if (isStreaming) ...[
-                    const SizedBox(height: 10),
-                    const _InlineStreamingIndicator(),
-                  ],
-                  if (showActions && !isStreaming) ...[
-                    const SizedBox(height: 12),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final compact = constraints.maxWidth < 300;
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Wrap(
-                                spacing: 8,
-                                runSpacing: 6,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  if (onContinue != null)
-                                    _ContinueTurnButton(onTap: onContinue!),
-                                  if (onReplay != null)
-                                    _ReplayButton(
-                                      onTap: onReplay!,
-                                      compact: compact,
-                                    ),
-                                  if (sceneTag != null)
-                                    _SceneTagBadge(
-                                      tag: sceneTag!,
-                                      accent: accent,
-                                    ),
-                                  if (replayVariants.length > 1)
-                                    _ReplayArrows(
-                                      count: replayVariants.length,
-                                      selectedIndex: selectedReplayIndex.clamp(
-                                        0,
-                                        replayVariants.length - 1,
+                    if (showActions && !isStreaming) ...[
+                      const SizedBox(height: 12),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final compact = constraints.maxWidth < 300;
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    if (onContinue != null)
+                                      _ContinueTurnButton(onTap: onContinue!),
+                                    if (onReplay != null)
+                                      _ReplayButton(
+                                        onTap: onReplay!,
+                                        compact: compact,
                                       ),
-                                      onSelect: onSelectReplayVariant,
-                                    ),
+                                    if (sceneTag != null)
+                                      _SceneTagBadge(
+                                        tag: sceneTag!,
+                                        accent: accent,
+                                      ),
+                                    if (replayVariants.length > 1)
+                                      _ReplayArrows(
+                                        count: replayVariants.length,
+                                        selectedIndex: selectedReplayIndex.clamp(
+                                          0,
+                                          replayVariants.length - 1,
+                                        ),
+                                        onSelect: onSelectReplayVariant,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (onMedia != null) ...[
+                                    _buildMediaButton(compact: compact),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  _CopyButton(text: text, compact: compact),
                                 ],
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _CopyButton(text: text, compact: compact),
-                              ],
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            // Scene-tinted illuminated spine, stretched to the panel's height
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: 3,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      accent.withValues(alpha: 0.7),
-                      accent.withValues(alpha: 0.15),
+                            ],
+                          );
+                        },
+                      ),
                     ],
+                  ],
+                ),
+              ),
+              // Scene-tinted illuminated spine, stretched to the panel's height
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 3,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        accent.withValues(alpha: 0.7),
+                        accent.withValues(alpha: 0.15),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -884,6 +926,58 @@ class _CopyButton extends StatelessWidget {
   }
 }
 
+class _MediaButton extends StatelessWidget {
+  final ValueChanged<Rect> onTap;
+  final bool compact;
+  const _MediaButton({
+    required this.onTap,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Picture or film this moment',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () {
+          final box = context.findRenderObject() as RenderBox?;
+          final rect = box != null && box.hasSize
+              ? (box.localToGlobal(Offset.zero) & box.size)
+              : null;
+          if (rect != null) {
+            onTap(rect);
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.auto_awesome_rounded,
+                size: 13,
+                color: EverloreTheme.gold.withValues(alpha: 0.85),
+              ),
+              if (!compact) ...[
+                const SizedBox(width: 4),
+                Text(
+                  'Media',
+                  style: EverloreTheme.ui(
+                    size: 11,
+                    color: EverloreTheme.gold.withValues(alpha: 0.85),
+                    spacing: 0.3,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RenderedLineSpan {
   final SpokenLine line;
   final int start;
@@ -917,7 +1011,6 @@ class _ProseText extends StatefulWidget {
   final String? playingLineId;
   final Set<String> unvoiceableLines;
   final ValueChanged<SpokenLine>? onSpokenLineTap;
-  final ValueChanged<SpokenLine>? onSpokenLineLongPress;
 
   const _ProseText({
     super.key,
@@ -931,7 +1024,6 @@ class _ProseText extends StatefulWidget {
     this.playingLineId,
     this.unvoiceableLines = const {},
     this.onSpokenLineTap,
-    this.onSpokenLineLongPress,
   });
 
   @override
@@ -944,7 +1036,7 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
   final GlobalKey _richTextKey = GlobalKey();
   List<_RenderedLineSpan> _renderedLines = const [];
 
-  SpokenLine? findSpokenLineAt(Offset globalPosition) {
+  ({SpokenLine line, Rect rect})? findSpokenLineAt(Offset globalPosition) {
     if (_renderedLines.isEmpty) return null;
     final renderObject = _richTextKey.currentContext?.findRenderObject();
     if (renderObject is! RenderParagraph) return null;
@@ -962,32 +1054,50 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
         TextSelection(baseOffset: rl.start, extentOffset: rl.end),
       );
 
-      // Geometric hit check: the press is within or immediately adjacent to
-      // the bounding boxes of the rendered glyphs for this spoken line.
-      if (boxes.any((box) => box.toRect().inflate(6.0).contains(localOffset))) {
-        return rl.line;
+      double top = double.infinity;
+      double bottom = double.negativeInfinity;
+      double left = double.infinity;
+      double right = double.negativeInfinity;
+      for (final box in boxes) {
+        if (box.top < top) top = box.top;
+        if (box.bottom > bottom) bottom = box.bottom;
+        if (box.left < left) left = box.left;
+        if (box.right > right) right = box.right;
       }
 
-      // Logical check: position resolved to an offset in this line and is
-      // within vertical bounds of the line's glyphs.
-      if (offset >= rl.start && offset <= rl.end) {
-        if (boxes.isEmpty) return rl.line;
-        double top = double.infinity;
-        double bottom = double.negativeInfinity;
-        double left = double.infinity;
-        double right = double.negativeInfinity;
-        for (final box in boxes) {
-          if (box.top < top) top = box.top;
-          if (box.bottom > bottom) bottom = box.bottom;
-          if (box.left < left) left = box.left;
-          if (box.right > right) right = box.right;
-        }
-        if (localOffset.dy >= top - 6.0 &&
+      final bool isHit;
+      if (boxes.any((box) => box.toRect().inflate(6.0).contains(localOffset))) {
+        isHit = true;
+      } else if (offset >= rl.start && offset <= rl.end) {
+        if (boxes.isEmpty) {
+          isHit = true;
+        } else if (localOffset.dy >= top - 6.0 &&
             localOffset.dy <= bottom + 6.0 &&
             localOffset.dx >= left - 12.0 &&
             localOffset.dx <= right + 12.0) {
-          return rl.line;
+          isHit = true;
+        } else {
+          isHit = false;
         }
+      } else {
+        isHit = false;
+      }
+
+      if (isHit) {
+        final Rect globalRect;
+        if (boxes.isEmpty) {
+          globalRect = Rect.fromCenter(center: globalPosition, width: 0, height: 0);
+        } else {
+          final localRect = Rect.fromLTRB(left, top, right, bottom);
+          final topLeft = renderObject.localToGlobal(localRect.topLeft);
+          globalRect = Rect.fromLTWH(
+            topLeft.dx,
+            topLeft.dy,
+            localRect.width,
+            localRect.height,
+          );
+        }
+        return (line: rl.line, rect: globalRect);
       }
     }
     return null;
@@ -1192,12 +1302,24 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
         final lineText = widget.text.substring(line.start, line.end);
         final rawLineSpans = _narrativeSpans(lineText);
 
+        final isUnvoiceable = line.unvoiceable ||
+            widget.unvoiceableLines.contains(line.lineId);
+        final isVoiceable = !isUnvoiceable;
+
         final isLoading = widget.loadingLineId == line.lineId;
 
         final lineStartRendered = currentRenderedLength;
         for (final s in rawLineSpans) {
           if (s is TextSpan) {
             TextStyle effectiveStyle = s.style ?? const TextStyle();
+            if (isVoiceable) {
+              effectiveStyle = effectiveStyle.copyWith(
+                decoration: TextDecoration.underline,
+                decorationStyle: TextDecorationStyle.dotted,
+                decorationColor: EverloreTheme.aether.withValues(alpha: 0.45),
+                decorationThickness: 1.0,
+              );
+            }
             if (isLoading) {
               final shimmerColor = Color.lerp(
                 EverloreTheme.parchment,

@@ -13,6 +13,7 @@ import 'widgets/bond_meters.dart';
 import 'widgets/bond_rail.dart';
 import 'widgets/story_timeline_sheet.dart';
 import 'widgets/the_ink_rests_dialog.dart';
+import 'widgets/anchored_menu_popup.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/event.dart';
@@ -117,6 +118,28 @@ class _PlayViewState extends State<_PlayView> {
 
   /// One-shot composer prefill consumed by [PlayerInput] (bond actions).
   final _composerDraft = ValueNotifier<String?>(null);
+  final GlobalKey _composerKey = GlobalKey();
+
+  double? get _composerTop {
+    final box = _composerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize) {
+      return box.localToGlobal(Offset.zero).dy;
+    }
+    return null;
+  }
+
+  Rect? _getEventBubbleRect(String eventId, BuildContext fallbackContext) {
+    final key = _eventBubbleKeys[eventId];
+    final box = key?.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    final fallbackBox = fallbackContext.findRenderObject() as RenderBox?;
+    if (fallbackBox != null && fallbackBox.hasSize) {
+      return fallbackBox.localToGlobal(Offset.zero) & fallbackBox.size;
+    }
+    return null;
+  }
 
   /// The draft last handed back after an authored refusal, so the listener
   /// restores it once rather than overwriting the player's edits every rebuild.
@@ -666,10 +689,23 @@ class _PlayViewState extends State<_PlayView> {
     // Only the newest passage carries the anchor, so the coachmark waits for a
     // newest turn that has something to tap.
     final hasSpokenLines = state.events.isNotEmpty &&
-        state.events.last.spokenLines.isNotEmpty;
+        state.events.last.spokenLines.any((l) =>
+            !l.unvoiceable &&
+            !state.unvoiceableLines.contains('${state.events.last.id}:${l.lineId}'));
     if (hasSpokenLines && guide.canAutoStart(GuideFlows.spokenLine)) {
       guide.maybeStart(
         GuideFlows.spokenLine,
+        delay: const Duration(milliseconds: 600),
+      );
+      return;
+    }
+    final hasMedia = state.isMediaAvailable &&
+        state.events.isNotEmpty &&
+        (state.events.last.aiResponse?.trim().isNotEmpty ?? false) &&
+        !state.events.last.isOptimistic;
+    if (hasMedia && guide.canAutoStart(GuideFlows.playMedia)) {
+      guide.maybeStart(
+        GuideFlows.playMedia,
         delay: const Duration(milliseconds: 600),
       );
       return;
@@ -1157,26 +1193,87 @@ class _PlayViewState extends State<_PlayView> {
     );
   }
 
-  void _showTurnMenu(BuildContext context, GameEvent event, bool canReplay) {
+  void _showTurnMenu(
+    BuildContext context,
+    GameEvent event,
+    bool canReplay, {
+    Rect? anchorRect,
+  }) {
     final cubit = context.read<PlayCubit>();
-    showModalBottomSheet(
-      useRootNavigator: true,
+    final rect = anchorRect ?? _getEventBubbleRect(event.id, context);
+    final hasAiResponse = (event.aiResponse ?? '').trim().isNotEmpty;
+
+    showAnchoredMenu<void>(
       context: context,
-      backgroundColor: EverloreTheme.void2,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      // The sheet lives on the root navigator, outside this screen's
-      // provider, so it is handed the cubit explicitly.
-      builder: (sheetCtx) => BlocProvider<PlayCubit>.value(
-        value: cubit,
-        child: TurnMenuSheet(
-          event: event,
-          canReplay: canReplay,
-          onEdit: () => _showEditResponseDialog(context, cubit, event),
-          onRewind: () => _confirmRewind(context, cubit, event.sequence),
+      anchorRect: rect,
+      composerTop: _composerTop,
+      items: [
+        if (canReplay)
+          AnchoredMenuItem(
+            icon: const Icon(
+              Icons.refresh_rounded,
+              color: EverloreTheme.cyanBright,
+              size: 16,
+            ),
+            label: 'Replay response',
+            onTap: () => cubit.replayAiResponse(event),
+          ),
+        if (hasAiResponse)
+          AnchoredMenuItem(
+            icon: const Icon(
+              Icons.copy_rounded,
+              color: EverloreTheme.ash,
+              size: 16,
+            ),
+            label: 'Copy response',
+            onTap: () {
+              Clipboard.setData(
+                ClipboardData(text: event.aiResponse?.trim() ?? ''),
+              );
+              showEverloreNotice(
+                context,
+                'Copied',
+                tone: NoticeTone.info,
+              );
+            },
+          ),
+        if (hasAiResponse)
+          AnchoredMenuItem(
+            icon: const Icon(
+              Icons.edit_outlined,
+              color: EverloreTheme.violetBright,
+              size: 16,
+            ),
+            label: 'Edit response',
+            onTap: () => _showEditResponseDialog(context, cubit, event),
+          ),
+        AnchoredMenuItem(
+          icon: const Icon(
+            Icons.history_toggle_off,
+            color: EverloreTheme.crimson,
+            size: 16,
+          ),
+          label: 'Rewind to here',
+          onTap: () => _confirmRewind(context, cubit, event.sequence),
         ),
-      ),
+      ],
+    );
+  }
+
+  void _showMediaMenu(
+    BuildContext context,
+    GameEvent event, {
+    Rect? anchorRect,
+  }) {
+    final cubit = context.read<PlayCubit>();
+    final rect = anchorRect ?? _getEventBubbleRect(event.id, context);
+
+    showTurnMediaMenu(
+      context: context,
+      cubit: cubit,
+      eventId: event.id,
+      anchorRect: rect,
+      composerTop: _composerTop,
     );
   }
 
@@ -1353,7 +1450,21 @@ class _PlayViewState extends State<_PlayView> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<PlayCubit, PlayState>(
+    return BlocListener<PlayCubit, PlayState>(
+      listenWhen: (prev, curr) =>
+          curr.mediaNotice != null &&
+          curr.mediaNotice?.sequence != prev.mediaNotice?.sequence,
+      listener: (context, state) {
+        final notice = state.mediaNotice;
+        if (notice != null) {
+          showEverloreNotice(
+            context,
+            notice.message,
+            tone: notice.tone,
+          );
+        }
+      },
+      child: BlocConsumer<PlayCubit, PlayState>(
       listenWhen: (prev, curr) {
         final lastResponseChanged =
             curr.events.isNotEmpty &&
@@ -1792,12 +1903,27 @@ class _PlayViewState extends State<_PlayView> {
                                           (!event.isOptimistic &&
                                               event.sequence > 0 &&
                                               state.replayingEventId == null)
-                                          ? () => _showTurnMenu(
+                                          ? (rect) => _showTurnMenu(
                                               context,
                                               event,
                                               canReplay,
+                                              anchorRect: rect,
                                             )
                                           : null,
+                                      onMedia: (state.isMediaAvailable &&
+                                              !event.isOptimistic &&
+                                              event.sequence > 0 &&
+                                              (event.aiResponse ?? '')
+                                                  .trim()
+                                                  .isNotEmpty)
+                                          ? (rect) => _showMediaMenu(
+                                              context,
+                                              event,
+                                              anchorRect: rect,
+                                            )
+                                          : null,
+                                      mediaAnchorId:
+                                          isLatest ? GuideIds.playMedia : null,
                                       onReplay: canReplay
                                           ? () => context
                                                 .read<PlayCubit>()
@@ -1825,9 +1951,11 @@ class _PlayViewState extends State<_PlayView> {
                                       onSpokenLineTap: (line) {
                                         context.read<PlayCubit>().playVoiceLine(event.id, line.lineId);
                                       },
-                                      onSpokenLineLongPress: (line) {
+                                      onSpokenLineLongPress: (line, lineRect) {
                                         showSpokenLineMenu(
                                           context: context,
+                                          anchorRect: lineRect,
+                                          composerTop: _composerTop,
                                           onHearIt: () {
                                             context.read<PlayCubit>().playVoiceLine(event.id, line.lineId);
                                           },
@@ -1869,6 +1997,7 @@ class _PlayViewState extends State<_PlayView> {
                   ),
 
                   PlayerInput(
+                    key: _composerKey,
                     composerLocked: state.composerLocked,
                     worldActionsLocked: state.worldActionsLocked,
                     hasQueuedSend: state.hasQueuedSend,
@@ -1945,8 +2074,9 @@ class _PlayViewState extends State<_PlayView> {
           ),
         );
       },
-    );
-  }
+    ),
+  );
+}
 }
 
 class _FocusBrassGlow extends StatefulWidget {
@@ -4724,191 +4854,6 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Bottom sheet containing actions for a narrative turn ("Picture this", "Film this", Rewind, Edit, etc.).
-class TurnMenuSheet extends StatelessWidget {
-  final GameEvent event;
-  final bool canReplay;
-  final VoidCallback? onReplay;
-  final VoidCallback? onEdit;
-  final VoidCallback? onRewind;
-
-  const TurnMenuSheet({
-    super.key,
-    required this.event,
-    this.canReplay = false,
-    this.onReplay,
-    this.onEdit,
-    this.onRewind,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cubit = context.read<PlayCubit>();
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 10),
-          const SheetGrabHandle(),
-          const SizedBox(height: 8),
-          if (canReplay)
-            ListTile(
-              leading: const Icon(
-                Icons.refresh_rounded,
-                color: EverloreTheme.cyanBright,
-              ),
-              title: Text(
-                'Replay response',
-                style: EverloreTheme.ui(
-                  size: 15,
-                  color: EverloreTheme.parchment,
-                ),
-              ),
-              subtitle: Text(
-                'Generate an improved alternative for this turn.',
-                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                if (onReplay != null) {
-                  onReplay!();
-                } else {
-                  cubit.replayAiResponse(event);
-                }
-              },
-            ),
-          if (canReplay)
-            const Divider(color: EverloreTheme.white10, height: 1),
-          if ((event.aiResponse ?? '').trim().isNotEmpty)
-            ListTile(
-              leading: const Icon(
-                Icons.copy_rounded,
-                color: EverloreTheme.ash,
-              ),
-              title: Text(
-                'Copy response',
-                style: EverloreTheme.ui(
-                  size: 15,
-                  color: EverloreTheme.parchment,
-                ),
-              ),
-              subtitle: Text(
-                'Copy this turn to the clipboard.',
-                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                Clipboard.setData(
-                  ClipboardData(text: event.aiResponse?.trim() ?? ''),
-                );
-                showEverloreNotice(
-                  context,
-                  'Copied',
-                  tone: NoticeTone.info,
-                );
-              },
-            ),
-          if ((event.aiResponse ?? '').trim().isNotEmpty)
-            const Divider(color: EverloreTheme.white10, height: 1),
-          if (cubit.state.isMediaAvailable &&
-              (event.aiResponse ?? '').trim().isNotEmpty) ...[
-            ListTile(
-              leading: const Icon(
-                Icons.auto_awesome_rounded,
-                color: EverloreTheme.goldGlow,
-              ),
-              title: Text(
-                'Picture this',
-                style: EverloreTheme.ui(
-                  size: 15,
-                  color: EverloreTheme.parchment,
-                ),
-              ),
-              subtitle: Text(
-                'Paint a scene of this moment.',
-                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                cubit.requestPicture(event.id);
-              },
-            ),
-            const Divider(color: EverloreTheme.white10, height: 1),
-            ListTile(
-              leading: const Icon(
-                Icons.videocam_outlined,
-                color: EverloreTheme.cyanBright,
-              ),
-              title: Text(
-                'Film this',
-                style: EverloreTheme.ui(
-                  size: 15,
-                  color: EverloreTheme.parchment,
-                ),
-              ),
-              subtitle: Text(
-                'Film a moment of this scene.',
-                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                cubit.requestTurnVideo(event.id);
-              },
-            ),
-            const Divider(color: EverloreTheme.white10, height: 1),
-          ],
-          if ((event.aiResponse ?? '').trim().isNotEmpty)
-            ListTile(
-              leading: const Icon(
-                Icons.edit_outlined,
-                color: EverloreTheme.violetBright,
-              ),
-              title: Text(
-                'Edit response',
-                style: EverloreTheme.ui(
-                  size: 15,
-                  color: EverloreTheme.parchment,
-                ),
-              ),
-              subtitle: Text(
-                'Rewrite this turn, and what it left in memory.',
-                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                onEdit?.call();
-              },
-            ),
-          if ((event.aiResponse ?? '').trim().isNotEmpty)
-            const Divider(color: EverloreTheme.white10, height: 1),
-          ListTile(
-            leading: const Icon(
-              Icons.history_toggle_off,
-              color: EverloreTheme.crimson,
-            ),
-            title: Text(
-              'Rewind to here',
-              style: EverloreTheme.ui(
-                size: 15,
-                color: EverloreTheme.parchment,
-              ),
-            ),
-            subtitle: Text(
-              'Removes this turn and everything after it.',
-              style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              onRewind?.call();
-            },
-          ),
-          const SizedBox(height: 8),
         ],
       ),
     );

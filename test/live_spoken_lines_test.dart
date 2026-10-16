@@ -350,11 +350,12 @@ void main() {
           Builder(
             builder: (ctx) => NarrativeBubble(
               event: liveEvent,
-              onLongPress: () => turnMenuOpened = true,
-              onSpokenLineLongPress: (line) {
+              onLongPress: (_) => turnMenuOpened = true,
+              onSpokenLineLongPress: (line, lineRect) {
                 lineMenuTarget = line;
                 showSpokenLineMenu(
                   context: ctx,
+                  anchorRect: lineRect,
                   onHearIt: () {},
                   onSeeThemSayIt: () {},
                 );

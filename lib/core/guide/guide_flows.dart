@@ -427,6 +427,21 @@ abstract final class GuideFlows {
     ],
   );
 
+  /// Fired the first time the media affordance appears on a turn.
+  static const playMedia = GuideFlow(
+    id: 'play.media',
+    label: 'Scenes and Portraits',
+    route: '/play',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.playMedia,
+        fallbackAnchor: GuideIds.playNarrative,
+        title: 'Scenes and Portraits',
+        body: 'Picture or film any moment of the story.',
+      ),
+    ],
+  );
+
   /// Registry for lookup, replay, and the settings list. Order is the order
   /// a player would meet them.
   static const all = <GuideFlow>[
@@ -435,6 +450,7 @@ abstract final class GuideFlows {
     playFirst,
     playTools,
     spokenLine,
+    playMedia,
     realm,
     sceneSettings,
     chronicle,

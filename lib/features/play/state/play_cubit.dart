@@ -19,6 +19,7 @@ import '../../media/models/spoken_line.dart';
 import '../../media/models/turn_media.dart';
 import '../../media/data/media_repository.dart';
 import '../../media/services/audio_playback_controller.dart';
+import '../../../shared/widgets/everlore_notice.dart';
 
 /// Socket error codes whose `message` was written for a player to read.
 ///
@@ -63,6 +64,27 @@ const Object _kUnset = Object();
 const int _activeEventLimit = 100;
 const int _activeMemoryLimit = 50;
 const int _olderEventsPageSize = 20;
+
+/// A one-shot transient notice for media outcomes (unseen, resting, failed).
+///
+/// Kept separate from the composer's [PlayState.notice] so media outcomes
+/// never stick in the composer's placeholder. Consumed by a `BlocListener`
+/// on the play screen and keyed by [sequence] so repeated identical
+/// notices still fire.
+class MediaNotice extends Equatable {
+  final String message;
+  final NoticeTone tone;
+  final int sequence;
+
+  const MediaNotice({
+    required this.message,
+    this.tone = NoticeTone.info,
+    required this.sequence,
+  });
+
+  @override
+  List<Object?> get props => [message, tone, sequence];
+}
 
 class PlayState extends Equatable {
   final WorldInstance? instance;
@@ -156,6 +178,7 @@ class PlayState extends Equatable {
   final String? playingVoiceLineId;
   final String? loadingVoiceEventId;
   final String? loadingVoiceLineId;
+  final MediaNotice? mediaNotice;
 
   const PlayState({
     this.instance,
@@ -190,6 +213,7 @@ class PlayState extends Equatable {
     this.playingVoiceLineId,
     this.loadingVoiceEventId,
     this.loadingVoiceLineId,
+    this.mediaNotice,
   });
 
   PlayState copyWith({
@@ -225,6 +249,7 @@ class PlayState extends Equatable {
     Object? playingVoiceLineId = _kUnset,
     Object? loadingVoiceEventId = _kUnset,
     Object? loadingVoiceLineId = _kUnset,
+    Object? mediaNotice = _kUnset,
   }) {
     return PlayState(
       instance: instance ?? this.instance,
@@ -279,6 +304,9 @@ class PlayState extends Equatable {
       loadingVoiceLineId: identical(loadingVoiceLineId, _kUnset)
           ? this.loadingVoiceLineId
           : loadingVoiceLineId as String?,
+      mediaNotice: identical(mediaNotice, _kUnset)
+          ? this.mediaNotice
+          : mediaNotice as MediaNotice?,
     );
   }
 
@@ -316,6 +344,7 @@ class PlayState extends Equatable {
     playingVoiceLineId,
     loadingVoiceEventId,
     loadingVoiceLineId,
+    mediaNotice,
   ];
 
   /// Composer is only locked while prose is still appearing, during rewind,
@@ -354,6 +383,7 @@ class PlayCubit extends Cubit<PlayState> {
   late StreamSubscription _mediaReadySub;
   late StreamSubscription _mediaUnseenSub;
   late StreamSubscription _mediaFailedSub;
+  int _mediaNoticeSeq = 0;
 
   /// Accumulates streamed narrative tokens for the in-progress turn.
   String _streamBuffer = '';
@@ -1212,6 +1242,41 @@ class PlayCubit extends Cubit<PlayState> {
       if (msg['instanceId'] != instanceId) return;
       final eventId = (msg['eventId'] ?? '').toString();
       final mediaId = (msg['media_id'] ?? msg['mediaId'] ?? '').toString();
+      final notice = MediaNotice(
+        message: 'This moment stays unseen.',
+        tone: NoticeTone.info,
+        sequence: ++_mediaNoticeSeq,
+      );
+      final events = [...state.events];
+      final idx = events.indexWhere((e) => e.id == eventId);
+      if (idx >= 0) {
+        final ev = events[idx];
+        final mediaList = ev.media.where((m) => m.mediaId != mediaId).toList();
+        events[idx] = ev.copyWith(media: mediaList);
+        LocalDb.insertEvent(events[idx]).ignore();
+        emit(state.copyWith(events: events, mediaNotice: notice));
+      } else {
+        emit(state.copyWith(mediaNotice: notice));
+      }
+    });
+
+    _mediaFailedSub = _ws.onMediaFailed.listen((msg) {
+      if (msg['instanceId'] != instanceId) return;
+      final eventId = (msg['eventId'] ?? '').toString();
+      final mediaId = (msg['media_id'] ?? msg['mediaId'] ?? '').toString();
+      final lineId = (msg['line_id'] ?? msg['lineId'])?.toString();
+      final kind = (msg['kind'] ?? '').toString();
+      final isVoiceMatch =
+          state.loadingVoiceEventId == eventId &&
+          state.loadingVoiceLineId == lineId;
+      if (isVoiceMatch) {
+        audioController.setLoading(null, null);
+      }
+      final notice = MediaNotice(
+        message: _mediaFailureCopy(kind),
+        tone: NoticeTone.error,
+        sequence: ++_mediaNoticeSeq,
+      );
       final events = [...state.events];
       final idx = events.indexWhere((e) => e.id == eventId);
       if (idx >= 0) {
@@ -1222,39 +1287,34 @@ class PlayCubit extends Cubit<PlayState> {
         emit(
           state.copyWith(
             events: events,
-            notice: 'This moment stays unseen.',
+            mediaNotice: notice,
+            loadingVoiceEventId: isVoiceMatch
+                ? null
+                : state.loadingVoiceEventId,
+            loadingVoiceLineId: isVoiceMatch ? null : state.loadingVoiceLineId,
           ),
         );
       } else {
-        emit(state.copyWith(notice: 'This moment stays unseen.'));
-      }
-    });
-
-    _mediaFailedSub = _ws.onMediaFailed.listen((msg) {
-      if (msg['instanceId'] != instanceId) return;
-      final eventId = (msg['eventId'] ?? '').toString();
-      final mediaId = (msg['media_id'] ?? msg['mediaId'] ?? '').toString();
-      final lineId = (msg['line_id'] ?? msg['lineId'])?.toString();
-      if (state.loadingVoiceEventId == eventId &&
-          state.loadingVoiceLineId == lineId) {
-        audioController.setLoading(null, null);
         emit(
           state.copyWith(
-            loadingVoiceEventId: null,
-            loadingVoiceLineId: null,
+            mediaNotice: notice,
+            loadingVoiceEventId: isVoiceMatch
+                ? null
+                : state.loadingVoiceEventId,
+            loadingVoiceLineId: isVoiceMatch ? null : state.loadingVoiceLineId,
           ),
         );
       }
-      final events = [...state.events];
-      final idx = events.indexWhere((e) => e.id == eventId);
-      if (idx >= 0) {
-        final ev = events[idx];
-        final mediaList = ev.media.where((m) => m.mediaId != mediaId).toList();
-        events[idx] = ev.copyWith(media: mediaList);
-        LocalDb.insertEvent(events[idx]).ignore();
-        emit(state.copyWith(events: events));
-      }
     });
+  }
+
+  String _mediaFailureCopy(String kind) {
+    return switch (kind) {
+      'picture' => 'Could not create this picture.',
+      'video' => 'Could not create this film.',
+      'voice' => 'Could not play this voice.',
+      _ => 'This moment stays unseen.',
+    };
   }
 
   @visibleForTesting
@@ -2398,7 +2458,11 @@ class PlayCubit extends Cubit<PlayState> {
       audioController.setLoading(null, null);
       emit(
         state.copyWith(
-          notice: e.restingCopy,
+          mediaNotice: MediaNotice(
+            message: e.restingCopy,
+            tone: NoticeTone.info,
+            sequence: ++_mediaNoticeSeq,
+          ),
           loadingVoiceEventId: null,
           loadingVoiceLineId: null,
         ),
@@ -2407,6 +2471,11 @@ class PlayCubit extends Cubit<PlayState> {
       audioController.setLoading(null, null);
       emit(
         state.copyWith(
+          mediaNotice: MediaNotice(
+            message: 'Could not play this voice.',
+            tone: NoticeTone.error,
+            sequence: ++_mediaNoticeSeq,
+          ),
           loadingVoiceEventId: null,
           loadingVoiceLineId: null,
         ),
@@ -2475,10 +2544,25 @@ class PlayCubit extends Cubit<PlayState> {
         }
       }
     } on MediaRestingException catch (e) {
-      _removeTempMedia(eventId, tempId);
-      emit(state.copyWith(notice: e.restingCopy));
+      _removeTempMedia(
+        eventId,
+        tempId,
+        MediaNotice(
+          message: e.restingCopy,
+          tone: NoticeTone.info,
+          sequence: ++_mediaNoticeSeq,
+        ),
+      );
     } catch (_) {
-      _removeTempMedia(eventId, tempId);
+      _removeTempMedia(
+        eventId,
+        tempId,
+        MediaNotice(
+          message: 'Could not create this picture.',
+          tone: NoticeTone.error,
+          sequence: ++_mediaNoticeSeq,
+        ),
+      );
     }
   }
 
@@ -2536,10 +2620,25 @@ class PlayCubit extends Cubit<PlayState> {
         }
       }
     } on MediaRestingException catch (e) {
-      _removeTempMedia(eventId, tempId);
-      emit(state.copyWith(notice: e.restingCopy));
+      _removeTempMedia(
+        eventId,
+        tempId,
+        MediaNotice(
+          message: e.restingCopy,
+          tone: NoticeTone.info,
+          sequence: ++_mediaNoticeSeq,
+        ),
+      );
     } catch (_) {
-      _removeTempMedia(eventId, tempId);
+      _removeTempMedia(
+        eventId,
+        tempId,
+        MediaNotice(
+          message: 'Could not create this film.',
+          tone: NoticeTone.error,
+          sequence: ++_mediaNoticeSeq,
+        ),
+      );
     }
   }
 
@@ -2593,21 +2692,49 @@ class PlayCubit extends Cubit<PlayState> {
         }
       }
     } on MediaRestingException catch (e) {
-      _removeTempMedia(eventId, tempId);
-      emit(state.copyWith(notice: e.restingCopy));
+      _removeTempMedia(
+        eventId,
+        tempId,
+        MediaNotice(
+          message: e.restingCopy,
+          tone: NoticeTone.info,
+          sequence: ++_mediaNoticeSeq,
+        ),
+      );
     } catch (_) {
-      _removeTempMedia(eventId, tempId);
+      _removeTempMedia(
+        eventId,
+        tempId,
+        MediaNotice(
+          message: 'Could not create this film.',
+          tone: NoticeTone.error,
+          sequence: ++_mediaNoticeSeq,
+        ),
+      );
     }
   }
 
-  void _removeTempMedia(String eventId, String tempId) {
+  void _removeTempMedia(
+    String eventId,
+    String tempId, [
+    MediaNotice? mediaNotice,
+  ]) {
     final events = [...state.events];
     final idx = events.indexWhere((e) => e.id == eventId);
     if (idx >= 0) {
       final ev = events[idx];
       final mediaList = ev.media.where((m) => m.mediaId != tempId).toList();
       events[idx] = ev.copyWith(media: mediaList);
-      emit(state.copyWith(events: events));
+      emit(
+        state.copyWith(
+          events: events,
+          mediaNotice: mediaNotice ?? state.mediaNotice,
+        ),
+      );
+      return;
+    }
+    if (mediaNotice != null) {
+      emit(state.copyWith(mediaNotice: mediaNotice));
     }
   }
 }

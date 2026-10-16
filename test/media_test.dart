@@ -11,8 +11,7 @@ import 'package:everlore/core/network/ws_manager.dart';
 import 'package:everlore/features/media/data/media_repository.dart';
 import 'package:everlore/features/media/models/spoken_line.dart';
 import 'package:everlore/features/media/models/turn_media.dart';
-import 'package:everlore/features/media/presentation/media_thumbnail.dart';
-import 'package:everlore/features/play/presentation/play_screen.dart';
+import 'package:everlore/features/play/presentation/widgets/anchored_menu_popup.dart';
 import 'package:everlore/features/play/presentation/widgets/narrative_bubble.dart';
 import 'package:everlore/features/play/state/play_cubit.dart';
 import 'package:everlore/shared/models/event.dart';
@@ -78,6 +77,7 @@ class MockWsManager extends Fake implements WsManager {
   @override
   Future<void> disconnect({bool clearToken = false}) async {}
 
+  @override
   void dispose() {
     mediaReadyCtrl.close();
     mediaUnseenCtrl.close();
@@ -440,8 +440,8 @@ void main() {
           _host(
             NarrativeBubble(
               event: event,
-              onLongPress: () => turnMenuOpened = true,
-              onSpokenLineLongPress: (l) => lineMenuTarget = l,
+              onLongPress: (_) => turnMenuOpened = true,
+              onSpokenLineLongPress: (l, _) => lineMenuTarget = l,
             ),
           ),
         );
@@ -493,8 +493,8 @@ void main() {
           _host(
             NarrativeBubble(
               event: event,
-              onLongPress: () => turnMenuOpened = true,
-              onSpokenLineLongPress: (l) => lineMenuTarget = l,
+              onLongPress: (_) => turnMenuOpened = true,
+              onSpokenLineLongPress: (l, _) => lineMenuTarget = l,
             ),
           ),
         );
@@ -551,8 +551,8 @@ void main() {
           _host(
             NarrativeBubble(
               event: event,
-              onLongPress: () => turnMenuOpened = true,
-              onSpokenLineLongPress: (l) => lineMenuTarget = l,
+              onLongPress: (_) => turnMenuOpened = true,
+              onSpokenLineLongPress: (l, _) => lineMenuTarget = l,
             ),
           ),
         );
@@ -603,8 +603,8 @@ void main() {
           _host(
             NarrativeBubble(
               event: event,
-              onLongPress: () => turnMenuOpened = true,
-              onSpokenLineLongPress: (l) => lineMenuTarget = l,
+              onLongPress: (_) => turnMenuOpened = true,
+              onSpokenLineLongPress: (l, _) => lineMenuTarget = l,
               onSpokenLineTap: (l) => tappedLine = l,
             ),
           ),
@@ -850,30 +850,50 @@ void main() {
           home: Scaffold(
             body: BlocProvider<PlayCubit>.value(
               value: cubit,
-              child: TurnMenuSheet(event: event),
+              child: Builder(
+                builder: (context) => NarrativeBubble(
+                  event: event,
+                  onMedia: (rect) => showTurnMediaMenu(
+                    context: context,
+                    cubit: cubit,
+                    eventId: event.id,
+                    anchorRect: rect,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      // Find all ListTiles in the menu
-      final listTiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
-      final titles = listTiles.map((t) => (t.title as Text).data).toList();
+      await tester.tap(find.text('Media'));
+      await tester.pumpAndSettle();
 
-      final pictureIndex = titles.indexOf('Picture this');
-      final filmIndex = titles.indexOf('Film this');
+      expect(find.text('Picture this'), findsOneWidget);
+      expect(find.text('Film this'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AnchoredMenuPopup),
+          matching: find.byIcon(Icons.auto_awesome_rounded),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AnchoredMenuPopup),
+          matching: find.byIcon(Icons.videocam_outlined),
+        ),
+        findsOneWidget,
+      );
 
-      expect(pictureIndex, isNonNegative);
-      expect(filmIndex, isNonNegative);
-      expect(filmIndex, equals(pictureIndex + 1));
+      final picturePos = tester.getTopLeft(find.text('Picture this'));
+      final filmPos = tester.getTopLeft(find.text('Film this'));
+      expect(filmPos.dy, greaterThan(picturePos.dy));
 
-      // Check copy rules and styling
-      final filmTile = listTiles[filmIndex];
-      expect((filmTile.title as Text).data, 'Film this');
-      expect((filmTile.subtitle as Text).data, 'Film a moment of this scene.');
-      final filmIcon = filmTile.leading as Icon;
-      expect(filmIcon.icon, Icons.videocam_outlined);
+      // Dismiss popup
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
 
       // When isMediaAvailable is false, neither Picture this nor Film this appears
       cubit.emit(cubit.state.copyWith(isMediaAvailable: false));
@@ -882,13 +902,26 @@ void main() {
           home: Scaffold(
             body: BlocProvider<PlayCubit>.value(
               value: cubit,
-              child: TurnMenuSheet(event: event),
+              child: Builder(
+                builder: (context) => NarrativeBubble(
+                  event: event,
+                  onMedia: cubit.state.isMediaAvailable
+                      ? (rect) => showTurnMediaMenu(
+                            context: context,
+                            cubit: cubit,
+                            eventId: event.id,
+                            anchorRect: rect,
+                          )
+                      : null,
+                ),
+              ),
             ),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
+      expect(find.text('Media'), findsNothing);
       expect(find.text('Picture this'), findsNothing);
       expect(find.text('Film this'), findsNothing);
     });
@@ -955,11 +988,24 @@ void main() {
           home: Scaffold(
             body: BlocProvider<PlayCubit>.value(
               value: cubit,
-              child: TurnMenuSheet(event: event),
+              child: Builder(
+                builder: (context) => NarrativeBubble(
+                  event: event,
+                  onMedia: (rect) => showTurnMediaMenu(
+                    context: context,
+                    cubit: cubit,
+                    eventId: event.id,
+                    anchorRect: rect,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
       );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Media'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Film this'));
@@ -1148,8 +1194,9 @@ void main() {
       // Cubit interaction test:
       await cubit.requestTurnVideo('ev_429_test');
 
-      // Resting copy emitted in notice
-      expect(cubit.state.notice, 'The visions rest until tomorrow.');
+      // Resting copy emitted in mediaNotice (transient notice, never composer notice)
+      expect(cubit.state.notice, isNull);
+      expect(cubit.state.mediaNotice?.message, 'The visions rest until tomorrow.');
 
       // The placeholder was quietly removed from the turn
       final updatedEvent = cubit.state.events.firstWhere((e) => e.id == 'ev_429_test');
