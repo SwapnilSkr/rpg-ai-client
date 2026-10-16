@@ -206,7 +206,7 @@ class PlayState extends Equatable {
     Object? restoreComposerText = _kUnset,
     bool? isConnected,
     bool? isLoading,
-    String? error,
+    Object? error = _kUnset,
     int? totalEvents,
     bool? hasOlderEvents,
     bool? isLoadingOlder,
@@ -242,7 +242,7 @@ class PlayState extends Equatable {
           : restoreComposerText as String?,
       isConnected: isConnected ?? this.isConnected,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
+      error: identical(error, _kUnset) ? this.error : error as String?,
       totalEvents: totalEvents ?? this.totalEvents,
       hasOlderEvents: hasOlderEvents ?? this.hasOlderEvents,
       isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
@@ -413,19 +413,60 @@ class PlayCubit extends Cubit<PlayState> {
   String? _pendingVariantEventId;
   int? _pendingVariantIndex;
 
+  /// Held spoken lines that arrived before their event landed (keyed by eventId).
+  final Map<String, List<SpokenLine>> _heldSpokenLines = {};
+  final Map<String, Timer> _heldSpokenLinesTimers = {};
+  static const _heldSpokenLinesTimeout = Duration(seconds: 30);
+
+  @visibleForTesting
+  Map<String, List<SpokenLine>> get heldSpokenLinesForTesting =>
+      Map.unmodifiable(_heldSpokenLines);
+
+  void _holdSpokenLines(String eventId, List<SpokenLine> lines) {
+    if (eventId.isEmpty) return;
+    _heldSpokenLinesTimers[eventId]?.cancel();
+    _heldSpokenLines[eventId] = lines;
+    _heldSpokenLinesTimers[eventId] = Timer(_heldSpokenLinesTimeout, () {
+      _heldSpokenLines.remove(eventId);
+      _heldSpokenLinesTimers.remove(eventId);
+    });
+  }
+
+  List<SpokenLine>? _takeHeldSpokenLines(String eventId) {
+    _heldSpokenLinesTimers[eventId]?.cancel();
+    _heldSpokenLinesTimers.remove(eventId);
+    return _heldSpokenLines.remove(eventId);
+  }
+
+  void _clearHeldSpokenLines() {
+    for (final timer in _heldSpokenLinesTimers.values) {
+      timer.cancel();
+    }
+    _heldSpokenLinesTimers.clear();
+    _heldSpokenLines.clear();
+  }
+
+  final Future<void> Function()? _onRefreshInk;
+
   PlayCubit({
     required this.instanceId,
     WsManager? ws,
     MediaRepository? mediaRepo,
     AudioPlaybackController? audio,
+    Future<void> Function()? onRefreshInk,
   })  : _ws = ws ?? WsManager(),
         _mediaRepo = mediaRepo ?? MediaRepository(),
         audioController = audio ?? AudioPlaybackController.instance,
+        _onRefreshInk = onRefreshInk,
         super(const PlayState()) {
     _init();
   }
 
   Future<void> _refreshInk() async {
+    if (_onRefreshInk != null) {
+      await _onRefreshInk();
+      return;
+    }
     try {
       await BillingRepository.instance.refreshWallet();
     } catch (_) {
@@ -453,6 +494,10 @@ class PlayCubit extends Cubit<PlayState> {
       if (data == null) return;
 
       final instance = WorldInstance.fromJson(data['instance']);
+      if (instance.id != instanceId) {
+        _clearHeldSpokenLines();
+        return;
+      }
       final template = data['template'] != null
           ? WorldTemplate.fromJson(data['template'])
           : null;
@@ -461,6 +506,12 @@ class PlayCubit extends Cubit<PlayState> {
               ?.map((e) => GameEvent.fromJson(e))
               .toList() ??
           [];
+      for (var i = 0; i < events.length; i++) {
+        final held = _takeHeldSpokenLines(events[i].id);
+        if (held != null && events[i].spokenLines.isEmpty) {
+          events[i] = events[i].copyWith(spokenLines: held);
+        }
+      }
       final memories =
           (data['memories'] as List?)
               ?.map((e) => Memory.fromJson(e))
@@ -496,6 +547,8 @@ class PlayCubit extends Cubit<PlayState> {
           isLoadingOlder: false,
           milestones: instance.meta.milestones,
           isLoading: false,
+          // A fresh load answers any earlier load or reconnect failure.
+          error: null,
           // A rewind is complete only when the load requested AFTER its HTTP
           // rebuild completes arrives — never on an older socket snapshot.
           isRewinding: rewindSnapshotReady ? false : state.isRewinding,
@@ -689,10 +742,19 @@ class PlayCubit extends Cubit<PlayState> {
           ? events[idx].playerInput
           : null;
 
+      final eventId = (eventData['id'] ?? '').toString();
+      final payloadLines = SpokenLine.listFromAny(
+        eventData['spoken_lines'] ?? msg['spoken_lines'],
+      );
+      final heldLines = _takeHeldSpokenLines(eventId);
+      final spokenLines = payloadLines.isNotEmpty
+          ? payloadLines
+          : (heldLines ?? const <SpokenLine>[]);
+
       // Finalize the streamed turn as one event (player input + AI response),
       // matching how the server persists and reloads turns.
       final finalEvent = GameEvent(
-        id: eventData['id'] ?? '',
+        id: eventId,
         instanceId: instanceId,
         sequence: eventData['sequence'] ?? 0,
         type: eventData['event_type']?.toString() ?? 'narration',
@@ -713,6 +775,7 @@ class PlayCubit extends Cubit<PlayState> {
         trackableMentions: TrackableMention.listFromAny(
           eventData['trackable_mentions'],
         ),
+        spokenLines: spokenLines,
       );
 
       // Stat deltas vs the pre-turn state — drives HUD pulses + delta chips.
@@ -739,7 +802,7 @@ class PlayCubit extends Cubit<PlayState> {
         events.add(finalEvent);
       }
 
-      LocalDb.insertEvent(finalEvent);
+      LocalDb.insertEvent(finalEvent).ignore();
       _clearGenerationTimers();
       _streamBuffer = '';
       _streamTarget = '';
@@ -825,6 +888,12 @@ class PlayCubit extends Cubit<PlayState> {
       final events = [...state.events];
       final idx = events.indexWhere((e) => e.id == eventId);
       if (idx >= 0) {
+        final payloadLines = SpokenLine.listFromAny(msg['spoken_lines']);
+        final heldLines = _takeHeldSpokenLines(eventId);
+        final spokenLines = payloadLines.isNotEmpty
+            ? payloadLines
+            : (heldLines ?? const <SpokenLine>[]);
+
         events[idx] = events[idx].copyWith(
           aiResponse: narrative,
           modelUsed: selectedVariant?.modelUsed,
@@ -840,8 +909,9 @@ class PlayCubit extends Cubit<PlayState> {
           trackableMentions: TrackableMention.listFromAny(
             msg['trackable_mentions'],
           ),
+          spokenLines: spokenLines,
         );
-        LocalDb.insertEvent(events[idx]);
+        LocalDb.insertEvent(events[idx]).ignore();
       }
       _endReplay();
 
@@ -1056,15 +1126,18 @@ class PlayCubit extends Cubit<PlayState> {
     unawaited(_checkMediaUsage());
 
     _spokenLinesSub = _ws.onSpokenLines.listen((msg) {
-      if (msg['instanceId'] != instanceId) return;
+      if (msg['instanceId']?.toString() != instanceId) return;
       final eventId = (msg['eventId'] ?? '').toString();
       final lines = SpokenLine.listFromAny(msg['lines']);
       final events = [...state.events];
       final idx = events.indexWhere((e) => e.id == eventId);
       if (idx >= 0) {
+        _takeHeldSpokenLines(eventId);
         events[idx] = events[idx].copyWith(spokenLines: lines);
-        LocalDb.insertEvent(events[idx]);
+        LocalDb.insertEvent(events[idx]).ignore();
         emit(state.copyWith(events: events));
+      } else if (eventId.isNotEmpty) {
+        _holdSpokenLines(eventId, lines);
       }
     });
 
@@ -1241,7 +1314,19 @@ class PlayCubit extends Cubit<PlayState> {
   }
 
   Future<void> _connectAndLoad() async {
-    final token = await SecureStore.getToken();
+    final String? token;
+    try {
+      token = await SecureStore.getToken();
+    } catch (_) {
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: 'Please sign in to load this world.',
+        ),
+      );
+      return;
+    }
+
     if (token == null || token.isEmpty) {
       emit(
         state.copyWith(
@@ -1252,8 +1337,13 @@ class PlayCubit extends Cubit<PlayState> {
       return;
     }
 
-    await _ws.connect(token, force: true);
-    _ws.loadInstance(instanceId);
+    try {
+      await _ws.connect(token, force: true);
+      _ws.loadInstance(instanceId);
+    } catch (_) {
+      // Connect and load failures are handled by socket reconnection/state;
+      // a transport or network issue must never tell the player to sign in.
+    }
   }
 
   Future<void> _loadCachedEvents() async {
@@ -1708,6 +1798,7 @@ class PlayCubit extends Cubit<PlayState> {
     if (state.isGenerating || state.replayingEventId != null) return;
     _pendingVariantEventId = null;
     _pendingVariantIndex = null;
+    _clearHeldSpokenLines();
     emit(
       state.copyWith(
         events: const [],
@@ -1751,6 +1842,7 @@ class PlayCubit extends Cubit<PlayState> {
       ),
     );
     _rewindRequestCompleted = false;
+    _clearHeldSpokenLines();
 
     try {
       await ChronicleRepository.rewind(instanceId, sequence);
@@ -2216,6 +2308,7 @@ class PlayCubit extends Cubit<PlayState> {
     await _mediaUnseenSub.cancel();
     await _mediaFailedSub.cancel();
     await _ws.disconnect();
+    _clearHeldSpokenLines();
     await super.close();
   }
 
