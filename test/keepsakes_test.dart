@@ -17,18 +17,47 @@ import 'package:everlore/core/storage/secure_storage.dart';
 import 'package:everlore/screens/auth_screen.dart';
 import 'package:everlore/features/keepsakes/data/keepsakes_repository.dart';
 import 'package:everlore/features/keepsakes/models/keepsake_item.dart';
+import 'package:everlore/features/creator/presentation/my_worlds_screen.dart';
 import 'package:everlore/features/keepsakes/presentation/keepsakes_screen.dart';
 import 'package:everlore/features/keepsakes/presentation/widgets/keepsake_faded_tile.dart';
 import 'package:everlore/features/keepsakes/presentation/widgets/keepsake_feed_post.dart';
 import 'package:everlore/features/keepsakes/presentation/widgets/keepsakes_state_view.dart';
+import 'package:everlore/features/keepsakes/presentation/widgets/keepsake_caption.dart';
 import 'package:everlore/features/keepsakes/presentation/widgets/keepsakes_viewer_screen.dart';
 import 'package:everlore/features/keepsakes/state/keepsakes_cubit.dart';
 import 'package:everlore/features/play/presentation/play_screen.dart';
 import 'package:everlore/features/play/state/play_cubit.dart';
+import 'package:everlore/features/media/data/media_repository.dart';
+import 'package:everlore/features/media/models/media_usage.dart';
 import 'package:everlore/shared/models/event.dart';
 import 'package:everlore/shared/models/user.dart';
 import 'package:everlore/shared/widgets/everlore_nav_bar.dart';
+import 'package:everlore/shared/widgets/everlore_top_bar.dart';
 import 'package:everlore/shared/widgets/neu.dart';
+
+class _FakeMediaRepository extends MediaRepository {
+  final List<({String instanceId, String eventId})> pictureRequests = [];
+
+  @override
+  Future<MediaUsage?> getUsage() async {
+    return const MediaUsage(
+      voice: UsageQuota(used: 0, limit: 10),
+      picture: UsageQuota(used: 0, limit: 10),
+      video: UsageQuota(used: 0, limit: 10),
+      portrait: UsageQuota(used: 0, limit: 10),
+      resetsAt: '',
+    );
+  }
+
+  @override
+  Future<MediaRequestResponse> requestPicture({
+    required String instanceId,
+    required String eventId,
+  }) async {
+    pictureRequests.add((instanceId: instanceId, eventId: eventId));
+    return const MediaRequestResponse(status: 'queued', mediaId: 'mock_pic_1');
+  }
+}
 
 class FakeKeepsakesRepository implements KeepsakesRepository {
   List<KeepsakeItem> items;
@@ -431,7 +460,9 @@ void main() {
       await tester.pumpWidget(_buildTestApp(child: KeepsakesScreen(repository: repo)));
       await _pumpIt(tester);
 
-      final textFinder = find.text('The tower stood silent against the dying light.');
+      final textFinder = find.byWidgetPredicate(
+        (w) => w is Text && w.textSpan?.toPlainText().contains('The tower stood silent against the dying light.') == true,
+      );
       expect(textFinder, findsOneWidget);
 
       final textWidget = tester.widget<Text>(textFinder);
@@ -453,7 +484,61 @@ void main() {
       await _pumpIt(tester);
 
       expect(find.text('MARA'), findsOneWidget);
-      expect(find.text('“Watch the shadows on the left.”'), findsOneWidget);
+      final captionFinder = find.text('"Watch the shadows on the left."', findRichText: true);
+      expect(captionFinder, findsOneWidget);
+
+      final widget = tester.firstWidget(captionFinder);
+      final InlineSpan rootSpan = widget is Text
+          ? widget.textSpan!
+          : (widget as RichText).text;
+      final leaves = <TextSpan>[];
+      void collectLeaves(InlineSpan s) {
+        if (s is TextSpan) {
+          if (s.children != null && s.children!.isNotEmpty) {
+            for (final c in s.children!) {
+              collectLeaves(c);
+            }
+          } else {
+            leaves.add(s);
+          }
+        }
+      }
+
+      collectLeaves(rootSpan);
+      expect(leaves, isNotEmpty);
+      for (final leaf in leaves) {
+        expect(leaf.style?.fontStyle, FontStyle.normal);
+        expect(leaf.style?.fontStyle, isNot(FontStyle.italic));
+      }
+    });
+
+    test('a line film caption renders upright with dialogue style and no italic span', () {
+      final item = _createTestItem(
+        kind: KeepsakeKind.video,
+        speakerName: 'Mara',
+        excerpt: 'Watch the shadows on the left.',
+      );
+      final spans = keepsakeCaptionSpans(item, fontSize: 15, height: 1.45);
+      expect(spans, isNotEmpty);
+      for (final span in spans) {
+        if (span is TextSpan) {
+          expect(span.style?.fontStyle, FontStyle.normal);
+          expect(span.style?.fontStyle, isNot(FontStyle.italic));
+        }
+      }
+      final texts = [for (final s in spans) if (s is TextSpan) s.text ?? ''].join();
+      expect(texts, '"Watch the shadows on the left."');
+    });
+
+    test('a narrative piece caption renders with italic narration style', () {
+      final item = _createTestItem(
+        kind: KeepsakeKind.picture,
+        excerpt: 'The tower stood silent.',
+      );
+      final spans = keepsakeCaptionSpans(item, fontSize: 15, height: 1.45);
+      expect(spans, isNotEmpty);
+      final textSpans = spans.whereType<TextSpan>().toList();
+      expect(textSpans.any((s) => s.style?.fontStyle == FontStyle.italic), isTrue);
     });
 
     testWidgets('Faces renders as a grid with names and Open their card', (tester) async {
@@ -939,5 +1024,272 @@ void main() {
       );
       expect(find.text('Default passage 2.', findRichText: true), findsOneWidget);
     });
+
+    testWidgets(
+      'regression test: turn-menu sheet opens through PlayScreen long-press with no hand-wrapped provider and Picture this works',
+      (tester) async {
+        _setTallViewport(tester, 800);
+        FlutterSecureStorage.setMockInitialValues({'auth_token': 'token'});
+
+        final ws = _TestWsManager();
+        addTearDown(ws.dispose);
+        final mediaRepo = _FakeMediaRepository();
+        final cubit = PlayCubit(
+          instanceId: 'inst_regression_turn_menu',
+          ws: ws,
+          mediaRepo: mediaRepo,
+        );
+        addTearDown(cubit.close);
+
+        final event = _createTestGameEvent(
+          id: 'turn_menu_evt_1',
+          sequence: 1,
+          aiResponse: 'A moonlit clearing where silver leaves fall silently.',
+        );
+
+        cubit.emit(cubit.state.copyWith(
+          isLoading: false,
+          isConnected: true,
+          isMediaAvailable: true,
+          events: [event],
+          totalEvents: 1,
+        ));
+
+        // Note: No BlocProvider<PlayCubit> wraps _buildTestApp or PlayScreen here.
+        // PlayScreen provides PlayCubit to its own children, but the modal sheet
+        // is pushed on the root navigator.
+        await tester.pumpWidget(
+          _buildTestApp(
+            child: PlayScreen(
+              instanceId: 'inst_regression_turn_menu',
+              cubit: cubit,
+            ),
+          ),
+        );
+        await _pumpIt(tester, 5);
+
+        final turnTextFinder = find.text(
+          'A moonlit clearing where silver leaves fall silently.',
+          findRichText: true,
+        );
+        expect(turnTextFinder, findsOneWidget);
+
+        await tester.longPress(turnTextFinder);
+        await _pumpIt(tester, 5);
+
+        expect(find.byType(TurnMenuSheet), findsOneWidget);
+        expect(find.text('Picture this'), findsOneWidget);
+
+        await tester.tap(find.text('Picture this'));
+        await _pumpIt(tester, 5);
+
+        expect(find.byType(TurnMenuSheet), findsNothing);
+        expect(mediaRepo.pictureRequests, [
+          (instanceId: 'inst_regression_turn_menu', eventId: 'turn_menu_evt_1'),
+        ]);
+      },
+    );
+
+    testWidgets(
+      'background asset is in the Keepsakes widget tree for both feed and empty state',
+      (tester) async {
+        final bgAssetFinder = find.byWidgetPredicate(
+          (w) =>
+              w is Image &&
+              w.image is AssetImage &&
+              (w.image as AssetImage).assetName ==
+                  'assets/art/keepsakes-archive.webp',
+        );
+
+        // 1. Feed state
+        final repoWithItems = FakeKeepsakesRepository(
+          items: [_createTestItem(excerpt: 'A silent monument.')],
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            child: KeepsakesScreen(
+              key: const ValueKey('bg-feed-test'),
+              repository: repoWithItems,
+            ),
+          ),
+        );
+        await _pumpIt(tester);
+        expect(bgAssetFinder, findsOneWidget);
+
+        // 2. Empty state
+        final emptyRepo = FakeKeepsakesRepository(items: const []);
+        await tester.pumpWidget(
+          _buildTestApp(
+            child: KeepsakesScreen(
+              key: const ValueKey('bg-empty-test'),
+              repository: emptyRepo,
+            ),
+          ),
+        );
+        await _pumpIt(tester);
+        expect(bgAssetFinder, findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'empty state has no boxed image in both full and compact variants',
+      (tester) async {
+        // 1. Full empty state
+        final emptyRepo = FakeKeepsakesRepository(items: const []);
+        await tester.pumpWidget(
+          _buildTestApp(
+            child: KeepsakesScreen(
+              key: const ValueKey('full-empty-box-test'),
+              repository: emptyRepo,
+            ),
+          ),
+        );
+        await _pumpIt(tester);
+
+        expect(find.byType(KeepsakesStateView), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(KeepsakesStateView),
+            matching: find.byType(Image),
+          ),
+          findsNothing,
+        );
+
+        // 2. Filter-only compact empty state
+        final pictureOnlyRepo = FakeKeepsakesRepository(
+          items: [_createTestItem(kind: KeepsakeKind.picture)],
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            child: KeepsakesScreen(
+              key: const ValueKey('compact-empty-box-test'),
+              repository: pictureOnlyRepo,
+            ),
+          ),
+        );
+        await _pumpIt(tester);
+
+        await tester.tap(find.text('Films'));
+        await _pumpIt(tester);
+
+        expect(find.byType(KeepsakesStateView), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(KeepsakesStateView),
+            matching: find.byType(Image),
+          ),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'a caption with *narration* renders without asterisks in styled story prose',
+      (tester) async {
+        final repo = FakeKeepsakesRepository(
+          items: [
+            _createTestItem(
+              excerpt: "*The Thorne rider's gaze* pierced through the mist.",
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          _buildTestApp(child: KeepsakesScreen(repository: repo)),
+        );
+        await _pumpIt(tester);
+
+        // No literal asterisks in the rendered caption
+        expect(find.textContaining('*', findRichText: true), findsNothing);
+        // The text is rendered cleanly
+        expect(
+          find.textContaining(
+            "The Thorne rider's gaze pierced through the mist.",
+            findRichText: true,
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'Your worlds shows a back control when pushed, and none as a root',
+      (tester) async {
+        // 1. As a root route: no back button
+        await tester.pumpWidget(
+          _buildTestApp(
+            child: const MyWorldsScreen(),
+          ),
+        );
+        await _pumpIt(tester, 3);
+        expect(find.byIcon(Icons.arrow_back_ios_new), findsNothing);
+
+        // 2. Pushed in a Navigator: standard back affordance is visible and pops
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: EverloreTheme.dark,
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const MyWorldsScreen(),
+                      ),
+                    ),
+                    child: const Text('Open Your Worlds'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.tap(find.text('Open Your Worlds'));
+        await _pumpIt(tester, 3);
+
+        expect(find.byIcon(Icons.arrow_back_ios_new), findsOneWidget);
+        expect(find.byTooltip('Back'), findsOneWidget);
+
+        // Tapping pops back to root
+        await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+        await _pumpIt(tester, 6);
+        expect(find.byType(MyWorldsScreen), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'EverloreTopBar has no back control by default, even when pushed',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: EverloreTheme.dark,
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const Scaffold(
+                          body: EverloreTopBar(title: 'Top Bar Default'),
+                        ),
+                      ),
+                    ),
+                    child: const Text('Push Top Bar'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.tap(find.text('Push Top Bar'));
+        await _pumpIt(tester, 3);
+
+        expect(find.byType(EverloreTopBar), findsOneWidget);
+        expect(find.byIcon(Icons.arrow_back_ios_new), findsNothing);
+        expect(find.byTooltip('Back'), findsNothing);
+      },
+    );
   });
 }

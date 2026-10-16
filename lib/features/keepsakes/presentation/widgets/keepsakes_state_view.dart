@@ -30,7 +30,6 @@ class KeepsakesStateView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final vignetteHeight = compact ? 88.0 : 160.0;
     final accentColor = isError ? EverloreTheme.ember : EverloreTheme.gold;
 
     return Center(
@@ -44,62 +43,32 @@ class KeepsakesStateView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Illustrated vignette
+              // Crest glyph over the painting
               vignette ??
                   Container(
-                    width: vignetteHeight * 1.3,
-                    height: vignetteHeight,
+                    padding: EdgeInsets.all(compact ? 12 : 16),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      gradient: RadialGradient(
-                        colors: [
-                          accentColor.withValues(alpha: 0.18),
-                          EverloreTheme.void2.withValues(alpha: 0.9),
-                          EverloreTheme.void1,
-                        ],
-                        stops: const [0.0, 0.6, 1.0],
-                      ),
+                      shape: BoxShape.circle,
+                      color: EverloreTheme.void0.withValues(alpha: 0.6),
                       border: Border.all(
-                        color: accentColor.withValues(alpha: 0.35),
+                        color: accentColor.withValues(alpha: 0.5),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: accentColor.withValues(alpha: 0.12),
-                          blurRadius: 24,
+                          color: accentColor.withValues(alpha: 0.15),
+                          blurRadius: 16,
                           spreadRadius: 1,
                         ),
                       ],
                     ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: Image.asset(
-                            'assets/art/chronicle-keeper.webp',
-                            fit: BoxFit.cover,
-                            alignment: Alignment.topCenter,
-                            opacity: const AlwaysStoppedAnimation(0.4),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: EverloreTheme.void0.withValues(alpha: 0.6),
-                            border: Border.all(
-                              color: accentColor.withValues(alpha: 0.5),
-                            ),
-                          ),
-                          child: Icon(
-                            isError
-                                ? Icons.cloud_off_rounded
-                                : (compact ? Icons.collections_bookmark_outlined : Icons.auto_stories_rounded),
-                            color: accentColor,
-                            size: compact ? 24 : 36,
-                          ),
-                        ),
-                      ],
+                    child: Icon(
+                      isError
+                          ? Icons.cloud_off_rounded
+                          : (compact
+                              ? Icons.collections_bookmark_outlined
+                              : Icons.auto_stories_rounded),
+                      color: accentColor,
+                      size: compact ? 24 : 36,
                     ),
                   ),
               SizedBox(height: compact ? 16 : 24),

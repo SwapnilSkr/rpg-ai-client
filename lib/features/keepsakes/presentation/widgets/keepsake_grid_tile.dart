@@ -30,8 +30,15 @@ class KeepsakeGridTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: EverloreTheme.void2,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: EverloreTheme.goldDim.withValues(alpha: 0.16),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: AspectRatio(
           aspectRatio: 9 / 16,
           child: Stack(

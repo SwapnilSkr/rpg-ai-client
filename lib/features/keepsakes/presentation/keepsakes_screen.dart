@@ -6,6 +6,7 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/everlore_top_bar.dart';
 import '../../../../shared/widgets/loading_shimmer.dart';
 import '../../../../shared/widgets/neu.dart';
+import '../../../../shared/widgets/realm_backdrop.dart';
 import '../data/keepsakes_repository.dart';
 import '../models/keepsake_item.dart';
 import '../state/keepsakes_cubit.dart';
@@ -488,80 +489,103 @@ class _KeepsakesViewState extends State<_KeepsakesView> {
 
     return Scaffold(
       backgroundColor: EverloreTheme.void0,
-      body: SafeArea(
-        bottom: false,
-        child: BlocBuilder<KeepsakesCubit, KeepsakesState>(
-          builder: (context, state) {
-            return Column(
-              children: [
-                const EverloreTopBar(
-                  title: 'Keepsakes',
-                  showProfile: true,
-                ),
-                // Filter row stays visible whenever player has any keepsakes (§3.5)
-                if (state.hasAnyKeepsakesOverall || state.items.isNotEmpty || state.filter != KeepsakesFilter.all)
-                  KeepsakesFilterRow(
-                    selectedFilter: state.filter,
-                    viewMode: state.mode,
-                    onFilterChanged: (f) => context.read<KeepsakesCubit>().setFilter(f),
-                    onModeChanged: (m) => context.read<KeepsakesCubit>().setMode(m),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/art/keepsakes-archive.webp',
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+          ),
+          const EmberOverlay(),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  EverloreTheme.void0.withValues(alpha: 0.22),
+                  EverloreTheme.void0.withValues(alpha: 0.58),
+                  EverloreTheme.void0.withValues(alpha: 0.84),
+                ],
+                stops: const [0, 0.42, 1],
+              ),
+            ),
+          ),
+          BlocBuilder<KeepsakesCubit, KeepsakesState>(
+            builder: (context, state) {
+              return Column(
+                children: [
+                  const EverloreTopBar(
+                    title: 'Keepsakes',
+                    backgroundOpacity: 0.68,
+                    showProfile: true,
                   ),
+                  // Filter row stays visible whenever player has any keepsakes (§3.5)
+                  if (state.hasAnyKeepsakesOverall || state.items.isNotEmpty || state.filter != KeepsakesFilter.all)
+                    KeepsakesFilterRow(
+                      selectedFilter: state.filter,
+                      viewMode: state.mode,
+                      onFilterChanged: (f) => context.read<KeepsakesCubit>().setFilter(f),
+                      onModeChanged: (m) => context.read<KeepsakesCubit>().setMode(m),
+                    ),
 
-                // Main body
-                Expanded(
-                  child: RefreshIndicator(
-                    color: EverloreTheme.gold,
-                    backgroundColor: EverloreTheme.void2,
-                    onRefresh: () => context.read<KeepsakesCubit>().refresh(),
-                    child: Builder(
-                      builder: (context) {
-                        // 1. First load error (§3.5)
-                        if (state.error != null && state.items.isEmpty) {
-                          return KeepsakesStateView(
-                            isError: true,
-                            title: 'Out of reach',
-                            body: 'Your keepsakes are out of reach. Check your connection and try again.',
-                            actionLabel: 'Try again',
-                            onAction: () => context.read<KeepsakesCubit>().loadInitial(),
-                          );
-                        }
+                  // Main body
+                  Expanded(
+                    child: RefreshIndicator(
+                      color: EverloreTheme.gold,
+                      backgroundColor: EverloreTheme.void2,
+                      onRefresh: () => context.read<KeepsakesCubit>().refresh(),
+                      child: Builder(
+                        builder: (context) {
+                          // 1. First load error (§3.5)
+                          if (state.error != null && state.items.isEmpty) {
+                            return KeepsakesStateView(
+                              isError: true,
+                              title: 'Out of reach',
+                              body: 'Your keepsakes are out of reach. Check your connection and try again.',
+                              actionLabel: 'Try again',
+                              onAction: () => context.read<KeepsakesCubit>().loadInitial(),
+                            );
+                          }
 
-                        // 2. Initial loading skeleton (§3.5)
-                        if (state.isLoading && state.items.isEmpty) {
-                          return Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 560),
-                              child: state.effectiveMode == KeepsakesViewMode.feed
-                                  ? _buildSkeletonFeed()
-                                  : _buildSkeletonGrid(columns),
-                            ),
-                          );
-                        }
+                          // 2. Initial loading skeleton (§3.5)
+                          if (state.isLoading && state.items.isEmpty) {
+                            return Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 560),
+                                child: state.effectiveMode == KeepsakesViewMode.feed
+                                    ? _buildSkeletonFeed()
+                                    : _buildSkeletonGrid(columns),
+                              ),
+                            );
+                          }
 
-                        // 3. Empty state (§3.5)
-                        if (state.isEmpty) {
-                          return _buildEmptyState(context, state);
-                        }
+                          // 3. Empty state (§3.5)
+                          if (state.isEmpty) {
+                            return _buildEmptyState(context, state);
+                          }
 
-                        // 4. Feed or Grid mode
-                        if (state.effectiveMode == KeepsakesViewMode.feed) {
-                          return Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 560),
-                              child: _buildFeedContent(context, state),
-                            ),
-                          );
-                        }
+                          // 4. Feed or Grid mode
+                          if (state.effectiveMode == KeepsakesViewMode.feed) {
+                            return Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 560),
+                                child: _buildFeedContent(context, state),
+                              ),
+                            );
+                          }
 
-                        return _buildGridContent(context, state, columns);
-                      },
+                          return _buildGridContent(context, state, columns);
+                        },
+                      ),
                     ),
                   ),
-                ),
-              ],
-            );
-          },
-        ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }

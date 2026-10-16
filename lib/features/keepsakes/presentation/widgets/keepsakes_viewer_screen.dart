@@ -7,6 +7,7 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/widgets/neu.dart';
 import '../../models/keepsake_item.dart';
+import 'keepsake_caption.dart';
 import 'keepsake_faded_tile.dart';
 import 'keepsake_feed_post.dart' show formatRelativeTime;
 
@@ -511,16 +512,24 @@ class _ViewerPieceState extends State<_ViewerPiece>
                   ),
                   const SizedBox(height: 2),
                 ],
-                Text(
-                  item.isLineFilm ? '“${item.excerpt}”' : item.excerpt!,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: EverloreTheme.aiText.fontFamily,
-                    fontSize: 14.5,
-                    height: 1.4,
-                    color: EverloreTheme.parchment,
-                  ),
+                Builder(
+                  builder: (context) {
+                    final baseStyle = EverloreTheme.aiText.copyWith(
+                      fontSize: 14.5,
+                      height: 1.4,
+                    );
+                    final spans = keepsakeCaptionSpans(
+                      item,
+                      fontSize: 14.5,
+                      height: 1.4,
+                    );
+                    return Text.rich(
+                      TextSpan(style: baseStyle, children: spans),
+                      style: baseStyle,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
               ],

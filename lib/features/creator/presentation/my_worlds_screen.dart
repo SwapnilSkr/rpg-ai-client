@@ -146,7 +146,11 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
             backgroundColor: EverloreTheme.void1,
             body: Column(
               children: [
-                EverloreTopBar(title: 'Worlds', subtitle: 'Your creations'),
+                EverloreTopBar(
+                  title: 'Worlds',
+                  subtitle: 'Your creations',
+                  showBack: true,
+                ),
                 Expanded(
                   child: Center(
                     child: EverloreSessionLoader(message: 'Opening your forge'),
@@ -171,7 +175,11 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const EverloreTopBar(title: 'Worlds', subtitle: 'Your creations'),
+          const EverloreTopBar(
+            title: 'Worlds',
+            subtitle: 'Your creations',
+            showBack: true,
+          ),
           Expanded(
             child: type == _GateType.unauth ? _UnauthGate() : _UpgradeGate(),
           ),
@@ -231,6 +239,7 @@ class _MyWorldsViewState extends State<_MyWorldsView> {
                                 : 'No worlds yet')
                           : '${state.total} ${state.total == 1 ? 'world' : 'worlds'}',
                       backgroundOpacity: 0.68,
+                      showBack: true,
                       actions: [
                         EverloreTopBarIcon(
                           icon: _searchOpen

@@ -14,6 +14,7 @@ class EverloreTopBar extends StatelessWidget {
   final List<Widget> actions;
   final bool showProfile;
   final double backgroundOpacity;
+  final bool showBack;
 
   const EverloreTopBar({
     super.key,
@@ -22,13 +23,15 @@ class EverloreTopBar extends StatelessWidget {
     this.actions = const [],
     this.showProfile = true,
     this.backgroundOpacity = 0.98,
+    this.showBack = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.viewPaddingOf(context).top;
+    final canPop = showBack && Navigator.canPop(context);
     return Container(
-      padding: EdgeInsets.fromLTRB(20, topInset + 10, 14, 10),
+      padding: EdgeInsets.fromLTRB(canPop ? 6 : 20, topInset + 10, 14, 10),
       decoration: BoxDecoration(
         color: EverloreTheme.void0.withValues(alpha: backgroundOpacity),
         border: Border(
@@ -51,6 +54,18 @@ class EverloreTopBar extends StatelessWidget {
       // and its sign-in; it does not need to introduce itself on every tab.
       child: Row(
         children: [
+          if (canPop) ...[
+            IconButton(
+              icon: const Icon(
+                Icons.arrow_back_ios_new,
+                color: EverloreTheme.ash,
+                size: 18,
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+              tooltip: 'Back',
+            ),
+            const SizedBox(width: 4),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

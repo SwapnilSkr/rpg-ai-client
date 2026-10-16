@@ -7,6 +7,7 @@ import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/widgets/everlore_sheet.dart';
 import '../../../../shared/widgets/neu.dart';
 import '../../models/keepsake_item.dart';
+import 'keepsake_caption.dart';
 import 'keepsake_faded_tile.dart';
 
 String formatRelativeTime(DateTime dateTime) {
@@ -303,6 +304,16 @@ class _KeepsakeFeedPostState extends State<KeepsakeFeedPost> {
       return const SizedBox.shrink();
     }
 
+    final baseStyle = EverloreTheme.aiText.copyWith(
+      fontSize: 15,
+      height: 1.45,
+    );
+    final spans = keepsakeCaptionSpans(
+      widget.item,
+      fontSize: 15,
+      height: 1.45,
+    );
+
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Column(
@@ -322,20 +333,14 @@ class _KeepsakeFeedPostState extends State<KeepsakeFeedPost> {
           ],
           LayoutBuilder(
             builder: (context, constraints) {
-              final text = isLineFilm ? '“$excerpt”' : excerpt;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    text,
+                  Text.rich(
+                    TextSpan(style: baseStyle, children: spans),
+                    style: baseStyle,
                     maxLines: _expanded ? null : 3,
                     overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: EverloreTheme.aiText.fontFamily,
-                      fontSize: 15,
-                      height: 1.45,
-                      color: EverloreTheme.parchment.withValues(alpha: 0.95),
-                    ),
                   ),
                   if (!_expanded && excerpt.length > 140)
                     GestureDetector(
