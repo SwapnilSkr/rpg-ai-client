@@ -91,8 +91,6 @@ class MediaRepository {
   static bool get isMediaEnabledSession =>
       _hasUsageCheckedThisSession && _cachedUsage != null;
 
-  static MediaUsage? get currentUsage => _cachedUsage;
-
   static void resetSession() {
     _cachedUsage = null;
     _hasUsageCheckedThisSession = false;
@@ -109,7 +107,8 @@ class MediaRepository {
   }
 
   /// Check media usage quota from the server.
-  /// Returns [MediaUsage] on 200, or null on 404 (feature off on wire).
+  /// Returns [MediaUsage] on 200; any other status (404 means the feature is
+  /// off on the wire) reads as unavailable.
   Future<MediaUsage?> getUsage() async {
     final uri = Uri.parse('$baseUrl/media/usage');
     final response = await _client.get(uri, headers: await _headers());
@@ -119,13 +118,9 @@ class MediaRepository {
       final json = jsonDecode(response.body) as Map<String, dynamic>;
       _cachedUsage = MediaUsage.fromJson(json);
       return _cachedUsage;
-    } else if (response.statusCode == 404) {
-      _cachedUsage = null;
-      return null;
-    } else {
-      _cachedUsage = null;
-      return null;
     }
+    _cachedUsage = null;
+    return null;
   }
 
   /// Request speech synthesis for a spoken line.
@@ -156,11 +151,7 @@ class MediaRepository {
     } else if (response.statusCode == 422) {
       throw const MediaUnvoiceableException();
     } else if (response.statusCode == 429) {
-      final json = _tryParseJson(response.body);
-      throw MediaRestingException(
-        kind: 'voice',
-        resetsAt: json?['resets_at']?.toString() ?? '',
-      );
+      throw _resting('voice', response.body);
     } else {
       throw MediaException(
         'Failed to voice line: ${response.body}',
@@ -174,35 +165,12 @@ class MediaRepository {
   Future<MediaRequestResponse> requestPicture({
     required String instanceId,
     required String eventId,
-  }) async {
-    final uri = Uri.parse('$baseUrl/instances/$instanceId/events/$eventId/picture');
-    final response = await _client.post(uri, headers: await _headers());
-
-    if (response.statusCode == 200) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return MediaRequestResponse(
-        status: 'ready',
-        url: json['url']?.toString(),
-        mediaId: json['media_id']?.toString(),
-      );
-    } else if (response.statusCode == 202) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return MediaRequestResponse(
-        status: 'queued',
-        mediaId: json['media_id']?.toString(),
-      );
-    } else if (response.statusCode == 429) {
-      final json = _tryParseJson(response.body);
-      throw MediaRestingException(
-        kind: 'picture',
-        resetsAt: json?['resets_at']?.toString() ?? '',
-      );
-    } else {
-      throw MediaException(
-        'Failed to request picture: ${response.body}',
-        statusCode: response.statusCode,
-      );
-    }
+  }) {
+    return _postMediaRequest(
+      '/instances/$instanceId/events/$eventId/picture',
+      restingKind: 'picture',
+      failure: 'Failed to request picture',
+    );
   }
 
   /// Request character talking video for a line.
@@ -211,37 +179,12 @@ class MediaRepository {
     required String instanceId,
     required String eventId,
     required String lineId,
-  }) async {
-    final uri = Uri.parse(
-      '$baseUrl/instances/$instanceId/events/$eventId/lines/$lineId/video',
+  }) {
+    return _postMediaRequest(
+      '/instances/$instanceId/events/$eventId/lines/$lineId/video',
+      restingKind: 'video',
+      failure: 'Failed to request video',
     );
-    final response = await _client.post(uri, headers: await _headers());
-
-    if (response.statusCode == 200) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return MediaRequestResponse(
-        status: 'ready',
-        url: json['url']?.toString(),
-        mediaId: json['media_id']?.toString(),
-      );
-    } else if (response.statusCode == 202) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return MediaRequestResponse(
-        status: 'queued',
-        mediaId: json['media_id']?.toString(),
-      );
-    } else if (response.statusCode == 429) {
-      final json = _tryParseJson(response.body);
-      throw MediaRestingException(
-        kind: 'video',
-        resetsAt: json?['resets_at']?.toString() ?? '',
-      );
-    } else {
-      throw MediaException(
-        'Failed to request video: ${response.body}',
-        statusCode: response.statusCode,
-      );
-    }
   }
 
   /// Request dialogue-free cut video for an event ("Film this").
@@ -249,37 +192,12 @@ class MediaRepository {
   Future<MediaRequestResponse> requestTurnVideo({
     required String instanceId,
     required String eventId,
-  }) async {
-    final uri = Uri.parse(
-      '$baseUrl/instances/$instanceId/events/$eventId/video',
+  }) {
+    return _postMediaRequest(
+      '/instances/$instanceId/events/$eventId/video',
+      restingKind: 'video',
+      failure: 'Failed to request turn video',
     );
-    final response = await _client.post(uri, headers: await _headers());
-
-    if (response.statusCode == 200) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return MediaRequestResponse(
-        status: 'ready',
-        url: json['url']?.toString(),
-        mediaId: json['media_id']?.toString(),
-      );
-    } else if (response.statusCode == 202) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return MediaRequestResponse(
-        status: 'queued',
-        mediaId: json['media_id']?.toString(),
-      );
-    } else if (response.statusCode == 429) {
-      final json = _tryParseJson(response.body);
-      throw MediaRestingException(
-        kind: 'video',
-        resetsAt: json?['resets_at']?.toString() ?? '',
-      );
-    } else {
-      throw MediaException(
-        'Failed to request turn video: ${response.body}',
-        statusCode: response.statusCode,
-      );
-    }
   }
 
   /// Repaint a character's portrait.
@@ -287,60 +205,61 @@ class MediaRepository {
   Future<MediaRequestResponse> repaintCharacterPortrait({
     required String instanceId,
     required String characterId,
-  }) async {
-    final uri = Uri.parse(
-      '$baseUrl/instances/$instanceId/characters/$characterId/portrait',
+  }) {
+    return _postMediaRequest(
+      '/instances/$instanceId/characters/$characterId/portrait',
+      restingKind: 'picture',
+      failure: 'Failed to repaint portrait',
     );
-    final response = await _client.post(uri, headers: await _headers());
-
-    if (response.statusCode == 200 || response.statusCode == 202) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return MediaRequestResponse(
-        status: response.statusCode == 200 ? 'ready' : 'queued',
-        url: json['url']?.toString(),
-        mediaId: json['media_id']?.toString(),
-      );
-    } else if (response.statusCode == 429) {
-      final json = _tryParseJson(response.body);
-      throw MediaRestingException(
-        kind: 'picture',
-        resetsAt: json?['resets_at']?.toString() ?? '',
-      );
-    } else {
-      throw MediaException(
-        'Failed to repaint portrait: ${response.body}',
-        statusCode: response.statusCode,
-      );
-    }
   }
 
   /// Paint a persona's portrait ("Give yourself a face").
   /// POST /personas/:personaId/portrait
   Future<MediaRequestResponse> paintPersonaPortrait({
     required String personaId,
+  }) {
+    return _postMediaRequest(
+      '/personas/$personaId/portrait',
+      restingKind: 'portrait',
+      failure: 'Failed to paint persona portrait',
+    );
+  }
+
+  /// The picture, film and portrait endpoints share one wire shape: 200 is
+  /// ready with a url, 202 is queued, 429 means today's allowance for
+  /// [restingKind] is spent.
+  Future<MediaRequestResponse> _postMediaRequest(
+    String path, {
+    required String restingKind,
+    required String failure,
   }) async {
-    final uri = Uri.parse('$baseUrl/personas/$personaId/portrait');
+    final uri = Uri.parse('$baseUrl$path');
     final response = await _client.post(uri, headers: await _headers());
 
     if (response.statusCode == 200 || response.statusCode == 202) {
+      final ready = response.statusCode == 200;
       final json = jsonDecode(response.body) as Map<String, dynamic>;
       return MediaRequestResponse(
-        status: response.statusCode == 200 ? 'ready' : 'queued',
-        url: json['url']?.toString(),
+        status: ready ? 'ready' : 'queued',
+        url: ready ? json['url']?.toString() : null,
         mediaId: json['media_id']?.toString(),
       );
     } else if (response.statusCode == 429) {
-      final json = _tryParseJson(response.body);
-      throw MediaRestingException(
-        kind: 'portrait',
-        resetsAt: json?['resets_at']?.toString() ?? '',
-      );
+      throw _resting(restingKind, response.body);
     } else {
       throw MediaException(
-        'Failed to paint persona portrait: ${response.body}',
+        '$failure: ${response.body}',
         statusCode: response.statusCode,
       );
     }
+  }
+
+  MediaRestingException _resting(String kind, String body) {
+    final json = _tryParseJson(body);
+    return MediaRestingException(
+      kind: kind,
+      resetsAt: json?['resets_at']?.toString() ?? '',
+    );
   }
 
   Map<String, dynamic>? _tryParseJson(String body) {

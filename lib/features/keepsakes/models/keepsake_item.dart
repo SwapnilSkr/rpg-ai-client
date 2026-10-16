@@ -111,7 +111,6 @@ class KeepsakeItem {
   });
 
   bool get isVideo => kind == KeepsakeKind.video;
-  bool get isPicture => kind == KeepsakeKind.picture;
   bool get isPortrait => kind == KeepsakeKind.portrait;
   bool get isLineFilm => isVideo && speakerName != null && speakerName!.isNotEmpty;
 
@@ -166,6 +165,8 @@ class KeepsakesPage {
     required this.items,
     this.nextBefore,
   });
+
+  bool get hasMore => nextBefore != null && nextBefore!.isNotEmpty;
 
   factory KeepsakesPage.fromJson(Map<String, dynamic> json) {
     final list = json['items'] as List<dynamic>? ?? [];

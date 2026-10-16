@@ -122,6 +122,61 @@ class _KeepsakesViewState extends State<_KeepsakesView> {
     );
   }
 
+  /// The close of the list; a short archive also nudges the player back to
+  /// their stories to make more.
+  Widget _buildEndOfList(BuildContext context, int count) {
+    final closing = Text(
+      'That\'s everything you\'ve kept.',
+      style: TextStyle(
+        fontFamily: EverloreTheme.aiText.fontFamily,
+        fontSize: 13,
+        fontStyle: FontStyle.italic,
+        color: EverloreTheme.ash,
+      ),
+    );
+    if (count > 3) return _buildEndFlourish(child: closing);
+
+    return _buildEndFlourish(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          closing,
+          const SizedBox(height: 12),
+          NeuButton(
+            label: 'Picture another moment',
+            primary: false,
+            accent: EverloreTheme.gold,
+            onTap: () => context.go('/'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPagingError(
+    BuildContext context, {
+    required double verticalPadding,
+    MainAxisSize mainAxisSize = MainAxisSize.max,
+  }) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: verticalPadding),
+      child: Column(
+        mainAxisSize: mainAxisSize,
+        children: [
+          Text(
+            "Couldn't reach the rest.",
+            style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+          ),
+          const SizedBox(height: 8),
+          NeuButton(
+            label: 'Try again',
+            onTap: () => context.read<KeepsakesCubit>().loadNextPage(),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSkeletonFeed() {
     return ListView.builder(
       physics: const NeverScrollableScrollPhysics(),
@@ -252,64 +307,16 @@ class _KeepsakesViewState extends State<_KeepsakesView> {
 
         // Paging error
         if (state.nextPageError != null && index == (count + (state.isLoadingNextPage ? 1 : 0))) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  "Couldn't reach the rest.",
-                  style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
-                ),
-                const SizedBox(height: 8),
-                NeuButton(
-                  label: 'Try again',
-                  onTap: () => context.read<KeepsakesCubit>().loadNextPage(),
-                ),
-              ],
-            ),
+          return _buildPagingError(
+            context,
+            verticalPadding: 20,
+            mainAxisSize: MainAxisSize.min,
           );
         }
 
         // End of list / 1-3 nudge
         if (count > 0 && !state.hasMore) {
-          if (count <= 3) {
-            return _buildEndFlourish(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'That\'s everything you\'ve kept.',
-                    style: TextStyle(
-                      fontFamily: EverloreTheme.aiText.fontFamily,
-                      fontSize: 13,
-                      fontStyle: FontStyle.italic,
-                      color: EverloreTheme.ash,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  NeuButton(
-                    label: 'Picture another moment',
-                    primary: false,
-                    accent: EverloreTheme.gold,
-                    onTap: () => context.go('/'),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return _buildEndFlourish(
-            child: Text(
-              'That\'s everything you\'ve kept.',
-              style: TextStyle(
-                fontFamily: EverloreTheme.aiText.fontFamily,
-                fontSize: 13,
-                fontStyle: FontStyle.italic,
-                color: EverloreTheme.ash,
-              ),
-            ),
-          );
+          return _buildEndOfList(context, count);
         }
 
         return const SizedBox.shrink();
@@ -374,63 +381,12 @@ class _KeepsakesViewState extends State<_KeepsakesView> {
         // Paging error
         if (state.nextPageError != null)
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Column(
-                children: [
-                  Text(
-                    "Couldn't reach the rest.",
-                    style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
-                  ),
-                  const SizedBox(height: 8),
-                  NeuButton(
-                    label: 'Try again',
-                    onTap: () => context.read<KeepsakesCubit>().loadNextPage(),
-                  ),
-                ],
-              ),
-            ),
+            child: _buildPagingError(context, verticalPadding: 16),
           ),
 
         // End flourish
         if (count > 0 && !state.hasMore)
-          SliverToBoxAdapter(
-            child: count <= 3
-                ? _buildEndFlourish(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'That\'s everything you\'ve kept.',
-                          style: TextStyle(
-                            fontFamily: EverloreTheme.aiText.fontFamily,
-                            fontSize: 13,
-                            fontStyle: FontStyle.italic,
-                            color: EverloreTheme.ash,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        NeuButton(
-                          label: 'Picture another moment',
-                          primary: false,
-                          accent: EverloreTheme.gold,
-                          onTap: () => context.go('/'),
-                        ),
-                      ],
-                    ),
-                  )
-                : _buildEndFlourish(
-                    child: Text(
-                      'That\'s everything you\'ve kept.',
-                      style: TextStyle(
-                        fontFamily: EverloreTheme.aiText.fontFamily,
-                        fontSize: 13,
-                        fontStyle: FontStyle.italic,
-                        color: EverloreTheme.ash,
-                      ),
-                    ),
-                  ),
-          ),
+          SliverToBoxAdapter(child: _buildEndOfList(context, count)),
         const SliverToBoxAdapter(child: SizedBox(height: 80)),
       ],
     );

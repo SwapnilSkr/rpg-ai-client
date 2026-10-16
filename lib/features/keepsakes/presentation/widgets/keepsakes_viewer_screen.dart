@@ -9,7 +9,7 @@ import '../../../../shared/widgets/neu.dart';
 import '../../models/keepsake_item.dart';
 import 'keepsake_caption.dart';
 import 'keepsake_faded_tile.dart';
-import 'keepsake_feed_post.dart' show formatRelativeTime;
+import 'keepsake_format.dart';
 
 /// Fullscreen vertical reel viewer for Keepsakes (§3.4).
 class KeepsakesViewerScreen extends StatefulWidget {
@@ -270,13 +270,8 @@ class _ViewerPieceState extends State<_ViewerPiece>
       _showCharacterCardSheet();
     } else {
       // "Return to this moment" (§3.1, §3.4)
-      final instanceId = widget.item.instanceId;
-      if (instanceId == null || instanceId.isEmpty) return;
-
-      final eventId = widget.item.eventId;
-      final target = (eventId != null && eventId.isNotEmpty)
-          ? '/play/$instanceId?event=$eventId'
-          : '/play/$instanceId';
+      final target = keepsakeMomentRoute(widget.item);
+      if (target == null) return;
 
       Navigator.of(context).pop(); // close viewer
       context.push(target);
@@ -370,16 +365,18 @@ class _ViewerPieceState extends State<_ViewerPiece>
           : const KeepsakeFadedTile();
     }
 
+    final picture = EverloreNetworkImage(
+      imageUrl: widget.item.url,
+      fit: BoxFit.cover,
+      placeholder: const DecoratedBox(
+        decoration: BoxDecoration(color: EverloreTheme.void1),
+      ),
+      errorWidget: const KeepsakeFadedTile(),
+    );
+
     // Picture with subtle Ken Burns drift
     if (reducedMotion || _kenBurnsController == null) {
-      return EverloreNetworkImage(
-        imageUrl: widget.item.url,
-        fit: BoxFit.cover,
-        placeholder: const DecoratedBox(
-          decoration: BoxDecoration(color: EverloreTheme.void1),
-        ),
-        errorWidget: const KeepsakeFadedTile(),
-      );
+      return picture;
     }
 
     return AnimatedBuilder(
@@ -392,14 +389,7 @@ class _ViewerPieceState extends State<_ViewerPiece>
           child: child,
         );
       },
-      child: EverloreNetworkImage(
-        imageUrl: widget.item.url,
-        fit: BoxFit.cover,
-        placeholder: const DecoratedBox(
-          decoration: BoxDecoration(color: EverloreTheme.void1),
-        ),
-        errorWidget: const KeepsakeFadedTile(),
-      ),
+      child: picture,
     );
   }
 
@@ -407,9 +397,7 @@ class _ViewerPieceState extends State<_ViewerPiece>
     final item = widget.item;
     final world = item.world;
     final isWorldRemoved = world == null;
-    final worldTitle = isWorldRemoved
-        ? 'A story no longer here'
-        : (world.title.isNotEmpty ? world.title : 'A story');
+    final worldTitle = keepsakeWorldTitle(world);
     final isFace = item.isPortrait;
     final primaryActionLabel = isFace ? 'Open their card' : 'Return to this moment';
     final canPerformAction = isFace || (!isWorldRemoved && item.instanceId != null);

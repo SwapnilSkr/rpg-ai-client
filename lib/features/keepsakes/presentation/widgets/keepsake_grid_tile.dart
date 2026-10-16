@@ -4,7 +4,7 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../models/keepsake_item.dart';
 import 'keepsake_faded_tile.dart';
-import 'keepsake_feed_post.dart' show formatDuration;
+import 'keepsake_format.dart';
 
 /// One 9:16 tile in the Keepsakes grid (§3.2, §3.3).
 class KeepsakeGridTile extends StatelessWidget {

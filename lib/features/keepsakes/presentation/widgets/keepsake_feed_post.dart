@@ -9,26 +9,7 @@ import '../../../../shared/widgets/neu.dart';
 import '../../models/keepsake_item.dart';
 import 'keepsake_caption.dart';
 import 'keepsake_faded_tile.dart';
-
-String formatRelativeTime(DateTime dateTime) {
-  final now = DateTime.now();
-  final diff = now.difference(dateTime);
-  if (diff.inSeconds < 60) return 'just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
-  if (diff.inDays == 1) return 'yesterday';
-  if (diff.inDays < 7) return '${diff.inDays}d ago';
-  if (diff.inDays < 30) return '${(diff.inDays / 7).floor()}w ago';
-  return '${(diff.inDays / 30).floor()}mo ago';
-}
-
-String formatDuration(int? durationMs) {
-  if (durationMs == null || durationMs <= 0) return '';
-  final seconds = (durationMs / 1000).round();
-  final m = seconds ~/ 60;
-  final s = seconds % 60;
-  return '$m:${s.toString().padLeft(2, '0')}';
-}
+import 'keepsake_format.dart';
 
 /// A vertical feed post representing one Keepsake (§3.1).
 class KeepsakeFeedPost extends StatefulWidget {
@@ -126,23 +107,15 @@ class _KeepsakeFeedPostState extends State<KeepsakeFeedPost> {
   }
 
   void _returnToMoment() {
-    final instanceId = widget.item.instanceId;
-    if (instanceId == null || instanceId.isEmpty) return;
-
-    final eventId = widget.item.eventId;
-    final target = (eventId != null && eventId.isNotEmpty)
-        ? '/play/$instanceId?event=$eventId'
-        : '/play/$instanceId';
-
+    final target = keepsakeMomentRoute(widget.item);
+    if (target == null) return;
     context.push(target);
   }
 
   Widget _buildHeader() {
     final world = widget.item.world;
     final isWorldRemoved = world == null;
-    final worldTitle = isWorldRemoved
-        ? 'A story no longer here'
-        : (world.title.isNotEmpty ? world.title : 'A story');
+    final worldTitle = keepsakeWorldTitle(world);
     final coverUrl = world?.coverUrl;
     final saveLabel = widget.item.saveLabel;
     final relativeTime = formatRelativeTime(widget.item.createdAt);
@@ -331,37 +304,28 @@ class _KeepsakeFeedPostState extends State<KeepsakeFeedPost> {
             ),
             const SizedBox(height: 3),
           ],
-          LayoutBuilder(
-            builder: (context, constraints) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text.rich(
-                    TextSpan(style: baseStyle, children: spans),
-                    style: baseStyle,
-                    maxLines: _expanded ? null : 3,
-                    overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                  ),
-                  if (!_expanded && excerpt.length > 140)
-                    GestureDetector(
-                      onTap: () => setState(() => _expanded = true),
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          'more',
-                          style: EverloreTheme.ui(
-                            size: 12,
-                            color: EverloreTheme.goldDim,
-                            weight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
+          Text.rich(
+            TextSpan(style: baseStyle, children: spans),
+            style: baseStyle,
+            maxLines: _expanded ? null : 3,
+            overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
           ),
+          if (!_expanded && excerpt.length > 140)
+            GestureDetector(
+              onTap: () => setState(() => _expanded = true),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'more',
+                  style: EverloreTheme.ui(
+                    size: 12,
+                    color: EverloreTheme.goldDim,
+                    weight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

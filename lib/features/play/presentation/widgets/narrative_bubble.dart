@@ -13,6 +13,7 @@ import '../../../../shared/widgets/everlore_notice.dart';
 import '../../../media/models/spoken_line.dart';
 import '../../../media/models/turn_media.dart';
 import '../../../media/presentation/media_thumbnail.dart';
+import 'anchored_menu_popup.dart' show globalRectOf;
 
 const _kNarrationMutedAlpha = kNarrationMutedAlpha;
 
@@ -79,23 +80,26 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
   final GlobalKey<_ProseTextState> _proseKey = GlobalKey<_ProseTextState>();
   final GlobalKey _narratorPanelKey = GlobalKey();
 
-  void _handleTapUp(TapUpDetails details) {
-    final effectiveSpokenLines = widget.event.spokenLines.isNotEmpty
-        ? widget.event.spokenLines
-        : widget.spokenLines;
+  /// Lines on the event itself win over lines handed in separately.
+  List<SpokenLine> get _effectiveSpokenLines =>
+      widget.event.spokenLines.isNotEmpty
+          ? widget.event.spokenLines
+          : widget.spokenLines;
 
+  bool _isUnvoiceable(SpokenLine line) =>
+      line.unvoiceable ||
+      widget.unvoiceableLines.contains(line.lineId) ||
+      _effectiveSpokenLines.any(
+        (l) => l.lineId == line.lineId && l.unvoiceable,
+      );
+
+  void _handleTapUp(TapUpDetails details) {
     final spokenResult =
         _proseKey.currentState?.findSpokenLineAt(details.globalPosition);
 
     if (spokenResult != null) {
       final spokenLine = spokenResult.line;
-      final isUnvoiceable = spokenLine.unvoiceable ||
-          widget.unvoiceableLines.contains(spokenLine.lineId) ||
-          effectiveSpokenLines.any(
-            (l) => l.lineId == spokenLine.lineId && l.unvoiceable,
-          );
-
-      if (isUnvoiceable) {
+      if (_isUnvoiceable(spokenLine)) {
         HapticFeedback.lightImpact();
       } else {
         widget.onSpokenLineTap?.call(spokenLine);
@@ -109,33 +113,15 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
   }
 
   void _handleLongPressStart(LongPressStartDetails details) {
-    final effectiveSpokenLines = widget.event.spokenLines.isNotEmpty
-        ? widget.event.spokenLines
-        : widget.spokenLines;
-
     final spokenResult =
         _proseKey.currentState?.findSpokenLineAt(details.globalPosition);
 
-    if (spokenResult != null) {
-      final spokenLine = spokenResult.line;
-      final isUnvoiceable = spokenLine.unvoiceable ||
-          widget.unvoiceableLines.contains(spokenLine.lineId) ||
-          effectiveSpokenLines.any(
-            (l) => l.lineId == spokenLine.lineId && l.unvoiceable,
-          );
-
-      if (!isUnvoiceable) {
-        widget.onSpokenLineLongPress?.call(spokenLine, spokenResult.rect);
-        return;
-      }
+    if (spokenResult != null && !_isUnvoiceable(spokenResult.line)) {
+      widget.onSpokenLineLongPress?.call(spokenResult.line, spokenResult.rect);
+      return;
     }
 
-    final panelBox =
-        _narratorPanelKey.currentContext?.findRenderObject() as RenderBox?;
-    final panelRect = panelBox != null && panelBox.hasSize
-        ? (panelBox.localToGlobal(Offset.zero) & panelBox.size)
-        : null;
-
+    final panelRect = globalRectOf(_narratorPanelKey.currentContext);
     if (panelRect != null) {
       widget.onLongPress?.call(panelRect);
     }
@@ -146,8 +132,7 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
     final event = widget.event;
     final ai = event.aiResponse ?? '';
     final hasProse = ai.isNotEmpty;
-    final effectiveSpokenLines =
-        event.spokenLines.isNotEmpty ? event.spokenLines : widget.spokenLines;
+    final effectiveSpokenLines = _effectiveSpokenLines;
 
     final canLongPress = widget.onLongPress != null ||
         (effectiveSpokenLines.isNotEmpty &&
@@ -941,10 +926,7 @@ class _MediaButton extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () {
-          final box = context.findRenderObject() as RenderBox?;
-          final rect = box != null && box.hasSize
-              ? (box.localToGlobal(Offset.zero) & box.size)
-              : null;
+          final rect = globalRectOf(context);
           if (rect != null) {
             onTap(rect);
           }
@@ -1258,16 +1240,18 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
       };
     }
 
+    List<InlineSpan> linked(List<InlineSpan> spans) {
+      if (csPattern == null || resolve == null) return spans;
+      return [
+        for (final s in spans)
+          if (s is TextSpan) ..._linkEntities(s, csPattern, resolve) else s,
+      ];
+    }
+
     List<InlineSpan> spans;
 
     if (widget.spokenLines.isEmpty) {
-      spans = _narrativeSpans(widget.text);
-      if (csPattern != null && resolve != null) {
-        spans = [
-          for (final s in spans)
-            if (s is TextSpan) ..._linkEntities(s, csPattern, resolve) else s,
-        ];
-      }
+      spans = linked(_narrativeSpans(widget.text));
     } else {
       final sortedLines = [...widget.spokenLines]
         ..sort((a, b) => a.start.compareTo(b.start));
@@ -1286,13 +1270,7 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
 
         if (line.start > lastIndex) {
           final beforeText = widget.text.substring(lastIndex, line.start);
-          var beforeSpans = _narrativeSpans(beforeText);
-          if (csPattern != null && resolve != null) {
-            beforeSpans = [
-              for (final s in beforeSpans)
-                if (s is TextSpan) ..._linkEntities(s, csPattern, resolve) else s,
-            ];
-          }
+          final beforeSpans = linked(_narrativeSpans(beforeText));
           builtSpans.addAll(beforeSpans);
           for (final s in beforeSpans) {
             currentRenderedLength += s.toPlainText().length;
@@ -1302,9 +1280,8 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
         final lineText = widget.text.substring(line.start, line.end);
         final rawLineSpans = _narrativeSpans(lineText);
 
-        final isUnvoiceable = line.unvoiceable ||
-            widget.unvoiceableLines.contains(line.lineId);
-        final isVoiceable = !isUnvoiceable;
+        final isVoiceable = !line.unvoiceable &&
+            !widget.unvoiceableLines.contains(line.lineId);
 
         final isLoading = widget.loadingLineId == line.lineId;
 
@@ -1335,11 +1312,10 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
                 style: effectiveStyle,
               ),
             );
-            currentRenderedLength += s.toPlainText().length;
           } else {
             builtSpans.add(s);
-            currentRenderedLength += s.toPlainText().length;
           }
+          currentRenderedLength += s.toPlainText().length;
         }
         final lineEndRendered = currentRenderedLength;
 
@@ -1356,14 +1332,7 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
 
       if (lastIndex < widget.text.length) {
         final afterText = widget.text.substring(lastIndex);
-        var afterSpans = _narrativeSpans(afterText);
-        if (csPattern != null && resolve != null) {
-          afterSpans = [
-            for (final s in afterSpans)
-              if (s is TextSpan) ..._linkEntities(s, csPattern, resolve) else s,
-          ];
-        }
-        builtSpans.addAll(afterSpans);
+        builtSpans.addAll(linked(_narrativeSpans(afterText)));
       }
 
       _renderedLines = renderedLines;

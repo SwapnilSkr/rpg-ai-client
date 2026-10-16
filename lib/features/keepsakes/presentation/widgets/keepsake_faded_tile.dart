@@ -6,22 +6,13 @@ import '../../../../app/theme/nexus_theme.dart';
 /// A muted parchment tile with a faint crest and "This keepsake has faded",
 /// at the exact 9:16 aspect ratio, never black or empty.
 class KeepsakeFadedTile extends StatelessWidget {
-  final double? width;
-  final double? height;
-
-  const KeepsakeFadedTile({
-    super.key,
-    this.width,
-    this.height,
-  });
+  const KeepsakeFadedTile({super.key});
 
   @override
   Widget build(BuildContext context) {
     return AspectRatio(
       aspectRatio: 9 / 16,
       child: Container(
-        width: width,
-        height: height,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           color: const Color(0xFF1E1A17), // muted warm parchment/stone

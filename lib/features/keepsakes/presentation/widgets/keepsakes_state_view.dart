@@ -11,9 +11,7 @@ class KeepsakesStateView extends StatelessWidget {
   final String body;
   final String actionLabel;
   final VoidCallback onAction;
-  final IconData? actionIcon;
   final bool compact;
-  final Widget? vignette;
   final bool isError;
 
   const KeepsakesStateView({
@@ -22,9 +20,7 @@ class KeepsakesStateView extends StatelessWidget {
     required this.body,
     required this.actionLabel,
     required this.onAction,
-    this.actionIcon,
     this.compact = false,
-    this.vignette,
     this.isError = false,
   });
 
@@ -44,33 +40,32 @@ class KeepsakesStateView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               // Crest glyph over the painting
-              vignette ??
-                  Container(
-                    padding: EdgeInsets.all(compact ? 12 : 16),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: EverloreTheme.void0.withValues(alpha: 0.6),
-                      border: Border.all(
-                        color: accentColor.withValues(alpha: 0.5),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: accentColor.withValues(alpha: 0.15),
-                          blurRadius: 16,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      isError
-                          ? Icons.cloud_off_rounded
-                          : (compact
-                              ? Icons.collections_bookmark_outlined
-                              : Icons.auto_stories_rounded),
-                      color: accentColor,
-                      size: compact ? 24 : 36,
-                    ),
+              Container(
+                padding: EdgeInsets.all(compact ? 12 : 16),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: EverloreTheme.void0.withValues(alpha: 0.6),
+                  border: Border.all(
+                    color: accentColor.withValues(alpha: 0.5),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accentColor.withValues(alpha: 0.15),
+                      blurRadius: 16,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  isError
+                      ? Icons.cloud_off_rounded
+                      : (compact
+                          ? Icons.collections_bookmark_outlined
+                          : Icons.auto_stories_rounded),
+                  color: accentColor,
+                  size: compact ? 24 : 36,
+                ),
+              ),
               SizedBox(height: compact ? 16 : 24),
               // Title in Cinzel display caps
               Text(
@@ -98,7 +93,6 @@ class KeepsakesStateView extends StatelessWidget {
               // Primary action
               NeuButton(
                 label: actionLabel,
-                icon: actionIcon,
                 primary: true,
                 accent: accentColor,
                 onTap: onAction,

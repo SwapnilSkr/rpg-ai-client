@@ -29,10 +29,7 @@ class KeepsakesCubit extends Cubit<KeepsakesState> {
       limit: limit,
     );
     int autoPages = 0;
-    while (page.items.isEmpty &&
-        page.nextBefore != null &&
-        page.nextBefore!.isNotEmpty &&
-        autoPages < maxAutoPages) {
+    while (page.items.isEmpty && page.hasMore && autoPages < maxAutoPages) {
       autoPages++;
       page = await _repository.getKeepsakes(
         filter: filter,
@@ -52,16 +49,13 @@ class KeepsakesCubit extends Cubit<KeepsakesState> {
 
     try {
       final hasSaves = await _repository.hasAnySaves();
-      final page = await _fetchNonEmptyPage(
-        filter: state.filter,
-        limit: 20,
-      );
+      final page = await _fetchNonEmptyPage(filter: state.filter);
 
       final deduped = _dedupe(page.items);
       emit(state.copyWith(
         items: deduped,
         nextBefore: page.nextBefore,
-        hasMore: page.nextBefore != null && page.nextBefore!.isNotEmpty,
+        hasMore: page.hasMore,
         isLoading: false,
         hasAnySaves: hasSaves,
         hasAnyKeepsakesOverall: state.hasAnyKeepsakesOverall || deduped.isNotEmpty,
@@ -91,16 +85,13 @@ class KeepsakesCubit extends Cubit<KeepsakesState> {
     ));
 
     try {
-      final page = await _fetchNonEmptyPage(
-        filter: newFilter,
-        limit: 20,
-      );
+      final page = await _fetchNonEmptyPage(filter: newFilter);
 
       final deduped = _dedupe(page.items);
       emit(state.copyWith(
         items: deduped,
         nextBefore: page.nextBefore,
-        hasMore: page.nextBefore != null && page.nextBefore!.isNotEmpty,
+        hasMore: page.hasMore,
         isLoading: false,
         hasAnyKeepsakesOverall: wasOverall || deduped.isNotEmpty,
       ));
@@ -126,10 +117,7 @@ class KeepsakesCubit extends Cubit<KeepsakesState> {
 
     try {
       final hasSaves = await _repository.hasAnySaves();
-      final page = await _fetchNonEmptyPage(
-        filter: state.filter,
-        limit: 20,
-      );
+      final page = await _fetchNonEmptyPage(filter: state.filter);
 
       final deduped = _dedupe(page.items);
       final hasKeepsakes = state.hasAnyKeepsakesOverall || deduped.isNotEmpty;
@@ -137,7 +125,7 @@ class KeepsakesCubit extends Cubit<KeepsakesState> {
       emit(state.copyWith(
         items: deduped,
         nextBefore: page.nextBefore,
-        hasMore: page.nextBefore != null && page.nextBefore!.isNotEmpty,
+        hasMore: page.hasMore,
         isRefreshing: false,
         hasAnySaves: hasSaves,
         hasAnyKeepsakesOverall: hasKeepsakes,
@@ -163,7 +151,6 @@ class KeepsakesCubit extends Cubit<KeepsakesState> {
       final page = await _fetchNonEmptyPage(
         filter: state.filter,
         before: state.nextBefore,
-        limit: 20,
       );
 
       // Append without duplicates
@@ -174,7 +161,7 @@ class KeepsakesCubit extends Cubit<KeepsakesState> {
       emit(state.copyWith(
         items: combined,
         nextBefore: page.nextBefore,
-        hasMore: page.nextBefore != null && page.nextBefore!.isNotEmpty,
+        hasMore: page.hasMore,
         isLoadingNextPage: false,
       ));
     } catch (e) {

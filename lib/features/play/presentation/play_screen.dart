@@ -120,25 +120,11 @@ class _PlayViewState extends State<_PlayView> {
   final _composerDraft = ValueNotifier<String?>(null);
   final GlobalKey _composerKey = GlobalKey();
 
-  double? get _composerTop {
-    final box = _composerKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box != null && box.hasSize) {
-      return box.localToGlobal(Offset.zero).dy;
-    }
-    return null;
-  }
+  double? get _composerTop => globalRectOf(_composerKey.currentContext)?.top;
 
   Rect? _getEventBubbleRect(String eventId, BuildContext fallbackContext) {
-    final key = _eventBubbleKeys[eventId];
-    final box = key?.currentContext?.findRenderObject() as RenderBox?;
-    if (box != null && box.hasSize) {
-      return box.localToGlobal(Offset.zero) & box.size;
-    }
-    final fallbackBox = fallbackContext.findRenderObject() as RenderBox?;
-    if (fallbackBox != null && fallbackBox.hasSize) {
-      return fallbackBox.localToGlobal(Offset.zero) & fallbackBox.size;
-    }
-    return null;
+    return globalRectOf(_eventBubbleKeys[eventId]?.currentContext) ??
+        globalRectOf(fallbackContext);
   }
 
   /// The draft last handed back after an authored refusal, so the listener

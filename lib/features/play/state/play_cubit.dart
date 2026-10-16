@@ -1242,22 +1242,16 @@ class PlayCubit extends Cubit<PlayState> {
       if (msg['instanceId'] != instanceId) return;
       final eventId = (msg['eventId'] ?? '').toString();
       final mediaId = (msg['media_id'] ?? msg['mediaId'] ?? '').toString();
-      final notice = MediaNotice(
-        message: 'This moment stays unseen.',
-        tone: NoticeTone.info,
-        sequence: ++_mediaNoticeSeq,
+      final notice = _nextMediaNotice(
+        'This moment stays unseen.',
+        NoticeTone.info,
       );
-      final events = [...state.events];
-      final idx = events.indexWhere((e) => e.id == eventId);
-      if (idx >= 0) {
-        final ev = events[idx];
-        final mediaList = ev.media.where((m) => m.mediaId != mediaId).toList();
-        events[idx] = ev.copyWith(media: mediaList);
-        LocalDb.insertEvent(events[idx]).ignore();
-        emit(state.copyWith(events: events, mediaNotice: notice));
-      } else {
-        emit(state.copyWith(mediaNotice: notice));
-      }
+      emit(
+        state.copyWith(
+          events: _eventsWithoutMedia(eventId, mediaId, persist: true),
+          mediaNotice: notice,
+        ),
+      );
     });
 
     _mediaFailedSub = _ws.onMediaFailed.listen((msg) {
@@ -1272,40 +1266,44 @@ class PlayCubit extends Cubit<PlayState> {
       if (isVoiceMatch) {
         audioController.setLoading(null, null);
       }
-      final notice = MediaNotice(
-        message: _mediaFailureCopy(kind),
-        tone: NoticeTone.error,
-        sequence: ++_mediaNoticeSeq,
+      final notice = _nextMediaNotice(
+        _mediaFailureCopy(kind),
+        NoticeTone.error,
       );
-      final events = [...state.events];
-      final idx = events.indexWhere((e) => e.id == eventId);
-      if (idx >= 0) {
-        final ev = events[idx];
-        final mediaList = ev.media.where((m) => m.mediaId != mediaId).toList();
-        events[idx] = ev.copyWith(media: mediaList);
-        LocalDb.insertEvent(events[idx]).ignore();
-        emit(
-          state.copyWith(
-            events: events,
-            mediaNotice: notice,
-            loadingVoiceEventId: isVoiceMatch
-                ? null
-                : state.loadingVoiceEventId,
-            loadingVoiceLineId: isVoiceMatch ? null : state.loadingVoiceLineId,
-          ),
-        );
-      } else {
-        emit(
-          state.copyWith(
-            mediaNotice: notice,
-            loadingVoiceEventId: isVoiceMatch
-                ? null
-                : state.loadingVoiceEventId,
-            loadingVoiceLineId: isVoiceMatch ? null : state.loadingVoiceLineId,
-          ),
-        );
-      }
+      emit(
+        state.copyWith(
+          events: _eventsWithoutMedia(eventId, mediaId, persist: true),
+          mediaNotice: notice,
+          loadingVoiceEventId: isVoiceMatch
+              ? null
+              : state.loadingVoiceEventId,
+          loadingVoiceLineId: isVoiceMatch ? null : state.loadingVoiceLineId,
+        ),
+      );
     });
+  }
+
+  /// Each media notice gets a fresh [MediaNotice.sequence] so the screen's
+  /// listener fires even when the same message repeats.
+  MediaNotice _nextMediaNotice(String message, NoticeTone tone) =>
+      MediaNotice(message: message, tone: tone, sequence: ++_mediaNoticeSeq);
+
+  /// [state.events] with [mediaId] dropped from [eventId]'s media, or null
+  /// when that event isn't loaded (so `copyWith` leaves the events alone).
+  List<GameEvent>? _eventsWithoutMedia(
+    String eventId,
+    String mediaId, {
+    required bool persist,
+  }) {
+    final events = [...state.events];
+    final idx = events.indexWhere((e) => e.id == eventId);
+    if (idx < 0) return null;
+    final ev = events[idx];
+    events[idx] = ev.copyWith(
+      media: ev.media.where((m) => m.mediaId != mediaId).toList(),
+    );
+    if (persist) LocalDb.insertEvent(events[idx]).ignore();
+    return events;
   }
 
   String _mediaFailureCopy(String kind) {
@@ -2458,11 +2456,7 @@ class PlayCubit extends Cubit<PlayState> {
       audioController.setLoading(null, null);
       emit(
         state.copyWith(
-          mediaNotice: MediaNotice(
-            message: e.restingCopy,
-            tone: NoticeTone.info,
-            sequence: ++_mediaNoticeSeq,
-          ),
+          mediaNotice: _nextMediaNotice(e.restingCopy, NoticeTone.info),
           loadingVoiceEventId: null,
           loadingVoiceLineId: null,
         ),
@@ -2471,10 +2465,9 @@ class PlayCubit extends Cubit<PlayState> {
       audioController.setLoading(null, null);
       emit(
         state.copyWith(
-          mediaNotice: MediaNotice(
-            message: 'Could not play this voice.',
-            tone: NoticeTone.error,
-            sequence: ++_mediaNoticeSeq,
+          mediaNotice: _nextMediaNotice(
+            _mediaFailureCopy('voice'),
+            NoticeTone.error,
           ),
           loadingVoiceEventId: null,
           loadingVoiceLineId: null,
@@ -2495,82 +2488,54 @@ class PlayCubit extends Cubit<PlayState> {
     );
   }
 
-  Future<void> requestPicture(String eventId) async {
-    final tempId = 'temp_pic_${DateTime.now().millisecondsSinceEpoch}';
-    final placeholder = TurnMedia(
-      mediaId: tempId,
+  Future<void> requestPicture(String eventId) {
+    return _requestTurnMedia(
+      eventId,
       kind: MediaKind.picture,
-      status: MediaStatus.queued,
-    );
-
-    final events = [...state.events];
-    final idx = events.indexWhere((e) => e.id == eventId);
-    if (idx >= 0) {
-      final ev = events[idx];
-      events[idx] = ev.copyWith(media: [...ev.media, placeholder]);
-      emit(state.copyWith(events: events));
-    }
-
-    try {
-      final res = await _mediaRepo.requestPicture(
+      request: () => _mediaRepo.requestPicture(
         instanceId: instanceId,
         eventId: eventId,
-      );
-
-      final nextEvents = [...state.events];
-      final nIdx = nextEvents.indexWhere((e) => e.id == eventId);
-      if (nIdx >= 0) {
-        final ev = nextEvents[nIdx];
-        final mediaList = [...ev.media];
-        final pIdx = mediaList.indexWhere((m) => m.mediaId == tempId);
-        if (pIdx >= 0) {
-          if (res.isReady) {
-            mediaList[pIdx] = TurnMedia(
-              mediaId: res.mediaId ?? tempId,
-              kind: MediaKind.picture,
-              status: MediaStatus.ready,
-              url: res.url,
-            );
-          } else {
-            mediaList[pIdx] = TurnMedia(
-              mediaId: res.mediaId ?? tempId,
-              kind: MediaKind.picture,
-              status: MediaStatus.queued,
-            );
-          }
-          nextEvents[nIdx] = ev.copyWith(media: mediaList);
-          LocalDb.insertEvent(nextEvents[nIdx]).ignore();
-          emit(state.copyWith(events: nextEvents));
-        }
-      }
-    } on MediaRestingException catch (e) {
-      _removeTempMedia(
-        eventId,
-        tempId,
-        MediaNotice(
-          message: e.restingCopy,
-          tone: NoticeTone.info,
-          sequence: ++_mediaNoticeSeq,
-        ),
-      );
-    } catch (_) {
-      _removeTempMedia(
-        eventId,
-        tempId,
-        MediaNotice(
-          message: 'Could not create this picture.',
-          tone: NoticeTone.error,
-          sequence: ++_mediaNoticeSeq,
-        ),
-      );
-    }
+      ),
+    );
   }
 
-  Future<void> requestVideo(String eventId, String lineId) async {
-    final tempId = 'temp_vid_${DateTime.now().millisecondsSinceEpoch}';
+  Future<void> requestVideo(String eventId, String lineId) {
+    return _requestTurnMedia(
+      eventId,
+      kind: MediaKind.video,
+      lineId: lineId,
+      request: () => _mediaRepo.requestVideo(
+        instanceId: instanceId,
+        eventId: eventId,
+        lineId: lineId,
+      ),
+    );
+  }
+
+  Future<void> requestTurnVideo(String eventId) {
+    return _requestTurnMedia(
+      eventId,
+      kind: MediaKind.video,
+      request: () => _mediaRepo.requestTurnVideo(
+        instanceId: instanceId,
+        eventId: eventId,
+      ),
+    );
+  }
+
+  /// Puts a queued placeholder under [eventId] at once, then swaps it for the
+  /// server's answer; a refusal removes it again and explains why.
+  Future<void> _requestTurnMedia(
+    String eventId, {
+    required MediaKind kind,
+    String? lineId,
+    required Future<MediaRequestResponse> Function() request,
+  }) async {
+    final tempPrefix = kind == MediaKind.picture ? 'temp_pic' : 'temp_vid';
+    final tempId = '${tempPrefix}_${DateTime.now().millisecondsSinceEpoch}';
     final placeholder = TurnMedia(
       mediaId: tempId,
-      kind: MediaKind.video,
+      kind: kind,
       status: MediaStatus.queued,
       lineId: lineId,
     );
@@ -2584,11 +2549,7 @@ class PlayCubit extends Cubit<PlayState> {
     }
 
     try {
-      final res = await _mediaRepo.requestVideo(
-        instanceId: instanceId,
-        eventId: eventId,
-        lineId: lineId,
-      );
+      final res = await request();
 
       final nextEvents = [...state.events];
       final nIdx = nextEvents.indexWhere((e) => e.id == eventId);
@@ -2597,23 +2558,15 @@ class PlayCubit extends Cubit<PlayState> {
         final mediaList = [...ev.media];
         final pIdx = mediaList.indexWhere((m) => m.mediaId == tempId);
         if (pIdx >= 0) {
-          if (res.isReady) {
-            mediaList[pIdx] = TurnMedia(
-              mediaId: res.mediaId ?? tempId,
-              kind: MediaKind.video,
-              status: MediaStatus.ready,
-              url: res.url,
-              lineId: lineId,
-              justRequested: true,
-            );
-          } else {
-            mediaList[pIdx] = TurnMedia(
-              mediaId: res.mediaId ?? tempId,
-              kind: MediaKind.video,
-              status: MediaStatus.queued,
-              lineId: lineId,
-            );
-          }
+          mediaList[pIdx] = TurnMedia(
+            mediaId: res.mediaId ?? tempId,
+            kind: kind,
+            status: res.isReady ? MediaStatus.ready : MediaStatus.queued,
+            url: res.isReady ? res.url : null,
+            lineId: lineId,
+            // A film the player just asked for plays once, muted, on arrival.
+            justRequested: res.isReady && kind == MediaKind.video,
+          );
           nextEvents[nIdx] = ev.copyWith(media: mediaList);
           LocalDb.insertEvent(nextEvents[nIdx]).ignore();
           emit(state.copyWith(events: nextEvents));
@@ -2623,118 +2576,23 @@ class PlayCubit extends Cubit<PlayState> {
       _removeTempMedia(
         eventId,
         tempId,
-        MediaNotice(
-          message: e.restingCopy,
-          tone: NoticeTone.info,
-          sequence: ++_mediaNoticeSeq,
-        ),
+        _nextMediaNotice(e.restingCopy, NoticeTone.info),
       );
     } catch (_) {
       _removeTempMedia(
         eventId,
         tempId,
-        MediaNotice(
-          message: 'Could not create this film.',
-          tone: NoticeTone.error,
-          sequence: ++_mediaNoticeSeq,
-        ),
+        _nextMediaNotice(_mediaFailureCopy(kind.name), NoticeTone.error),
       );
     }
   }
 
-  Future<void> requestTurnVideo(String eventId) async {
-    final tempId = 'temp_vid_${DateTime.now().millisecondsSinceEpoch}';
-    final placeholder = TurnMedia(
-      mediaId: tempId,
-      kind: MediaKind.video,
-      status: MediaStatus.queued,
+  void _removeTempMedia(String eventId, String tempId, MediaNotice notice) {
+    emit(
+      state.copyWith(
+        events: _eventsWithoutMedia(eventId, tempId, persist: false),
+        mediaNotice: notice,
+      ),
     );
-
-    final events = [...state.events];
-    final idx = events.indexWhere((e) => e.id == eventId);
-    if (idx >= 0) {
-      final ev = events[idx];
-      events[idx] = ev.copyWith(media: [...ev.media, placeholder]);
-      emit(state.copyWith(events: events));
-    }
-
-    try {
-      final res = await _mediaRepo.requestTurnVideo(
-        instanceId: instanceId,
-        eventId: eventId,
-      );
-
-      final nextEvents = [...state.events];
-      final nIdx = nextEvents.indexWhere((e) => e.id == eventId);
-      if (nIdx >= 0) {
-        final ev = nextEvents[nIdx];
-        final mediaList = [...ev.media];
-        final pIdx = mediaList.indexWhere((m) => m.mediaId == tempId);
-        if (pIdx >= 0) {
-          if (res.isReady) {
-            mediaList[pIdx] = TurnMedia(
-              mediaId: res.mediaId ?? tempId,
-              kind: MediaKind.video,
-              status: MediaStatus.ready,
-              url: res.url,
-              justRequested: true,
-            );
-          } else {
-            mediaList[pIdx] = TurnMedia(
-              mediaId: res.mediaId ?? tempId,
-              kind: MediaKind.video,
-              status: MediaStatus.queued,
-            );
-          }
-          nextEvents[nIdx] = ev.copyWith(media: mediaList);
-          LocalDb.insertEvent(nextEvents[nIdx]).ignore();
-          emit(state.copyWith(events: nextEvents));
-        }
-      }
-    } on MediaRestingException catch (e) {
-      _removeTempMedia(
-        eventId,
-        tempId,
-        MediaNotice(
-          message: e.restingCopy,
-          tone: NoticeTone.info,
-          sequence: ++_mediaNoticeSeq,
-        ),
-      );
-    } catch (_) {
-      _removeTempMedia(
-        eventId,
-        tempId,
-        MediaNotice(
-          message: 'Could not create this film.',
-          tone: NoticeTone.error,
-          sequence: ++_mediaNoticeSeq,
-        ),
-      );
-    }
-  }
-
-  void _removeTempMedia(
-    String eventId,
-    String tempId, [
-    MediaNotice? mediaNotice,
-  ]) {
-    final events = [...state.events];
-    final idx = events.indexWhere((e) => e.id == eventId);
-    if (idx >= 0) {
-      final ev = events[idx];
-      final mediaList = ev.media.where((m) => m.mediaId != tempId).toList();
-      events[idx] = ev.copyWith(media: mediaList);
-      emit(
-        state.copyWith(
-          events: events,
-          mediaNotice: mediaNotice ?? state.mediaNotice,
-        ),
-      );
-      return;
-    }
-    if (mediaNotice != null) {
-      emit(state.copyWith(mediaNotice: mediaNotice));
-    }
   }
 }

@@ -39,12 +39,7 @@ class AudioPlaybackController extends ChangeNotifier {
     });
   }
 
-  String? get activeEventId => _activeEventId;
-  String? get activeLineId => _activeLineId;
   bool get isPlaying => _isPlaying;
-
-  String? get loadingEventId => _loadingEventId;
-  String? get loadingLineId => _loadingLineId;
 
   bool isLinePlaying(String eventId, String lineId) =>
       _isPlaying && _activeEventId == eventId && _activeLineId == lineId;
@@ -84,7 +79,7 @@ class AudioPlaybackController extends ChangeNotifier {
         await _player.setUrl(url);
         await _player.play();
       }
-    } catch (e) {
+    } catch (_) {
       _isPlaying = false;
       _activeEventId = null;
       _activeLineId = null;

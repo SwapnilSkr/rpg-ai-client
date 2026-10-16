@@ -8,14 +8,22 @@ class AnchoredMenuItem {
   final Widget icon;
   final String label;
   final VoidCallback onTap;
-  final Color? labelColor;
 
   const AnchoredMenuItem({
     required this.icon,
     required this.label,
     required this.onTap,
-    this.labelColor,
   });
+}
+
+/// The on-screen rect of [context]'s render box, or null before it has laid
+/// out. Menus anchor to this rect.
+Rect? globalRectOf(BuildContext? context) {
+  final box = context?.findRenderObject() as RenderBox?;
+  if (box != null && box.hasSize) {
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+  return null;
 }
 
 /// Compact popup surface styled in EverloreTheme (void2/void3, hairline border,
@@ -106,7 +114,7 @@ class _PopupItemTile extends StatelessWidget {
                 item.label,
                 style: EverloreTheme.ui(
                   size: 13.5,
-                  color: item.labelColor ?? EverloreTheme.parchment,
+                  color: EverloreTheme.parchment,
                   weight: FontWeight.w500,
                 ),
                 maxLines: 1,
@@ -118,33 +126,6 @@ class _PopupItemTile extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Builds the menu items for turn media actions ("Picture this" and "Film this").
-List<AnchoredMenuItem> buildTurnMediaMenuItems({
-  required PlayCubit cubit,
-  required String eventId,
-}) {
-  return [
-    AnchoredMenuItem(
-      icon: const Icon(
-        Icons.auto_awesome_rounded,
-        color: EverloreTheme.goldGlow,
-        size: 16,
-      ),
-      label: 'Picture this',
-      onTap: () => cubit.requestPicture(eventId),
-    ),
-    AnchoredMenuItem(
-      icon: const Icon(
-        Icons.videocam_outlined,
-        color: EverloreTheme.cyanBright,
-        size: 16,
-      ),
-      label: 'Film this',
-      onTap: () => cubit.requestTurnVideo(eventId),
-    ),
-  ];
 }
 
 /// Opens the anchored popup menu with "Picture this" and "Film this" for [eventId].
@@ -159,7 +140,26 @@ Future<void> showTurnMediaMenu({
     context: context,
     anchorRect: anchorRect,
     composerTop: composerTop,
-    items: buildTurnMediaMenuItems(cubit: cubit, eventId: eventId),
+    items: [
+      AnchoredMenuItem(
+        icon: const Icon(
+          Icons.auto_awesome_rounded,
+          color: EverloreTheme.goldGlow,
+          size: 16,
+        ),
+        label: 'Picture this',
+        onTap: () => cubit.requestPicture(eventId),
+      ),
+      AnchoredMenuItem(
+        icon: const Icon(
+          Icons.videocam_outlined,
+          color: EverloreTheme.cyanBright,
+          size: 16,
+        ),
+        label: 'Film this',
+        onTap: () => cubit.requestTurnVideo(eventId),
+      ),
+    ],
   );
 }
 
@@ -251,22 +251,22 @@ Future<T?> showAnchoredMenu<T>({
   required List<AnchoredMenuItem> items,
   Rect? anchorRect,
   double? composerTop,
-  double width = 188.0,
 }) {
   final mediaQuery = MediaQuery.of(context);
-  final effectiveAnchor = anchorRect ??
-      (context.findRenderObject() is RenderBox
-          ? ((context.findRenderObject() as RenderBox)
-                  .localToGlobal(Offset.zero) &
-              (context.findRenderObject() as RenderBox).size)
-          : Rect.fromCenter(
-              center: Offset(
-                mediaQuery.size.width / 2,
-                mediaQuery.size.height / 2,
-              ),
-              width: 0,
-              height: 0,
-            ));
+  Rect ownRectOrCenter() {
+    final box = context.findRenderObject();
+    if (box is RenderBox) return box.localToGlobal(Offset.zero) & box.size;
+    return Rect.fromCenter(
+      center: Offset(
+        mediaQuery.size.width / 2,
+        mediaQuery.size.height / 2,
+      ),
+      width: 0,
+      height: 0,
+    );
+  }
+
+  final effectiveAnchor = anchorRect ?? ownRectOrCenter();
 
   return showGeneralDialog<T>(
     context: context,
@@ -284,7 +284,6 @@ Future<T?> showAnchoredMenu<T>({
         ),
         child: AnchoredMenuPopup(
           items: items,
-          width: width,
           dialogContext: dialogCtx,
         ),
       );
