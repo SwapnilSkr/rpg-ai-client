@@ -73,6 +73,34 @@ class NarrativeBubble extends StatefulWidget {
 class _NarrativeBubbleState extends State<NarrativeBubble> {
   final GlobalKey<_ProseTextState> _proseKey = GlobalKey<_ProseTextState>();
 
+  void _handleTapUp(TapUpDetails details) {
+    final effectiveSpokenLines = widget.event.spokenLines.isNotEmpty
+        ? widget.event.spokenLines
+        : widget.spokenLines;
+
+    final spokenLine =
+        _proseKey.currentState?.findSpokenLineAt(details.globalPosition);
+
+    if (spokenLine != null) {
+      final isUnvoiceable = spokenLine.unvoiceable ||
+          widget.unvoiceableLines.contains(spokenLine.lineId) ||
+          effectiveSpokenLines.any(
+            (l) => l.lineId == spokenLine.lineId && l.unvoiceable,
+          );
+
+      if (isUnvoiceable) {
+        HapticFeedback.lightImpact();
+      } else {
+        widget.onSpokenLineTap?.call(spokenLine);
+      }
+      return;
+    }
+
+    // This tap wins the arena over the app-wide DismissKeyboard, so a miss
+    // does its job: narration taps still close the keyboard.
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   void _handleLongPressStart(LongPressStartDetails details) {
     final effectiveSpokenLines = widget.event.spokenLines.isNotEmpty
         ? widget.event.spokenLines
@@ -106,6 +134,8 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
 
     final canLongPress = widget.onLongPress != null ||
         (effectiveSpokenLines.isNotEmpty && widget.onSpokenLineLongPress != null);
+    final canTap =
+        effectiveSpokenLines.isNotEmpty && widget.onSpokenLineTap != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -153,6 +183,7 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
           GestureDetector(
             behavior: HitTestBehavior.translucent,
             onLongPressStart: canLongPress ? _handleLongPressStart : null,
+            onTapUp: canTap ? _handleTapUp : null,
             child: _NarratorPanel(
               proseKey: _proseKey,
               text: ai,
@@ -853,18 +884,6 @@ class _CopyButton extends StatelessWidget {
   }
 }
 
-/// Tap only: long-press is routed by position at the turn level in
-/// [NarrativeBubble], because an ancestor long-press wins the gesture arena.
-class SpokenLineGestureRecognizer extends TapGestureRecognizer {
-  SpokenLineGestureRecognizer({
-    super.debugOwner,
-    super.supportedDevices,
-  });
-
-  @override
-  String get debugDescription => 'spokenLine';
-}
-
 class _RenderedLineSpan {
   final SpokenLine line;
   final int start;
@@ -1174,18 +1193,6 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
         final rawLineSpans = _narrativeSpans(lineText);
 
         final isLoading = widget.loadingLineId == line.lineId;
-        final isUnvoiceable =
-            line.unvoiceable || widget.unvoiceableLines.contains(line.lineId);
-
-        final recognizer = SpokenLineGestureRecognizer()
-          ..onTap = () {
-            if (isUnvoiceable) {
-              HapticFeedback.lightImpact();
-            } else {
-              widget.onSpokenLineTap?.call(line);
-            }
-          };
-        _recognizers.add(recognizer);
 
         final lineStartRendered = currentRenderedLength;
         for (final s in rawLineSpans) {
@@ -1204,7 +1211,6 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
                 text: s.text,
                 children: s.children,
                 style: effectiveStyle,
-                recognizer: recognizer,
               ),
             );
             currentRenderedLength += s.toPlainText().length;

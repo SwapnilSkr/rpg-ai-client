@@ -73,13 +73,21 @@ void main() {
           (s) => s.text != null && s.text!.contains('Protect the realm'),
         );
         expect(spokenSpan.text, '"Protect the realm,"');
-        expect(spokenSpan.recognizer, isNotNull);
+        expect(spokenSpan.recognizer, isNull);
 
         // Verify tap invokes the callback
-        if (spokenSpan.recognizer is SpokenLineGestureRecognizer) {
-          (spokenSpan.recognizer as SpokenLineGestureRecognizer).onTap?.call();
-          expect(tappedLine?.lineId, 'line_emoji_1');
-        }
+        final renderParagraph = tester.renderObject<RenderParagraph>(
+          find.byType(RichText).first,
+        );
+        final boxes = renderParagraph.getBoxesForSelection(
+          const TextSelection(baseOffset: 4, extentOffset: 25),
+        );
+        expect(boxes, isNotEmpty);
+        await tester.tapAt(
+          renderParagraph.localToGlobal(boxes.first.toRect().center),
+        );
+        await tester.pumpAndSettle();
+        expect(tappedLine?.lineId, 'line_emoji_1');
 
         // Test curly quotes at the beginning:
         const proseWithCurly = '“I see the stars,” murmured the traveler.';
@@ -118,7 +126,19 @@ void main() {
           (s) => s.text != null && s.text!.contains('I see the stars'),
         );
         expect(targetCurlySpan.text, '"I see the stars,"');
-        (targetCurlySpan.recognizer as SpokenLineGestureRecognizer).onTap?.call();
+        expect(targetCurlySpan.recognizer, isNull);
+
+        final curlyRenderParagraph = tester.renderObject<RenderParagraph>(
+          find.byType(RichText).first,
+        );
+        final curlyBoxes = curlyRenderParagraph.getBoxesForSelection(
+          const TextSelection(baseOffset: 0, extentOffset: 18),
+        );
+        expect(curlyBoxes, isNotEmpty);
+        await tester.tapAt(
+          curlyRenderParagraph.localToGlobal(curlyBoxes.first.toRect().center),
+        );
+        await tester.pumpAndSettle();
         expect(curlyTapped?.lineId, 'line_curly_2');
       },
     );
@@ -200,10 +220,19 @@ void main() {
       final spokenSpan = spans.firstWhere(
         (s) => s.text != null && s.text!.contains('Inert line'),
       );
-      final recognizer = spokenSpan.recognizer as SpokenLineGestureRecognizer;
+      expect(spokenSpan.recognizer, isNull);
 
-      // Tap on unvoiceable line triggers light impact and does NOT call onSpokenLineTap
-      recognizer.onTap?.call();
+      final renderParagraph = tester.renderObject<RenderParagraph>(
+        find.byType(RichText).first,
+      );
+      final boxes = renderParagraph.getBoxesForSelection(
+        const TextSelection(baseOffset: 0, extentOffset: 11),
+      );
+      expect(boxes, isNotEmpty);
+      await tester.tapAt(
+        renderParagraph.localToGlobal(boxes.first.toRect().center),
+      );
+      await tester.pumpAndSettle();
       expect(tapCalled, isFalse);
     });
 
@@ -533,5 +562,168 @@ void main() {
         expect(turnMenuOpened, isFalse);
       },
     );
+
+    // 11. Tap anywhere on spoken line plays it (geometry, glyphs, narration miss, unvoiceable)
+    testWidgets(
+      'tapping between lines of a wrapped quote or on glyphs triggers play, but narration and unvoiceable do not',
+      (tester) async {
+        const narrationPrefix =
+            '*The elder stepped forward into the dim circle of hearthlight, leaning heavily upon an ash staff.* ';
+        const quoteText =
+            '"You will find neither solace nor shelter within these desolate mountain peaks, stranger, for the shadows here hold secrets far older than your fragile mortal kingdoms, and they do not yield to steel or gold."';
+        const narrationMid =
+            ' *He turned his gaze toward the dark ridge and muttered,* ';
+        const unvoiceableText = '"Turn back before the cold takes you."';
+
+        const fullProse =
+            '$narrationPrefix$quoteText$narrationMid$unvoiceableText';
+
+        final quoteStart = narrationPrefix.length;
+        final quoteEnd = quoteStart + quoteText.length;
+        final unvoiceableStart = fullProse.indexOf(unvoiceableText);
+        final unvoiceableEnd = unvoiceableStart + unvoiceableText.length;
+
+        final voiceableLine = SpokenLine(
+          lineId: 'line_wrapped_1',
+          start: quoteStart,
+          end: quoteEnd,
+        );
+        final unvoiceableLine = SpokenLine(
+          lineId: 'line_unvoiceable_2',
+          start: unvoiceableStart,
+          end: unvoiceableEnd,
+          unvoiceable: true,
+        );
+
+        int tapCount = 0;
+        SpokenLine? lastTappedLine;
+
+        final event = GameEvent(
+          id: 'ev_wrap_test',
+          instanceId: 'inst_1',
+          sequence: 1,
+          type: 'narration',
+          aiResponse: fullProse,
+          spokenLines: [voiceableLine, unvoiceableLine],
+          createdAt: DateTime.now(),
+        );
+
+        await tester.pumpWidget(
+          _host(
+            NarrativeBubble(
+              event: event,
+              onSpokenLineTap: (l) {
+                tapCount++;
+                lastTappedLine = l;
+              },
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final renderParagraph = tester.renderObject<RenderParagraph>(
+          find.byType(RichText).first,
+        );
+
+        final boxes = renderParagraph.getBoxesForSelection(
+          TextSelection(baseOffset: quoteStart, extentOffset: quoteEnd),
+        );
+        // Requirement: real prose of 3+ wrapped lines
+        expect(boxes.length, greaterThanOrEqualTo(3));
+
+        // 1. Between two rendered lines of a quote: calls onSpokenLineTap once
+        final box0 = boxes[0];
+        final box1 = boxes[1];
+        final gapX = box0.left + 24.0;
+        final gapY = (box0.bottom + box1.top) / 2.0;
+        final globalGap = renderParagraph.localToGlobal(Offset(gapX, gapY));
+
+        await tester.tapAt(globalGap);
+        await tester.pumpAndSettle();
+        expect(tapCount, 1);
+        expect(lastTappedLine?.lineId, 'line_wrapped_1');
+
+        // 2. Tap on the glyphs: calls it exactly once (total count becomes 2)
+        final glyphPoint = renderParagraph.localToGlobal(box0.toRect().center);
+        await tester.tapAt(glyphPoint);
+        await tester.pumpAndSettle();
+        expect(tapCount, 2);
+        expect(lastTappedLine?.lineId, 'line_wrapped_1');
+
+        // 3. Tap on narration: calls it zero times (tapCount unchanged at 2)
+        final narrationBoxes = renderParagraph.getBoxesForSelection(
+          const TextSelection(baseOffset: 4, extentOffset: 30),
+        );
+        expect(narrationBoxes, isNotEmpty);
+        final narrationPoint = renderParagraph.localToGlobal(
+          narrationBoxes.first.toRect().center,
+        );
+        await tester.tapAt(narrationPoint);
+        await tester.pumpAndSettle();
+        expect(tapCount, 2);
+
+        // 4. Tap on an unvoiceable line: never calls it (tapCount unchanged at 2)
+        final unvoiceableBoxes = renderParagraph.getBoxesForSelection(
+          TextSelection(baseOffset: unvoiceableStart, extentOffset: unvoiceableEnd),
+        );
+        expect(unvoiceableBoxes, isNotEmpty);
+        final unvoiceablePoint = renderParagraph.localToGlobal(
+          unvoiceableBoxes.first.toRect().center,
+        );
+        await tester.tapAt(unvoiceablePoint);
+        await tester.pumpAndSettle();
+        expect(tapCount, 2);
+      },
+    );
+
+    // 12. Miss on narration behaves as before (unfocuses active input)
+    testWidgets('tap on narration unfocuses keyboard focus', (tester) async {
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+
+      final event = GameEvent(
+        id: 'ev_focus_test',
+        instanceId: 'inst_1',
+        sequence: 1,
+        type: 'narration',
+        aiResponse: '*Narration words.* "A quote."',
+        spokenLines: const [SpokenLine(lineId: 'l1', start: 19, end: 29)],
+        createdAt: DateTime.now(),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                TextField(focusNode: focusNode),
+                NarrativeBubble(
+                  event: event,
+                  onSpokenLineTap: (_) {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      focusNode.requestFocus();
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue);
+
+      final renderParagraph = tester.renderObject<RenderParagraph>(
+        find.byType(RichText).first,
+      );
+      final narrationBoxes = renderParagraph.getBoxesForSelection(
+        const TextSelection(baseOffset: 2, extentOffset: 10),
+      );
+      await tester.tapAt(
+        renderParagraph.localToGlobal(narrationBoxes.first.toRect().center),
+      );
+      await tester.pumpAndSettle();
+
+      expect(focusNode.hasFocus, isFalse);
+    });
   });
 }
