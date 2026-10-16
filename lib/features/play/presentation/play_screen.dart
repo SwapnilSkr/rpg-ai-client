@@ -1046,11 +1046,16 @@ class _PlayViewState extends State<_PlayView> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetCtx) => TurnMenuSheet(
-        event: event,
-        canReplay: canReplay,
-        onEdit: () => _showEditResponseDialog(context, cubit, event),
-        onRewind: () => _confirmRewind(context, cubit, event.sequence),
+      // The sheet lives on the root navigator, outside this screen's
+      // provider, so it is handed the cubit explicitly.
+      builder: (sheetCtx) => BlocProvider<PlayCubit>.value(
+        value: cubit,
+        child: TurnMenuSheet(
+          event: event,
+          canReplay: canReplay,
+          onEdit: () => _showEditResponseDialog(context, cubit, event),
+          onRewind: () => _confirmRewind(context, cubit, event.sequence),
+        ),
       ),
     );
   }
