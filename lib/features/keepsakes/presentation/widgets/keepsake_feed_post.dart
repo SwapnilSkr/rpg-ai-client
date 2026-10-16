@@ -457,9 +457,9 @@ class _FilmPieceState extends State<_FilmPiece> {
     _initVideo();
   }
 
-  void _initVideo() {
+  void _initVideo({bool force = false}) {
     final url = widget.item.url;
-    if (url.isNotEmpty && widget.isAutoplayEnabled) {
+    if (url.isNotEmpty && (widget.isAutoplayEnabled || force)) {
       final uri = Uri.tryParse(url);
       if (uri != null) {
         _controller = VideoPlayerController.networkUrl(uri)
@@ -477,6 +477,16 @@ class _FilmPieceState extends State<_FilmPiece> {
           });
       }
     }
+  }
+
+  void _retry() {
+    _controller?.dispose();
+    _controller = null;
+    setState(() {
+      _playbackFailed = false;
+      _initialized = false;
+    });
+    _initVideo(force: true);
   }
 
   @override
@@ -526,19 +536,23 @@ class _FilmPieceState extends State<_FilmPiece> {
 
         // Failed to play overlay (§3.5)
         if (_playbackFailed)
-          Container(
-            color: EverloreTheme.void0.withValues(alpha: 0.45),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.refresh_rounded, color: EverloreTheme.parchment, size: 28),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Tap to try again',
-                    style: EverloreTheme.ui(size: 12, color: EverloreTheme.parchment),
-                  ),
-                ],
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _retry,
+            child: Container(
+              color: EverloreTheme.void0.withValues(alpha: 0.45),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.refresh_rounded, color: EverloreTheme.parchment, size: 28),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Tap to try again',
+                      style: EverloreTheme.ui(size: 12, color: EverloreTheme.parchment),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

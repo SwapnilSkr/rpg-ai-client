@@ -40,6 +40,8 @@ class AudioPlaybackController extends ChangeNotifier {
   }
 
   bool get isPlaying => _isPlaying;
+  String? get activeEventId => _activeEventId;
+  String? get activeLineId => _activeLineId;
 
   bool isLinePlaying(String eventId, String lineId) =>
       _isPlaying && _activeEventId == eventId && _activeLineId == lineId;

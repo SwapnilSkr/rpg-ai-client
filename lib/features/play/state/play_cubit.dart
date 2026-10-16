@@ -516,6 +516,7 @@ class PlayCubit extends Cubit<PlayState> {
   }
 
   void _init() {
+    audioController.addListener(_onAudioChanged);
     _loadCachedEvents();
     _connectAndLoad();
 
@@ -832,7 +833,7 @@ class PlayCubit extends Cubit<PlayState> {
         events.add(finalEvent);
       }
 
-      LocalDb.insertEvent(finalEvent).ignore();
+      LocalDb.insertEvent(_stripTempMedia(finalEvent)).ignore();
       _clearGenerationTimers();
       _streamBuffer = '';
       _streamTarget = '';
@@ -941,7 +942,7 @@ class PlayCubit extends Cubit<PlayState> {
           ),
           spokenLines: spokenLines,
         );
-        LocalDb.insertEvent(events[idx]).ignore();
+        LocalDb.insertEvent(_stripTempMedia(events[idx])).ignore();
       }
       _endReplay();
 
@@ -1164,7 +1165,7 @@ class PlayCubit extends Cubit<PlayState> {
       if (idx >= 0) {
         _takeHeldSpokenLines(eventId);
         events[idx] = events[idx].copyWith(spokenLines: lines);
-        LocalDb.insertEvent(events[idx]).ignore();
+        LocalDb.insertEvent(_stripTempMedia(events[idx])).ignore();
         emit(state.copyWith(events: events));
       } else if (eventId.isNotEmpty) {
         _holdSpokenLines(eventId, lines);
@@ -1189,8 +1190,6 @@ class PlayCubit extends Cubit<PlayState> {
           audioController.play(eventId: eventId, lineId: lineId!, url: url);
           emit(
             state.copyWith(
-              playingVoiceEventId: eventId,
-              playingVoiceLineId: lineId,
               loadingVoiceEventId: null,
               loadingVoiceLineId: null,
             ),
@@ -1233,7 +1232,7 @@ class PlayCubit extends Cubit<PlayState> {
         }
 
         events[idx] = ev.copyWith(media: mediaList);
-        LocalDb.insertEvent(events[idx]).ignore();
+        LocalDb.insertEvent(_stripTempMedia(events[idx])).ignore();
         emit(state.copyWith(events: events));
       }
     });
@@ -1302,7 +1301,7 @@ class PlayCubit extends Cubit<PlayState> {
     events[idx] = ev.copyWith(
       media: ev.media.where((m) => m.mediaId != mediaId).toList(),
     );
-    if (persist) LocalDb.insertEvent(events[idx]).ignore();
+    if (persist) LocalDb.insertEvent(_stripTempMedia(events[idx])).ignore();
     return events;
   }
 
@@ -1421,10 +1420,11 @@ class PlayCubit extends Cubit<PlayState> {
     try {
       final cached = await LocalDb.getEvents(instanceId, limit: 50);
       if (cached.isNotEmpty && state.events.isEmpty) {
+        final sanitized = cached.map(_stripTempMedia).toList();
         emit(
           state.copyWith(
-            events: cached,
-            totalEvents: cached.length,
+            events: sanitized,
+            totalEvents: sanitized.length,
             hasOlderEvents: false,
           ),
         );
@@ -1976,7 +1976,7 @@ class PlayCubit extends Cubit<PlayState> {
         committed[cIdx] = settled;
         emit(state.copyWith(events: committed));
       }
-      await LocalDb.insertEvent(settled);
+      await LocalDb.insertEvent(_stripTempMedia(settled));
     } catch (_) {
       final reverted = [...state.events];
       final revertIdx = reverted.indexWhere((e) => e.id == before.id);
@@ -2344,7 +2344,7 @@ class PlayCubit extends Cubit<PlayState> {
       final next = [...state.events];
       final idx = next.indexWhere((e) => e.id == id);
       if (idx >= 0) next[idx] = updated;
-      await LocalDb.insertEvent(updated);
+      await LocalDb.insertEvent(_stripTempMedia(updated));
       emit(state.copyWith(events: next));
     } catch (_) {
       // Non-fatal: the locally-previewed variant still shows; selection simply
@@ -2380,6 +2380,7 @@ class PlayCubit extends Cubit<PlayState> {
     await _mediaFailedSub.cancel();
     await _ws.disconnect();
     _clearHeldSpokenLines();
+    audioController.removeListener(_onAudioChanged);
     await super.close();
   }
 
@@ -2427,18 +2428,18 @@ class PlayCubit extends Cubit<PlayState> {
       );
 
       if (res.isReady) {
+        // Clear loading before playing: play() resolves only when the line
+        // ends, and the playing ids follow the controller (_onAudioChanged).
+        emit(
+          state.copyWith(
+            loadingVoiceEventId: null,
+            loadingVoiceLineId: null,
+          ),
+        );
         await audioController.play(
           eventId: eventId,
           lineId: lineId,
           url: res.url!,
-        );
-        emit(
-          state.copyWith(
-            playingVoiceEventId: eventId,
-            playingVoiceLineId: lineId,
-            loadingVoiceEventId: null,
-            loadingVoiceLineId: null,
-          ),
         );
       }
     } on MediaUnvoiceableException {
@@ -2568,7 +2569,7 @@ class PlayCubit extends Cubit<PlayState> {
             justRequested: res.isReady && kind == MediaKind.video,
           );
           nextEvents[nIdx] = ev.copyWith(media: mediaList);
-          LocalDb.insertEvent(nextEvents[nIdx]).ignore();
+          LocalDb.insertEvent(_stripTempMedia(nextEvents[nIdx])).ignore();
           emit(state.copyWith(events: nextEvents));
         }
       }
@@ -2592,6 +2593,37 @@ class PlayCubit extends Cubit<PlayState> {
       state.copyWith(
         events: _eventsWithoutMedia(eventId, tempId, persist: false),
         mediaNotice: notice,
+      ),
+    );
+  }
+
+  static GameEvent _stripTempMedia(GameEvent event) {
+    if (!event.media.any((m) => m.mediaId.startsWith('temp_'))) {
+      return event;
+    }
+    return event.copyWith(
+      media: event.media.where((m) => !m.mediaId.startsWith('temp_')).toList(),
+    );
+  }
+
+  @visibleForTesting
+  static GameEvent stripTempMedia(GameEvent event) => _stripTempMedia(event);
+
+  /// The playing line mirrors the controller, so a line that ends on its
+  /// own (or is buffering) is never shown as playing.
+  void _onAudioChanged() {
+    if (isClosed) return;
+    final playing = audioController.isPlaying;
+    final eventId = playing ? audioController.activeEventId : null;
+    final lineId = playing ? audioController.activeLineId : null;
+    if (eventId == state.playingVoiceEventId &&
+        lineId == state.playingVoiceLineId) {
+      return;
+    }
+    emit(
+      state.copyWith(
+        playingVoiceEventId: eventId,
+        playingVoiceLineId: lineId,
       ),
     );
   }

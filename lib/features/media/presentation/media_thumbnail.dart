@@ -189,10 +189,25 @@ class _VideoThumbnail extends StatefulWidget {
 class _VideoThumbnailState extends State<_VideoThumbnail> {
   VideoPlayerController? _controller;
   bool _initialized = false;
+  bool _failed = false;
 
   @override
   void initState() {
     super.initState();
+    _initVideo();
+  }
+
+  void _retry() {
+    _controller?.dispose();
+    _controller = null;
+    setState(() {
+      _initialized = false;
+      _failed = false;
+    });
+    _initVideo();
+  }
+
+  void _initVideo() {
     if (widget.item.url != null && widget.item.url!.isNotEmpty) {
       final uri = Uri.tryParse(widget.item.url!);
       if (uri != null) {
@@ -205,6 +220,10 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
                 _controller?.setVolume(0.0);
                 _controller?.play();
               }
+            }
+          }).catchError((_) {
+            if (mounted) {
+              setState(() => _failed = true);
             }
           });
       }
@@ -219,6 +238,33 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
 
   @override
   Widget build(BuildContext context) {
+    if (_failed) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _retry,
+        child: Container(
+          color: EverloreTheme.void0.withValues(alpha: 0.45),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.refresh_rounded,
+                  color: EverloreTheme.parchment,
+                  size: 20,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tap to try again',
+                  style: EverloreTheme.ui(size: 11, color: EverloreTheme.parchment),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     if (_controller != null && _initialized) {
       return Stack(
         fit: StackFit.expand,

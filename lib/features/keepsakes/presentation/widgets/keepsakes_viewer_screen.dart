@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
@@ -6,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/widgets/neu.dart';
+import '../../../chronicle/presentation/character_memory_screen.dart';
 import '../../models/keepsake_item.dart';
 import 'keepsake_caption.dart';
 import 'keepsake_faded_tile.dart';
@@ -79,7 +81,7 @@ class _KeepsakesViewerScreenState extends State<KeepsakesViewerScreen> {
         final item = widget.items[target];
         final url = item.isVideo ? (item.posterUrl ?? item.url) : item.url;
         if (url.isNotEmpty) {
-          precacheImage(NetworkImage(url), context).catchError((_) {});
+          precacheImage(CachedNetworkImageProvider(url), context).catchError((_) {});
         }
       }
     }
@@ -179,7 +181,7 @@ class _ViewerPieceState extends State<_ViewerPiece>
     with SingleTickerProviderStateMixin {
   VideoPlayerController? _videoController;
   bool _videoInitialized = false;
-  bool _isPlaying = true;
+  bool _isPlaying = false;
   AnimationController? _kenBurnsController;
 
   @override
@@ -216,16 +218,28 @@ class _ViewerPieceState extends State<_ViewerPiece>
         _videoController = VideoPlayerController.networkUrl(uri)
           ..initialize().then((_) {
             if (mounted) {
-              setState(() => _videoInitialized = true);
               if (widget.isActive) {
                 // Sound on in the viewer, and loop
                 _videoController?.setVolume(1.0);
                 _videoController?.setLooping(true);
                 _videoController?.play();
               }
+              _videoController?.addListener(_onVideoControllerUpdate);
+              setState(() {
+                _videoInitialized = true;
+                _isPlaying = _videoController?.value.isPlaying ?? false;
+              });
             }
           }).catchError((_) {});
       }
+    }
+  }
+
+  void _onVideoControllerUpdate() {
+    if (!mounted || _videoController == null) return;
+    final playing = _videoController!.value.isPlaying;
+    if (_isPlaying != playing) {
+      setState(() => _isPlaying = playing);
     }
   }
 
@@ -236,7 +250,7 @@ class _ViewerPieceState extends State<_ViewerPiece>
       if (widget.isActive && !oldWidget.isActive) {
         _videoController?.setVolume(1.0);
         _videoController?.play();
-        setState(() => _isPlaying = true);
+        setState(() => _isPlaying = _videoController?.value.isPlaying ?? true);
       } else if (!widget.isActive && oldWidget.isActive) {
         _videoController?.pause();
         setState(() => _isPlaying = false);
@@ -246,6 +260,7 @@ class _ViewerPieceState extends State<_ViewerPiece>
 
   @override
   void dispose() {
+    _videoController?.removeListener(_onVideoControllerUpdate);
     _videoController?.dispose();
     _kenBurnsController?.dispose();
     super.dispose();
@@ -253,14 +268,13 @@ class _ViewerPieceState extends State<_ViewerPiece>
 
   void _togglePlayPause() {
     if (_videoController == null || !_videoInitialized) return;
+    if (_videoController!.value.isPlaying) {
+      _videoController!.pause();
+    } else {
+      _videoController!.play();
+    }
     setState(() {
-      if (_videoController!.value.isPlaying) {
-        _videoController!.pause();
-        _isPlaying = false;
-      } else {
-        _videoController!.play();
-        _isPlaying = true;
-      }
+      _isPlaying = _videoController!.value.isPlaying;
     });
   }
 
@@ -279,36 +293,16 @@ class _ViewerPieceState extends State<_ViewerPiece>
   }
 
   void _showCharacterCardSheet() {
-    final name = widget.item.character?.name ?? widget.item.speakerName ?? 'Character';
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: EverloreTheme.void2,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border(top: BorderSide(color: Color(0x33D8B878))),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              name,
-              style: EverloreTheme.serifDisplay(size: 20, color: EverloreTheme.parchment),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'A companion in your stories.',
-              style: EverloreTheme.ui(size: 13.5, color: EverloreTheme.ash),
-            ),
-            const SizedBox(height: 20),
-            NeuButton(
-              label: 'Close',
-              primary: true,
-              onTap: () => Navigator.pop(ctx),
-            ),
-          ],
+    final char = widget.item.character;
+    final instanceId = widget.item.instanceId;
+    if (char == null || instanceId == null) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CharacterMemoryScreen(
+          instanceId: instanceId,
+          characterId: char.id,
+          characterName: char.name,
         ),
       ),
     );
@@ -399,8 +393,11 @@ class _ViewerPieceState extends State<_ViewerPiece>
     final isWorldRemoved = world == null;
     final worldTitle = keepsakeWorldTitle(world);
     final isFace = item.isPortrait;
+    final hasCharacter =
+        item.character != null && item.character!.id.isNotEmpty && item.instanceId != null;
     final primaryActionLabel = isFace ? 'Open their card' : 'Return to this moment';
-    final canPerformAction = isFace || (!isWorldRemoved && item.instanceId != null);
+    final canPerformAction =
+        isFace ? hasCharacter : (!isWorldRemoved && item.instanceId != null);
 
     return Positioned(
       bottom: 0,

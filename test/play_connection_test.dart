@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -137,6 +138,7 @@ class FakeMediaRepository extends Fake implements MediaRepository {
 }
 
 class FakeAudioPlaybackController extends Fake
+    with ChangeNotifier
     implements AudioPlaybackController {
   @override
   bool isLinePlaying(String eventId, String lineId) => false;

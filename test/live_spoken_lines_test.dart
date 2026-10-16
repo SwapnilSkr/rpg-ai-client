@@ -121,7 +121,9 @@ class FakeMediaRepository extends Fake implements MediaRepository {
   Future<MediaUsage?> getUsage() async => null;
 }
 
-class FakeAudioPlaybackController extends Fake implements AudioPlaybackController {
+class FakeAudioPlaybackController extends Fake
+    with ChangeNotifier
+    implements AudioPlaybackController {
   @override
   bool isLinePlaying(String eventId, String lineId) => false;
   @override

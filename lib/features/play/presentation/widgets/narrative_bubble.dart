@@ -1284,6 +1284,7 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
             !widget.unvoiceableLines.contains(line.lineId);
 
         final isLoading = widget.loadingLineId == line.lineId;
+        final isPlaying = widget.playingLineId == line.lineId;
 
         final lineStartRendered = currentRenderedLength;
         for (final s in rawLineSpans) {
@@ -1292,7 +1293,9 @@ class _ProseTextState extends State<_ProseText> with SingleTickerProviderStateMi
             if (isVoiceable) {
               effectiveStyle = effectiveStyle.copyWith(
                 decoration: TextDecoration.underline,
-                decorationStyle: TextDecorationStyle.dotted,
+                decorationStyle: isPlaying
+                    ? TextDecorationStyle.solid
+                    : TextDecorationStyle.dotted,
                 decorationColor: EverloreTheme.aether.withValues(alpha: 0.45),
                 decorationThickness: 1.0,
               );

@@ -88,11 +88,26 @@ class _VideoPlayerView extends StatefulWidget {
 class _VideoPlayerViewState extends State<_VideoPlayerView> {
   VideoPlayerController? _controller;
   bool _initialized = false;
+  bool _failed = false;
   bool _muted = false;
 
   @override
   void initState() {
     super.initState();
+    _initVideo();
+  }
+
+  void _retry() {
+    _controller?.dispose();
+    _controller = null;
+    setState(() {
+      _initialized = false;
+      _failed = false;
+    });
+    _initVideo();
+  }
+
+  void _initVideo() {
     if (widget.url.isNotEmpty) {
       final uri = Uri.tryParse(widget.url);
       if (uri != null) {
@@ -101,6 +116,10 @@ class _VideoPlayerViewState extends State<_VideoPlayerView> {
             if (mounted) {
               setState(() => _initialized = true);
               _controller?.play();
+            }
+          }).catchError((_) {
+            if (mounted) {
+              setState(() => _failed = true);
             }
           });
       }
@@ -134,6 +153,36 @@ class _VideoPlayerViewState extends State<_VideoPlayerView> {
 
   @override
   Widget build(BuildContext context) {
+    if (_failed) {
+      return AspectRatio(
+        aspectRatio: 16 / 9,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _retry,
+          child: Container(
+            color: EverloreTheme.void0.withValues(alpha: 0.45),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.refresh_rounded,
+                    color: EverloreTheme.parchment,
+                    size: 28,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Tap to try again',
+                    style: EverloreTheme.ui(size: 12, color: EverloreTheme.parchment),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     if (_controller == null || !_initialized) {
       return const Center(
         child: CircularProgressIndicator(color: EverloreTheme.gold),
