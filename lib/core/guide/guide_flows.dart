@@ -383,8 +383,7 @@ abstract final class GuideFlows {
     label: 'The Forge',
     route: '/my-worlds',
     beats: [
-      GuideBeat(
-        anchor: GuideIds.navCreate,
+      GuideBeat.card(
         title: 'The Forge',
         body:
             'Build a world of your own — its rules, its cast, its temper. Keep '

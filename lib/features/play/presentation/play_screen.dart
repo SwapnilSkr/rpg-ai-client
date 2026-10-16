@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -60,20 +61,35 @@ bool _scenePresent(CharacterProfile c, Set<String>? presence) {
 
 class PlayScreen extends StatelessWidget {
   final String instanceId;
+  final String? focusEventId;
+  final PlayCubit? cubit;
 
-  const PlayScreen({super.key, required this.instanceId});
+  const PlayScreen({
+    super.key,
+    required this.instanceId,
+    this.focusEventId,
+    this.cubit,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (cubit != null) {
+      return BlocProvider<PlayCubit>.value(
+        value: cubit!,
+        child: _PlayView(focusEventId: focusEventId),
+      );
+    }
     return BlocProvider(
       create: (_) => PlayCubit(instanceId: instanceId),
-      child: const _PlayView(),
+      child: _PlayView(focusEventId: focusEventId),
     );
   }
 }
 
 class _PlayView extends StatefulWidget {
-  const _PlayView();
+  final String? focusEventId;
+
+  const _PlayView({this.focusEventId});
 
   @override
   State<_PlayView> createState() => _PlayViewState();
@@ -113,6 +129,12 @@ class _PlayViewState extends State<_PlayView> {
   /// menu. Cleared if they dismiss the menu outright or finish an in-sheet action.
   bool _pendingRealmMenuReturn = false;
 
+  bool _focusInitiated = false;
+  bool _focusCompleted = false;
+  String? _glowingEventId;
+  Timer? _glowTimer;
+  final Map<String, GlobalKey> _eventBubbleKeys = {};
+
   @override
   void initState() {
     super.initState();
@@ -125,6 +147,103 @@ class _PlayViewState extends State<_PlayView> {
     // only ever offers.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _maybeGuide(context.read<PlayCubit>().state);
+    });
+
+    if (widget.focusEventId != null && widget.focusEventId!.isNotEmpty) {
+      _followLatest = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final state = context.read<PlayCubit>().state;
+        if (!state.isLoading && !_focusInitiated) {
+          _focusInitiated = true;
+          _initiateFocus(widget.focusEventId!);
+        }
+      });
+    }
+  }
+
+  Future<void> _initiateFocus(String eventId) async {
+    if (!mounted) return;
+    final cubit = context.read<PlayCubit>();
+    int pagesChecked = 0;
+    const int maxPages = 20;
+
+    while (mounted) {
+      final state = cubit.state;
+      final foundIndex = state.events.indexWhere((e) => e.id == eventId);
+      if (foundIndex != -1) {
+        _focusCompleted = true;
+        _scrollAndGlowEvent(eventId, foundIndex, state.events.length);
+        return;
+      }
+
+      if (!state.hasOlderEvents || pagesChecked >= maxPages) {
+        _focusCompleted = true;
+        _followLatest = true;
+        _scrollToBottom(force: true, animated: false);
+        if (!mounted) return;
+        showEverloreNotice(
+          context,
+          "That moment was rewritten. Here's where the story stands.",
+        );
+        return;
+      }
+
+      pagesChecked++;
+      await cubit.loadOlderEvents();
+      if (!mounted) return;
+      await WidgetsBinding.instance.endOfFrame;
+    }
+  }
+
+  void _scrollAndGlowEvent(String eventId, int eventIndex, int totalEvents) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final key = _eventBubbleKeys[eventId];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+        );
+        _triggerGlow(eventId);
+      } else if (_scrollController.hasClients) {
+        final pos = _scrollController.position;
+        final frac = totalEvents > 1
+            ? (eventIndex / (totalEvents - 1)).clamp(0.0, 1.0)
+            : 0.0;
+        final target = (pos.maxScrollExtent * frac)
+            .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+        _scrollController.jumpTo(target);
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final k = _eventBubbleKeys[eventId];
+          if (k?.currentContext != null) {
+            Scrollable.ensureVisible(
+              k!.currentContext!,
+              alignment: 0.5,
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+            );
+          }
+          _triggerGlow(eventId);
+        });
+      }
+    });
+  }
+
+  void _triggerGlow(String eventId) {
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (reduceMotion) return;
+    setState(() => _glowingEventId = eventId);
+    _glowTimer?.cancel();
+    _glowTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (mounted && _glowingEventId == eventId) {
+        setState(() => _glowingEventId = null);
+      }
     });
   }
 
@@ -237,6 +356,7 @@ class _PlayViewState extends State<_PlayView> {
 
   @override
   void dispose() {
+    _glowTimer?.cancel();
     _scrollController.removeListener(_updateFollowLatest);
     _composerDraft.dispose();
     _scrollController.dispose();
@@ -1291,17 +1411,26 @@ class _PlayViewState extends State<_PlayView> {
         // This listener receives the new state from BlocConsumer, but the cubit
         // already holds it too. Track the previous values locally so entering a
         // realm or sending a message always reveals the latest beat.
+        final hasFocusTarget =
+            widget.focusEventId != null && widget.focusEventId!.isNotEmpty;
+        if (hasFocusTarget && !state.isLoading && !_focusInitiated) {
+          _focusInitiated = true;
+          _initiateFocus(widget.focusEventId!);
+        }
+
         final structuralChange =
             _lastSeenEventCount != state.events.length ||
             _lastSeenLoading != state.isLoading ||
             _lastSeenTemplate != state.template;
         if (!preserveOlderAnchor) {
-          _scrollToBottom(
-            // New windows/turns belong at the tail. Token and choice updates only
-            // follow when the reader remains at that tail.
-            force: structuralChange,
-            animated: structuralChange,
-          );
+          if (!hasFocusTarget || _focusCompleted) {
+            _scrollToBottom(
+              // New windows/turns belong at the tail. Token and choice updates only
+              // follow when the reader remains at that tail.
+              force: structuralChange,
+              animated: structuralChange,
+            );
+          }
         }
         _lastSeenEventCount = state.events.length;
         _lastSeenLoading = state.isLoading;
@@ -1716,12 +1845,22 @@ class _PlayViewState extends State<_PlayView> {
                                         : event.spokenLines.isNotEmpty
                                             ? GuideIds.playSpokenLine
                                             : GuideIds.playNarrative;
-                                    return anchorId != null
+                                    final childWidget = anchorId != null
                                         ? GuideAnchor(
                                             id: anchorId,
                                             child: bubble,
                                           )
                                         : bubble;
+                                    return KeyedSubtree(
+                                      key: _eventBubbleKeys.putIfAbsent(
+                                        event.id,
+                                        () => GlobalKey(),
+                                      ),
+                                      child: _FocusBrassGlow(
+                                        isGlowing: _glowingEventId == event.id,
+                                        child: childWidget,
+                                      ),
+                                    );
                                   },
                                 );
                               },
@@ -1806,6 +1945,96 @@ class _PlayViewState extends State<_PlayView> {
           ),
         );
       },
+    );
+  }
+}
+
+class _FocusBrassGlow extends StatefulWidget {
+  final Widget child;
+  final bool isGlowing;
+
+  const _FocusBrassGlow({
+    required this.child,
+    required this.isGlowing,
+  });
+
+  @override
+  State<_FocusBrassGlow> createState() => _FocusBrassGlowState();
+}
+
+class _FocusBrassGlowState extends State<_FocusBrassGlow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    if (widget.isGlowing) {
+      _startGlow();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _FocusBrassGlow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isGlowing && !oldWidget.isGlowing) {
+      _startGlow();
+    }
+  }
+
+  void _startGlow() {
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (reduceMotion) return;
+    _controller.forward(from: 0.0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (reduceMotion) {
+      return widget.child;
+    }
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        if (_controller.value == 0.0 || _controller.isCompleted) {
+          return child!;
+        }
+        final glowFactor = 1.0 - Curves.easeOut.transform(_controller.value);
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: EverloreTheme.goldGlow
+                    .withValues(alpha: 0.45 * glowFactor),
+                blurRadius: 24 * glowFactor,
+                spreadRadius: 2 * glowFactor,
+              ),
+              BoxShadow(
+                color: EverloreTheme.gold
+                    .withValues(alpha: 0.25 * glowFactor),
+                blurRadius: 10 * glowFactor,
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: widget.child,
     );
   }
 }

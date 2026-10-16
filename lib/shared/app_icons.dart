@@ -6,6 +6,7 @@ class AppIcons {
   static const navExplore = 'assets/icons/nav_explore.png';
   static const navRealms = 'assets/icons/nav_realms.png';
   static const navWorlds = 'assets/icons/nav_worlds.png';
+  static const navKeepsakes = 'assets/icons/chronicle.png';
   static const navProfile = 'assets/icons/nav_profile.png';
   static const createCharacter = 'assets/icons/create_character.png';
 

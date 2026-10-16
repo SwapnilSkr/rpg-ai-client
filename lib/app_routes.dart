@@ -20,6 +20,7 @@ import 'package:everlore/features/billing/presentation/billing_screen.dart';
 import 'package:everlore/shared/models/world_template.dart';
 import 'package:everlore/shared/widgets/everlore_nav_bar.dart';
 import 'features/moderation/presentation/blocked_content_screen.dart';
+import 'features/keepsakes/presentation/keepsakes_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -72,8 +73,10 @@ final router = GoRouter(
     GoRoute(
       path: '/play/:instanceId',
       name: 'play',
-      builder: (context, state) =>
-          PlayScreen(instanceId: state.pathParameters['instanceId']!),
+      builder: (context, state) => PlayScreen(
+        instanceId: state.pathParameters['instanceId']!,
+        focusEventId: state.uri.queryParameters['event'],
+      ),
     ),
     GoRoute(
       path: '/chronicle/:instanceId',
@@ -108,6 +111,11 @@ final router = GoRouter(
         templateId: state.pathParameters['templateId'],
         existing: state.extra as WorldTemplate?,
       ),
+    ),
+    GoRoute(
+      path: '/my-worlds',
+      name: 'my_worlds',
+      builder: (context, state) => const MyWorldsScreen(),
     ),
     GoRoute(
       path: '/profile',
@@ -152,9 +160,9 @@ final router = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/my-worlds',
-              name: 'my_worlds',
-              builder: (context, state) => const MyWorldsScreen(),
+              path: '/keepsakes',
+              name: 'keepsakes',
+              builder: (context, state) => const KeepsakesScreen(),
             ),
           ],
         ),

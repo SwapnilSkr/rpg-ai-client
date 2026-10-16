@@ -1,0 +1,143 @@
+import 'package:flutter/material.dart';
+
+import '../../../../app/theme/nexus_theme.dart';
+import '../../../../shared/widgets/neu.dart';
+
+/// Shared Keepsakes empty/error state composition (§3.5):
+/// soft illustrated vignette, title in Cinzel display caps,
+/// body copy, and one primary action within thumb reach.
+class KeepsakesStateView extends StatelessWidget {
+  final String title;
+  final String body;
+  final String actionLabel;
+  final VoidCallback onAction;
+  final IconData? actionIcon;
+  final bool compact;
+  final Widget? vignette;
+  final bool isError;
+
+  const KeepsakesStateView({
+    super.key,
+    required this.title,
+    required this.body,
+    required this.actionLabel,
+    required this.onAction,
+    this.actionIcon,
+    this.compact = false,
+    this.vignette,
+    this.isError = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final vignetteHeight = compact ? 88.0 : 160.0;
+    final accentColor = isError ? EverloreTheme.ember : EverloreTheme.gold;
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(
+          horizontal: 32,
+          vertical: compact ? 24 : 48,
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Illustrated vignette
+              vignette ??
+                  Container(
+                    width: vignetteHeight * 1.3,
+                    height: vignetteHeight,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      gradient: RadialGradient(
+                        colors: [
+                          accentColor.withValues(alpha: 0.18),
+                          EverloreTheme.void2.withValues(alpha: 0.9),
+                          EverloreTheme.void1,
+                        ],
+                        stops: const [0.0, 0.6, 1.0],
+                      ),
+                      border: Border.all(
+                        color: accentColor.withValues(alpha: 0.35),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: accentColor.withValues(alpha: 0.12),
+                          blurRadius: 24,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Image.asset(
+                            'assets/art/chronicle-keeper.webp',
+                            fit: BoxFit.cover,
+                            alignment: Alignment.topCenter,
+                            opacity: const AlwaysStoppedAnimation(0.4),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: EverloreTheme.void0.withValues(alpha: 0.6),
+                            border: Border.all(
+                              color: accentColor.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: Icon(
+                            isError
+                                ? Icons.cloud_off_rounded
+                                : (compact ? Icons.collections_bookmark_outlined : Icons.auto_stories_rounded),
+                            color: accentColor,
+                            size: compact ? 24 : 36,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              SizedBox(height: compact ? 16 : 24),
+              // Title in Cinzel display caps
+              Text(
+                title.toUpperCase(),
+                textAlign: TextAlign.center,
+                style: EverloreTheme.serifDisplay(
+                  size: compact ? 16 : 19,
+                  color: EverloreTheme.parchment,
+                  spacing: 1.5,
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Body copy
+              Text(
+                body,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: EverloreTheme.aiText.fontFamily,
+                  fontSize: compact ? 13.5 : 15,
+                  height: 1.5,
+                  color: EverloreTheme.ash,
+                ),
+              ),
+              SizedBox(height: compact ? 20 : 28),
+              // Primary action
+              NeuButton(
+                label: actionLabel,
+                icon: actionIcon,
+                primary: true,
+                accent: accentColor,
+                onTap: onAction,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

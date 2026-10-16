@@ -663,6 +663,15 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 16),
 
         NeuButton(
+          label: 'Your worlds',
+          icon: Icons.public_rounded,
+          primary: false,
+          accent: EverloreTheme.gold,
+          onTap: () => context.push('/my-worlds'),
+        ),
+        const SizedBox(height: 16),
+
+        NeuButton(
           label: 'Membership & Ink',
           icon: Icons.auto_awesome_rounded,
           primary: false,

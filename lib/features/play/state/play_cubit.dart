@@ -1257,6 +1257,13 @@ class PlayCubit extends Cubit<PlayState> {
     });
   }
 
+  @visibleForTesting
+  static Future<Map<String, dynamic>> Function(
+    String instanceId, {
+    int limit,
+    int? beforeSequence,
+  })? olderEventsLoaderForTesting;
+
   /// Fetch an older page without using offsets. The cursor is the first loaded
   /// sequence, so a concurrently-created latest turn cannot shift this page.
   Future<void> loadOlderEvents() async {
@@ -1272,11 +1279,17 @@ class PlayCubit extends Cubit<PlayState> {
     _loadingOlderEvents = true;
     emit(state.copyWith(isLoadingOlder: true));
     try {
-      final page = await ChronicleRepository.getEvents(
-        instanceId,
-        limit: _olderEventsPageSize,
-        beforeSequence: beforeSequence,
-      );
+      final page = olderEventsLoaderForTesting != null
+          ? await olderEventsLoaderForTesting!(
+              instanceId,
+              limit: _olderEventsPageSize,
+              beforeSequence: beforeSequence,
+            )
+          : await ChronicleRepository.getEvents(
+              instanceId,
+              limit: _olderEventsPageSize,
+              beforeSequence: beforeSequence,
+            );
       final incoming =
           (page['events'] as List<GameEvent>?) ?? const <GameEvent>[];
       // Ids survive reconnects; sequence is a fallback for legacy seed rows.
