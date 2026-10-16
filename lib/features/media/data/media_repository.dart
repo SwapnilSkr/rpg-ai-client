@@ -244,6 +244,44 @@ class MediaRepository {
     }
   }
 
+  /// Request dialogue-free cut video for an event ("Film this").
+  /// POST /instances/:instanceId/events/:eventId/video
+  Future<MediaRequestResponse> requestTurnVideo({
+    required String instanceId,
+    required String eventId,
+  }) async {
+    final uri = Uri.parse(
+      '$baseUrl/instances/$instanceId/events/$eventId/video',
+    );
+    final response = await _client.post(uri, headers: await _headers());
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      return MediaRequestResponse(
+        status: 'ready',
+        url: json['url']?.toString(),
+        mediaId: json['media_id']?.toString(),
+      );
+    } else if (response.statusCode == 202) {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      return MediaRequestResponse(
+        status: 'queued',
+        mediaId: json['media_id']?.toString(),
+      );
+    } else if (response.statusCode == 429) {
+      final json = _tryParseJson(response.body);
+      throw MediaRestingException(
+        kind: 'video',
+        resetsAt: json?['resets_at']?.toString() ?? '',
+      );
+    } else {
+      throw MediaException(
+        'Failed to request turn video: ${response.body}',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
   /// Repaint a character's portrait.
   /// POST /instances/:instanceId/characters/:characterId/portrait
   Future<MediaRequestResponse> repaintCharacterPortrait({

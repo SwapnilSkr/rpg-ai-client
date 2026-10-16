@@ -1183,7 +1183,7 @@ class PlayCubit extends Cubit<PlayState> {
               m.mediaId == mediaId ||
               (m.isQueued &&
                   m.kind == kind &&
-                  (lineId == null || m.lineId == lineId)),
+                  (lineId == null ? m.lineId == null : m.lineId == lineId)),
         );
 
         final readyItem = TurnMedia(
@@ -1203,7 +1203,7 @@ class PlayCubit extends Cubit<PlayState> {
         }
 
         events[idx] = ev.copyWith(media: mediaList);
-        LocalDb.insertEvent(events[idx]);
+        LocalDb.insertEvent(events[idx]).ignore();
         emit(state.copyWith(events: events));
       }
     });
@@ -1218,7 +1218,7 @@ class PlayCubit extends Cubit<PlayState> {
         final ev = events[idx];
         final mediaList = ev.media.where((m) => m.mediaId != mediaId).toList();
         events[idx] = ev.copyWith(media: mediaList);
-        LocalDb.insertEvent(events[idx]);
+        LocalDb.insertEvent(events[idx]).ignore();
         emit(
           state.copyWith(
             events: events,
@@ -1251,7 +1251,7 @@ class PlayCubit extends Cubit<PlayState> {
         final ev = events[idx];
         final mediaList = ev.media.where((m) => m.mediaId != mediaId).toList();
         events[idx] = ev.copyWith(media: mediaList);
-        LocalDb.insertEvent(events[idx]);
+        LocalDb.insertEvent(events[idx]).ignore();
         emit(state.copyWith(events: events));
       }
     });
@@ -2457,7 +2457,7 @@ class PlayCubit extends Cubit<PlayState> {
             );
           }
           nextEvents[nIdx] = ev.copyWith(media: mediaList);
-          LocalDb.insertEvent(nextEvents[nIdx]);
+          LocalDb.insertEvent(nextEvents[nIdx]).ignore();
           emit(state.copyWith(events: nextEvents));
         }
       }
@@ -2518,7 +2518,64 @@ class PlayCubit extends Cubit<PlayState> {
             );
           }
           nextEvents[nIdx] = ev.copyWith(media: mediaList);
-          LocalDb.insertEvent(nextEvents[nIdx]);
+          LocalDb.insertEvent(nextEvents[nIdx]).ignore();
+          emit(state.copyWith(events: nextEvents));
+        }
+      }
+    } on MediaRestingException catch (e) {
+      _removeTempMedia(eventId, tempId);
+      emit(state.copyWith(notice: e.restingCopy));
+    } catch (_) {
+      _removeTempMedia(eventId, tempId);
+    }
+  }
+
+  Future<void> requestTurnVideo(String eventId) async {
+    final tempId = 'temp_vid_${DateTime.now().millisecondsSinceEpoch}';
+    final placeholder = TurnMedia(
+      mediaId: tempId,
+      kind: MediaKind.video,
+      status: MediaStatus.queued,
+    );
+
+    final events = [...state.events];
+    final idx = events.indexWhere((e) => e.id == eventId);
+    if (idx >= 0) {
+      final ev = events[idx];
+      events[idx] = ev.copyWith(media: [...ev.media, placeholder]);
+      emit(state.copyWith(events: events));
+    }
+
+    try {
+      final res = await _mediaRepo.requestTurnVideo(
+        instanceId: instanceId,
+        eventId: eventId,
+      );
+
+      final nextEvents = [...state.events];
+      final nIdx = nextEvents.indexWhere((e) => e.id == eventId);
+      if (nIdx >= 0) {
+        final ev = nextEvents[nIdx];
+        final mediaList = [...ev.media];
+        final pIdx = mediaList.indexWhere((m) => m.mediaId == tempId);
+        if (pIdx >= 0) {
+          if (res.isReady) {
+            mediaList[pIdx] = TurnMedia(
+              mediaId: res.mediaId ?? tempId,
+              kind: MediaKind.video,
+              status: MediaStatus.ready,
+              url: res.url,
+              justRequested: true,
+            );
+          } else {
+            mediaList[pIdx] = TurnMedia(
+              mediaId: res.mediaId ?? tempId,
+              kind: MediaKind.video,
+              status: MediaStatus.queued,
+            );
+          }
+          nextEvents[nIdx] = ev.copyWith(media: mediaList);
+          LocalDb.insertEvent(nextEvents[nIdx]).ignore();
           emit(state.copyWith(events: nextEvents));
         }
       }

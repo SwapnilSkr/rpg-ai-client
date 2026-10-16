@@ -1,14 +1,20 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:everlore/core/network/ws_manager.dart';
 import 'package:everlore/features/media/data/media_repository.dart';
 import 'package:everlore/features/media/models/spoken_line.dart';
 import 'package:everlore/features/media/models/turn_media.dart';
+import 'package:everlore/features/media/presentation/media_thumbnail.dart';
+import 'package:everlore/features/play/presentation/play_screen.dart';
 import 'package:everlore/features/play/presentation/widgets/narrative_bubble.dart';
+import 'package:everlore/features/play/state/play_cubit.dart';
 import 'package:everlore/shared/models/event.dart';
 import 'package:everlore/shared/widgets/story_prose.dart';
 
@@ -17,6 +23,69 @@ Widget _host(Widget child) => MaterialApp(
     body: SingleChildScrollView(child: SizedBox(width: 380, child: child)),
   ),
 );
+
+class MockWsManager extends Fake implements WsManager {
+  final mediaReadyCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final mediaUnseenCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final mediaFailedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final spokenLinesCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final connectionStateCtrl = StreamController<bool>.broadcast();
+
+  @override
+  Stream<Map<String, dynamic>> get onMediaReady => mediaReadyCtrl.stream;
+  @override
+  Stream<Map<String, dynamic>> get onMediaUnseen => mediaUnseenCtrl.stream;
+  @override
+  Stream<Map<String, dynamic>> get onMediaFailed => mediaFailedCtrl.stream;
+  @override
+  Stream<Map<String, dynamic>> get onSpokenLines => spokenLinesCtrl.stream;
+  @override
+  Stream<bool> get onConnectionState => connectionStateCtrl.stream;
+
+  @override
+  Stream<Map<String, dynamic>> get onGenerationComplete => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onGenerationStarted => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onGenerationDelta => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onGenerationStreamEnd => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onChoicesReady => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onGenerationRetrying => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onGenerationReset => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onMemoriesCurated => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onError => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onInstanceLoaded => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onCharacterCodexUpdated => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onReplayDelta => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onReplayComplete => const Stream.empty();
+  @override
+  Stream<Map<String, dynamic>> get onMilestoneUnlocked => const Stream.empty();
+
+  @override
+  bool get isConnected => true;
+  @override
+  void loadInstance(String instanceId) {}
+  @override
+  Future<void> disconnect({bool clearToken = false}) async {}
+
+  void dispose() {
+    mediaReadyCtrl.close();
+    mediaUnseenCtrl.close();
+    mediaFailedCtrl.close();
+    spokenLinesCtrl.close();
+    connectionStateCtrl.close();
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -724,6 +793,367 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(focusNode.hasFocus, isFalse);
+    });
+  });
+
+  group('media-app-film-this: "Film this" on every turn', () {
+    // 1. The menu shows Film this right after Picture this
+    testWidgets('the menu shows Film this right after Picture this', (tester) async {
+      final event = GameEvent(
+        id: 'ev_menu_film_1',
+        instanceId: 'inst_1',
+        sequence: 1,
+        type: 'narration',
+        aiResponse: 'The fortress loomed against the dusk sky.',
+        createdAt: DateTime.now(),
+      );
+
+      final ws = MockWsManager();
+      addTearDown(ws.dispose);
+
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/media/usage')) {
+          return http.Response(
+            jsonEncode({
+              'voice': {'used': 0, 'limit': 100},
+              'picture': {'used': 0, 'limit': 15},
+              'video': {'used': 0, 'limit': 2},
+              'portrait': {'used': 0, 'limit': 20},
+              'resets_at': '2026-10-17T00:00:00.000Z',
+            }),
+            200,
+          );
+        }
+        return http.Response('', 200);
+      });
+
+      final mediaRepo = MediaRepository(
+        client: client,
+        baseUrl: 'https://api.test',
+        tokenProvider: () async => 'test_token',
+      );
+
+      final cubit = PlayCubit(
+        instanceId: 'inst_1',
+        ws: ws,
+        mediaRepo: mediaRepo,
+      );
+      addTearDown(cubit.close);
+
+      cubit.emit(cubit.state.copyWith(
+        events: [event],
+        isMediaAvailable: true,
+      ));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BlocProvider<PlayCubit>.value(
+              value: cubit,
+              child: TurnMenuSheet(event: event),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find all ListTiles in the menu
+      final listTiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+      final titles = listTiles.map((t) => (t.title as Text).data).toList();
+
+      final pictureIndex = titles.indexOf('Picture this');
+      final filmIndex = titles.indexOf('Film this');
+
+      expect(pictureIndex, isNonNegative);
+      expect(filmIndex, isNonNegative);
+      expect(filmIndex, equals(pictureIndex + 1));
+
+      // Check copy rules and styling
+      final filmTile = listTiles[filmIndex];
+      expect((filmTile.title as Text).data, 'Film this');
+      expect((filmTile.subtitle as Text).data, 'Film a moment of this scene.');
+      final filmIcon = filmTile.leading as Icon;
+      expect(filmIcon.icon, Icons.videocam_outlined);
+
+      // When isMediaAvailable is false, neither Picture this nor Film this appears
+      cubit.emit(cubit.state.copyWith(isMediaAvailable: false));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BlocProvider<PlayCubit>.value(
+              value: cubit,
+              child: TurnMenuSheet(event: event),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Picture this'), findsNothing);
+      expect(find.text('Film this'), findsNothing);
+    });
+
+    // 2. Tapping it calls the turn video route (fake repository)
+    testWidgets('tapping Film this calls the turn video route (fake repository)', (tester) async {
+      http.Request? capturedRequest;
+      final event = GameEvent(
+        id: 'ev_film_test',
+        instanceId: 'inst_film_1',
+        sequence: 1,
+        type: 'narration',
+        aiResponse: 'The cold dawn broke over the silent trees.',
+        createdAt: DateTime.now(),
+      );
+
+      final ws = MockWsManager();
+      addTearDown(ws.dispose);
+
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/media/usage')) {
+          return http.Response(
+            jsonEncode({
+              'voice': {'used': 0, 'limit': 100},
+              'picture': {'used': 0, 'limit': 15},
+              'video': {'used': 0, 'limit': 2},
+              'portrait': {'used': 0, 'limit': 20},
+              'resets_at': '2026-10-17T00:00:00.000Z',
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/instances/inst_film_1/events/ev_film_test/video' &&
+            request.method == 'POST') {
+          capturedRequest = request;
+          return http.Response(
+            jsonEncode({'status': 'queued', 'media_id': 'vid_job_123'}),
+            202,
+          );
+        }
+        return http.Response('', 200);
+      });
+
+      final mediaRepo = MediaRepository(
+        client: client,
+        baseUrl: 'https://api.test',
+        tokenProvider: () async => 'test_token',
+      );
+
+      final cubit = PlayCubit(
+        instanceId: 'inst_film_1',
+        ws: ws,
+        mediaRepo: mediaRepo,
+      );
+      addTearDown(cubit.close);
+
+      cubit.emit(cubit.state.copyWith(
+        events: [event],
+        isMediaAvailable: true,
+      ));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BlocProvider<PlayCubit>.value(
+              value: cubit,
+              child: TurnMenuSheet(event: event),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Film this'));
+      await tester.pumpAndSettle();
+
+      expect(capturedRequest, isNotNull);
+      expect(
+        capturedRequest!.url.path,
+        '/instances/inst_film_1/events/ev_film_test/video',
+      );
+      expect(capturedRequest!.method, 'POST');
+      expect(
+        capturedRequest!.headers['authorization'],
+        'Bearer test_token',
+      );
+
+      // And the turn in state has a queued video placeholder with the returned media_id
+      final updatedEvent = cubit.state.events.firstWhere((e) => e.id == 'ev_film_test');
+      expect(updatedEvent.media, hasLength(1));
+      expect(updatedEvent.media.first.kind, MediaKind.video);
+      expect(updatedEvent.media.first.isQueued, isTrue);
+      expect(updatedEvent.media.first.mediaId, 'vid_job_123');
+      expect(updatedEvent.media.first.lineId, isNull);
+    });
+
+    // 3. A media_ready with kind: 'video' and no line_id attaches the video to that turn
+    testWidgets('a media_ready with kind: video and no line_id attaches the video to that turn', (tester) async {
+      final event = GameEvent(
+        id: 'ev_ready_test',
+        instanceId: 'inst_ready_1',
+        sequence: 1,
+        type: 'narration',
+        aiResponse: 'Lanterns flickered in the fog along the quay.',
+        media: const [
+          TurnMedia(
+            mediaId: 'vid_placeholder_456',
+            kind: MediaKind.video,
+            status: MediaStatus.queued,
+          ),
+          TurnMedia(
+            mediaId: 'vid_line_queued',
+            kind: MediaKind.video,
+            status: MediaStatus.queued,
+            lineId: 'l0',
+          ),
+        ],
+        createdAt: DateTime.now(),
+      );
+
+      final ws = MockWsManager();
+      addTearDown(ws.dispose);
+
+      final cubit = PlayCubit(
+        instanceId: 'inst_ready_1',
+        ws: ws,
+      );
+      addTearDown(cubit.close);
+
+      cubit.emit(cubit.state.copyWith(
+        events: [event],
+        isMediaAvailable: true,
+      ));
+
+      // Simulate socket message arrival with no line_id:
+      ws.mediaReadyCtrl.add({
+        'type': 'media_ready',
+        'instanceId': 'inst_ready_1',
+        'eventId': 'ev_ready_test',
+        'media_id': 'vid_placeholder_456',
+        'kind': 'video',
+        'url': 'https://cdn.everlore.app/media/turn_video.mp4',
+      });
+
+      await tester.pumpAndSettle();
+
+      final updatedEvent = cubit.state.events.firstWhere((e) => e.id == 'ev_ready_test');
+      expect(updatedEvent.media, hasLength(2));
+
+      // Turn video was updated to ready with no line_id
+      final turnVideo = updatedEvent.media.firstWhere((m) => m.mediaId == 'vid_placeholder_456');
+      expect(turnVideo.kind, MediaKind.video);
+      expect(turnVideo.isReady, isTrue);
+      expect(turnVideo.url, 'https://cdn.everlore.app/media/turn_video.mp4');
+      expect(turnVideo.lineId, isNull);
+
+      // Line video placeholder was not corrupted by the turn video arriving
+      final lineVideo = updatedEvent.media.firstWhere((m) => m.mediaId == 'vid_line_queued');
+      expect(lineVideo.lineId, 'l0');
+      expect(lineVideo.isQueued, isTrue);
+
+      // Also verify media_ready arriving for a turn with no prior placeholder attaches cleanly
+      final eventNoPlaceholder = GameEvent(
+        id: 'ev_direct_ready',
+        instanceId: 'inst_ready_1',
+        sequence: 2,
+        type: 'narration',
+        aiResponse: 'Shadows crept across the valley floor.',
+        createdAt: DateTime.now(),
+      );
+      cubit.emit(cubit.state.copyWith(
+        events: [...cubit.state.events, eventNoPlaceholder],
+      ));
+
+      ws.mediaReadyCtrl.add({
+        'type': 'media_ready',
+        'instanceId': 'inst_ready_1',
+        'eventId': 'ev_direct_ready',
+        'media_id': 'vid_direct_789',
+        'kind': 'video',
+        'url': 'https://cdn.everlore.app/media/direct_vid.mp4',
+      });
+
+      await tester.pumpAndSettle();
+
+      final directEvent = cubit.state.events.firstWhere((e) => e.id == 'ev_direct_ready');
+      expect(directEvent.media, hasLength(1));
+      expect(directEvent.media.first.kind, MediaKind.video);
+      expect(directEvent.media.first.isReady, isTrue);
+      expect(directEvent.media.first.url, 'https://cdn.everlore.app/media/direct_vid.mp4');
+      expect(directEvent.media.first.lineId, isNull);
+    });
+
+    // 4. 429 shows the resting copy
+    testWidgets('429 shows the resting copy', (tester) async {
+      final event = GameEvent(
+        id: 'ev_429_test',
+        instanceId: 'inst_429_1',
+        sequence: 1,
+        type: 'narration',
+        aiResponse: 'The moon rose high above the silver sea.',
+        createdAt: DateTime.now(),
+      );
+
+      final ws = MockWsManager();
+      addTearDown(ws.dispose);
+
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/video')) {
+          return http.Response(
+            jsonEncode({
+              'status': 'resting',
+              'kind': 'video',
+              'resets_at': '2026-10-17T00:00:00.000Z',
+            }),
+            429,
+          );
+        }
+        return http.Response('', 200);
+      });
+
+      final mediaRepo = MediaRepository(
+        client: client,
+        baseUrl: 'https://api.test',
+        tokenProvider: () async => 'test_token',
+      );
+
+      final cubit = PlayCubit(
+        instanceId: 'inst_429_1',
+        ws: ws,
+        mediaRepo: mediaRepo,
+      );
+      addTearDown(cubit.close);
+
+      cubit.emit(cubit.state.copyWith(
+        events: [event],
+        isMediaAvailable: true,
+      ));
+
+      // Direct repo test:
+      expect(
+        () => mediaRepo.requestTurnVideo(
+          instanceId: 'inst_429_1',
+          eventId: 'ev_429_test',
+        ),
+        throwsA(
+          isA<MediaRestingException>()
+              .having((e) => e.kind, 'kind', 'video')
+              .having(
+                (e) => e.restingCopy,
+                'restingCopy',
+                'The visions rest until tomorrow.',
+              ),
+        ),
+      );
+
+      // Cubit interaction test:
+      await cubit.requestTurnVideo('ev_429_test');
+
+      // Resting copy emitted in notice
+      expect(cubit.state.notice, 'The visions rest until tomorrow.');
+
+      // The placeholder was quietly removed from the turn
+      final updatedEvent = cubit.state.events.firstWhere((e) => e.id == 'ev_429_test');
+      expect(updatedEvent.media, isEmpty);
     });
   });
 }

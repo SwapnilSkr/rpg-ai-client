@@ -1046,141 +1046,11 @@ class _PlayViewState extends State<_PlayView> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetCtx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 10),
-            const SheetGrabHandle(),
-            const SizedBox(height: 8),
-            if (canReplay)
-              ListTile(
-                leading: const Icon(
-                  Icons.refresh_rounded,
-                  color: EverloreTheme.cyanBright,
-                ),
-                title: Text(
-                  'Replay response',
-                  style: EverloreTheme.ui(
-                    size: 15,
-                    color: EverloreTheme.parchment,
-                  ),
-                ),
-                subtitle: Text(
-                  'Generate an improved alternative for this turn.',
-                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-                ),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  cubit.replayAiResponse(event);
-                },
-              ),
-            if (canReplay)
-              const Divider(color: EverloreTheme.white10, height: 1),
-            if ((event.aiResponse ?? '').trim().isNotEmpty)
-              ListTile(
-                leading: const Icon(
-                  Icons.copy_rounded,
-                  color: EverloreTheme.ash,
-                ),
-                title: Text(
-                  'Copy response',
-                  style: EverloreTheme.ui(
-                    size: 15,
-                    color: EverloreTheme.parchment,
-                  ),
-                ),
-                subtitle: Text(
-                  'Copy this turn to the clipboard.',
-                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-                ),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  Clipboard.setData(
-                    ClipboardData(text: event.aiResponse?.trim() ?? ''),
-                  );
-                  showEverloreNotice(
-                    context,
-                    'Copied',
-                    tone: NoticeTone.info,
-                  );
-                },
-              ),
-            if ((event.aiResponse ?? '').trim().isNotEmpty)
-              const Divider(color: EverloreTheme.white10, height: 1),
-            if (cubit.state.isMediaAvailable &&
-                (event.aiResponse ?? '').trim().isNotEmpty) ...[
-              ListTile(
-                leading: const Icon(
-                  Icons.auto_awesome_rounded,
-                  color: EverloreTheme.goldGlow,
-                ),
-                title: Text(
-                  'Picture this',
-                  style: EverloreTheme.ui(
-                    size: 15,
-                    color: EverloreTheme.parchment,
-                  ),
-                ),
-                subtitle: Text(
-                  'Paint a scene of this moment.',
-                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-                ),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  cubit.requestPicture(event.id);
-                },
-              ),
-              const Divider(color: EverloreTheme.white10, height: 1),
-            ],
-            if ((event.aiResponse ?? '').trim().isNotEmpty)
-              ListTile(
-                leading: const Icon(
-                  Icons.edit_outlined,
-                  color: EverloreTheme.violetBright,
-                ),
-                title: Text(
-                  'Edit response',
-                  style: EverloreTheme.ui(
-                    size: 15,
-                    color: EverloreTheme.parchment,
-                  ),
-                ),
-                subtitle: Text(
-                  'Rewrite this turn, and what it left in memory.',
-                  style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-                ),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _showEditResponseDialog(context, cubit, event);
-                },
-              ),
-            if ((event.aiResponse ?? '').trim().isNotEmpty)
-              const Divider(color: EverloreTheme.white10, height: 1),
-            ListTile(
-              leading: const Icon(
-                Icons.history_toggle_off,
-                color: EverloreTheme.crimson,
-              ),
-              title: Text(
-                'Rewind to here',
-                style: EverloreTheme.ui(
-                  size: 15,
-                  color: EverloreTheme.parchment,
-                ),
-              ),
-              subtitle: Text(
-                'Removes this turn and everything after it.',
-                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
-              ),
-              onTap: () {
-                Navigator.pop(sheetCtx);
-                _confirmRewind(context, cubit, event.sequence);
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
+      builder: (sheetCtx) => TurnMenuSheet(
+        event: event,
+        canReplay: canReplay,
+        onEdit: () => _showEditResponseDialog(context, cubit, event),
+        onRewind: () => _confirmRewind(context, cubit, event.sequence),
       ),
     );
   }
@@ -4620,6 +4490,191 @@ class _CharacterEditSheetState extends State<_CharacterEditSheet> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom sheet containing actions for a narrative turn ("Picture this", "Film this", Rewind, Edit, etc.).
+class TurnMenuSheet extends StatelessWidget {
+  final GameEvent event;
+  final bool canReplay;
+  final VoidCallback? onReplay;
+  final VoidCallback? onEdit;
+  final VoidCallback? onRewind;
+
+  const TurnMenuSheet({
+    super.key,
+    required this.event,
+    this.canReplay = false,
+    this.onReplay,
+    this.onEdit,
+    this.onRewind,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cubit = context.read<PlayCubit>();
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 10),
+          const SheetGrabHandle(),
+          const SizedBox(height: 8),
+          if (canReplay)
+            ListTile(
+              leading: const Icon(
+                Icons.refresh_rounded,
+                color: EverloreTheme.cyanBright,
+              ),
+              title: Text(
+                'Replay response',
+                style: EverloreTheme.ui(
+                  size: 15,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
+              subtitle: Text(
+                'Generate an improved alternative for this turn.',
+                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                if (onReplay != null) {
+                  onReplay!();
+                } else {
+                  cubit.replayAiResponse(event);
+                }
+              },
+            ),
+          if (canReplay)
+            const Divider(color: EverloreTheme.white10, height: 1),
+          if ((event.aiResponse ?? '').trim().isNotEmpty)
+            ListTile(
+              leading: const Icon(
+                Icons.copy_rounded,
+                color: EverloreTheme.ash,
+              ),
+              title: Text(
+                'Copy response',
+                style: EverloreTheme.ui(
+                  size: 15,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
+              subtitle: Text(
+                'Copy this turn to the clipboard.',
+                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                Clipboard.setData(
+                  ClipboardData(text: event.aiResponse?.trim() ?? ''),
+                );
+                showEverloreNotice(
+                  context,
+                  'Copied',
+                  tone: NoticeTone.info,
+                );
+              },
+            ),
+          if ((event.aiResponse ?? '').trim().isNotEmpty)
+            const Divider(color: EverloreTheme.white10, height: 1),
+          if (cubit.state.isMediaAvailable &&
+              (event.aiResponse ?? '').trim().isNotEmpty) ...[
+            ListTile(
+              leading: const Icon(
+                Icons.auto_awesome_rounded,
+                color: EverloreTheme.goldGlow,
+              ),
+              title: Text(
+                'Picture this',
+                style: EverloreTheme.ui(
+                  size: 15,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
+              subtitle: Text(
+                'Paint a scene of this moment.',
+                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                cubit.requestPicture(event.id);
+              },
+            ),
+            const Divider(color: EverloreTheme.white10, height: 1),
+            ListTile(
+              leading: const Icon(
+                Icons.videocam_outlined,
+                color: EverloreTheme.cyanBright,
+              ),
+              title: Text(
+                'Film this',
+                style: EverloreTheme.ui(
+                  size: 15,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
+              subtitle: Text(
+                'Film a moment of this scene.',
+                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                cubit.requestTurnVideo(event.id);
+              },
+            ),
+            const Divider(color: EverloreTheme.white10, height: 1),
+          ],
+          if ((event.aiResponse ?? '').trim().isNotEmpty)
+            ListTile(
+              leading: const Icon(
+                Icons.edit_outlined,
+                color: EverloreTheme.violetBright,
+              ),
+              title: Text(
+                'Edit response',
+                style: EverloreTheme.ui(
+                  size: 15,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
+              subtitle: Text(
+                'Rewrite this turn, and what it left in memory.',
+                style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                onEdit?.call();
+              },
+            ),
+          if ((event.aiResponse ?? '').trim().isNotEmpty)
+            const Divider(color: EverloreTheme.white10, height: 1),
+          ListTile(
+            leading: const Icon(
+              Icons.history_toggle_off,
+              color: EverloreTheme.crimson,
+            ),
+            title: Text(
+              'Rewind to here',
+              style: EverloreTheme.ui(
+                size: 15,
+                color: EverloreTheme.parchment,
+              ),
+            ),
+            subtitle: Text(
+              'Removes this turn and everything after it.',
+              style: EverloreTheme.ui(size: 12, color: EverloreTheme.ash),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              onRewind?.call();
+            },
+          ),
+          const SizedBox(height: 8),
         ],
       ),
     );
