@@ -128,11 +128,20 @@ abstract final class GuideFlows {
             'travel elsewhere, or correct who someone truly is to you.',
       ),
       GuideBeat(
+        anchor: GuideIds.playNarrative,
+        fallbackAnchor: GuideIds.playNarrativeArea,
+        title: 'Unwriting',
+        body:
+            'Linger on any passage to tell it again, reshape its words, or '
+            'return the story to that moment.',
+      ),
+      GuideBeat(
         anchor: GuideIds.playBondRail,
         title: 'Those Who Stand With You',
         body:
             'The souls present in this scene, and how near they hold you. '
-            'Open one to speak with them apart from the story.',
+            'Open one to approach them, seek them out, or learn what they '
+            'remember of you.',
         requiresAnchor: true,
       ),
       GuideBeat(
@@ -415,6 +424,7 @@ abstract final class GuideFlows {
   /// Fired the first time a turn with spoken lines appears.
   static const spokenLine = GuideFlow(
     id: 'play.spoken_line',
+    version: 2,
     label: 'Spoken Words',
     route: '/play',
     beats: [
@@ -422,7 +432,9 @@ abstract final class GuideFlows {
         anchor: GuideIds.playSpokenLine,
         fallbackAnchor: GuideIds.playNarrative,
         title: 'Spoken Words',
-        body: 'Tap what they say to hear it.',
+        body:
+            'Words said aloud are marked beneath. Choose one to hear it in '
+            'their voice — linger on it, and watch them say it.',
       ),
     ],
   );
@@ -430,14 +442,39 @@ abstract final class GuideFlows {
   /// Fired the first time the media affordance appears on a turn.
   static const playMedia = GuideFlow(
     id: 'play.media',
-    label: 'Scenes and Portraits',
+    version: 2,
+    label: 'Picture and Film',
     route: '/play',
     beats: [
       GuideBeat(
         anchor: GuideIds.playMedia,
         fallbackAnchor: GuideIds.playNarrative,
-        title: 'Scenes and Portraits',
-        body: 'Picture or film any moment of the story.',
+        title: 'Picture and Film',
+        body:
+            'Paint any moment of the story, or film it as a short scene. Each '
+            'one is kept among your Keepsakes.',
+      ),
+    ],
+  );
+
+  /// Fired the first time Keepsakes holds something to show; an empty archive
+  /// already explains itself.
+  static const keepsakes = GuideFlow(
+    id: 'keepsakes',
+    label: 'Keepsakes',
+    route: '/keepsakes',
+    beats: [
+      GuideBeat.card(
+        title: 'Keepsakes',
+        body:
+            'Every picture, film and face your stories have made, kept in one '
+            'place. Open one and you return to the moment it came from.',
+      ),
+      GuideBeat(
+        anchor: GuideIds.keepsakesFilters,
+        title: 'Shelves',
+        body: 'Pictures, films and faces, each on its own shelf.',
+        requiresAnchor: true,
       ),
     ],
   );
@@ -451,6 +488,7 @@ abstract final class GuideFlows {
     playTools,
     spokenLine,
     playMedia,
+    keepsakes,
     realm,
     sceneSettings,
     chronicle,

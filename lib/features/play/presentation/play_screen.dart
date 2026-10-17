@@ -696,7 +696,11 @@ class _PlayViewState extends State<_PlayView> {
       );
       return;
     }
-    if (turns >= 3 && guide.canAutoStart(GuideFlows.ink)) {
+    // While the launch promo makes Ink unlimited, "every turn costs Ink"
+    // would be untrue, so the beat waits for a wallet that is actually spent.
+    final unlimitedInk =
+        BillingRepository.instance.cachedWallet?.unlimitedInk ?? false;
+    if (turns >= 3 && !unlimitedInk && guide.canAutoStart(GuideFlows.ink)) {
       guide.maybeStart(GuideFlows.ink);
       return;
     }
@@ -1485,6 +1489,11 @@ class _PlayViewState extends State<_PlayView> {
             prev.characters.length != curr.characters.length ||
             previousChoices != currentChoices ||
             lastResponseChanged ||
+            // Spoken lines and media availability land after the turn
+            // itself; the spoken-line and media arcs wait on them.
+            (prev.events.isEmpty ? 0 : prev.events.last.spokenLines.length) !=
+                (curr.events.isEmpty ? 0 : curr.events.last.spokenLines.length) ||
+            prev.isMediaAvailable != curr.isMediaAvailable ||
             prev.error != curr.error;
       },
       listener: (ctx, state) {
@@ -1910,6 +1919,18 @@ class _PlayViewState extends State<_PlayView> {
                                           : null,
                                       mediaAnchorId:
                                           isLatest ? GuideIds.playMedia : null,
+                                      // Only the newest passage is a guide
+                                      // target, outlined without the player's
+                                      // own line: playNarrative always (the
+                                      // Unwriting beat), playSpokenLine when it
+                                      // has dialogue.
+                                      passageAnchorIds: !isLatest
+                                          ? const []
+                                          : [
+                                              GuideIds.playNarrative,
+                                              if (event.spokenLines.isNotEmpty)
+                                                GuideIds.playSpokenLine,
+                                            ],
                                       onReplay: canReplay
                                           ? () => context
                                                 .read<PlayCubit>()
@@ -1951,20 +1972,7 @@ class _PlayViewState extends State<_PlayView> {
                                         );
                                       },
                                     );
-                                    // Only the newest passage is a guide target —
-                                    // spotlighting the whole scroll would say
-                                    // nothing about where the story is now.
-                                    final anchorId = !isLatest
-                                        ? null
-                                        : event.spokenLines.isNotEmpty
-                                            ? GuideIds.playSpokenLine
-                                            : GuideIds.playNarrative;
-                                    final childWidget = anchorId != null
-                                        ? GuideAnchor(
-                                            id: anchorId,
-                                            child: bubble,
-                                          )
-                                        : bubble;
+                                    final childWidget = bubble;
                                     return KeyedSubtree(
                                       key: _eventBubbleKeys.putIfAbsent(
                                         event.id,

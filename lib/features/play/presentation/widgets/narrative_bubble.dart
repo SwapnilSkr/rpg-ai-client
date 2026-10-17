@@ -49,6 +49,10 @@ class NarrativeBubble extends StatefulWidget {
   final Set<String> unvoiceableLines;
   final String? mediaAnchorId;
 
+  /// Guide anchors that outline the narrator's passage only, never the
+  /// player's own line above it.
+  final List<String> passageAnchorIds;
+
   const NarrativeBubble({
     super.key,
     required this.event,
@@ -70,6 +74,7 @@ class NarrativeBubble extends StatefulWidget {
     this.playingVoiceLineId,
     this.unvoiceableLines = const {},
     this.mediaAnchorId,
+    this.passageAnchorIds = const [],
   });
 
   @override
@@ -92,6 +97,14 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
       _effectiveSpokenLines.any(
         (l) => l.lineId == line.lineId && l.unvoiceable,
       );
+
+  Widget _withPassageAnchors(Widget child) {
+    var wrapped = child;
+    for (final id in widget.passageAnchorIds) {
+      wrapped = GuideAnchor(id: id, child: wrapped);
+    }
+    return wrapped;
+  }
 
   void _handleTapUp(TapUpDetails details) {
     final spokenResult =
@@ -183,7 +196,7 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
               label: event.travel?.label,
               timeAdvanced: event.timeAdvanced,
             ),
-          GestureDetector(
+          _withPassageAnchors(GestureDetector(
             behavior: HitTestBehavior.translucent,
             onLongPressStart: canLongPress ? _handleLongPressStart : null,
             onTapUp: canTap ? _handleTapUp : null,
@@ -218,7 +231,7 @@ class _NarrativeBubbleState extends State<NarrativeBubble> {
               unvoiceableLines: widget.unvoiceableLines,
               onSpokenLineTap: widget.onSpokenLineTap,
             ),
-          ),
+          )),
         ] else if (event.isOptimistic)
           const _GeneratingIndicator(),
       ],

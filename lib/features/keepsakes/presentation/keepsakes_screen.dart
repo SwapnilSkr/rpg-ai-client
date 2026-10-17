@@ -3,6 +3,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../core/guide/guide_anchor.dart';
+import '../../../../core/guide/guide_flows.dart';
+import '../../../../core/guide/guide_ids.dart';
+import '../../../../core/guide/guide_trigger.dart';
 import '../../../../shared/widgets/everlore_top_bar.dart';
 import '../../../../shared/widgets/loading_shimmer.dart';
 import '../../../../shared/widgets/neu.dart';
@@ -470,7 +474,12 @@ class _KeepsakesViewState extends State<_KeepsakesView> {
           ),
           BlocBuilder<KeepsakesCubit, KeepsakesState>(
             builder: (context, state) {
-              return Column(
+              // The guide waits for a first keepsake: an empty archive
+              // already explains itself.
+              return GuideOnEnter(
+                flow: GuideFlows.keepsakes,
+                enabled: state.items.isNotEmpty,
+                child: Column(
                 children: [
                   const EverloreTopBar(
                     title: 'Keepsakes',
@@ -479,11 +488,14 @@ class _KeepsakesViewState extends State<_KeepsakesView> {
                   ),
                   // Filter row stays visible whenever player has any keepsakes (§3.5)
                   if (state.hasAnyKeepsakesOverall || state.items.isNotEmpty || state.filter != KeepsakesFilter.all)
-                    KeepsakesFilterRow(
-                      selectedFilter: state.filter,
-                      viewMode: state.mode,
-                      onFilterChanged: (f) => context.read<KeepsakesCubit>().setFilter(f),
-                      onModeChanged: (m) => context.read<KeepsakesCubit>().setMode(m),
+                    GuideAnchor(
+                      id: GuideIds.keepsakesFilters,
+                      child: KeepsakesFilterRow(
+                        selectedFilter: state.filter,
+                        viewMode: state.mode,
+                        onFilterChanged: (f) => context.read<KeepsakesCubit>().setFilter(f),
+                        onModeChanged: (m) => context.read<KeepsakesCubit>().setMode(m),
+                      ),
                     ),
 
                   // Main body
@@ -538,6 +550,7 @@ class _KeepsakesViewState extends State<_KeepsakesView> {
                     ),
                   ),
                 ],
+                ),
               );
             },
           ),

@@ -18,6 +18,9 @@ abstract final class GuideIds {
   static const playSpokenLine = 'play.spoken_line';
   static const playMedia = 'play.media';
 
+  // ── Keepsakes ──
+  static const keepsakesFilters = 'keepsakes.filters';
+
   // ── Realm screen (the story's own menu) ──
   static const realmTomes = 'realm.tomes';
   static const realmPlaythrough = 'realm.playthrough';
