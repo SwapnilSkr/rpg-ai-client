@@ -30,14 +30,16 @@ class AppConfig {
     key: 'API_BASE_URL',
     compiled: const String.fromEnvironment('API_BASE_URL', defaultValue: ''),
     releaseDefault: _releaseApiBaseUrl,
-    devDefault: 'http://localhost:3000',
+    // A const-folded branch, so the local address never reaches a release binary.
+    devDefault: kReleaseMode ? '' : 'http://localhost:3000',
   );
 
   static String get wsBaseUrl => _resolve(
     key: 'WS_BASE_URL',
     compiled: const String.fromEnvironment('WS_BASE_URL', defaultValue: ''),
     releaseDefault: _releaseWsBaseUrl,
-    devDefault: 'ws://localhost:3000',
+    // A const-folded branch, so the local address never reaches a release binary.
+    devDefault: kReleaseMode ? '' : 'ws://localhost:3000',
   );
 
   /// The Google web client ID that Firebase brokers the sign-in credential

@@ -100,6 +100,17 @@ for so in $(find "$WORK" -name libapp.so); do
   strings -a "$so" > "$SYMS"
   grep -qF "$HOST" "$SYMS" \
     || { echo "✗ $ABI/libapp.so does not contain $HOST" >&2; exit 1; }
+  # A loopback *URL* means a dev endpoint was compiled in. (Bare "localhost" and
+  # "127.0.0.1" also live in Dart's own socket runtime, so only URLs count.)
+  if LOOP="$(grep -oE '(https?|wss?)://(localhost|127\.0\.0\.1)[^ ]*' "$SYMS")"; then
+    echo "✗ $ABI/libapp.so carries a loopback endpoint: $LOOP" >&2
+    exit 1
+  fi
+  # Every endpoint compiled in for our own services must be the production host.
+  if OTHER="$(grep -oE '(https?|wss?)://[a-z0-9.-]*everloreapp\.com' "$SYMS" | grep -vF "://$HOST" | sort -u)" && [ -n "$OTHER" ]; then
+    echo "✗ $ABI/libapp.so carries a non-production everloreapp endpoint: $OTHER" >&2
+    exit 1
+  fi
 done
 rm -f "$SYMS"
 
