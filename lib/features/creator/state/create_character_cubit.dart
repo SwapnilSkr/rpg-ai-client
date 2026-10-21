@@ -99,6 +99,22 @@ class CreateCharacterState extends Equatable {
       tagline.trim().length >= 3 &&
       persona.trim().length >= 10;
 
+  /// Whether leaving now would throw work away, defined like the forge's:
+  /// false while submitting or once the character is created, otherwise true
+  /// if any field the player fills in is non-empty.
+  bool get hasUnsavedWork {
+    if (isSubmitting || instanceId != null) return false;
+    return name.trim().isNotEmpty ||
+        tagline.trim().isNotEmpty ||
+        persona.trim().isNotEmpty ||
+        greeting.trim().isNotEmpty ||
+        backstory.trim().isNotEmpty ||
+        narrativeStyle.trim().isNotEmpty ||
+        styleNotes.trim().isNotEmpty ||
+        imagePrompt.trim().isNotEmpty ||
+        imageUrl.trim().isNotEmpty;
+  }
+
   @override
   List<Object?> get props => [
     name,

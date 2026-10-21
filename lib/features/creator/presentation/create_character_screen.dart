@@ -69,6 +69,69 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
     if (_step > 0) setState(() => _step -= 1);
   }
 
+  void _leave(BuildContext context) {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/');
+    }
+  }
+
+  /// Shared by the system back gesture and the header arrow, so both routes
+  /// out of a half-built character behave the same way.
+  Future<bool> _confirmDiscard(BuildContext context) async {
+    if (!context.read<CreateCharacterCubit>().state.hasUnsavedWork) return true;
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: EverloreTheme.void2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: EverloreTheme.goldDim.withValues(alpha: 0.3)),
+        ),
+        title: Text(
+          'Leave this character unfinished?',
+          style: EverloreTheme.serifDisplay(
+            size: 18,
+            color: EverloreTheme.parchment,
+          ),
+        ),
+        content: const Text(
+          'Nothing you have written here has been saved yet. Leaving now '
+          'discards it.',
+          style: TextStyle(color: EverloreTheme.ash, fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              'Keep forging',
+              style: TextStyle(color: EverloreTheme.ash),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Discard',
+              style: TextStyle(color: EverloreTheme.crimson),
+            ),
+          ),
+        ],
+      ),
+    );
+    return leave == true;
+  }
+
+  Future<void> _handleBack(BuildContext context) async {
+    if (_step > 0) {
+      _back();
+      return;
+    }
+    if (await _confirmDiscard(context) && context.mounted) {
+      _leave(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<CreateCharacterCubit, CreateCharacterState>(
@@ -83,66 +146,72 @@ class _CreateCharacterViewState extends State<_CreateCharacterView> {
       },
       builder: (context, state) {
         final cubit = context.read<CreateCharacterCubit>();
-        return Scaffold(
-          backgroundColor: EverloreTheme.void1,
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.asset(
-                'assets/art/forge-character-cover.webp',
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-              ),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      EverloreTheme.void1.withValues(alpha: 0.32),
-                      EverloreTheme.void1.withValues(alpha: 0.7),
-                      EverloreTheme.void0.withValues(alpha: 0.88),
-                    ],
-                    stops: const [0, 0.46, 1],
+        return PopScope(
+          canPop: _step == 0 && !state.hasUnsavedWork,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _handleBack(context);
+          },
+          child: Scaffold(
+            backgroundColor: EverloreTheme.void1,
+            body: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  'assets/art/forge-character-cover.webp',
+                  fit: BoxFit.cover,
+                  alignment: Alignment.center,
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        EverloreTheme.void1.withValues(alpha: 0.32),
+                        EverloreTheme.void1.withValues(alpha: 0.7),
+                        EverloreTheme.void0.withValues(alpha: 0.88),
+                      ],
+                      stops: const [0, 0.46, 1],
+                    ),
                   ),
                 ),
-              ),
-              SafeArea(
-                child: Column(
-                  children: [
-                    _Header(onBack: _step == 0 ? null : _back),
-                    _CharStepProgress(step: _step),
-                    Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 260),
-                        transitionBuilder: (child, anim) =>
-                            FadeTransition(opacity: anim, child: child),
-                        child: _buildStep(context, cubit, state),
+                SafeArea(
+                  child: Column(
+                    children: [
+                      _Header(onBack: () => _handleBack(context)),
+                      _CharStepProgress(step: _step),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 260),
+                          transitionBuilder: (child, anim) =>
+                              FadeTransition(opacity: anim, child: child),
+                          child: _buildStep(context, cubit, state),
+                        ),
                       ),
-                    ),
-                    if (state.error != null)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                        child: _ErrorText(state.error!),
+                      if (state.error != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                          child: _ErrorText(state.error!),
+                        ),
+                      _CharNavBar(
+                        step: _step,
+                        canProceed: _step != 0 || state.canCreate,
+                        canCreate: state.canCreate,
+                        busy: state.isSubmitting,
+                        onBack: _back,
+                        onNext: _next,
+                        onCreate: () async {
+                          final personaId =
+                              await choosePersonaForNewSentientStory(context);
+                          if (!context.mounted) return;
+                          cubit.create(personaId: personaId);
+                        },
                       ),
-                    _CharNavBar(
-                      step: _step,
-                      canProceed: _step != 0 || state.canCreate,
-                      canCreate: state.canCreate,
-                      busy: state.isSubmitting,
-                      onBack: _back,
-                      onNext: _next,
-                      onCreate: () async {
-                        final personaId =
-                            await choosePersonaForNewSentientStory(context);
-                        if (!context.mounted) return;
-                        cubit.create(personaId: personaId);
-                      },
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -439,8 +508,8 @@ class _CharLiveCount extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  final VoidCallback? onBack;
-  const _Header({this.onBack});
+  final VoidCallback onBack;
+  const _Header({required this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -449,13 +518,7 @@ class _Header extends StatelessWidget {
       child: Row(
         children: [
           GestureDetector(
-            onTap: () {
-              if (onBack != null) {
-                onBack!();
-              } else {
-                context.canPop() ? context.pop() : context.go('/');
-              }
-            },
+            onTap: onBack,
             child: const Icon(
               Icons.arrow_back_ios_new,
               size: 18,

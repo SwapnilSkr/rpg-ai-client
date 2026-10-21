@@ -27,15 +27,24 @@ class AuthScreen extends StatefulWidget {
   final String? title;
 
   @override
-  State<AuthScreen> createState() => _AuthScreenState();
+  State<AuthScreen> createState() => AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> {
+class AuthScreenState extends State<AuthScreen> {
   final _googleAuthService = GoogleAuthService();
   final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
 
   DialCode _dialCode = kDefaultDialCode; // United States +1
+
+  @visibleForTesting
+  bool get isPhoneLoading => _isPhoneLoading;
+
+  @visibleForTesting
+  TextEditingController get otpController => _otpController;
+
+  @visibleForTesting
+  Future<void> handleVerifyCode() => _handleVerifyCode();
 
   User? _currentUser;
   bool _sessionReady = false;
@@ -208,6 +217,8 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _handleVerifyCode() async {
+    final code = _otpController.text.trim();
+    if (code.length != 6) return;
     setState(() {
       _isPhoneLoading = true;
       _clearMessages();
@@ -215,7 +226,7 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final user = await AuthService.verifyOtp(
         phone: _normalizePhone('${_dialCode.code}${_phoneController.text}'),
-        code: _otpController.text.trim(),
+        code: code,
       );
       if (!mounted) return;
       setState(() => _currentUser = user);
@@ -808,7 +819,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
         const SizedBox(height: 32),
 
-        _PhoneTab(
+        PhoneTab(
           phoneController: _phoneController,
           otpController: _otpController,
           isLoading: _isPhoneLoading,
@@ -879,8 +890,10 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 
-class _PhoneTab extends StatefulWidget {
-  const _PhoneTab({
+@visibleForTesting
+class PhoneTab extends StatefulWidget {
+  const PhoneTab({
+    super.key,
     required this.phoneController,
     required this.otpController,
     required this.isLoading,
@@ -903,10 +916,10 @@ class _PhoneTab extends StatefulWidget {
   final VoidCallback onEditPhone;
 
   @override
-  State<_PhoneTab> createState() => _PhoneTabState();
+  State<PhoneTab> createState() => PhoneTabState();
 }
 
-class _PhoneTabState extends State<_PhoneTab> {
+class PhoneTabState extends State<PhoneTab> {
   static const int _resendSeconds = 30;
   Timer? _timer;
   int _cooldown = 0;
@@ -916,19 +929,29 @@ class _PhoneTabState extends State<_PhoneTab> {
   void initState() {
     super.initState();
     if (widget.codeSent) _startCooldown();
+    widget.otpController.addListener(_onOtpChanged);
   }
 
   @override
-  void didUpdateWidget(_PhoneTab old) {
-    super.didUpdateWidget(old);
-    if (widget.codeSent && !old.codeSent) _startCooldown();
+  void didUpdateWidget(PhoneTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.codeSent && !oldWidget.codeSent) _startCooldown();
+    if (widget.otpController != oldWidget.otpController) {
+      oldWidget.otpController.removeListener(_onOtpChanged);
+      widget.otpController.addListener(_onOtpChanged);
+    }
   }
 
   @override
   void dispose() {
+    widget.otpController.removeListener(_onOtpChanged);
     _timer?.cancel();
     _phoneFocus.dispose();
     super.dispose();
+  }
+
+  void _onOtpChanged() {
+    if (mounted) setState(() {});
   }
 
   void _startCooldown() {
@@ -1011,6 +1034,7 @@ class _PhoneTabState extends State<_PhoneTab> {
   Widget _buildOtpStep() {
     final fullNumber =
         '${widget.dialCode.code} ${widget.phoneController.text.trim()}';
+    final hasValidOtp = widget.otpController.text.trim().length == 6;
     return Column(
       key: const ValueKey('otp-step'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1072,7 +1096,9 @@ class _PhoneTabState extends State<_PhoneTab> {
                 label: widget.isLoading ? 'Verifying…' : 'Enter the Realm',
                 accent: EverloreTheme.aether,
                 loading: widget.isLoading,
-                onTap: widget.isLoading ? null : widget.onVerifyCode,
+                onTap: (widget.isLoading || !hasValidOtp)
+                    ? null
+                    : widget.onVerifyCode,
               ),
             ],
           ),
