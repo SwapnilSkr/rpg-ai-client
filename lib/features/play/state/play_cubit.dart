@@ -5,6 +5,7 @@ import 'package:equatable/equatable.dart';
 import '../../../core/network/ws_manager.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../../../core/storage/local_db.dart';
+import '../../../core/rating/rating_prompt.dart';
 import '../../chronicle/data/chronicle_repository.dart';
 import '../../home/data/home_repository.dart';
 import '../../../shared/models/event.dart';
@@ -477,6 +478,7 @@ class PlayCubit extends Cubit<PlayState> {
   }
 
   final Future<void> Function()? _onRefreshInk;
+  final RatingPrompt _rating;
 
   PlayCubit({
     required this.instanceId,
@@ -484,10 +486,12 @@ class PlayCubit extends Cubit<PlayState> {
     MediaRepository? mediaRepo,
     AudioPlaybackController? audio,
     Future<void> Function()? onRefreshInk,
+    RatingPrompt? rating,
   })  : _ws = ws ?? WsManager(),
         _mediaRepo = mediaRepo ?? MediaRepository(),
         audioController = audio ?? AudioPlaybackController.instance,
         _onRefreshInk = onRefreshInk,
+        _rating = rating ?? RatingPrompt.instance,
         super(const PlayState()) {
     _init();
   }
@@ -859,6 +863,7 @@ class PlayCubit extends Cubit<PlayState> {
           restoreComposerText: null,
         ),
       );
+      unawaited(_rating.recordSuccessfulTurn());
       unawaited(_refreshInk());
       _sendQueuedMessage();
     });
@@ -984,6 +989,7 @@ class PlayCubit extends Cubit<PlayState> {
     });
 
     _errorSub = _ws.onError.listen((msg) {
+      unawaited(_rating.recordSetback());
       // Reservations are released on failed turns; refresh the header so it
       // reflects the settled/refunded ledger immediately.
       unawaited(_refreshInk());
