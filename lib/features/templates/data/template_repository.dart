@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../../../core/auth/auth_service.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/models/world_template.dart';
@@ -13,6 +15,7 @@ class TemplateRepository {
     _cacheEpoch = AuthService.sessionEpoch.value;
     _listCache.clear();
     _templateCache.clear();
+    listPublishedOverride = null;
   }
 
   static void _syncSessionCache() {
@@ -23,15 +26,92 @@ class TemplateRepository {
     _templateCache.clear();
   }
 
+  static String buildPublishedPath({
+    int page = 1,
+    int limit = 20,
+    String? search,
+    String? genre,
+    String? kind,
+    Iterable<String>? styles,
+    String? sort,
+  }) {
+    final queryParameters = <String, String>{
+      'page': page.toString(),
+      'limit': limit.toString(),
+    };
+    if (search != null && search.trim().isNotEmpty) {
+      queryParameters['search'] = search.trim();
+    }
+    if (genre != null && genre.isNotEmpty) {
+      queryParameters['genre'] = genre;
+    }
+    if (kind != null && kind.isNotEmpty) {
+      queryParameters['kind'] = kind;
+    }
+    if (styles != null && styles.isNotEmpty) {
+      final sortedStyles = styles.toList()..sort();
+      queryParameters['styles'] = sortedStyles.join(',');
+    }
+    if (sort != null && sort.isNotEmpty) {
+      queryParameters['sort'] = sort;
+    }
+    return Uri(path: '/templates', queryParameters: queryParameters).toString();
+  }
+
+  @visibleForTesting
+  static Future<Map<String, dynamic>> Function({
+    int page,
+    int limit,
+    String? search,
+    String? genre,
+    String? kind,
+    Iterable<String>? styles,
+    String? sort,
+    bool forceRefresh,
+  })? listPublishedOverride;
+
+  @visibleForTesting
+  static bool isPathCached(String path) => _listCache.containsKey(path);
+
+  @visibleForTesting
+  static Map<String, dynamic>? getCached(String path) => _listCache[path];
+
+  @visibleForTesting
+  static void setCached(String path, Map<String, dynamic> data) =>
+      _listCache[path] = data;
+
   static Future<Map<String, dynamic>> listPublished({
     int page = 1,
     int limit = 20,
     String? search,
+    String? genre,
+    String? kind,
+    Iterable<String>? styles,
+    String? sort,
     bool forceRefresh = false,
   }) async {
+    if (listPublishedOverride != null) {
+      return listPublishedOverride!(
+        page: page,
+        limit: limit,
+        search: search,
+        genre: genre,
+        kind: kind,
+        styles: styles,
+        sort: sort,
+        forceRefresh: forceRefresh,
+      );
+    }
     _syncSessionCache();
-    String path = '/templates?page=$page&limit=$limit';
-    if (search != null && search.isNotEmpty) path += '&search=$search';
+    final path = buildPublishedPath(
+      page: page,
+      limit: limit,
+      search: search,
+      genre: genre,
+      kind: kind,
+      styles: styles,
+      sort: sort,
+    );
     final cached = _listCache[path];
     if (!forceRefresh && cached != null) {
       _fetchPublished(path).ignore();

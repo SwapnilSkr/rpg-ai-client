@@ -1,28 +1,32 @@
 import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../app/layout/responsive.dart';
+import '../app/theme/nexus_theme.dart';
+import '../core/auth/auth_service.dart';
+import '../core/errors/user_message.dart';
 import '../core/guide/guide_anchor.dart';
 import '../core/guide/guide_flows.dart';
 import '../core/guide/guide_ids.dart';
 import '../core/guide/guide_trigger.dart';
-
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import '../app/theme/nexus_theme.dart';
-import '../core/auth/auth_service.dart';
+import '../features/moderation/data/moderation_repository.dart';
+import '../features/templates/data/genre_repository.dart';
+import '../features/templates/data/interest_ranking.dart';
+import '../features/templates/data/template_repository.dart';
+import '../features/templates/presentation/explore_filter_sheet.dart';
 import '../shared/app_icons.dart';
+import '../shared/models/explore_genre.dart';
 import '../shared/models/world_template.dart';
 import '../shared/narrative_styles.dart';
-import '../shared/widgets/everlore_session_loader.dart';
-import '../shared/widgets/everlore_network_image.dart';
 import '../shared/widgets/everlore_empty_state.dart';
+import '../shared/widgets/everlore_network_image.dart';
+import '../shared/widgets/everlore_session_loader.dart';
 import '../shared/widgets/everlore_top_bar.dart';
 import '../shared/widgets/mature_content_chip.dart';
 import '../shared/widgets/neu.dart';
 import '../shared/widgets/realm_backdrop.dart';
-import '../features/templates/data/template_repository.dart';
-import '../features/templates/data/interest_ranking.dart';
-import '../features/moderation/data/moderation_repository.dart';
-import '../core/errors/user_message.dart';
-import '../app/layout/responsive.dart';
 
 /// The default landing after auth — an art-led, interest-ranked explore feed.
 /// Two-column masonry of forged cards, champagne pill tabs, and the primary
@@ -35,19 +39,70 @@ class DiscoverScreen extends StatefulWidget {
 }
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
-  static const _tabs = ['For You', 'Worlds', 'Characters'];
   int _tab = 0;
+  List<ExploreGenre> _genres = [];
+  final Map<int, ExploreFilterState> _filtersByTab = {};
 
   List<WorldTemplate> _templates = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
   int _page = 1;
   int _total = 0;
+  int _loadToken = 0;
+  int _loadMoreToken = 0;
+  // A tab swap keeps the old cards on screen, so a scroll during it must not
+  // page the new query from the old page number.
+  bool _loadInFlight = false;
   String? _error;
   final _scrollController = ScrollController();
+  final _tabScrollController = ScrollController();
   final _searchController = TextEditingController();
+  final Map<int, GlobalKey> _tabKeys = {};
   Timer? _searchDebounce;
   bool _searchOpen = false;
+
+  ExploreFilterState _filterForTab(int tab) =>
+      _filtersByTab[tab] ?? const ExploreFilterState();
+
+  ExploreFilterState get _currentFilter => _filterForTab(_tab);
+
+  String? get _currentGenre =>
+      _tab == 0 ? null : (_tab - 1 < _genres.length ? _genres[_tab - 1].key : null);
+
+  Map<String, GenreStyleCount> _styleCountsForTab(int tab) {
+    if (tab == 0) {
+      final combined = <String, GenreStyleCount>{};
+      for (final genre in _genres) {
+        for (final entry in genre.styles.entries) {
+          final existing = combined[entry.key];
+          if (existing == null) {
+            combined[entry.key] = entry.value;
+          } else {
+            combined[entry.key] = GenreStyleCount(
+              worlds: existing.worlds + entry.value.worlds,
+              characters: existing.characters + entry.value.characters,
+            );
+          }
+        }
+      }
+      return combined;
+    }
+    if (tab - 1 < _genres.length) {
+      return _genres[tab - 1].styles;
+    }
+    return const {};
+  }
+
+  Set<String> _availableStylesForTab(int tab, {String? kind}) {
+    final counts = _styleCountsForTab(tab);
+    final result = <String>{};
+    for (final entry in counts.entries) {
+      if (entry.value.countForKind(kind) > 0) {
+        result.add(entry.key);
+      }
+    }
+    return result;
+  }
 
   @override
   void initState() {
@@ -57,7 +112,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     ModerationRepository.revision.addListener(_onBlocksChanged);
     AuthService.sessionEpoch.addListener(_onSessionChanged);
     _scrollController.addListener(_maybeLoadMore);
-    _load();
+    _initData();
   }
 
   @override
@@ -66,32 +121,71 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     AuthService.sessionEpoch.removeListener(_onSessionChanged);
     _searchDebounce?.cancel();
     _scrollController.dispose();
+    _tabScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   void _onSessionChanged() {
-    if (mounted) _load();
+    if (mounted) {
+      _filtersByTab.clear();
+      _refreshAll();
+    }
+  }
+
+  Future<void> _initData() async {
+    await _loadGenres();
+    await _load();
+  }
+
+  Future<void> _refreshAll() async {
+    await _loadGenres(forceRefresh: true);
+    await _load(forceRefresh: true);
+  }
+
+  Future<void> _loadGenres({bool forceRefresh = false}) async {
+    try {
+      final genres = await GenreRepository.list(forceRefresh: forceRefresh);
+      if (!mounted) return;
+      setState(() {
+        _genres = genres.where((g) => g.hasContent).toList();
+        if (_tab > _genres.length) {
+          _tab = 0;
+        }
+      });
+    } catch (_) {
+      // Keep working with For You
+    }
   }
 
   Future<void> _load({bool forceRefresh = false, String? search}) async {
+    final token = ++_loadToken;
+    _loadInFlight = true;
     setState(() {
-      // Preserve the visible feed while an inline search is resolving. The
-      // initial load still uses the full-screen loader.
+      // Preserve the visible feed while an inline search or tab swap is resolving.
+      // The initial load still uses the full-screen loader.
       _isLoading = _templates.isEmpty;
+      _isLoadingMore = false;
       _error = null;
     });
+    final filter = _currentFilter;
+    final genre = _currentGenre;
     try {
       final result = await TemplateRepository.listPublished(
         page: 1,
         limit: 20,
         search: search ?? _searchController.text.trim(),
+        genre: genre,
+        kind: filter.kind,
+        styles: filter.styles.isEmpty ? null : filter.styles,
+        sort: filter.sort,
         forceRefresh: forceRefresh,
       );
+      if (!mounted || token != _loadToken) return;
       final ranked = await orderTemplatesForFeed(
         List<WorldTemplate>.from(result['templates']),
       );
-      if (!mounted) return;
+      if (!mounted || token != _loadToken) return;
       setState(() {
         _templates = ranked;
         _page = 1;
@@ -99,11 +193,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || token != _loadToken) return;
       setState(() {
         _isLoading = false;
         _error = userFacingError(e, fallback: 'Could not load worlds.');
       });
+    } finally {
+      if (token == _loadToken) _loadInFlight = false;
     }
   }
 
@@ -116,18 +212,27 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Future<void> _loadMore() async {
-    if (_isLoading || _isLoadingMore || _templates.length >= _total) return;
+    if (_isLoading || _loadInFlight || _isLoadingMore || _templates.length >= _total) return;
     setState(() => _isLoadingMore = true);
+    final loadTokenAtStart = _loadToken;
+    final moreToken = ++_loadMoreToken;
+    final filter = _currentFilter;
+    final genre = _currentGenre;
     try {
       final result = await TemplateRepository.listPublished(
         page: _page + 1,
         limit: 20,
         search: _searchController.text.trim(),
+        genre: genre,
+        kind: filter.kind,
+        styles: filter.styles.isEmpty ? null : filter.styles,
+        sort: filter.sort,
       );
+      if (!mounted || _loadToken != loadTokenAtStart || moreToken != _loadMoreToken) return;
       final next = await orderTemplatesForFeed(
         List<WorldTemplate>.from(result['templates']),
       );
-      if (!mounted) return;
+      if (!mounted || _loadToken != loadTokenAtStart || moreToken != _loadMoreToken) return;
       final known = _templates.map((t) => t.id).toSet();
       setState(() {
         _templates = [..._templates, ...next.where((t) => known.add(t.id))];
@@ -135,12 +240,69 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         _total = (result['total'] as num?)?.toInt() ?? _templates.length;
       });
     } finally {
-      if (mounted) setState(() => _isLoadingMore = false);
+      if (mounted && _loadToken == loadTokenAtStart && moreToken == _loadMoreToken) {
+        setState(() => _isLoadingMore = false);
+      }
     }
   }
 
   void _onBlocksChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _selectTab(int i) {
+    if (_tab == i) return;
+    final existingFilter = _filterForTab(i);
+    final available = _availableStylesForTab(i, kind: existingFilter.kind);
+    final cleaned = existingFilter.cleanForAvailableStyles(available);
+    setState(() {
+      _tab = i;
+      _filtersByTab[i] = cleaned;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = _tabKeys[i];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
+    _load();
+  }
+
+  Future<void> _openFilterSheet() async {
+    final current = _currentFilter;
+    final availableCounts = _styleCountsForTab(_tab);
+    final next = await showExploreFilterSheet(
+      context: context,
+      currentFilter: current,
+      availableStyles: availableCounts,
+    );
+    if (next != null && next != current) {
+      setState(() {
+        _filtersByTab[_tab] = next;
+      });
+      _load();
+    }
+  }
+
+  void _clearCurrentTabFilters() {
+    setState(() {
+      _filtersByTab[_tab] = const ExploreFilterState();
+    });
+    _load();
+  }
+
+  void _clearFiltersAndSearch() {
+    setState(() {
+      _filtersByTab[_tab] = const ExploreFilterState();
+      _searchController.clear();
+      _searchOpen = false;
+    });
+    _load(search: '');
   }
 
   List<WorldTemplate> get _visible {
@@ -156,20 +318,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         )
         .toList();
 
-    final List<WorldTemplate> byTab;
-    switch (_tab) {
-      case 1:
-        byTab = unblocked.where((t) => !t.isCharacter).toList();
-        break;
-      case 2:
-        byTab = unblocked.where((t) => t.isCharacter).toList();
-        break;
-      default:
-        byTab = unblocked;
-    }
     final query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) return byTab;
-    return byTab
+    if (query.isEmpty) return unblocked;
+    return unblocked
         .where(
           (template) =>
               template.title.toLowerCase().contains(query) ||
@@ -231,52 +382,129 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             // empty grid would explain nothing.
             flow: GuideFlows.arrival,
             enabled: _templates.isNotEmpty,
-            child: Column(
-              children: [
-                EverloreTopBar(
-                  title: 'Explore',
-                  subtitle: 'Find worlds and characters',
-                  backgroundOpacity: 0.68,
-                  actions: [
-                    GuideAnchor(
-                      id: GuideIds.discoverSearch,
-                      child: EverloreTopBarIcon(
-                        icon: _searchOpen
-                            ? Icons.close_rounded
-                            : Icons.search_rounded,
-                        tooltip: _searchOpen
-                            ? 'Close search'
-                            : 'Search Explore',
-                        onTap: _toggleSearch,
-                      ),
-                    ),
-                  ],
-                ),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                  child: _searchOpen
-                      ? Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
-                          child: TextField(
-                            controller: _searchController,
-                            autofocus: true,
-                            onChanged: _onSearchChanged,
-                            textInputAction: TextInputAction.search,
-                            style: EverloreTheme.ui(
-                              size: 14,
-                              color: EverloreTheme.parchment,
+            child: GuideOnEnter(
+              flow: GuideFlows.exploreGenres,
+              enabled: _templates.isNotEmpty,
+              child: Column(
+                children: [
+                  EverloreTopBar(
+                    title: 'Explore',
+                    subtitle: 'Find worlds and characters',
+                    backgroundOpacity: 0.68,
+                    actions: [
+                      GuideAnchor(
+                        id: GuideIds.discoverFilter,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            EverloreTopBarIcon(
+                              icon: Icons.tune_rounded,
+                              tooltip: 'Filter Explore',
+                              onTap: _openFilterSheet,
                             ),
-                            decoration: _exploreSearchDecoration(),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                const SizedBox(height: 14),
-                GuideAnchor(id: GuideIds.discoverTabs, child: _buildTabs()),
-                const SizedBox(height: 4),
-                Expanded(child: _buildBody()),
-              ],
+                            if (_currentFilter.hasActiveFilter)
+                              Positioned(
+                                top: 2,
+                                right: 2,
+                                child: IgnorePointer(
+                                  child: Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: EverloreTheme.gold,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: EverloreTheme.goldGlow,
+                                          blurRadius: 4,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      GuideAnchor(
+                        id: GuideIds.discoverSearch,
+                        child: EverloreTopBarIcon(
+                          icon: _searchOpen
+                              ? Icons.close_rounded
+                              : Icons.search_rounded,
+                          tooltip: _searchOpen
+                              ? 'Close search'
+                              : 'Search Explore',
+                          onTap: _toggleSearch,
+                        ),
+                      ),
+                    ],
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    child: _searchOpen
+                        ? Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+                            child: TextField(
+                              controller: _searchController,
+                              autofocus: true,
+                              onChanged: _onSearchChanged,
+                              textInputAction: TextInputAction.search,
+                              style: EverloreTheme.ui(
+                                size: 14,
+                                color: EverloreTheme.parchment,
+                              ),
+                              decoration: _exploreSearchDecoration(),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  const SizedBox(height: 14),
+                  GuideAnchor(id: GuideIds.discoverTabs, child: _buildTabs()),
+                  if (_currentFilter.hasActiveFilter) ...[
+                    const SizedBox(height: 8),
+                    _buildFilterSummaryLine(),
+                  ],
+                  const SizedBox(height: 4),
+                  Expanded(child: _buildBody()),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterSummaryLine() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _currentFilter.buildSummary(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: EverloreTheme.ui(
+                size: 12,
+                color: EverloreTheme.ash,
+                weight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _clearCurrentTabFilters,
+            behavior: HitTestBehavior.opaque,
+            child: Text(
+              'Clear',
+              style: EverloreTheme.ui(
+                size: 12,
+                color: EverloreTheme.gold,
+                weight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -288,22 +516,29 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     // The pill row is a fixed strip, so it has to grow with the player's text
     // size or the labels are trimmed top and bottom.
     final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    final totalTabs = 1 + _genres.length;
     return SizedBox(
       height: 44 * textScale.clamp(1.0, 1.4),
       child: ListView.separated(
+        controller: _tabScrollController,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: _tabs.length,
+        itemCount: totalTabs,
         separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (context, i) => _tabPill(i, _tabs[i]),
+        itemBuilder: (context, i) {
+          final label = i == 0 ? 'For You' : _genres[i - 1].label;
+          final key = _tabKeys.putIfAbsent(i, GlobalKey.new);
+          return _tabPill(i, label, key);
+        },
       ),
     );
   }
 
-  Widget _tabPill(int i, String label) {
+  Widget _tabPill(int i, String label, Key key) {
     final active = _tab == i;
     return GestureDetector(
-      onTap: () => setState(() => _tab = i),
+      key: key,
+      onTap: () => _selectTab(i),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
@@ -388,24 +623,27 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
     final visible = _visible;
     if (visible.isEmpty) {
-      final isCharacters = _tab == 2;
+      final hasFiltersOrSearch =
+          _currentFilter.hasActiveFilter || _searchController.text.trim().isNotEmpty;
       return EverloreEmptyState(
-        icon: isCharacters
-            ? Icons.person_search_rounded
+        icon: hasFiltersOrSearch
+            ? Icons.filter_alt_off_rounded
             : Icons.explore_outlined,
-        eyebrow: isCharacters ? 'CHARACTER SHELF' : 'WORLD SHELF',
-        title: isCharacters ? 'No characters to meet yet' : 'No worlds in view',
-        message: isCharacters
-            ? 'New companions and characters will appear here as the collection grows.'
+        eyebrow: 'ARCHIVE',
+        title: hasFiltersOrSearch ? 'No matches found' : 'No worlds in view',
+        message: hasFiltersOrSearch
+            ? 'Try adjusting your filters or search terms to uncover more realms.'
             : 'Try another shelf or return soon—new realms are always being forged.',
-        actionLabel: isCharacters ? 'Browse worlds' : 'Show everything',
-        actionIcon: isCharacters
-            ? Icons.explore_rounded
-            : Icons.auto_awesome_rounded,
-        accent: isCharacters ? EverloreTheme.violetBright : EverloreTheme.gold,
-        onAction: isCharacters
-            ? () => setState(() => _tab = 0)
-            : () => setState(() => _tab = 0),
+        actionLabel: hasFiltersOrSearch
+            ? 'Clear filters'
+            : (_tab != 0 ? 'Show everything' : null),
+        actionIcon: hasFiltersOrSearch
+            ? Icons.tune_rounded
+            : (_tab != 0 ? Icons.auto_awesome_rounded : null),
+        accent: EverloreTheme.gold,
+        onAction: hasFiltersOrSearch
+            ? _clearFiltersAndSearch
+            : (_tab != 0 ? () => _selectTab(0) : null),
       );
     }
 
@@ -425,7 +663,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     return RefreshIndicator(
       color: EverloreTheme.gold,
       backgroundColor: EverloreTheme.void2,
-      onRefresh: () => _load(forceRefresh: true),
+      onRefresh: _refreshAll,
       child: SingleChildScrollView(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),

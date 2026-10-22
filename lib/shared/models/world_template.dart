@@ -64,6 +64,7 @@ class WorldTemplate {
   final String? visibility;
   final String? reviewStatus;
   final String? reviewNote;
+  final String? genre;
 
   const WorldTemplate({
     required this.id,
@@ -93,6 +94,7 @@ class WorldTemplate {
     this.visibility,
     this.reviewStatus,
     this.reviewNote,
+    this.genre,
   });
 
   bool get isCharacter => kind == 'character';
@@ -146,6 +148,7 @@ class WorldTemplate {
     String? visibility,
     String? reviewStatus,
     String? reviewNote,
+    String? genre,
   }) {
     return WorldTemplate(
       id: id ?? this.id,
@@ -175,6 +178,7 @@ class WorldTemplate {
       visibility: visibility ?? this.visibility,
       reviewStatus: reviewStatus ?? this.reviewStatus,
       reviewNote: reviewNote ?? this.reviewNote,
+      genre: genre ?? this.genre,
     );
   }
 
@@ -220,6 +224,7 @@ class WorldTemplate {
       visibility: json['visibility'] as String?,
       reviewStatus: json['review_status'] as String?,
       reviewNote: json['review_note'] as String?,
+      genre: json['genre'] as String?,
     );
   }
 }

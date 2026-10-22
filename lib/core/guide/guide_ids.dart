@@ -51,6 +51,7 @@ abstract final class GuideIds {
 
   // ── Discover ──
   static const discoverTabs = 'discover.tabs';
+  static const discoverFilter = 'discover.filter';
   static const discoverSearch = 'discover.search';
   static const discoverCard = 'discover.card';
 

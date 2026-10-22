@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../config/env.dart';
 import 'guide_anchor.dart';
 import 'guide_beat.dart';
+import 'guide_flows.dart';
 import 'guide_progress.dart';
 import 'guide_store.dart';
 
@@ -231,7 +232,15 @@ class GuideController extends ChangeNotifier {
     if (_progress.optOut) return false;
     if (_startedThisSession.contains(flow.id)) return false;
     final record = _progress[flow.id];
-    if (record == null) return true;
+    if (record == null) {
+      if (flow.id == GuideFlows.exploreGenres.id) {
+        // Explore genres tour fires on Explore only for players whose
+        // arrival was recorded before.
+        final arrivalRecord = _progress[GuideFlows.arrival.id];
+        return arrivalRecord != null;
+      }
+      return true;
+    }
     // A materially changed surface replays exactly once, for everyone.
     return flow.version > record.version;
   }
@@ -727,6 +736,19 @@ class GuideController extends ChangeNotifier {
         at: DateTime.now(),
       ),
     );
+    // A player going through arrival gets exploreGenres marked as seen at
+    // the same moment, so they never see both. Rehearsal mode keeps them separate.
+    if (flow.id == GuideFlows.arrival.id && !AppConfig.guideRehearsal) {
+      _progress = _progress.withFlow(
+        GuideFlows.exploreGenres.id,
+        GuideFlowProgress(
+          version: GuideFlows.exploreGenres.version,
+          step: 0,
+          status: GuideStatus.seen,
+          at: DateTime.now(),
+        ),
+      );
+    }
     unawaited(GuideStore.save(_progress, flush: flush));
   }
 }

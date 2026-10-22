@@ -27,10 +27,16 @@ abstract final class GuideFlows {
       ),
       GuideBeat(
         anchor: GuideIds.discoverTabs,
-        title: 'Worlds and Souls',
+        title: 'Shelves of the Archive',
         body:
-            'Realms are places to live in. Characters are souls to meet. '
-            'Either one will open a story around you.',
+            'For You gathers a little of everything. Each shelf after it '
+            'keeps one kind of tale.',
+      ),
+      GuideBeat(
+        anchor: GuideIds.discoverFilter,
+        title: 'Narrowing the Search',
+        body:
+            'Seek only worlds or only souls, or only the voices you love.',
       ),
       GuideBeat(
         anchor: GuideIds.discoverCard,
@@ -479,10 +485,28 @@ abstract final class GuideFlows {
     ],
   );
 
+  /// One-beat arc explaining shelves and filters together for players who
+  /// finished arrival before genres landed.
+  static const exploreGenres = GuideFlow(
+    id: 'explore_genres',
+    label: 'Shelves and Filters',
+    route: '/discover',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.discoverFilter,
+        title: 'Shelves of the Archive',
+        body:
+            'Each shelf keeps one kind of tale. Seek only worlds or only souls, '
+            'or only the voices you love.',
+      ),
+    ],
+  );
+
   /// Registry for lookup, replay, and the settings list. Order is the order
   /// a player would meet them.
   static const all = <GuideFlow>[
     arrival,
+    exploreGenres,
     worldDetail,
     playFirst,
     playTools,
