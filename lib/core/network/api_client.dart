@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/env.dart';
 import '../storage/secure_storage.dart';
@@ -81,6 +81,10 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  @visibleForTesting
+  static dynamic parseResponse(http.Response response) =>
+      _handleResponse(response);
+
   static dynamic _handleResponse(http.Response response) {
     final ok = response.statusCode >= 200 && response.statusCode < 300;
 
@@ -103,9 +107,13 @@ class ApiClient {
 
     // A non-2xx body is not guaranteed to be a JSON object either.
     final error = body is Map ? body['error'] : null;
+    final code = body is Map ? body['code'] : null;
+    final retryAfter = body is Map ? body['retryAfter'] : null;
     throw ApiException(
       statusCode: response.statusCode,
       message: error?.toString() ?? 'Unknown error',
+      code: code is String ? code : null,
+      retryAfter: retryAfter is num ? retryAfter.toInt() : null,
     );
   }
 }
@@ -114,7 +122,19 @@ class ApiException implements Exception {
   final int statusCode;
   final String message;
 
-  ApiException({required this.statusCode, required this.message});
+  /// Machine-readable reason (`code_locked`, `send_limited`, ...) when the
+  /// server gave one. Callers decide from this, never from [message].
+  final String? code;
+
+  /// Seconds until the action may be tried again, when the server said so.
+  final int? retryAfter;
+
+  ApiException({
+    required this.statusCode,
+    required this.message,
+    this.code,
+    this.retryAfter,
+  });
 
   @override
   String toString() => 'ApiException($statusCode): $message';

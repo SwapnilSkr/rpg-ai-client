@@ -9,6 +9,9 @@ import 'package:google_fonts/google_fonts.dart';
 import '../core/auth/auth_service.dart';
 import '../core/auth/google_auth_service.dart';
 import '../core/errors/user_message.dart';
+import '../core/network/api_client.dart';
+import '../core/telemetry/reasons.dart';
+import '../core/telemetry/telemetry.dart';
 import '../shared/models/user.dart';
 import '../app/theme/nexus_theme.dart';
 import '../core/onboarding/interests_store.dart';
@@ -22,9 +25,22 @@ import '../shared/narrative_styles.dart';
 import '../shared/widgets/everlore_sheet.dart';
 import '../shared/widgets/everlore_notice.dart';
 
+typedef SendCodeFn = Future<bool> Function(String phone);
+typedef VerifyCodeFn =
+    Future<User> Function({required String phone, required String code});
+
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key, this.title});
+  const AuthScreen({
+    super.key,
+    this.title,
+    this.sendCode = AuthService.sendOtp,
+    this.verifyCode = AuthService.verifyOtp,
+  });
   final String? title;
+
+  /// Seams for tests; production always uses [AuthService].
+  final SendCodeFn sendCode;
+  final VerifyCodeFn verifyCode;
 
   @override
   State<AuthScreen> createState() => AuthScreenState();
@@ -63,6 +79,15 @@ class AuthScreenState extends State<AuthScreen> {
   /// back to the device store when the account has none recorded yet.
   List<String> _interests = const [];
   bool _codeSent = false;
+
+  /// The server refused the current code for good (locked or expired). Only a
+  /// freshly sent code can move on; the old one must never be posted again.
+  bool _needsNewCode = false;
+
+  /// A rate limit told us to wait. [PhoneTab] counts it down; the token makes
+  /// two identical waits in a row distinguishable.
+  int? _holdSeconds;
+  int _holdToken = 0;
   String? _errorMessage;
   String? _successMessage;
 
@@ -160,6 +185,7 @@ class AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _handleGoogleSignIn() async {
+    Telemetry.instance.track('sign_in_started', {'method': 'google'});
     setState(() {
       _isGoogleLoading = true;
       _clearMessages();
@@ -172,12 +198,23 @@ class AuthScreenState extends State<AuthScreen> {
       // Null now means one thing only: the player closed the chooser. That is a
       // choice, not a failure, so the screen says nothing and simply stops.
       // Anything actually broken arrives as a GoogleSignInFailure instead.
-      if (idToken == null || idToken.isEmpty) return;
+      if (idToken == null || idToken.isEmpty) {
+        Telemetry.instance.track('sign_in_failed', {
+          'method': 'google',
+          'reason': 'cancelled',
+        });
+        return;
+      }
       final user = await AuthService.loginWithGoogle(idToken);
+      _signedIn('google');
       if (!mounted) return;
       setState(() => _currentUser = user);
       await _routeAfterAuth();
     } catch (e) {
+      Telemetry.instance.track('sign_in_failed', {
+        'method': 'google',
+        'reason': signInFailureReason(e),
+      });
       setState(
         () => _errorMessage = userFacingError(
           e,
@@ -189,7 +226,37 @@ class AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  /// Copy for a sign-in failure. A body carrying a `code` was written for the
+  /// player by the sign-in routes (including their 503), so it is shown as is;
+  /// anything else goes through the usual filter.
+  String _signInError(Object e, String fallback) {
+    if (e is ApiException && e.code != null && e.message.trim().isNotEmpty) {
+      return e.message.trim();
+    }
+    return userFacingError(e, fallback: fallback);
+  }
+
+  /// Starts the wait the server asked for when it rate-limited us.
+  void _holdFor(ApiException e) {
+    _holdSeconds = e.retryAfter != null && e.retryAfter! > 0
+        ? e.retryAfter
+        : 600;
+    _holdToken++;
+  }
+
+  /// The token is stored, so the queue can now be sent under the account: the
+  /// events from before sign-in are linked to it by the server.
+  void _signedIn(String method) {
+    Telemetry.instance
+      ..track('sign_in_completed', {'method': method})
+      ..flush();
+  }
+
   Future<void> _handleSendCode() async {
+    // A resend after the code step is reached is not a second sign-in attempt.
+    if (!_codeSent) {
+      Telemetry.instance.track('sign_in_started', {'method': 'phone'});
+    }
     setState(() {
       _isPhoneLoading = true;
       _clearMessages();
@@ -198,46 +265,71 @@ class AuthScreenState extends State<AuthScreen> {
       final phone = _normalizePhone(
         '${_dialCode.code}${_phoneController.text}',
       );
-      await AuthService.sendOtp(phone);
+      await widget.sendCode(phone);
       if (!mounted) return;
       setState(() {
         _codeSent = true;
+        _needsNewCode = false;
         _successMessage = 'A verification code was sent to $phone';
       });
     } catch (e) {
-      setState(
-        () => _errorMessage = userFacingError(
+      Telemetry.instance.track('sign_in_failed', {
+        'method': 'phone',
+        'reason': signInFailureReason(e),
+      });
+      setState(() {
+        if (e is ApiException && e.code == 'send_limited') _holdFor(e);
+        _errorMessage = _signInError(
           e,
-          fallback: 'Could not send the code. Please try again.',
-        ),
-      );
+          'Could not send the code. Please try again.',
+        );
+      });
     } finally {
       if (mounted) setState(() => _isPhoneLoading = false);
     }
   }
 
+  /// "Send new code" after a locked or expired code: empty the field first so
+  /// the dead code can neither be seen nor resubmitted, then ask for a fresh one.
+  Future<void> _handleSendNewCode() async {
+    _otpController.clear();
+    await _handleSendCode();
+  }
+
   Future<void> _handleVerifyCode() async {
     final code = _otpController.text.trim();
-    if (code.length != 6) return;
+    if (code.length != 6 || _needsNewCode) return;
     setState(() {
       _isPhoneLoading = true;
       _clearMessages();
     });
     try {
-      final user = await AuthService.verifyOtp(
+      final user = await widget.verifyCode(
         phone: _normalizePhone('${_dialCode.code}${_phoneController.text}'),
         code: code,
       );
+      _signedIn('phone');
       if (!mounted) return;
       setState(() => _currentUser = user);
       await _routeAfterAuth();
     } catch (e) {
-      setState(
-        () => _errorMessage = userFacingError(
+      Telemetry.instance.track('sign_in_failed', {
+        'method': 'phone',
+        'reason': signInFailureReason(e),
+      });
+      setState(() {
+        if (e is ApiException) {
+          if (e.code == 'code_locked' || e.code == 'code_expired') {
+            _needsNewCode = true;
+          } else if (e.code == 'verify_limited') {
+            _holdFor(e);
+          }
+        }
+        _errorMessage = _signInError(
           e,
-          fallback: 'Could not verify the code. Please try again.',
-        ),
-      );
+          'Could not verify the code. Please try again.',
+        );
+      });
     } finally {
       if (mounted) setState(() => _isPhoneLoading = false);
     }
@@ -247,6 +339,7 @@ class AuthScreenState extends State<AuthScreen> {
   void _handleEditPhone() {
     setState(() {
       _codeSent = false;
+      _needsNewCode = false;
       _otpController.clear();
       _clearMessages();
     });
@@ -728,8 +821,8 @@ class AuthScreenState extends State<AuthScreen> {
                 ),
                 subtitle: Text(
                   _isUpdatingPreferences
-                       ? 'Updating...'
-                       : 'Needed before a world with mature themes will open.',
+                      ? 'Updating...'
+                      : 'Needed before a world with mature themes will open.',
                   style: const TextStyle(
                     color: EverloreTheme.ash,
                     fontSize: 12,
@@ -829,6 +922,10 @@ class AuthScreenState extends State<AuthScreen> {
           onSendCode: _handleSendCode,
           onVerifyCode: _handleVerifyCode,
           onEditPhone: _handleEditPhone,
+          needsNewCode: _needsNewCode,
+          onSendNewCode: _handleSendNewCode,
+          holdSeconds: _holdSeconds,
+          holdToken: _holdToken,
         ),
 
         const SizedBox(height: 28),
@@ -903,6 +1000,10 @@ class PhoneTab extends StatefulWidget {
     required this.onSendCode,
     required this.onVerifyCode,
     required this.onEditPhone,
+    this.needsNewCode = false,
+    this.onSendNewCode,
+    this.holdSeconds,
+    this.holdToken = 0,
   });
 
   final TextEditingController phoneController;
@@ -915,6 +1016,14 @@ class PhoneTab extends StatefulWidget {
   final Future<void> Function() onVerifyCode;
   final VoidCallback onEditPhone;
 
+  /// The code on screen is spent; show "Send new code" instead of verify.
+  final bool needsNewCode;
+  final Future<void> Function()? onSendNewCode;
+
+  /// A rate limit's wait in seconds, applied whenever [holdToken] changes.
+  final int? holdSeconds;
+  final int holdToken;
+
   @override
   State<PhoneTab> createState() => PhoneTabState();
 }
@@ -923,6 +1032,10 @@ class PhoneTabState extends State<PhoneTab> {
   static const int _resendSeconds = 30;
   Timer? _timer;
   int _cooldown = 0;
+
+  /// The current countdown is a server-imposed wait, not the routine resend
+  /// delay: it also disables the first "Send the Code" button.
+  bool _holding = false;
   final FocusNode _phoneFocus = FocusNode();
 
   @override
@@ -936,6 +1049,13 @@ class PhoneTabState extends State<PhoneTab> {
   void didUpdateWidget(PhoneTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.codeSent && !oldWidget.codeSent) _startCooldown();
+    // A fresh code replaced the spent one: the resend delay starts over.
+    if (oldWidget.needsNewCode && !widget.needsNewCode && widget.codeSent) {
+      _startCooldown();
+    }
+    if (widget.holdToken != oldWidget.holdToken && widget.holdSeconds != null) {
+      _startCooldown(widget.holdSeconds!, true);
+    }
     if (widget.otpController != oldWidget.otpController) {
       oldWidget.otpController.removeListener(_onOtpChanged);
       widget.otpController.addListener(_onOtpChanged);
@@ -954,17 +1074,25 @@ class PhoneTabState extends State<PhoneTab> {
     if (mounted) setState(() {});
   }
 
-  void _startCooldown() {
+  void _startCooldown([int seconds = _resendSeconds, bool hold = false]) {
     _timer?.cancel();
-    setState(() => _cooldown = _resendSeconds);
+    setState(() {
+      _cooldown = seconds;
+      _holding = hold;
+    });
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
       setState(() {
         _cooldown--;
-        if (_cooldown <= 0) t.cancel();
+        if (_cooldown <= 0) {
+          _holding = false;
+          t.cancel();
+        }
       });
     });
   }
+
+  String _clock(int s) => '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
 
   Future<void> _resend() async {
     _startCooldown(); // optimistic — blocks spamming even if the call 429s
@@ -1020,9 +1148,15 @@ class PhoneTabState extends State<PhoneTab> {
               ),
               const SizedBox(height: 14),
               NeuButton(
-                label: widget.isLoading ? 'Sending the code…' : 'Send the Code',
+                label: widget.isLoading
+                    ? 'Sending the code…'
+                    : (_holding && _cooldown > 0)
+                    ? 'Try again in ${_clock(_cooldown)}'
+                    : 'Send the Code',
                 loading: widget.isLoading,
-                onTap: widget.isLoading ? null : widget.onSendCode,
+                onTap: (widget.isLoading || (_holding && _cooldown > 0))
+                    ? null
+                    : widget.onSendCode,
               ),
             ],
           ),
@@ -1088,47 +1222,68 @@ class PhoneTabState extends State<PhoneTab> {
                 autofocus: true,
                 scrollPadding: const EdgeInsets.symmetric(horizontal: 24),
                 onCompleted: () {
-                  if (!widget.isLoading) widget.onVerifyCode();
+                  // A spent code is never posted again, however it is typed.
+                  if (!widget.isLoading && !widget.needsNewCode) {
+                    widget.onVerifyCode();
+                  }
                 },
               ),
               const SizedBox(height: 18),
-              NeuButton(
-                label: widget.isLoading ? 'Verifying…' : 'Enter the Realm',
-                accent: EverloreTheme.aether,
-                loading: widget.isLoading,
-                onTap: (widget.isLoading || !hasValidOtp)
-                    ? null
-                    : widget.onVerifyCode,
-              ),
+              if (widget.needsNewCode)
+                NeuButton(
+                  label: widget.isLoading
+                      ? 'Sending the code…'
+                      : (_holding && _cooldown > 0)
+                      ? 'Try again in ${_clock(_cooldown)}'
+                      : 'Send new code',
+                  loading: widget.isLoading,
+                  onTap:
+                      (widget.isLoading ||
+                          (_holding && _cooldown > 0) ||
+                          widget.onSendNewCode == null)
+                      ? null
+                      : widget.onSendNewCode,
+                )
+              else
+                NeuButton(
+                  label: widget.isLoading ? 'Verifying…' : 'Enter the Realm',
+                  accent: EverloreTheme.aether,
+                  loading: widget.isLoading,
+                  onTap: (widget.isLoading || !hasValidOtp)
+                      ? null
+                      : widget.onVerifyCode,
+                ),
             ],
           ),
         ),
         const SizedBox(height: 14),
-        // Resend, with a cooldown countdown.
-        Center(
-          child: _cooldown > 0
-              ? Text(
-                  'Resend code in 0:${_cooldown.toString().padLeft(2, '0')}',
-                  style: TextStyle(
-                    fontFamily: EverloreTheme.uiFamily,
-                    color: EverloreTheme.ash,
-                    fontSize: 13,
-                  ),
-                )
-              : GestureDetector(
-                  onTap: widget.isLoading ? null : _resend,
-                  behavior: HitTestBehavior.opaque,
-                  child: Text(
-                    'Resend code',
+        // Resend, with a cooldown countdown. The spent-code state has its own
+        // prominent button above, so the small link steps aside.
+        if (!widget.needsNewCode)
+          Center(
+            child: _cooldown > 0
+                ? Text(
+                    'Resend code in ${_clock(_cooldown)}',
                     style: TextStyle(
                       fontFamily: EverloreTheme.uiFamily,
-                      color: EverloreTheme.gold,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                      color: EverloreTheme.ash,
+                      fontSize: 13,
+                    ),
+                  )
+                : GestureDetector(
+                    onTap: widget.isLoading ? null : _resend,
+                    behavior: HitTestBehavior.opaque,
+                    child: Text(
+                      'Resend code',
+                      style: TextStyle(
+                        fontFamily: EverloreTheme.uiFamily,
+                        color: EverloreTheme.gold,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-        ),
+          ),
       ],
     );
   }
