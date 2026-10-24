@@ -40,6 +40,11 @@ class WsManager {
   final _choicesReadyController =
       StreamController<Map<String, dynamic>>.broadcast();
 
+  /// The server accepted a send and names its turn (`jobId`). Every later frame
+  /// of that turn carries the same id, which is how two overlapping turns of one
+  /// save are told apart.
+  final _ackController = StreamController<Map<String, dynamic>>.broadcast();
+
   /// A turn hit a transient failure and is being retried — the stream is still
   /// coming. Lets the UI keep the loader up (with a hint) instead of a dead end.
   final _generationRetryingController =
@@ -92,6 +97,7 @@ class WsManager {
       _generationStreamEndController.stream;
   Stream<Map<String, dynamic>> get onChoicesReady =>
       _choicesReadyController.stream;
+  Stream<Map<String, dynamic>> get onAck => _ackController.stream;
   Stream<Map<String, dynamic>> get onGenerationRetrying =>
       _generationRetryingController.stream;
   Stream<Map<String, dynamic>> get onGenerationReset =>
@@ -314,8 +320,10 @@ class WsManager {
       case 'account_deleted':
         _accountDeletedController.add(null);
         break;
-      case 'pong':
       case 'ack':
+        _ackController.add(msg);
+        break;
+      case 'pong':
         break;
       default:
         // Unknown / future frame — don't silently swallow it; surface for
@@ -449,6 +457,7 @@ class WsManager {
     _generationCompleteController.close();
     _generationStreamEndController.close();
     _choicesReadyController.close();
+    _ackController.close();
     _generationRetryingController.close();
     _generationResetController.close();
     _memoriesCuratedController.close();

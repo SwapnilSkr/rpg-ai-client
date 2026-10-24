@@ -50,6 +50,9 @@ class MockWsManager extends Fake implements WsManager {
   @override
   Stream<Map<String, dynamic>> get onGenerationStreamEnd => const Stream.empty();
   @override
+  Stream<Map<String, dynamic>> get onAck => const Stream.empty();
+
+  @override
   Stream<Map<String, dynamic>> get onChoicesReady => const Stream.empty();
   @override
   Stream<Map<String, dynamic>> get onGenerationRetrying => const Stream.empty();

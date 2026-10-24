@@ -45,6 +45,9 @@ class _TestWsManager extends Fake implements WsManager {
   @override
   Stream<Map<String, dynamic>> get onGenerationStreamEnd => _emptyCtrl.stream;
   @override
+  Stream<Map<String, dynamic>> get onAck => const Stream.empty();
+
+  @override
   Stream<Map<String, dynamic>> get onChoicesReady => _emptyCtrl.stream;
   @override
   Stream<Map<String, dynamic>> get onGenerationRetrying => _emptyCtrl.stream;

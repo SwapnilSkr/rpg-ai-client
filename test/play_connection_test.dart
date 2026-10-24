@@ -53,6 +53,9 @@ class MockableWsManager extends Fake implements WsManager {
       const Stream.empty();
 
   @override
+  Stream<Map<String, dynamic>> get onAck => const Stream.empty();
+
+  @override
   Stream<Map<String, dynamic>> get onChoicesReady =>
       const Stream.empty();
 

@@ -116,6 +116,11 @@ class PlayState extends Equatable {
   /// not fire into that held line, and the composer hint should say so.
   final bool hasQueuedSend;
 
+  /// The in-flight turn's prose has ended and the server names its turns, so
+  /// the next send, continue or travel can go now instead of waiting for this
+  /// turn's bookkeeping. The server holds the next turn until this one is saved.
+  final bool nextTurnReady;
+
   /// One-shot composer restore when a held next line cannot be dispatched
   /// because the in-flight turn failed. The play screen copies this into the
   /// field and the next successful send clears it.
@@ -192,6 +197,7 @@ class PlayState extends Equatable {
     this.narrativeStreaming = false,
     this.choicesPreview = false,
     this.hasQueuedSend = false,
+    this.nextTurnReady = false,
     this.restoreComposerText,
     this.isConnected = false,
     this.isLoading = true,
@@ -228,6 +234,7 @@ class PlayState extends Equatable {
     bool? narrativeStreaming,
     bool? choicesPreview,
     bool? hasQueuedSend,
+    bool? nextTurnReady,
     Object? restoreComposerText = _kUnset,
     bool? isConnected,
     bool? isLoading,
@@ -263,6 +270,7 @@ class PlayState extends Equatable {
       narrativeStreaming: narrativeStreaming ?? this.narrativeStreaming,
       choicesPreview: choicesPreview ?? this.choicesPreview,
       hasQueuedSend: hasQueuedSend ?? this.hasQueuedSend,
+      nextTurnReady: nextTurnReady ?? this.nextTurnReady,
       restoreComposerText: identical(restoreComposerText, _kUnset)
           ? this.restoreComposerText
           : restoreComposerText as String?,
@@ -323,6 +331,7 @@ class PlayState extends Equatable {
     narrativeStreaming,
     choicesPreview,
     hasQueuedSend,
+    nextTurnReady,
     restoreComposerText,
     isConnected,
     isLoading,
@@ -355,9 +364,12 @@ class PlayState extends Equatable {
       isRewinding || replayingEventId != null || narrativeStreaming;
 
   /// Continue, travel, and other world mutations wait until the in-flight
-  /// turn is persisted. A queued chat send is not a world action.
+  /// turn is persisted, unless [nextTurnReady] lets them follow its prose.
+  /// A queued chat send is not a world action.
   bool get worldActionsLocked =>
-      isRewinding || replayingEventId != null || isGenerating;
+      isRewinding ||
+      replayingEventId != null ||
+      (isGenerating && !(nextTurnReady && !narrativeStreaming));
 }
 
 class PlayCubit extends Cubit<PlayState> {
@@ -368,6 +380,7 @@ class PlayCubit extends Cubit<PlayState> {
   late StreamSubscription _deltaSub;
   late StreamSubscription _streamEndSub;
   late StreamSubscription _choicesReadySub;
+  late StreamSubscription _ackSub;
   late StreamSubscription _retryingSub;
   late StreamSubscription _generationResetSub;
   late StreamSubscription _memorySub;
@@ -421,6 +434,31 @@ class PlayCubit extends Cubit<PlayState> {
   /// catches up to the target it can clear [PlayState.narrativeStreaming] — the
   /// story is done even though [isGenerating] stays up for the rest of the turn.
   bool _proseStreamEnded = false;
+
+  /// Turn ids from the server (`jobId`). [_activeJobId] names the turn the
+  /// stream state above belongs to; it is null until that send's `ack` lands.
+  String? _activeJobId;
+  bool _awaitingAck = false;
+  bool _abandonNextAck = false;
+
+  /// The active turn's own frames carry its id, so a next turn may overlap it.
+  /// An older server never sets this, which keeps the post-prose hold.
+  bool _activeTurnTagged = false;
+
+  /// The active turn's prose has ended (unlike [_proseStreamEnded], not reset
+  /// when the reveal finishes painting).
+  bool _activeProseEnded = false;
+
+  /// Turn N after the player moved on: its prose is on screen, its bubble is
+  /// no longer the optimistic one, and only its completion or failure is still
+  /// to come. At most one turn settles behind the active one.
+  String? _settlingJobId;
+  String? _settlingEventId;
+  Timer? _settlingWatchdog;
+  static const _settlingTimeout = Duration(seconds: 90);
+
+  /// Turns whose remaining frames no longer belong on screen.
+  final Set<String> _abandonedJobIds = {};
 
   /// In-progress streaming replay of an existing turn.
   String? _replayEventId;
@@ -547,6 +585,9 @@ class PlayCubit extends Cubit<PlayState> {
           events[i] = events[i].copyWith(spokenLines: held);
         }
       }
+      // The snapshot replaces every bubble. A settling turn that was not saved
+      // yet still lands through its own completion, matched by its server id.
+      _settlingEventId = null;
       final memories =
           (data['memories'] as List?)
               ?.map((e) => Memory.fromJson(e))
@@ -636,7 +677,7 @@ class PlayCubit extends Cubit<PlayState> {
     // and reveal them on a short cadence so large network frames do not snap
     // abruptly into the narrator panel.
     _deltaSub = _ws.onGenerationDelta.listen((msg) {
-      if (msg['instanceId']?.toString() != instanceId) return;
+      if (_ownerOf(msg) != _FrameOwner.active) return;
       _armGenerationWatchdog(_generationQuietTimeout);
       // Tokens are flowing again — drop any "retrying" notice.
       if (state.notice != null && !state.hasQueuedSend) {
@@ -666,7 +707,7 @@ class PlayCubit extends Cubit<PlayState> {
     // a cold retrieval path, so give the otherwise-empty optimistic bubble an
     // accurate status instead of making it look stalled.
     _generationStartedSub = _ws.onGenerationStarted.listen((msg) {
-      if (msg['instanceId']?.toString() != instanceId) return;
+      if (_ownerOf(msg) != _FrameOwner.active) return;
       if (!state.isGenerating || state.replayingEventId != null) return;
       emit(state.copyWith(notice: 'Gathering the scene…'));
     });
@@ -674,7 +715,7 @@ class PlayCubit extends Cubit<PlayState> {
     // A turn hit a transient failure and is being retried server-side. Keep the
     // loader up and tell the player it's still coming, rather than a dead stream.
     _retryingSub = _ws.onGenerationRetrying.listen((msg) {
-      if (msg['instanceId']?.toString() != instanceId) return;
+      if (_ownerOf(msg) != _FrameOwner.active) return;
       if (!state.isGenerating) return;
       _armGenerationWatchdog(_generationQuietTimeout);
       emit(state.copyWith(notice: 'The world stumbled — trying again…'));
@@ -686,8 +727,11 @@ class PlayCubit extends Cubit<PlayState> {
     // Once replacement text arrives, [_deltaSub] swaps it atomically. This is
     // a recovery state, not a second canonical story turn.
     _generationResetSub = _ws.onGenerationReset.listen((msg) {
-      if (msg['instanceId']?.toString() != instanceId) return;
+      // A settling turn's reset needs nothing on screen: its chips are already
+      // gone, and its completion (or failure) still decides the bubble.
+      if (_ownerOf(msg) != _FrameOwner.active) return;
       if (!state.isGenerating || state.replayingEventId != null) return;
+      _activeProseEnded = false;
 
       final events = [...state.events];
       final idx = events.lastIndexWhere((event) => event.isOptimistic);
@@ -710,6 +754,7 @@ class PlayCubit extends Cubit<PlayState> {
           events: events,
           narrativeStreaming: true,
           choicesPreview: false,
+          nextTurnReady: false,
           notice: visibleNarrative.trim().isEmpty
               ? 'The world stumbled — trying again…'
               : 'Reconnecting this scene…',
@@ -719,7 +764,7 @@ class PlayCubit extends Cubit<PlayState> {
     });
 
     _streamEndSub = _ws.onGenerationStreamEnd.listen((msg) {
-      if (msg['instanceId']?.toString() != instanceId) return;
+      if (_ownerOf(msg) != _FrameOwner.active) return;
       final narrative = msg['narrative']?.toString();
       if (narrative != null) {
         // The server may have removed only a provider's unfinished trailing
@@ -738,8 +783,23 @@ class PlayCubit extends Cubit<PlayState> {
       // remaining buffered text. Continue/travel stay locked via isGenerating
       // until generation_complete.
       _proseStreamEnded = true;
+      _activeProseEnded = true;
       _armGenerationWatchdog(_generationFinalizationTimeout);
+      _refreshNextTurnReady();
       _startGenerationReveal();
+    });
+
+    _ackSub = _ws.onAck.listen((msg) {
+      final jobId = msg['jobId']?.toString();
+      if (jobId == null || jobId.isEmpty || !_awaitingAck) return;
+      _awaitingAck = false;
+      if (_abandonNextAck) {
+        _abandonNextAck = false;
+        _abandonedJobIds.add(jobId);
+        return;
+      }
+      _activeJobId = jobId;
+      _refreshNextTurnReady();
     });
 
     // The narrator's choices arrive ahead of generation_complete. Attach them to
@@ -747,7 +807,8 @@ class PlayCubit extends Cubit<PlayState> {
     // instead of after the post-prose bookkeeping. generation_complete will later
     // replace the event with the final (audited) choices.
     _choicesReadySub = _ws.onChoicesReady.listen((msg) {
-      if (msg['instanceId']?.toString() != instanceId) return;
+      // A settling turn's chips stay off: the player has already moved on.
+      if (_ownerOf(msg) != _FrameOwner.active) return;
       // A held next line already dismissed these chips; don't bring them back.
       if (state.hasQueuedSend) return;
       final choices = Choice.listFromAny(msg['choices']);
@@ -760,76 +821,24 @@ class PlayCubit extends Cubit<PlayState> {
     });
 
     _generationSub = _ws.onGenerationComplete.listen((msg) {
-      if (msg['instanceId']?.toString() != instanceId) return;
+      final owner = _ownerOf(msg);
+      if (owner == _FrameOwner.settling) {
+        _completeSettlingTurn(msg);
+        return;
+      }
+      if (owner != _FrameOwner.active) return;
 
       final eventData = msg['event'] as Map<String, dynamic>;
       final narrative = eventData['narrative']?.toString() ?? _streamTarget;
       _finishGenerationReveal(narrative);
       final events = [...state.events];
       final idx = events.lastIndexWhere((e) => e.isOptimistic);
-      // Structured world actions have no player-authored chat bubble. Prefer
-      // the server's persisted field even when it is intentionally empty;
-      // older servers omit it, in which case the optimistic input remains the
-      // backwards-compatible fallback.
-      final playerInput = eventData.containsKey('player_input')
-          ? eventData['player_input']?.toString()
-          : idx >= 0
-          ? events[idx].playerInput
-          : null;
-
-      final eventId = (eventData['id'] ?? '').toString();
-      final payloadLines = SpokenLine.listFromAny(
-        eventData['spoken_lines'] ?? msg['spoken_lines'],
+      final finalEvent = _finalEventFrom(
+        msg,
+        narrative: narrative,
+        bubble: idx >= 0 ? events[idx] : null,
       );
-      final heldLines = _takeHeldSpokenLines(eventId);
-      final spokenLines = payloadLines.isNotEmpty
-          ? payloadLines
-          : (heldLines ?? const <SpokenLine>[]);
-
-      // Finalize the streamed turn as one event (player input + AI response),
-      // matching how the server persists and reloads turns.
-      final finalEvent = GameEvent(
-        id: eventId,
-        instanceId: instanceId,
-        sequence: eventData['sequence'] ?? 0,
-        type: eventData['event_type']?.toString() ?? 'narration',
-        playerInput: playerInput,
-        aiResponse: narrative,
-        sceneTag: eventData['scene_tag'],
-        emotionalTone: eventData['emotional_tone'],
-        modelUsed: eventData['model_used']?.toString() ?? '',
-        createdAt: DateTime.now(),
-        choices: Choice.listFromAny(eventData['choices']),
-        milestone: eventData['milestone']?.toString(),
-        timeAdvanced: eventData['time_advanced']?.toString(),
-        fateThread: eventData['fate_thread']?.toString(),
-        presentCharacters: GameEvent.presentFromAny(
-          eventData['present_characters'],
-        ),
-        presenceKnown: eventData.containsKey('present_characters'),
-        trackableMentions: TrackableMention.listFromAny(
-          eventData['trackable_mentions'],
-        ),
-        spokenLines: spokenLines,
-      );
-
-      // Stat deltas vs the pre-turn state — drives HUD pulses + delta chips.
-      Map<String, num>? statDeltas;
-      final stateDiff = eventData['state_diff'];
-      if (stateDiff is Map &&
-          stateDiff['world_state'] is Map &&
-          state.instance != null) {
-        final old = state.instance!.worldState;
-        final next = Map<String, dynamic>.from(stateDiff['world_state'] as Map);
-        final deltas = <String, num>{};
-        next.forEach((key, value) {
-          final nv = value is num ? value : num.tryParse(value.toString());
-          if (nv == null) return;
-          final ov = old[key];
-          if (ov != null && nv != ov) deltas[key] = nv - ov;
-        });
-        if (deltas.isNotEmpty) statDeltas = deltas;
-      }
+      final statDeltas = _statDeltasFrom(eventData);
 
       if (idx >= 0) {
         events[idx] = finalEvent;
@@ -847,6 +856,8 @@ class PlayCubit extends Cubit<PlayState> {
           ? finalEvent.sequence
           : state.totalEvents;
 
+      _activeJobId = null;
+      _activeProseEnded = false;
       emit(
         state.copyWith(
           events: trimmedEvents,
@@ -854,6 +865,7 @@ class PlayCubit extends Cubit<PlayState> {
           narrativeStreaming: false,
           choicesPreview: false,
           hasQueuedSend: false,
+          nextTurnReady: false,
           notice: null,
           instance: state.instance?.applyStateDiff(eventData['state_diff']),
           totalEvents: nextTotalEvents,
@@ -989,6 +1001,19 @@ class PlayCubit extends Cubit<PlayState> {
     });
 
     _errorSub = _ws.onError.listen((msg) {
+      // Only a turn's own failure frame names its turn; direct socket errors
+      // (no id) answer the latest send, as before.
+      final failedJobId = msg['jobId']?.toString();
+      if (failedJobId != null && failedJobId.isNotEmpty) {
+        final owner = _ownerOf(msg);
+        if (owner == _FrameOwner.none) return;
+        if (owner == _FrameOwner.settling) {
+          unawaited(_rating.recordSetback());
+          unawaited(_refreshInk());
+          _failSettlingTurn(msg);
+          return;
+        }
+      }
       unawaited(_rating.recordSetback());
       // Reservations are released on failed turns; refresh the header so it
       // reflects the settled/refunded ledger immediately.
@@ -1448,9 +1473,10 @@ class PlayCubit extends Cubit<PlayState> {
     // Prose is still appearing — the composer is locked, so this is a no-op
     // rather than a silent queue.
     if (state.narrativeStreaming) return;
-    // The narrator's words are on screen but the turn has not persisted.
-    // Hold this line locally; do not start the next generation job.
-    if (state.isGenerating) {
+    // The narrator's words are on screen but the turn has not persisted. Send
+    // now when the server can hold the next turn for it; otherwise hold this
+    // line locally and do not start the next generation job.
+    if (state.isGenerating && !_canOverlapNextTurn()) {
       _holdSendUntilTurnSettles(message);
       return;
     }
@@ -1458,7 +1484,13 @@ class PlayCubit extends Cubit<PlayState> {
     // Lock in any variant the player browsed to before this turn is generated,
     // so the world weaves forward from the prose they actually chose.
     await _flushPendingVariant();
+    // The in-flight turn may have retried while that settled.
+    if (state.isGenerating && !_canOverlapNextTurn()) {
+      _holdSendUntilTurnSettles(message);
+      return;
+    }
 
+    final priorEvents = _beginTurn();
     _streamBuffer = '';
     _streamTarget = '';
     _awaitingRetryReplacement = false;
@@ -1471,11 +1503,12 @@ class PlayCubit extends Cubit<PlayState> {
 
     emit(
       state.copyWith(
-        events: _trimEvents([...state.events, optimisticEvent]),
+        events: _trimEvents([...priorEvents, optimisticEvent]),
         isGenerating: true,
         narrativeStreaming: true,
         choicesPreview: false,
         hasQueuedSend: false,
+        nextTurnReady: false,
         restoreComposerText: null,
         hasOlderEvents:
             state.hasOlderEvents || state.events.length >= _activeEventLimit,
@@ -1509,10 +1542,12 @@ class PlayCubit extends Cubit<PlayState> {
   /// [advance] turns the quiet continue into a time skip (calendar tick):
   /// 'hours' | 'day' | 'days' | 'season'.
   Future<void> continueStory({String? advance}) async {
-    if (state.isGenerating || state.replayingEventId != null) return;
+    if (state.worldActionsLocked) return;
 
     await _flushPendingVariant();
+    if (state.worldActionsLocked) return;
 
+    final priorEvents = _beginTurn();
     _streamBuffer = '';
     _streamTarget = '';
     _awaitingRetryReplacement = false;
@@ -1525,10 +1560,11 @@ class PlayCubit extends Cubit<PlayState> {
 
     emit(
       state.copyWith(
-        events: _trimEvents([...state.events, optimisticEvent]),
+        events: _trimEvents([...priorEvents, optimisticEvent]),
         isGenerating: true,
         narrativeStreaming: true,
         choicesPreview: false,
+        nextTurnReady: false,
         hasOlderEvents:
             state.hasOlderEvents || state.events.length >= _activeEventLimit,
         error: null,
@@ -1586,8 +1622,10 @@ class PlayCubit extends Cubit<PlayState> {
     required String optimisticInput,
     required Map<String, dynamic> payload,
   }) async {
-    if (state.isGenerating || state.replayingEventId != null) return;
+    if (state.worldActionsLocked) return;
     await _flushPendingVariant();
+    if (state.worldActionsLocked) return;
+    final priorEvents = _beginTurn();
     _streamBuffer = '';
     _streamTarget = '';
     _awaitingRetryReplacement = false;
@@ -1599,10 +1637,11 @@ class PlayCubit extends Cubit<PlayState> {
     );
     emit(
       state.copyWith(
-        events: _trimEvents([...state.events, optimisticEvent]),
+        events: _trimEvents([...priorEvents, optimisticEvent]),
         isGenerating: true,
         narrativeStreaming: true,
         choicesPreview: false,
+        nextTurnReady: false,
         hasOlderEvents:
             state.hasOlderEvents || state.events.length >= _activeEventLimit,
         error: null,
@@ -2112,6 +2151,251 @@ class PlayCubit extends Cubit<PlayState> {
   /// Hold a player line until the in-flight turn persists. Does not start a
   /// generation job, does not add a second optimistic bubble, and does not
   /// poll — [generation_complete] dispatches it.
+  /// Which turn a frame belongs to. A frame without `jobId` (an older server)
+  /// is the active turn's, as it always was. Before the active send's `ack`
+  /// lands, any id that is not the settling turn's is taken as the active one:
+  /// only one new turn is ever outstanding.
+  _FrameOwner _ownerOf(Map<String, dynamic> msg) {
+    if (msg['instanceId']?.toString() != instanceId) return _FrameOwner.none;
+    final jobId = msg['jobId']?.toString();
+    if (jobId == null || jobId.isEmpty) return _FrameOwner.active;
+    if (_abandonedJobIds.contains(jobId)) return _FrameOwner.none;
+    if (jobId == _settlingJobId) return _FrameOwner.settling;
+    if (_activeJobId != null && jobId != _activeJobId) return _FrameOwner.none;
+    _activeTurnTagged = true;
+    return _FrameOwner.active;
+  }
+
+  /// The next turn may start now: the active turn's prose has fully ended, the
+  /// server names this turn's frames, and no other turn is still settling.
+  bool _canOverlapNextTurn() =>
+      state.isGenerating &&
+      !state.narrativeStreaming &&
+      !state.isRewinding &&
+      state.replayingEventId == null &&
+      _activeProseEnded &&
+      _activeTurnTagged &&
+      _activeJobId != null &&
+      _settlingJobId == null;
+
+  void _refreshNextTurnReady() {
+    final ready =
+        state.isGenerating &&
+        _activeProseEnded &&
+        _activeTurnTagged &&
+        _activeJobId != null &&
+        _settlingJobId == null;
+    if (ready != state.nextTurnReady) emit(state.copyWith(nextTurnReady: ready));
+  }
+
+  /// Starts tracking a new send and returns the events to append its bubble
+  /// to. When the current turn is still settling after its prose, its bubble
+  /// stops being the optimistic one (so every path that drives "the" in-flight
+  /// bubble now drives the new one) and its chips go, as the player moved on.
+  List<GameEvent> _beginTurn() {
+    final events = [...state.events];
+    if (_canOverlapNextTurn()) {
+      final idx = events.lastIndexWhere((e) => e.isOptimistic);
+      if (idx >= 0) {
+        _settlingEventId = events[idx].id;
+        events[idx] = events[idx].copyWith(
+          isOptimistic: false,
+          choices: const [],
+        );
+      }
+      _settlingJobId = _activeJobId;
+      _settlingWatchdog?.cancel();
+      // Its completion normally lands within seconds. If it never does, a
+      // fresh snapshot is the truth.
+      _settlingWatchdog = Timer(_settlingTimeout, () {
+        if (_settlingJobId == null || isClosed) return;
+        _abandonedJobIds.add(_settlingJobId!);
+        _settlingJobId = null;
+        _settlingEventId = null;
+        _ws.loadInstance(instanceId);
+      });
+    }
+    _activeJobId = null;
+    _awaitingAck = true;
+    _abandonNextAck = false;
+    _activeTurnTagged = false;
+    _activeProseEnded = false;
+    return events;
+  }
+
+  void _clearSettlingTurn() {
+    _settlingWatchdog?.cancel();
+    _settlingWatchdog = null;
+    _settlingJobId = null;
+    _settlingEventId = null;
+  }
+
+  /// The settling turn was saved: put the final event in its bubble's place
+  /// (or, after a snapshot replaced the bubbles, by its server id) without
+  /// touching the active turn's loader, stream or timers.
+  void _completeSettlingTurn(Map<String, dynamic> msg) {
+    final eventData = msg['event'] as Map<String, dynamic>;
+    final eventId = (eventData['id'] ?? '').toString();
+    final events = [...state.events];
+    var idx = _settlingEventId == null
+        ? -1
+        : events.indexWhere((e) => e.id == _settlingEventId);
+    if (idx < 0 && eventId.isNotEmpty) {
+      idx = events.indexWhere((e) => e.id == eventId);
+    }
+    final bubble = idx >= 0 ? events[idx] : null;
+    final narrative =
+        eventData['narrative']?.toString() ?? bubble?.aiResponse ?? '';
+    final finalEvent = _finalEventFrom(msg, narrative: narrative, bubble: bubble);
+    if (idx >= 0) {
+      events[idx] = finalEvent;
+    } else {
+      // Not on screen at all: it belongs just before the active turn's bubble.
+      final activeIdx = events.lastIndexWhere((e) => e.isOptimistic);
+      events.insert(activeIdx >= 0 ? activeIdx : events.length, finalEvent);
+    }
+    _clearSettlingTurn();
+    LocalDb.insertEvent(_stripTempMedia(finalEvent)).ignore();
+    final trimmedEvents = _trimEvents(events);
+    final nextTotalEvents = finalEvent.sequence > state.totalEvents
+        ? finalEvent.sequence
+        : state.totalEvents;
+    emit(
+      state.copyWith(
+        events: trimmedEvents,
+        instance: state.instance?.applyStateDiff(eventData['state_diff']),
+        totalEvents: nextTotalEvents,
+        hasOlderEvents:
+            state.hasOlderEvents || nextTotalEvents > trimmedEvents.length,
+        lastStatDeltas: _statDeltasFrom(eventData),
+      ),
+    );
+    unawaited(_rating.recordSuccessfulTurn());
+    unawaited(_refreshInk());
+  }
+
+  /// The settling turn failed after its prose. It was never saved, so the next
+  /// turn (which the server holds behind it) fails too and never streams. Show
+  /// the settling prose as the provisional draft with a one-tap retry, and
+  /// hand the player's next line back to the composer instead of losing it.
+  void _failSettlingTurn(Map<String, dynamic> msg) {
+    final events = [...state.events];
+    final idx = _settlingEventId == null
+        ? -1
+        : events.indexWhere((e) => e.id == _settlingEventId);
+    final failedInput = idx >= 0 ? events[idx].playerInput : null;
+    final nextIdx = events.lastIndexWhere((e) => e.isOptimistic);
+    final nextInput = nextIdx >= 0 ? events[nextIdx].playerInput : null;
+    if (nextIdx >= 0) events.removeAt(nextIdx);
+    if (idx >= 0) {
+      events[idx] = events[idx].copyWith(isOptimistic: true, choices: const []);
+    }
+    _abandonedJobIds.add(_settlingJobId!);
+    if (_activeJobId != null) {
+      _abandonedJobIds.add(_activeJobId!);
+    } else if (_awaitingAck) {
+      _abandonNextAck = true;
+    }
+    _clearSettlingTurn();
+    _activeJobId = null;
+    _activeProseEnded = false;
+    _streamBuffer = '';
+    _streamTarget = '';
+    _awaitingRetryReplacement = false;
+    _clearGenerationTimers();
+    final queued = _takeQueuedSend();
+    emit(
+      state.copyWith(
+        events: events,
+        isGenerating: false,
+        narrativeStreaming: false,
+        choicesPreview: false,
+        nextTurnReady: false,
+        notice: null,
+        error: playerErrorMessage(
+          msg,
+          'This scene could not be saved. Please try again.',
+        ),
+        canRetry: !isAuthoredSocketError(msg),
+        lastFailedInput: failedInput,
+        hasQueuedSend: false,
+        restoreComposerText: (nextInput != null && nextInput.trim().isNotEmpty)
+            ? nextInput
+            : queued,
+      ),
+    );
+  }
+
+  /// One finished turn as the server persisted it (player input + response).
+  GameEvent _finalEventFrom(
+    Map<String, dynamic> msg, {
+    required String narrative,
+    GameEvent? bubble,
+  }) {
+    final eventData = msg['event'] as Map<String, dynamic>;
+    // Structured world actions have no player-authored chat bubble. Prefer
+    // the server's persisted field even when it is intentionally empty;
+    // older servers omit it, in which case the optimistic input remains the
+    // backwards-compatible fallback.
+    final playerInput = eventData.containsKey('player_input')
+        ? eventData['player_input']?.toString()
+        : bubble?.playerInput;
+
+    final eventId = (eventData['id'] ?? '').toString();
+    final payloadLines = SpokenLine.listFromAny(
+      eventData['spoken_lines'] ?? msg['spoken_lines'],
+    );
+    final heldLines = _takeHeldSpokenLines(eventId);
+    final spokenLines = payloadLines.isNotEmpty
+        ? payloadLines
+        : (heldLines ?? const <SpokenLine>[]);
+
+    return GameEvent(
+      id: eventId,
+      instanceId: instanceId,
+      sequence: eventData['sequence'] ?? 0,
+      type: eventData['event_type']?.toString() ?? 'narration',
+      playerInput: playerInput,
+      aiResponse: narrative,
+      sceneTag: eventData['scene_tag'],
+      emotionalTone: eventData['emotional_tone'],
+      modelUsed: eventData['model_used']?.toString() ?? '',
+      createdAt: DateTime.now(),
+      choices: Choice.listFromAny(eventData['choices']),
+      milestone: eventData['milestone']?.toString(),
+      timeAdvanced: eventData['time_advanced']?.toString(),
+      fateThread: eventData['fate_thread']?.toString(),
+      presentCharacters: GameEvent.presentFromAny(
+        eventData['present_characters'],
+      ),
+      presenceKnown: eventData.containsKey('present_characters'),
+      trackableMentions: TrackableMention.listFromAny(
+        eventData['trackable_mentions'],
+      ),
+      spokenLines: spokenLines,
+    );
+  }
+
+  /// Stat deltas vs the pre-turn state — drives HUD pulses + delta chips.
+  Map<String, num>? _statDeltasFrom(Map<String, dynamic> eventData) {
+    final stateDiff = eventData['state_diff'];
+    if (stateDiff is! Map ||
+        stateDiff['world_state'] is! Map ||
+        state.instance == null) {
+      return null;
+    }
+    final old = state.instance!.worldState;
+    final next = Map<String, dynamic>.from(stateDiff['world_state'] as Map);
+    final deltas = <String, num>{};
+    next.forEach((key, value) {
+      final nv = value is num ? value : num.tryParse(value.toString());
+      if (nv == null) return;
+      final ov = old[key];
+      if (ov != null && nv != ov) deltas[key] = nv - ov;
+    });
+    return deltas.isEmpty ? null : deltas;
+  }
+
   void _holdSendUntilTurnSettles(String message) {
     final next = message.trim();
     if (next.isEmpty) return;
@@ -2364,7 +2648,9 @@ class PlayCubit extends Cubit<PlayState> {
     _reconciliationTimer?.cancel();
     _reconciliationTimer = null;
     _clearGenerationTimers();
+    _settlingWatchdog?.cancel();
     _replayRevealTimer?.cancel();
+    await _ackSub.cancel();
     await _generationSub.cancel();
     await _generationStartedSub.cancel();
     await _deltaSub.cancel();
@@ -2634,3 +2920,6 @@ class PlayCubit extends Cubit<PlayState> {
     );
   }
 }
+
+/// Which turn a socket frame belongs to while two can overlap.
+enum _FrameOwner { active, settling, none }
