@@ -21,6 +21,9 @@ import '../../media/models/turn_media.dart';
 import '../../media/data/media_repository.dart';
 import '../../media/services/audio_playback_controller.dart';
 import '../../../shared/widgets/everlore_notice.dart';
+import '../../../core/telemetry/reasons.dart';
+import '../../../core/telemetry/telemetry.dart';
+import '../../../core/telemetry/telemetry_vocabulary.dart';
 
 /// Socket error codes whose `message` was written for a player to read.
 ///
@@ -557,6 +560,9 @@ class PlayCubit extends Cubit<PlayState> {
     return memories.sublist(memories.length - _activeMemoryLimit);
   }
 
+  /// `story_opened` once per visit, not on every reconnect snapshot.
+  bool _openTracked = false;
+
   void _init() {
     audioController.addListener(_onAudioChanged);
     _loadCachedEvents();
@@ -632,6 +638,13 @@ class PlayCubit extends Cubit<PlayState> {
         ),
       );
       unawaited(_refreshInk());
+      if (!_openTracked) {
+        _openTracked = true;
+        final worldId = template?.id;
+        Telemetry.instance.track('story_opened', {
+          if (isWorldId(worldId)) 'world_id': worldId,
+        });
+      }
       if (rewindSnapshotReady) _rewindRequestCompleted = false;
       _loadingOlderEvents = false;
 
@@ -1008,12 +1021,14 @@ class PlayCubit extends Cubit<PlayState> {
         final owner = _ownerOf(msg);
         if (owner == _FrameOwner.none) return;
         if (owner == _FrameOwner.settling) {
+          _trackTurnFailed(msg);
           unawaited(_rating.recordSetback());
           unawaited(_refreshInk());
           _failSettlingTurn(msg);
           return;
         }
       }
+      _trackTurnFailed(msg);
       unawaited(_rating.recordSetback());
       // Reservations are released on failed turns; refresh the header so it
       // reflects the settled/refunded ledger immediately.
@@ -1463,6 +1478,11 @@ class PlayCubit extends Cubit<PlayState> {
     } catch (_) {}
   }
 
+  void _trackTurnFailed(Map<String, dynamic> frame) {
+    final reason = turnFailureReason(frame);
+    if (reason != null) Telemetry.instance.track('turn_failed', {'reason': reason});
+  }
+
   Future<void> sendMessage(String message) async {
     if (message.trim().isEmpty) return;
     if (state.isRewinding) {
@@ -1521,6 +1541,9 @@ class PlayCubit extends Cubit<PlayState> {
     );
 
     _armGenerationWatchdog(_generationFirstTokenTimeout);
+    // A tapped choice lands in the composer first and is sent from there, so
+    // it is indistinguishable from a typed line at this point.
+    Telemetry.instance.track('turn_sent', {'input': 'typed'});
     _ws.sendChatMessage(instanceId, message);
   }
 
@@ -1573,6 +1596,7 @@ class PlayCubit extends Cubit<PlayState> {
     );
 
     _armGenerationWatchdog(_generationFirstTokenTimeout);
+    Telemetry.instance.track('turn_sent', {'input': 'continue'});
     _ws.sendContinue(instanceId, advance: advance);
   }
 

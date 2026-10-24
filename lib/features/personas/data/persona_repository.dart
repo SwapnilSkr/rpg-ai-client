@@ -1,4 +1,5 @@
 import '../../../core/auth/auth_service.dart';
+import '../../../core/telemetry/telemetry.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/models/persona.dart';
 
@@ -96,6 +97,7 @@ class PersonaRepository {
     );
     _cacheEpoch = AuthService.sessionEpoch.value;
     _cache = null;
+    Telemetry.instance.track('persona_created');
     return Persona.fromJson(Map<String, dynamic>.from(response['persona']));
   }
 

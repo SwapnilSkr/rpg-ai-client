@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_review/in_app_review.dart';
+import '../telemetry/telemetry.dart';
 import 'rating_prompt_policy.dart';
 import 'rating_prompt_store.dart';
 
@@ -99,6 +100,7 @@ class RatingPrompt {
 
       if (available) {
         debugPrint('[rating] Requesting in-app review...');
+        Telemetry.instance.track('review_prompt_shown');
         await _client.requestReview();
         nextState = nextState.copyWith(requested: true);
         await _store.write(nextState);

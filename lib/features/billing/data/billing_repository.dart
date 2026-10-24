@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../../core/telemetry/telemetry.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
 import '../../../core/network/api_client.dart';
@@ -174,6 +175,7 @@ class BillingRepository {
 
   Future<void> buy(ProductDetails product) async {
     final param = PurchaseParam(productDetails: product);
+    Telemetry.instance.track('purchase_started', {'product': product.id});
     final started = _subscriptionIds.contains(product.id)
         ? await _play.buyNonConsumable(purchaseParam: param)
         : await _play.buyConsumable(purchaseParam: param, autoConsume: false);
@@ -211,6 +213,9 @@ class BillingRepository {
           );
           _walletChanges.add(await _walletWithCatalog(response));
           verifiedAndGranted = true;
+          Telemetry.instance.track('purchase_completed', {
+            'product': purchase.productID,
+          });
         }
       } catch (error) {
         _errors.add(

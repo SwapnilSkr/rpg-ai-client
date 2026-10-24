@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/models/world_template.dart';
+import '../../../core/telemetry/telemetry.dart';
+import '../../../core/telemetry/telemetry_vocabulary.dart';
 import '../data/template_repository.dart';
 import '../../home/presentation/realm_entry_flow.dart';
 import '../../../../app/theme/nexus_theme.dart';
@@ -40,6 +42,9 @@ class _TemplateDetailScreenState extends State<TemplateDetailScreen> {
   @override
   void initState() {
     super.initState();
+    if (isWorldId(widget.templateId)) {
+      Telemetry.instance.track('world_viewed', {'world_id': widget.templateId});
+    }
     _load();
     _loadViewer();
   }

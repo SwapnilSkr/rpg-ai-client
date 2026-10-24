@@ -2,6 +2,8 @@ import 'dart:async';
 
 import '../../../core/auth/auth_service.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/telemetry/telemetry.dart';
+import '../../../core/telemetry/telemetry_vocabulary.dart';
 import '../../../shared/models/realm_play_status.dart';
 import '../../../shared/models/world_instance.dart';
 import '../domain/realm_group.dart';
@@ -200,6 +202,20 @@ class HomeRepository {
     );
     final instance = response['instance'];
     final created = WorldInstance.fromJson(instance);
+    final template = created.template;
+    final kind = template == null
+        ? null
+        : template['kind'] == 'character'
+        ? 'character'
+        : template['is_sentient'] == true
+        ? 'sentient'
+        : 'gm';
+    if (isWorldId(templateId)) {
+      Telemetry.instance.track('world_started', {
+        'world_id': templateId,
+        if (kind != null) 'kind': kind,
+      });
+    }
     invalidate(templateId: templateId);
     _realmChanges.add(RealmChange.created(created));
     return created;

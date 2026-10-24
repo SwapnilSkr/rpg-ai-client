@@ -13,9 +13,16 @@ import 'core/network/ws_manager.dart';
 import 'core/auth/auth_service.dart';
 import 'core/guide/guide_controller.dart';
 import 'core/guide/widgets/guide_host.dart';
+import 'core/telemetry/route_name.dart';
+import 'core/telemetry/telemetry.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Started first and awaited just before runApp: its disk and device reads
+  // overlap the startup work below instead of adding to the first frame, and
+  // the error handlers still exist before the app runs. It never throws: a
+  // failure just leaves telemetry off for the run.
+  final telemetryReady = Telemetry.instance.init();
   // Draw behind the status and navigation bars, explicitly and on every
   // Android version. From Android 15 the system does this anyway for apps
   // targeting SDK 35+, so declaring it is what makes the layout the same
@@ -48,6 +55,14 @@ Future<void> main() async {
   // Warm the device-cached guide record before the first frame so an arc can
   // never flash in a beat late; the account's copy folds in at splash.
   await guide.init();
+  // Debug-only way to see an uncaught error arrive in the console:
+  // `--dart-define=TELEMETRY_TEST_ERROR=true`. Folds away in release.
+  if (kDebugMode && const bool.fromEnvironment('TELEMETRY_TEST_ERROR')) {
+    Future<void>.delayed(const Duration(seconds: 8), () {
+      throw StateError('Telemetry test error');
+    });
+  }
+  await telemetryReady;
   runApp(const EverloreApp());
 }
 
@@ -99,7 +114,12 @@ class _EverloreAppState extends State<EverloreApp> {
     });
   }
 
-  void _onRouteChanged() => guide.onLocationChanged(_currentLocation());
+  void _onRouteChanged() {
+    guide.onLocationChanged(_currentLocation());
+    // The route's declared name, never the path with ids in it.
+    final screen = routeNameOf(router.routerDelegate.currentConfiguration);
+    if (screen != null) Telemetry.instance.screen(screen);
+  }
 
   /// Where the player actually is, pushed routes included.
   ///

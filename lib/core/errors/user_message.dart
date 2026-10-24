@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../network/api_client.dart';
+import '../telemetry/telemetry.dart';
 
 /// Turns any thrown object into something a player can read.
 ///
@@ -43,6 +44,28 @@ bool isConnectivityError(Object error) {
 const String connectivityMessage =
     'Could not reach Everlore. Check your connection and try again.';
 
+/// Counts the failure a player is about to be shown. Sends the kind of error
+/// and the HTTP status, never the text: an ApiException's message is written
+/// for the player and may echo what they typed.
+void _report(Object error) {
+  if (error is ApiException) {
+    Telemetry.instance.recordHandled(
+      error,
+      stack: StackTrace.current,
+      httpStatus: error.statusCode,
+      message: 'HTTP ${error.statusCode}',
+    );
+  } else if (isConnectivityError(error)) {
+    Telemetry.instance.recordHandled(
+      error,
+      stack: StackTrace.current,
+      message: 'Connection failed',
+    );
+  } else {
+    Telemetry.instance.recordHandled(error, stack: StackTrace.current);
+  }
+}
+
 /// The player-facing text for [error], or [fallback] when the failure has
 /// nothing a player could act on.
 ///
@@ -50,6 +73,8 @@ const String connectivityMessage =
 /// ("Could not send the code.") rather than the language of the transport.
 String userFacingError(Object? error, {required String fallback}) {
   if (error == null) return fallback;
+
+  _report(error);
 
   if (error is ApiException) {
     final message = error.message.trim();

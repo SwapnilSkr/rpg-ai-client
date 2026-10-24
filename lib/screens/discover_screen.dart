@@ -8,6 +8,8 @@ import '../app/theme/nexus_theme.dart';
 import '../core/auth/auth_service.dart';
 import '../core/errors/user_message.dart';
 import '../core/guide/guide_anchor.dart';
+import '../core/telemetry/telemetry.dart';
+import '../core/telemetry/telemetry_vocabulary.dart';
 import '../core/guide/guide_flows.dart';
 import '../core/guide/guide_ids.dart';
 import '../core/guide/guide_trigger.dart';
@@ -259,6 +261,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       _tab = i;
       _filtersByTab[i] = cleaned;
     });
+    _trackFiltered();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final key = _tabKeys[i];
       if (key?.currentContext != null) {
@@ -273,7 +276,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     _load();
   }
 
+  /// Genre tab or filter applied. The label is the server's own genre name,
+  /// never anything the player typed; the "All" tab has none.
+  void _trackFiltered() {
+    final label = _tab > 0 && _tab - 1 < _genres.length
+        ? _genres[_tab - 1].label
+        : null;
+    Telemetry.instance.track('explore_filtered', {
+      if (isGenreLabel(label)) 'genre': label,
+    });
+  }
+
   Future<void> _openFilterSheet() async {
+    Telemetry.instance.track('sheet_opened', {'sheet': 'filters'});
     final current = _currentFilter;
     final availableCounts = _styleCountsForTab(_tab);
     final next = await showExploreFilterSheet(
@@ -285,6 +300,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       setState(() {
         _filtersByTab[_tab] = next;
       });
+      _trackFiltered();
       _load();
     }
   }

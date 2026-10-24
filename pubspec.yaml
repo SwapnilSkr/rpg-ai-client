@@ -57,6 +57,8 @@ dependencies:
   firebase_auth: ^6.6.1
   just_audio: ^0.10.6
   video_player: ^2.14.1
+  package_info_plus: ^10.2.2
+  device_info_plus: ^13.3.0
 
 dev_dependencies:
   flutter_test:

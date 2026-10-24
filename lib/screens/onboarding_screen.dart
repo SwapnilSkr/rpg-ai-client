@@ -5,6 +5,7 @@ import '../app/theme/nexus_theme.dart';
 import '../core/auth/auth_service.dart';
 import '../core/errors/user_message.dart';
 import '../core/onboarding/interests_store.dart';
+import '../core/telemetry/telemetry.dart';
 import '../shared/models/user.dart';
 import '../shared/widgets/keyboard_aware_scroll.dart';
 import '../shared/widgets/player_avatar.dart';
@@ -133,11 +134,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       return;
     }
     await InterestsStore.markOnboarded();
+    Telemetry.instance.track('onboarding_completed', {'interests_count': 0});
     if (!mounted) return;
     context.go('/discover');
   }
 
-  void _onInterestsComplete() {
+  Future<void> _onInterestsComplete() async {
+    // The step saved the picks just before calling back; count them, send
+    // only the number.
+    final picked = await InterestsStore.getInterests();
+    Telemetry.instance.track('onboarding_completed', {
+      'interests_count': picked.length,
+    });
     if (!mounted) return;
     context.go('/discover');
   }

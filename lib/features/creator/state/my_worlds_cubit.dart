@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../core/telemetry/telemetry.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../shared/models/world_template.dart';
@@ -167,6 +168,9 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
     _ignoreRepoSignals++;
     try {
       await _publishFn(templateId, visibility: visibility);
+      if (visibility == 'private' || visibility == 'public') {
+        Telemetry.instance.track('world_published', {'visibility': visibility});
+      }
       await load(search: _search, forceRefresh: true);
       final done = Set<String>.from(state.publishingIds)..remove(templateId);
       emit(state.copyWith(publishingIds: done));

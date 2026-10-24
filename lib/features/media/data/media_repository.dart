@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/config/env.dart';
 import '../../../core/storage/secure_storage.dart';
+import '../../../core/telemetry/telemetry.dart';
 import '../models/media_usage.dart';
 
 class MediaUnvoiceableException implements Exception {
@@ -130,6 +131,7 @@ class MediaRepository {
     required String eventId,
     required String lineId,
   }) async {
+    Telemetry.instance.track('media_requested', {'kind': 'voice'});
     final uri = Uri.parse(
       '$baseUrl/instances/$instanceId/events/$eventId/lines/$lineId/voice',
     );
@@ -209,6 +211,7 @@ class MediaRepository {
     return _postMediaRequest(
       '/instances/$instanceId/characters/$characterId/portrait',
       restingKind: 'picture',
+      askedFor: 'portrait',
       failure: 'Failed to repaint portrait',
     );
   }
@@ -232,7 +235,13 @@ class MediaRepository {
     String path, {
     required String restingKind,
     required String failure,
+    String? askedFor,
   }) async {
+    // [askedFor] names what the player asked for when that differs from
+    // whose daily allowance it spends (a repainted portrait spends pictures).
+    Telemetry.instance.track('media_requested', {
+      'kind': askedFor ?? (restingKind == 'video' ? 'film' : restingKind),
+    });
     final uri = Uri.parse('$baseUrl$path');
     final response = await _client.post(uri, headers: await _headers());
 
