@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../config/env.dart';
+import '../telemetry/telemetry.dart';
+import '../telemetry/telemetry_vocabulary.dart';
 import 'guide_anchor.dart';
 import 'guide_beat.dart';
 import 'guide_flows.dart';
@@ -717,7 +719,24 @@ class GuideController extends ChangeNotifier {
     if (flow != null) {
       // Arc boundary — this is where the debounced server write is spent.
       _record(flow, step: step, status: status, flush: true);
+      _trackArc(flow, status);
     }
+  }
+
+  /// `guide_arc` for an arc that ended by being finished or waved off. A
+  /// `seen` ending (the surface went away mid-arc) is neither, so it is not
+  /// reported. Arcs outside the §3.1 list (the play and chronicle sub-arcs)
+  /// are not reported; `home.empty` is the home arc's empty-shelf variant.
+  void _trackArc(GuideFlow flow, GuideStatus status) {
+    final outcome = switch (status) {
+      GuideStatus.done => 'completed',
+      GuideStatus.skipped => 'skipped',
+      _ => null,
+    };
+    if (outcome == null) return;
+    final arc = flow.id == 'home.empty' ? 'home' : flow.id;
+    if (!guideArcValues.contains(arc)) return;
+    Telemetry.instance.track('guide_arc', {'arc': arc, 'outcome': outcome});
   }
 
   /// Update the in-memory record synchronously, then persist in the background.

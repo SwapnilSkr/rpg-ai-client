@@ -191,6 +191,7 @@ class MyWorldsCubit extends Cubit<MyWorldsState> {
     _ignoreRepoSignals++;
     try {
       await _deleteFn(templateId);
+      Telemetry.instance.track('library_action', {'action': 'world_deleted'});
       emit(
         state.copyWith(
           worlds: state.worlds.where((w) => w.id != templateId).toList(),

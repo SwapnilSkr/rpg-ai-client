@@ -53,7 +53,12 @@ class Telemetry with WidgetsBindingObserver {
        _startTimers = startTimers,
        _installHandlers = installHandlers;
 
-  static final Telemetry instance = Telemetry();
+  static Telemetry instance = Telemetry();
+
+  /// Tests point the app-wide handle at a rig with a fake transport, so the
+  /// call sites in cubits and screens can be asserted on without a network.
+  @visibleForTesting
+  static void replaceInstance(Telemetry telemetry) => instance = telemetry;
 
   static const String _enabledKey = 'enabled';
   static const String _installKey = 'install_id';
@@ -169,6 +174,9 @@ class Telemetry with WidgetsBindingObserver {
       _write(_item('event', body, at), nextSeq: _seq);
     } catch (_) {}
   }
+
+  /// `sheet_opened`. One line at each place a sheet is shown.
+  void sheet(String name) => track('sheet_opened', {'sheet': name});
 
   /// The player moved to [name] (a route name). Emits the previous screen's
   /// `screen_view`.

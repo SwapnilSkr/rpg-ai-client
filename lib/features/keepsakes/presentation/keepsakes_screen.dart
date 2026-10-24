@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/telemetry/telemetry.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -276,6 +277,7 @@ class _KeepsakesViewState extends State<_KeepsakesView> {
             item: item,
             isAutoplayEnabled: !reducedMotion,
             onTap: () {
+              Telemetry.instance.track('keepsakes_action', {'action': 'opened'});
               KeepsakesViewerScreen.show(
                 context,
                 items: items,
@@ -351,7 +353,8 @@ class _KeepsakesViewState extends State<_KeepsakesView> {
                 return KeepsakeGridTile(
                   item: item,
                   onTap: () {
-                    KeepsakesViewerScreen.show(
+                    Telemetry.instance.track('keepsakes_action', {'action': 'opened'});
+              KeepsakesViewerScreen.show(
                       context,
                       items: items,
                       initialIndex: index,

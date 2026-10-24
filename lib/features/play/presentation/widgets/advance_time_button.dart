@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/telemetry/telemetry.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../../app/theme/nexus_theme.dart';
@@ -33,6 +34,7 @@ class AdvanceTimeButton extends StatelessWidget {
 
   void _showTimeSheet(BuildContext context) {
     HapticFeedback.mediumImpact();
+    Telemetry.instance.sheet('advance_time');
     showModalBottomSheet(
       useRootNavigator: true,
       context: context,

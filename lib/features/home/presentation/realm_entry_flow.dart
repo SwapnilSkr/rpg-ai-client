@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/telemetry/telemetry.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
@@ -115,6 +116,7 @@ Future<_PersonaStartChoice?> _chooseSentientPersona(
     // library cannot be reached.
   }
   if (!context.mounted) return null;
+  Telemetry.instance.sheet('story_intro');
   return showModalBottomSheet<_PersonaStartChoice>(
       useRootNavigator: true,
     context: context,
@@ -332,6 +334,7 @@ Future<RealmEntryResult?> showRealmContinueSheet(
   required String worldTitle,
   required RealmPlayStatus status,
 }) {
+  Telemetry.instance.sheet('story_intro');
   return showModalBottomSheet<RealmEntryResult>(
       useRootNavigator: true,
     context: context,

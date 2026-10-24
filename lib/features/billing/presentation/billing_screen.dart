@@ -7,16 +7,30 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../shared/models/user.dart';
 import '../../../core/auth/auth_service.dart';
+import '../../../core/telemetry/telemetry.dart';
+import '../../../core/telemetry/telemetry_vocabulary.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/ink_mark.dart';
 import '../data/billing_repository.dart';
 import '../../../shared/widgets/everlore_notice.dart';
 
+/// `paywall_shown` with where the screen was opened from (the route's
+/// `source` query). A missing or unknown source is left out, not guessed.
+void trackPaywallShown(String? source) {
+  Telemetry.instance.track('paywall_shown', {
+    if (source != null && paywallSources.contains(source)) 'source': source,
+  });
+}
+
 class BillingScreen extends StatefulWidget {
   final User? user;
   final BillingWallet? wallet;
 
-  const BillingScreen({super.key, this.user, this.wallet});
+  /// Where the player came from (`ink`, `profile`, `top_bar`, ...), passed
+  /// through the route so `paywall_shown` says what led here.
+  final String? source;
+
+  const BillingScreen({super.key, this.user, this.wallet, this.source});
 
   @override
   State<BillingScreen> createState() => _BillingScreenState();
@@ -35,6 +49,8 @@ class _BillingScreenState extends State<BillingScreen> {
   @override
   void initState() {
     super.initState();
+    // Once per opening of the screen, never on a rebuild.
+    trackPaywallShown(widget.source);
     _user = widget.user;
     if (widget.wallet != null) {
       _wallet = widget.wallet;

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../core/telemetry/telemetry.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/network/ws_manager.dart';
@@ -166,6 +167,7 @@ class ChronicleCubit extends Cubit<ChronicleState> {
     WsManager? ws,
   }) : _ws = ws ?? WsManager(),
        super(ChronicleState(activeTab: initialTab)) {
+    _trackTab(initialTab);
     _projectionSub = _ws.onWorldProjectionUpdated.listen((msg) {
       if (msg['instance_id']?.toString() != instanceId) return;
       final scopes =
@@ -410,6 +412,7 @@ class ChronicleCubit extends Cubit<ChronicleState> {
         type: type,
         importance: importance,
       );
+      _trackAction('memory_edited');
       emit(
         state.copyWith(
           memories: state.memories.map((m) {
@@ -432,6 +435,7 @@ class ChronicleCubit extends Cubit<ChronicleState> {
   Future<void> deleteMemory(String memoryId) async {
     try {
       await ChronicleRepository.deleteMemory(memoryId);
+      _trackAction('memory_deleted');
       emit(
         state.copyWith(
           memories: state.memories.where((m) => m.id != memoryId).toList(),
@@ -457,6 +461,7 @@ class ChronicleCubit extends Cubit<ChronicleState> {
         aiResponse: aiResponse,
         playerInput: playerInput,
       );
+      _trackAction('event_edited');
       await loadEvents(page: state.currentPage);
     } catch (e) {
       emit(
@@ -487,6 +492,7 @@ class ChronicleCubit extends Cubit<ChronicleState> {
   Future<void> setActiveTimeline(String timelineId) async {
     try {
       await ChronicleRepository.setActiveTimeline(instanceId, timelineId);
+      _trackAction('timeline_switched');
       await loadCalendar();
     } catch (e) {
       emit(
@@ -557,7 +563,14 @@ class ChronicleCubit extends Cubit<ChronicleState> {
     }
   }
 
+  void _trackTab(ChronicleTab tab) =>
+      Telemetry.instance.track('chronicle_tab', {'tab': tab.name});
+
+  void _trackAction(String action) =>
+      Telemetry.instance.track('chronicle_action', {'action': action});
+
   void switchTab(ChronicleTab tab) {
+    if (tab != state.activeTab) _trackTab(tab);
     emit(state.copyWith(activeTab: tab));
 
     // A tab marked dirty by a projection update is always re-fetched on view,

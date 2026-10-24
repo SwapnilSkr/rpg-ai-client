@@ -125,7 +125,8 @@ final router = GoRouter(
     GoRoute(
       path: '/membership',
       name: 'membership',
-      builder: (context, state) => const BillingScreen(),
+      builder: (context, state) =>
+          BillingScreen(source: state.uri.queryParameters['source']),
     ),
     GoRoute(
       path: '/blocked-content',

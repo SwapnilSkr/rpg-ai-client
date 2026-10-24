@@ -45,6 +45,52 @@ PropSpec _intRange(int min, int max, {bool required = false}) => PropSpec(
   required: required,
 );
 
+/// The §3.1 sheet list. Confirm dialogs are not sheets: their outcome is an
+/// action event.
+const List<String> sheetValues = [
+  'realm_menu',
+  'protagonist',
+  'filters',
+  'paywall',
+  'chat_menu',
+  'timeline',
+  'thoughts',
+  'bond_actions',
+  'world_actions',
+  'travel',
+  'relationships',
+  'advance_time',
+  'create_chooser',
+  'world_options',
+  'story_options',
+  'keepsake_options',
+  'report',
+  'content_actions',
+  'persona_editor',
+  'interests_editor',
+  'autofill',
+  'publish',
+  'story_intro',
+];
+
+/// First-run guide arc ids, as §3.1 lists them.
+const List<String> guideArcValues = [
+  'arrival',
+  'chronicle',
+  'explore_genres',
+  'home',
+  'ink',
+  'keepsakes',
+  'my_worlds',
+  'personas',
+  'realm',
+  'scene_settings',
+  'world_detail',
+];
+
+/// Where a paywall can be opened from.
+const List<String> paywallSources = ['ink', 'media', 'profile', 'top_bar', 'story'];
+
 final Map<String, Map<String, PropSpec>> telemetryEvents = {
   'first_open': {},
   'session_start': {
@@ -76,19 +122,19 @@ final Map<String, Map<String, PropSpec>> telemetryEvents = {
   },
   'story_opened': {'world_id': _worldId()},
   'turn_sent': {
-    'input': _oneOf(['typed', 'choice', 'continue']),
+    'input': _oneOf(['typed', 'choice', 'choice_edited', 'continue']),
   },
   'turn_failed': {
     'reason': _oneOf(['network', 'ink', 'server', 'rest']),
   },
   'sheet_opened': {
-    'sheet': _oneOf(['realm_menu', 'protagonist', 'filters', 'paywall']),
+    'sheet': _oneOf(sheetValues),
   },
   'explore_filtered': {
     'genre': PropSpec((v) => v is String && _label.hasMatch(v)),
   },
   'paywall_shown': {
-    'source': _oneOf(['ink', 'media', 'profile']),
+    'source': _oneOf(paywallSources),
   },
   'purchase_started': {
     'product': PropSpec((v) => v is String && _productId.hasMatch(v)),
@@ -101,6 +147,106 @@ final Map<String, Map<String, PropSpec>> telemetryEvents = {
   },
   'world_published': {
     'visibility': _oneOf(['private', 'public']),
+  },
+  'story_action': {
+    'action': _oneOf([
+      'retry',
+      'rewind',
+      'edit_reply',
+      'replay_reply',
+      'pick_variant',
+      'reset',
+      'delete',
+      'travel',
+      'relationship_set',
+      'time_advanced',
+      'protagonist_set',
+      'protagonist_reused',
+      'protagonist_skipped',
+      'character_edited',
+      'character_tracked',
+      'relation_resolved',
+      'milestone_cleared',
+      'history_loaded',
+      'voice_played',
+    ], required: true),
+  },
+  'story_settings_changed': {
+    'setting': _oneOf([
+      'pov',
+      'mode',
+      'length',
+      'voice',
+      'tone',
+      'focus',
+      'persona',
+    ], required: true),
+  },
+  'chronicle_tab': {
+    'tab': _oneOf([
+      'recap',
+      'timeline',
+      'memories',
+      'calendar',
+      'places',
+      'bonds',
+      'threads',
+    ], required: true),
+  },
+  'chronicle_action': {
+    'action': _oneOf([
+      'memory_edited',
+      'memory_deleted',
+      'event_edited',
+      'timeline_switched',
+    ], required: true),
+  },
+  'keepsakes_action': {
+    'action': _oneOf([
+      'filtered',
+      'mode_changed',
+      'opened',
+      'removed',
+    ], required: true),
+    'filter': _oneOf(['all', 'pictures', 'films', 'faces']),
+    'mode': _oneOf(['feed', 'grid']),
+  },
+  'library_action': {
+    'action': _oneOf([
+      'story_deleted',
+      'world_deleted',
+      'world_forge_opened',
+      'character_creation_opened',
+    ], required: true),
+    'mode': _oneOf(['new', 'edit']),
+  },
+  'creator_action': {
+    'action': _oneOf([
+      'autofill_used',
+      'character_created',
+      'world_saved',
+    ], required: true),
+  },
+  'report_submitted': {
+    'target': _oneOf([
+      'world',
+      'message',
+      'character',
+      'keepsake',
+      'other',
+    ], required: true),
+  },
+  'account_action': {
+    'action': _oneOf([
+      'signed_out',
+      'account_deleted',
+      'interests_updated',
+    ], required: true),
+    'count': _intRange(0, 200),
+  },
+  'guide_arc': {
+    'arc': _oneOf(guideArcValues, required: true),
+    'outcome': _oneOf(['completed', 'skipped'], required: true),
   },
   'review_prompt_shown': {},
   'analytics_opted_out': {},

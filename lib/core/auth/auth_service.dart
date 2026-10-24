@@ -16,7 +16,24 @@ class AuthService {
 
   static void _bumpSessionEpoch() => sessionEpoch.value++;
 
+  /// Whether the last sign-in created the account. The server adds
+  /// `new_account: true` to the response only when it did.
+  static bool _lastSignInCreatedAccount = false;
+
+  /// Reads the flag once for the sign-in that just finished, so a later
+  /// sign-in cannot inherit it.
+  static bool takeNewAccountFlag() {
+    final value = _lastSignInCreatedAccount;
+    _lastSignInCreatedAccount = false;
+    return value;
+  }
+
+  @visibleForTesting
+  static bool newAccountFrom(Map<String, dynamic> response) =>
+      response['new_account'] == true;
+
   static Future<void> _persistSession(Map<String, dynamic> response) async {
+    _lastSignInCreatedAccount = newAccountFrom(response);
     await SecureStore.saveToken(response['token']);
     await SecureStore.saveUserData(jsonEncode(response['user']));
     await _wsManager.connect(response['token']);

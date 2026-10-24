@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../../core/telemetry/telemetry.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/storage/local_db.dart';
@@ -203,6 +204,7 @@ class HomeCubit extends Cubit<HomeState> {
     );
     try {
       await HomeRepository.deleteInstance(instanceId);
+      Telemetry.instance.track('library_action', {'action': 'story_deleted'});
       await LocalDb.clearInstanceCache(instanceId);
     } catch (e) {
       emit(

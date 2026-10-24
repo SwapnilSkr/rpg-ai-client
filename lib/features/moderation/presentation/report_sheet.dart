@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/telemetry/telemetry.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/widgets/everlore_notice.dart';
@@ -13,6 +14,7 @@ Future<bool> showReportWorldSheet(
   required String worldId,
   required String worldTitle,
 }) async {
+  Telemetry.instance.sheet('report');
   final filed = await showModalBottomSheet<bool>(
       useRootNavigator: true,
     context: context,
@@ -34,6 +36,7 @@ Future<bool> showReportCreatorSheet(
   required String creatorId,
   required String creatorLabel,
 }) async {
+  Telemetry.instance.sheet('report');
   final filed = await showModalBottomSheet<bool>(
       useRootNavigator: true,
     context: context,
@@ -99,6 +102,10 @@ class _ReportSheetState extends State<_ReportSheet> {
         reason: _reason!,
         details: _detailsController.text,
       );
+      // A creator report has no §3.1 target of its own, so it is `other`.
+      Telemetry.instance.track('report_submitted', {
+        'target': widget.targetType == 'world' ? 'world' : 'other',
+      });
       if (!mounted) return;
       Navigator.of(context).pop(true);
       showEverloreNotice(

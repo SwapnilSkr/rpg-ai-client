@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/telemetry/telemetry.dart';
 import '../data/keepsakes_repository.dart';
 import '../models/keepsake_item.dart';
 import 'keepsakes_state.dart';
@@ -70,6 +71,10 @@ class KeepsakesCubit extends Cubit<KeepsakesState> {
 
   Future<void> setFilter(KeepsakesFilter newFilter) async {
     if (state.filter == newFilter) return;
+    Telemetry.instance.track('keepsakes_action', {
+      'action': 'filtered',
+      'filter': newFilter.name,
+    });
 
     final wasOverall = state.hasAnyKeepsakesOverall || state.items.isNotEmpty;
 
@@ -105,6 +110,10 @@ class KeepsakesCubit extends Cubit<KeepsakesState> {
 
   void setMode(KeepsakesViewMode newMode) {
     if (state.mode == newMode) return;
+    Telemetry.instance.track('keepsakes_action', {
+      'action': 'mode_changed',
+      'mode': newMode.name,
+    });
     emit(state.copyWith(mode: newMode));
   }
 
@@ -180,6 +189,7 @@ class KeepsakesCubit extends Cubit<KeepsakesState> {
 
     try {
       await _repository.hideKeepsake(mediaId);
+      Telemetry.instance.track('keepsakes_action', {'action': 'removed'});
     } catch (e) {
       // Revert if hide call failed
       emit(state.copyWith(items: previous, error: e.toString()));

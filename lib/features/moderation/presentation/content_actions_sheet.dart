@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/telemetry/telemetry.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/widgets/everlore_notice.dart';
@@ -21,6 +22,7 @@ Future<ContentActionResult> showContentActionsSheet(
   required String worldTitle,
   required String creatorId,
 }) async {
+  Telemetry.instance.sheet('content_actions');
   final result = await showModalBottomSheet<ContentActionResult>(
     useRootNavigator: true,
     context: context,

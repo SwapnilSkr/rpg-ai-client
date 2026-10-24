@@ -38,6 +38,7 @@ import '../../chronicle/data/chronicle_repository.dart';
 import 'realm_screen.dart';
 import '../../../shared/widgets/everlore_sheet.dart';
 import '../../../shared/text_format.dart';
+import '../../../core/telemetry/telemetry.dart';
 import '../../media/presentation/floating_mini_player.dart';
 import '../../media/presentation/spoken_line_menu.dart';
 
@@ -303,7 +304,7 @@ class _PlayViewState extends State<_PlayView> {
         onRestore: () {
           context.read<PlayCubit>().clearError();
           Navigator.of(dialogContext).pop();
-          context.push('/membership');
+          context.push('/membership?source=ink');
         },
       ),
       transitionBuilder: (context, animation, secondaryAnimation, child) {
@@ -385,6 +386,7 @@ class _PlayViewState extends State<_PlayView> {
     // in it is "elsewhere" — you seek them out rather than turning to thin air.
     final presence = _presentNames(cubit.state);
     final isPresent = _scenePresent(character, presence);
+    Telemetry.instance.sheet('bond_actions');
     showModalBottomSheet<void>(
       useRootNavigator: true,
       context: context,
@@ -730,6 +732,7 @@ class _PlayViewState extends State<_PlayView> {
     }
     if (!mounted || !context.mounted) return;
     _onboardingOpen = true;
+    Telemetry.instance.sheet('protagonist');
     await showModalBottomSheet<void>(
       useRootNavigator: true,
       context: context,
@@ -764,6 +767,7 @@ class _PlayViewState extends State<_PlayView> {
 
   void _showRealmMenu(BuildContext context) {
     var navigatingFromMenu = false;
+    Telemetry.instance.sheet('realm_menu');
     showModalBottomSheet<void>(
       useRootNavigator: true,
       context: context,
@@ -827,6 +831,7 @@ class _PlayViewState extends State<_PlayView> {
       personas = const [];
     }
     if (!mounted || !context.mounted) return;
+    Telemetry.instance.sheet('chat_menu');
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -962,6 +967,7 @@ class _PlayViewState extends State<_PlayView> {
 
   void _showTimelineSheet(BuildContext context) {
     final cubit = context.read<PlayCubit>();
+    Telemetry.instance.sheet('timeline');
     showModalBottomSheet(
       useRootNavigator: true,
       context: context,
@@ -990,6 +996,7 @@ class _PlayViewState extends State<_PlayView> {
 
   void _showThoughtsSheet(BuildContext context) {
     final cubit = context.read<PlayCubit>();
+    Telemetry.instance.sheet('thoughts');
     showModalBottomSheet(
       useRootNavigator: true,
       context: context,
@@ -1158,6 +1165,7 @@ class _PlayViewState extends State<_PlayView> {
               final router = GoRouter.of(context);
               try {
                 await HomeRepository.deleteInstance(instanceId);
+                Telemetry.instance.track('story_action', {'action': 'delete'});
                 await LocalDb.clearInstanceCache(instanceId);
                 router.go('/'); // home route is '/', not '/home'
               } catch (_) {
@@ -1802,6 +1810,9 @@ class _PlayViewState extends State<_PlayView> {
                                             // narration/dialogue before sending it.
                                             onChoose: (choice) {
                                               if (state.hasQueuedSend) return;
+                                              context
+                                                  .read<PlayCubit>()
+                                                  .noteChoiceTapped(choice);
                                               _composerDraft.value = choice;
                                             },
                                           ),

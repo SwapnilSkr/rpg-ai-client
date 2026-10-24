@@ -24,6 +24,7 @@ import '../shared/widgets/interest_picker.dart';
 import '../shared/narrative_styles.dart';
 import '../shared/widgets/everlore_sheet.dart';
 import '../shared/widgets/everlore_notice.dart';
+import 'sharing_switch_row.dart';
 
 typedef SendCodeFn = Future<bool> Function(String phone);
 typedef VerifyCodeFn =
@@ -247,8 +248,13 @@ class AuthScreenState extends State<AuthScreen> {
   /// The token is stored, so the queue can now be sent under the account: the
   /// events from before sign-in are linked to it by the server.
   void _signedIn(String method) {
+    // Absent from the response means an existing account: omit the prop.
+    final created = AuthService.takeNewAccountFlag();
     Telemetry.instance
-      ..track('sign_in_completed', {'method': method})
+      ..track('sign_in_completed', {
+        'method': method,
+        if (created) 'new_account': true,
+      })
       ..flush();
   }
 
@@ -358,6 +364,7 @@ class AuthScreenState extends State<AuthScreen> {
         await _googleAuthService.signOut();
       } catch (_) {}
       await AuthService.logout();
+      Telemetry.instance.track('account_action', {'action': 'signed_out'});
     } catch (_) {
       // UI already shows signed-out state; session clear is best-effort.
     }
@@ -411,6 +418,7 @@ class AuthScreenState extends State<AuthScreen> {
     setState(() => _isDeletingAccount = true);
     try {
       await AuthService.deleteAccount();
+      Telemetry.instance.track('account_action', {'action': 'account_deleted'});
       try {
         await _googleAuthService.signOut();
       } catch (_) {}
@@ -594,6 +602,7 @@ class AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _openInterestsEditor() async {
+    Telemetry.instance.sheet('interests_editor');
     final picked = await showModalBottomSheet<List<String>>(
       context: context,
       isScrollControlled: true,
@@ -615,6 +624,10 @@ class AuthScreenState extends State<AuthScreen> {
     try {
       final updated = await AuthService.updatePreferences({
         'interests': picked,
+      });
+      Telemetry.instance.track('account_action', {
+        'action': 'interests_updated',
+        'count': picked.length.clamp(0, 200),
       });
       if (!mounted) return;
       setState(() {
@@ -780,7 +793,7 @@ class AuthScreenState extends State<AuthScreen> {
           icon: Icons.auto_awesome_rounded,
           primary: false,
           accent: EverloreTheme.gold,
-          onTap: () => context.push('/membership'),
+          onTap: () => context.push('/membership?source=profile'),
         ),
         const SizedBox(height: 16),
 
@@ -829,6 +842,7 @@ class AuthScreenState extends State<AuthScreen> {
                   ),
                 ),
               ),
+              const SharingSwitchRow(),
             ],
           ),
         ),

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../../../core/telemetry/telemetry.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/network/api_client.dart';
@@ -139,7 +140,12 @@ class CreateCharacterState extends Equatable {
 }
 
 class CreateCharacterCubit extends Cubit<CreateCharacterState> {
-  CreateCharacterCubit() : super(const CreateCharacterState());
+  CreateCharacterCubit() : super(const CreateCharacterState()) {
+    Telemetry.instance.track('library_action', {
+      'action': 'character_creation_opened',
+      'mode': 'new',
+    });
+  }
 
   void setName(String v) => emit(state.copyWith(name: v));
   void setTagline(String v) => emit(state.copyWith(tagline: v));
@@ -279,6 +285,7 @@ class CreateCharacterCubit extends Cubit<CreateCharacterState> {
       };
 
       final template = await CreatorRepository.create(payload);
+      Telemetry.instance.track('creator_action', {'action': 'character_created'});
       await CreatorRepository.publish(template.id);
       final instance = await HomeRepository.createInstance(
         template.id,

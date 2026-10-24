@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/telemetry/telemetry.dart';
 import 'package:flutter/services.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/models/character_profile.dart';
@@ -59,6 +60,7 @@ class WorldActionsButton extends StatelessWidget {
     HapticFeedback.mediumImpact();
     var candidatesLoaded = false;
     var candidates = const <RelationCandidate>[];
+    Telemetry.instance.sheet('world_actions');
     showModalBottomSheet<void>(
       useRootNavigator: true,
       context: context,
@@ -638,6 +640,7 @@ class WorldActionsButton extends StatelessWidget {
     var destinationsLoaded = false;
     var knownDestinations = const <String>[];
     final available = _presentTravelCompanions();
+    Telemetry.instance.sheet('travel');
     showModalBottomSheet<void>(
       useRootNavigator: true,
       context: context,
@@ -949,6 +952,7 @@ class WorldActionsButton extends StatelessWidget {
       'fiancee',
       'partner',
     ];
+    Telemetry.instance.sheet('relationships');
     showModalBottomSheet<void>(
       useRootNavigator: true,
       context: context,

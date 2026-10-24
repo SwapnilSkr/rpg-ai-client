@@ -1420,6 +1420,7 @@ class PlayCubit extends Cubit<PlayState> {
           isLoadingOlder: false,
         ),
       );
+      _trackStoryAction('history_loaded');
     } catch (_) {
       // A transient history-page failure must not surface as a story failure;
       // leave the current window intact and allow the next upward scroll to retry.
@@ -1478,9 +1479,29 @@ class PlayCubit extends Cubit<PlayState> {
     } catch (_) {}
   }
 
+  void _trackStoryAction(String action) =>
+      Telemetry.instance.track('story_action', {'action': action});
+
   void _trackTurnFailed(Map<String, dynamic> frame) {
     final reason = turnFailureReason(frame);
     if (reason != null) Telemetry.instance.track('turn_failed', {'reason': reason});
+  }
+
+  /// What the player last tapped from the choice chips. A tap only fills the
+  /// composer, so the cubit learns of it here and compares at send time. Kept
+  /// only on the device: telemetry gets the kind of input, never the text.
+  String? _tappedChoice;
+
+  void noteChoiceTapped(String choiceText) => _tappedChoice = choiceText;
+
+  /// `choice` when the line went out as tapped, `choice_edited` when the
+  /// player changed it first, `typed` when no choice was tapped since the last
+  /// send. Clears the memory so the next send starts fresh.
+  String _takeInputKind(String message) {
+    final tapped = _tappedChoice;
+    _tappedChoice = null;
+    if (tapped == null) return 'typed';
+    return tapped.trim() == message.trim() ? 'choice' : 'choice_edited';
   }
 
   Future<void> sendMessage(String message) async {
@@ -1541,9 +1562,7 @@ class PlayCubit extends Cubit<PlayState> {
     );
 
     _armGenerationWatchdog(_generationFirstTokenTimeout);
-    // A tapped choice lands in the composer first and is sent from there, so
-    // it is indistinguishable from a typed line at this point.
-    Telemetry.instance.track('turn_sent', {'input': 'typed'});
+    Telemetry.instance.track('turn_sent', {'input': _takeInputKind(message)});
     _ws.sendChatMessage(instanceId, message);
   }
 
@@ -1558,6 +1577,7 @@ class PlayCubit extends Cubit<PlayState> {
     // copies of the same player action in the visible timeline.
     final events = state.events.where((event) => !event.isOptimistic).toList();
     emit(state.copyWith(events: events, error: null, lastFailedInput: null, canRetry: false));
+    _trackStoryAction('retry');
     sendMessage(pending);
   }
 
@@ -1597,6 +1617,7 @@ class PlayCubit extends Cubit<PlayState> {
 
     _armGenerationWatchdog(_generationFirstTokenTimeout);
     Telemetry.instance.track('turn_sent', {'input': 'continue'});
+    if (advance != null) _trackStoryAction('time_advanced');
     _ws.sendContinue(instanceId, advance: advance);
   }
 
@@ -1606,18 +1627,21 @@ class PlayCubit extends Cubit<PlayState> {
     required String destination,
     required List<String> companions,
     String? advance,
-  }) => _sendWorldAction(
-    // Travel is a structured world-state command, not a chat line. The route
-    // and destination are represented by the travel event / world_action
-    // payload, while the narrator shows the resulting journey.
-    optimisticInput: '',
-    payload: {
-      'kind': 'travel',
-      'destination': destination,
-      'companions': companions,
-      if (advance != null) 'time_advance': advance,
-    },
-  );
+  }) async {
+    final sent = await _sendWorldAction(
+      // Travel is a structured world-state command, not a chat line. The route
+      // and destination are represented by the travel event / world_action
+      // payload, while the narrator shows the resulting journey.
+      optimisticInput: '',
+      payload: {
+        'kind': 'travel',
+        'destination': destination,
+        'companions': companions,
+        if (advance != null) 'time_advance': advance,
+      },
+    );
+    if (sent) _trackStoryAction('travel');
+  }
 
   /// Confirm or correct a relationship as player-authored canon.
   Future<bool> setRelationship({
@@ -1635,6 +1659,7 @@ class PlayCubit extends Cubit<PlayState> {
         correction: correction,
         replacesRelation: replacesRelation,
       );
+      _trackStoryAction('relationship_set');
       return true;
     } catch (_) {
       emit(state.copyWith(error: 'Could not save the relationship.'));
@@ -1642,13 +1667,15 @@ class PlayCubit extends Cubit<PlayState> {
     }
   }
 
-  Future<void> _sendWorldAction({
+  /// True when the action was handed to the server, false when the story was
+  /// busy and nothing was sent.
+  Future<bool> _sendWorldAction({
     required String optimisticInput,
     required Map<String, dynamic> payload,
   }) async {
-    if (state.worldActionsLocked) return;
+    if (state.worldActionsLocked) return false;
     await _flushPendingVariant();
-    if (state.worldActionsLocked) return;
+    if (state.worldActionsLocked) return false;
     final priorEvents = _beginTurn();
     _streamBuffer = '';
     _streamTarget = '';
@@ -1677,12 +1704,14 @@ class PlayCubit extends Cubit<PlayState> {
     );
     _armGenerationWatchdog(_generationFirstTokenTimeout);
     _ws.sendWorldAction(instanceId, payload);
+    return true;
   }
 
   /// One-shot acknowledgement of the milestone toast.
   void clearMilestone() {
     if (state.lastMilestone != null) {
       emit(state.copyWith(lastMilestone: null));
+      _trackStoryAction('milestone_cleared');
     }
   }
 
@@ -1713,7 +1742,10 @@ class PlayCubit extends Cubit<PlayState> {
     return !state.characters.any((c) => c.isProtagonist);
   }
 
-  void skipProtagonistOnboarding() => _protagonistPrompted = true;
+  void skipProtagonistOnboarding() {
+    _protagonistPrompted = true;
+    _trackStoryAction('protagonist_skipped');
+  }
 
   /// Persist a player edit to a character/protagonist card and reflect it locally.
   Future<bool> editCharacter(
@@ -1729,6 +1761,7 @@ class PlayCubit extends Cubit<PlayState> {
           .map((c) => c.id == characterId ? updated : c)
           .toList();
       emit(state.copyWith(characters: list));
+      _trackStoryAction('character_edited');
       return true;
     } catch (_) {
       emit(state.copyWith(error: 'Could not save character changes.'));
@@ -1753,6 +1786,7 @@ class PlayCubit extends Cubit<PlayState> {
         action: action,
         relation: relation,
       );
+      _trackStoryAction('relation_resolved');
       return true;
     } catch (_) {
       emit(state.copyWith(error: 'Could not update the story detail.'));
@@ -1779,6 +1813,7 @@ class PlayCubit extends Cubit<PlayState> {
         name: trimmed,
         identity: identity,
       );
+      _trackStoryAction('protagonist_set');
     } catch (_) {
       // Best-effort: the card still seeds emergently on the next turn.
     }
@@ -1803,6 +1838,7 @@ class PlayCubit extends Cubit<PlayState> {
         instanceId,
         reuseFromInstanceId: source.sourceInstanceId,
       );
+      _trackStoryAction('protagonist_reused');
       return true;
     } catch (_) {
       emit(
@@ -1854,6 +1890,7 @@ class PlayCubit extends Cubit<PlayState> {
         result.character,
       ];
       emit(state.copyWith(characters: list));
+      _trackStoryAction('character_tracked');
       return true;
     } catch (_) {
       emit(
@@ -1881,6 +1918,32 @@ class PlayCubit extends Cubit<PlayState> {
     bool clearPersona = false,
   }) async {
     final inst = state.instance;
+    // Work out what really changes before the optimistic copy overwrites it.
+    // The settings sheet may resend every field; only a difference counts.
+    final changed = <String>[
+      if (inst != null) ...[
+        if (narrationPov != null && narrationPov != inst.narrationPov) 'pov',
+        if (mode != null && mode != inst.mode) 'mode',
+        if (messageLength != null && messageLength != inst.messageLength)
+          'length',
+        if (clearNarrativeStyleOverride
+            ? inst.narrativeStyleOverride != null
+            : narrativeStyleOverride != null &&
+                  narrativeStyleOverride != inst.narrativeStyleOverride)
+          'voice',
+        if (narrationTone != null && narrationTone != inst.narrationTone)
+          'tone',
+        if (clearFocusCharacter
+            ? inst.focusCharacterId != null
+            : focusCharacterId != null &&
+                  focusCharacterId != inst.focusCharacterId)
+          'focus',
+        if (clearPersona
+            ? inst.personaId != null
+            : personaId != null && personaId != inst.personaId)
+          'persona',
+      ],
+    ];
     if (inst != null) {
       // Apply non-focus fields first, then touch focus ONLY when explicitly
       // clearing or setting it (copyWith's _unset sentinel keeps it otherwise).
@@ -1919,6 +1982,9 @@ class PlayCubit extends Cubit<PlayState> {
         clearNarrativeStyleOverride: clearNarrativeStyleOverride,
         clearPersona: clearPersona,
       );
+      for (final setting in changed) {
+        Telemetry.instance.track('story_settings_changed', {'setting': setting});
+      }
       return true;
     } catch (_) {
       emit(
@@ -1951,6 +2017,7 @@ class PlayCubit extends Cubit<PlayState> {
     try {
       await HomeRepository.resetInstance(instanceId);
       await LocalDb.clearInstanceCache(instanceId);
+      _trackStoryAction('reset');
       _ws.loadInstance(instanceId); // pull the re-seeded opening line + state
     } catch (_) {
       emit(
@@ -1989,6 +2056,7 @@ class PlayCubit extends Cubit<PlayState> {
       await LocalDb.clearInstanceCache(instanceId);
       // Pull the rolled-back state (events, stats, memories) back from the server.
       _rewindRequestCompleted = true;
+      _trackStoryAction('rewind');
       _ws.loadInstance(instanceId);
     } catch (_) {
       _rewindRequestCompleted = false;
@@ -2045,6 +2113,7 @@ class PlayCubit extends Cubit<PlayState> {
         committed[cIdx] = settled;
         emit(state.copyWith(events: committed));
       }
+      _trackStoryAction('edit_reply');
       await LocalDb.insertEvent(_stripTempMedia(settled));
     } catch (_) {
       final reverted = [...state.events];
@@ -2092,6 +2161,7 @@ class PlayCubit extends Cubit<PlayState> {
     );
     _armReplayWatchdog();
     _ws.sendReplay(instanceId, event.id);
+    _trackStoryAction('replay_reply');
   }
 
   /// (Re)start the liveness timer for an in-flight replay.
@@ -2642,6 +2712,7 @@ class PlayCubit extends Cubit<PlayState> {
       );
     }
     emit(state.copyWith(events: next, error: null));
+    _trackStoryAction('pick_variant');
   }
 
   /// Commit a pending variant selection to the backend so the chosen prose
@@ -2752,6 +2823,7 @@ class PlayCubit extends Cubit<PlayState> {
             loadingVoiceLineId: null,
           ),
         );
+        _trackStoryAction('voice_played');
         await audioController.play(
           eventId: eventId,
           lineId: lineId,

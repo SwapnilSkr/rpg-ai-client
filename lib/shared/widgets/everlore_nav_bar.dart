@@ -1,4 +1,5 @@
 import 'dart:ui';
+import '../../core/telemetry/telemetry.dart';
 import '../../core/guide/guide_anchor.dart';
 import '../../core/guide/guide_ids.dart';
 import 'package:flutter/material.dart';
@@ -246,6 +247,7 @@ class _CreateAction extends StatelessWidget {
 /// Bottom sheet to choose what to forge — a World or a Character. Resolves the
 /// old "+ only made characters" gap.
 void showCreateChooser(BuildContext context) {
+  Telemetry.instance.sheet('create_chooser');
   showModalBottomSheet<void>(
     useRootNavigator: true,
     context: context,

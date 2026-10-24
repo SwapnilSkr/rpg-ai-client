@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/telemetry/telemetry.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -47,6 +48,11 @@ class _ForgeWorldScreenState extends State<ForgeWorldScreen> {
   void initState() {
     super.initState();
     _cubit = ForgeWorldCubit(existing: widget.existing);
+    // Once per opening of the forge; a rebuild does not reach initState.
+    Telemetry.instance.track('library_action', {
+      'action': 'world_forge_opened',
+      'mode': widget.existing == null ? 'new' : 'edit',
+    });
     final s = _cubit.state;
     _titleCtrl = TextEditingController(text: s.title);
     _descCtrl = TextEditingController(text: s.description);

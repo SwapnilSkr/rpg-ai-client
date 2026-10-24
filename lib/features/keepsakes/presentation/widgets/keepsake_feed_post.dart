@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/telemetry/telemetry.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 
@@ -189,6 +190,7 @@ class _KeepsakeFeedPostState extends State<KeepsakeFeedPost> {
           IconButton(
             icon: const Icon(Icons.more_horiz_rounded, color: EverloreTheme.ash, size: 20),
             onPressed: () {
+              Telemetry.instance.sheet('keepsake_options');
               showModalBottomSheet<void>(
                 context: context,
                 useRootNavigator: true,

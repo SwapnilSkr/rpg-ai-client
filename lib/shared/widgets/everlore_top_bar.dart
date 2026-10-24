@@ -234,7 +234,7 @@ class _InkBalanceChipState extends State<EverloreInkBalanceChip>
       child: Tooltip(
         message: 'Story Ink · open Membership',
         child: GestureDetector(
-          onTap: () => context.push('/membership'),
+          onTap: () => context.push('/membership?source=top_bar'),
           behavior: HitTestBehavior.opaque,
           // A number, not a button. It carries no fill and no border: three
           // bordered objects in a row is what made this corner read as a

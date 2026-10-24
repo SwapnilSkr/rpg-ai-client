@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../../../core/telemetry/telemetry.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/network/api_client.dart';
@@ -582,6 +583,7 @@ class ForgeWorldCubit extends Cubit<ForgeWorldState> {
       final result = existingId != null
           ? await CreatorRepository.update(existingId!, payload)
           : await CreatorRepository.create(payload);
+      Telemetry.instance.track('creator_action', {'action': 'world_saved'});
       emit(state.copyWith(isSubmitting: false, result: result));
     } catch (e) {
       emit(state.copyWith(isSubmitting: false, error: _friendly(e)));

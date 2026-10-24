@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/telemetry/telemetry.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/models/world_template.dart';
 import '../../../../../shared/widgets/everlore_sheet.dart';
@@ -26,6 +27,7 @@ class PublishWorldSheet extends StatefulWidget {
     String initialVisibility = 'private',
     Future<bool> Function(String visibility)? onPublish,
   }) {
+    Telemetry.instance.sheet('publish');
     return showEverloreSheet<bool>(
       context: context,
       builder: (_) => PublishWorldSheet(

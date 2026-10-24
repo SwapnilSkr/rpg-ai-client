@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../../core/telemetry/telemetry.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/nexus_theme.dart';
@@ -339,6 +340,7 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
     final countBefore = _data?.stories.length ?? 0;
     try {
       await HomeRepository.deleteInstance(instanceId);
+      Telemetry.instance.track('library_action', {'action': 'story_deleted'});
       if (!mounted) return;
       unawaited(_load());
       if (countBefore <= 1) context.pop();
@@ -481,6 +483,7 @@ class _StoryCard extends StatelessWidget {
   }
 
   void _showOptions(BuildContext context) {
+    Telemetry.instance.sheet('story_options');
     showModalBottomSheet(
       useRootNavigator: true,
       context: context,

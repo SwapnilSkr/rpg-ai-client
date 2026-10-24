@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/telemetry/telemetry.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/everlore_sheet.dart';
 
@@ -47,6 +48,7 @@ class AutofillLauncher extends StatelessWidget {
   bool get _isChar => target == 'character';
 
   Future<void> _open(BuildContext context) async {
+    Telemetry.instance.sheet('autofill');
     final brief = await showModalBottomSheet<String>(
       useRootNavigator: true,
       context: context,
@@ -60,7 +62,10 @@ class AutofillLauncher extends StatelessWidget {
         onSetNsfw: onSetNsfw,
       ),
     );
-    if (brief != null) onGenerate(brief);
+    if (brief != null) {
+      Telemetry.instance.track('creator_action', {'action': 'autofill_used'});
+      onGenerate(brief);
+    }
   }
 
   @override

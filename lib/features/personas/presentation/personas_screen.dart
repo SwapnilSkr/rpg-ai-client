@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../core/telemetry/telemetry.dart';
 import '../../../core/guide/guide_anchor.dart';
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_ids.dart';
@@ -125,6 +126,7 @@ class _PersonasScreenState extends State<PersonasScreen> {
   }
 
   Future<void> _openEditor([Persona? persona]) async {
+    Telemetry.instance.sheet('persona_editor');
     final changed = await showModalBottomSheet<bool>(
       useRootNavigator: true,
       context: context,

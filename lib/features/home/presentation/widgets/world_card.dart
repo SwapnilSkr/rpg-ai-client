@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/telemetry/telemetry.dart';
 import '../../../../../shared/models/world_instance.dart';
 import '../../../../../app/theme/nexus_theme.dart';
 import '../../../../../shared/app_icons.dart';
@@ -243,6 +244,7 @@ class WorldCard extends StatelessWidget {
   }
 
   void _showOptions(BuildContext context) {
+    Telemetry.instance.sheet('world_options');
     showModalBottomSheet(
       useRootNavigator: true,
       context: context,
