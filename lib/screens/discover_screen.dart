@@ -13,6 +13,7 @@ import '../core/telemetry/telemetry_vocabulary.dart';
 import '../core/guide/guide_flows.dart';
 import '../core/guide/guide_ids.dart';
 import '../core/guide/guide_trigger.dart';
+import '../features/home/presentation/widgets/continue_story_card.dart';
 import '../features/moderation/data/moderation_repository.dart';
 import '../features/templates/data/genre_repository.dart';
 import '../features/templates/data/interest_ranking.dart';
@@ -59,6 +60,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   final _scrollController = ScrollController();
   final _tabScrollController = ScrollController();
   final _searchController = TextEditingController();
+  final _continueCardKey = GlobalKey<ContinueStoryCardState>();
   final Map<int, GlobalKey> _tabKeys = {};
   Timer? _searchDebounce;
   bool _searchOpen = false;
@@ -141,6 +143,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Future<void> _refreshAll() async {
+    _continueCardKey.currentState?.refresh(forceRefresh: true);
     await _loadGenres(forceRefresh: true);
     await _load(forceRefresh: true);
   }
@@ -476,6 +479,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           )
                         : const SizedBox.shrink(),
                   ),
+                  ContinueStoryCard(key: _continueCardKey),
                   const SizedBox(height: 14),
                   GuideAnchor(id: GuideIds.discoverTabs, child: _buildTabs()),
                   if (_currentFilter.hasActiveFilter) ...[
