@@ -248,6 +248,11 @@ final Map<String, Map<String, PropSpec>> telemetryEvents = {
     'arc': _oneOf(guideArcValues, required: true),
     'outcome': _oneOf(['completed', 'skipped'], required: true),
   },
+  'reminder_prompt': {
+    'answer': _oneOf(['yes', 'not_now', 'granted', 'denied'], required: true),
+    'attempt': _intRange(1, 2, required: true),
+  },
+  'reminder_opened': {'nth': _intRange(1, 3, required: true)},
   'review_prompt_shown': {},
   'analytics_opted_out': {},
 };

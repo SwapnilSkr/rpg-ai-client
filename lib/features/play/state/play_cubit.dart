@@ -6,6 +6,7 @@ import '../../../core/network/ws_manager.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../../../core/storage/local_db.dart';
 import '../../../core/rating/rating_prompt.dart';
+import '../../../core/reminders/reminder_service.dart';
 import '../../chronicle/data/chronicle_repository.dart';
 import '../../home/data/home_repository.dart';
 import '../../../shared/models/event.dart';
@@ -430,6 +431,11 @@ class PlayCubit extends Cubit<PlayState> {
   ///
   /// Newest player intent wins. No invisible chain of actions.
   String? _queuedMessage;
+
+  /// Turns the player sent that have not completed yet. Only a completion that
+  /// pays one back anchors the story reminders, so the opening scene, replays
+  /// and rewinds never move the anchor.
+  int _playerTurnsInFlight = 0;
   static const _reconciliationInterval = Duration(seconds: 3);
 
   /// Set when the server signals the prose is complete (the choices/bookkeeping
@@ -889,6 +895,7 @@ class PlayCubit extends Cubit<PlayState> {
         ),
       );
       unawaited(_rating.recordSuccessfulTurn());
+      _anchorReminders();
       unawaited(_refreshInk());
       _sendQueuedMessage();
     });
@@ -1484,7 +1491,11 @@ class PlayCubit extends Cubit<PlayState> {
 
   void _trackTurnFailed(Map<String, dynamic> frame) {
     final reason = turnFailureReason(frame);
-    if (reason != null) Telemetry.instance.track('turn_failed', {'reason': reason});
+    if (reason == null) return;
+    Telemetry.instance.track('turn_failed', {'reason': reason});
+    // The failed turn will never complete, so it must not leave a debt that a
+    // later travel or replay completion would pay off as a player turn.
+    _playerTurnsInFlight = 0;
   }
 
   /// What the player last tapped from the choice chips. A tap only fills the
@@ -1563,6 +1574,7 @@ class PlayCubit extends Cubit<PlayState> {
 
     _armGenerationWatchdog(_generationFirstTokenTimeout);
     Telemetry.instance.track('turn_sent', {'input': _takeInputKind(message)});
+    _playerTurnsInFlight++;
     _ws.sendChatMessage(instanceId, message);
   }
 
@@ -1617,6 +1629,7 @@ class PlayCubit extends Cubit<PlayState> {
 
     _armGenerationWatchdog(_generationFirstTokenTimeout);
     Telemetry.instance.track('turn_sent', {'input': 'continue'});
+    _playerTurnsInFlight++;
     if (advance != null) _trackStoryAction('time_advanced');
     _ws.sendContinue(instanceId, advance: advance);
   }
@@ -2365,7 +2378,22 @@ class PlayCubit extends Cubit<PlayState> {
       ),
     );
     unawaited(_rating.recordSuccessfulTurn());
+    _anchorReminders();
     unawaited(_refreshInk());
+  }
+
+  /// A turn the player sent finished: move the story reminders to this save.
+  void _anchorReminders() {
+    if (_playerTurnsInFlight <= 0) return;
+    _playerTurnsInFlight--;
+    final title = state.template?.title;
+    if (title == null) return;
+    unawaited(
+      ReminderService.instance.onAnchor(
+        instanceId: instanceId,
+        worldTitle: title,
+      ),
+    );
   }
 
   /// The settling turn failed after its prose. It was never saved, so the next

@@ -14,6 +14,7 @@ import 'core/auth/auth_service.dart';
 import 'core/guide/guide_controller.dart';
 import 'core/guide/widgets/guide_host.dart';
 import 'core/telemetry/route_name.dart';
+import 'core/reminders/reminder_service.dart';
 import 'core/telemetry/telemetry.dart';
 
 Future<void> main() async {
@@ -23,6 +24,9 @@ Future<void> main() async {
   // the error handlers still exist before the app runs. It never throws: a
   // failure just leaves telemetry off for the run.
   final telemetryReady = Telemetry.instance.init();
+  // Same shape: never throws, and a cold-start tap on a reminder is held until
+  // the router has left the splash screen.
+  final remindersReady = ReminderService.instance.init();
   // Draw behind the status and navigation bars, explicitly and on every
   // Android version. From Android 15 the system does this anyway for apps
   // targeting SDK 35+, so declaring it is what makes the layout the same
@@ -63,6 +67,7 @@ Future<void> main() async {
     });
   }
   await telemetryReady;
+  await remindersReady;
   runApp(const EverloreApp());
 }
 

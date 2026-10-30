@@ -4,6 +4,7 @@ import '../network/api_client.dart';
 import '../network/ws_manager.dart';
 import '../guide/guide_controller.dart';
 import '../onboarding/interests_store.dart';
+import '../reminders/reminder_service.dart';
 import '../storage/secure_storage.dart';
 import '../../shared/models/user.dart';
 import '../../features/moderation/data/moderation_repository.dart';
@@ -172,6 +173,8 @@ class AuthService {
 
   static Future<void> logout() async {
     await _wsManager.disconnect(clearToken: true);
+    // Pending reminders would otherwise fire into the next player's session.
+    await ReminderService.instance.clear();
     await SecureStore.clearAll();
     // Device guide state goes with the session; the account keeps its record,
     // so signing back in restores it rather than re-touring.
