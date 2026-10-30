@@ -101,6 +101,8 @@ void main() {
 
     Future<void> sendFirstCode(WidgetTester tester) async {
       await tester.enterText(find.byType(TextField).first, '5551234567');
+      // Send only enables once the frame after typing has built.
+      await tester.pump();
       await tester.tap(find.widgetWithText(NeuButton, 'Send the Code'));
       await tester.pump(const Duration(milliseconds: 400));
     }
@@ -194,6 +196,27 @@ void main() {
       expect(find.text('Too many tries. Wait a few minutes.'), findsOneWidget);
       expect(find.textContaining('Resend code in 10:00'), findsOneWidget);
       await tester.pump(const Duration(seconds: 601));
+    });
+
+    // Oct 24 2026: three taps on an empty field each sent a bare dial code,
+    // which the server refused. Send waits for the server's 8-15 digits.
+    testWidgets('Send stays disabled until the number is complete', (
+      tester,
+    ) async {
+      await pump(tester);
+      final send = find.widgetWithText(NeuButton, 'Send the Code');
+      expect(tester.widget<NeuButton>(send).onTap, isNull);
+
+      await tester.enterText(find.byType(TextField).first, '555012');
+      await tester.pump();
+      expect(tester.widget<NeuButton>(send).onTap, isNull);
+
+      await tester.enterText(find.byType(TextField).first, '5550123456');
+      await tester.pump();
+      expect(tester.widget<NeuButton>(send).onTap, isNotNull);
+      await tester.tap(send);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(sends, 1);
     });
   });
 }
