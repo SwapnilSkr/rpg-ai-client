@@ -14,6 +14,8 @@ import 'widgets/bond_rail.dart';
 import 'widgets/story_timeline_sheet.dart';
 import 'widgets/the_ink_rests_dialog.dart';
 import 'widgets/anchored_menu_popup.dart';
+import 'widgets/reminder_ask_sheet.dart';
+import '../../../../core/reminders/reminder_service.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../shared/app_icons.dart';
 import '../../../shared/models/event.dart';
@@ -116,6 +118,7 @@ class _PlayViewState extends State<_PlayView> {
   double? _olderLoadAnchorExtent;
   bool _inkModalVisible = false;
   bool _restModalVisible = false;
+  bool _reminderSheetOpen = false;
 
   /// One-shot composer prefill consumed by [PlayerInput] (bond actions).
   final _composerDraft = ValueNotifier<String?>(null);
@@ -149,6 +152,7 @@ class _PlayViewState extends State<_PlayView> {
   void initState() {
     super.initState();
     _scrollController.addListener(_updateFollowLatest);
+    ReminderService.instance.askNow.addListener(_onReminderAskNowChanged);
     // The arcs are otherwise driven entirely by state *changes*, and a
     // listener never sees the state it was mounted with. A story whose turns
     // are already loaded when the screen opens therefore produced no change
@@ -156,7 +160,10 @@ class _PlayViewState extends State<_PlayView> {
     // frame closes that hole; `maybeStart` still decides eligibility, so this
     // only ever offers.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _maybeGuide(context.read<PlayCubit>().state);
+      if (mounted) {
+        _maybeGuide(context.read<PlayCubit>().state);
+        _maybeShowReminderSheet();
+      }
     });
 
     if (widget.focusEventId != null && widget.focusEventId!.isNotEmpty) {
@@ -366,6 +373,7 @@ class _PlayViewState extends State<_PlayView> {
 
   @override
   void dispose() {
+    ReminderService.instance.askNow.removeListener(_onReminderAskNowChanged);
     _glowTimer?.cancel();
     _scrollController.removeListener(_updateFollowLatest);
     _composerDraft.dispose();
@@ -762,7 +770,53 @@ class _PlayViewState extends State<_PlayView> {
     _onboardingOpen = false;
     // The way is clear: offer the arc that was held back, rather than leaving
     // it to whenever the next turn happens to change the state.
-    if (mounted) _maybeGuide(cubit.state);
+    if (mounted) {
+      _maybeGuide(cubit.state);
+      _maybeShowReminderSheet();
+    }
+  }
+
+  void _onReminderAskNowChanged() {
+    _maybeShowReminderSheet();
+  }
+
+  void _maybeShowReminderSheet() {
+    if (!mounted) return;
+    if (!ReminderService.instance.askNow.value) return;
+    if (_reminderSheetOpen) return;
+    if (_onboardingOpen || _restModalVisible || _inkModalVisible) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!ReminderService.instance.askNow.value) return;
+      if (_reminderSheetOpen) return;
+      if (_onboardingOpen || _restModalVisible || _inkModalVisible) return;
+      final route = ModalRoute.of(context);
+      if (route == null || !route.isCurrent) return;
+
+      final cubit = context.read<PlayCubit>();
+      final state = cubit.state;
+      if (state.isGenerating ||
+          state.narrativeStreaming ||
+          state.isLoading ||
+          state.isRewinding) {
+        return;
+      }
+
+      _showReminderSheet();
+    });
+  }
+
+  Future<void> _showReminderSheet() async {
+    if (_reminderSheetOpen || !mounted) return;
+    _reminderSheetOpen = true;
+    try {
+      await ReminderAskSheet.show(context);
+    } finally {
+      if (mounted) {
+        _reminderSheetOpen = false;
+      }
+    }
   }
 
   void _showRealmMenu(BuildContext context) {
@@ -1580,6 +1634,7 @@ class _PlayViewState extends State<_PlayView> {
         }
         _maybeShowOnboarding(ctx);
         _maybeGuide(state);
+        _maybeShowReminderSheet();
       },
       builder: (context, state) {
         final title = state.template?.title ?? '';
