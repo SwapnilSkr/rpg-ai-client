@@ -115,6 +115,10 @@ final Map<String, Map<String, PropSpec>> telemetryEvents = {
     'reason': _oneOf(['cancelled', 'network', 'rejected', 'unknown']),
   },
   'onboarding_completed': {'interests_count': _intRange(0, 200)},
+  'starter_started': {'world_id': _worldId(required: true)},
+  'starter_fallback': {
+    'reason': _oneOf(['none', 'error', 'has_saves'], required: true),
+  },
   'persona_created': {},
   'world_viewed': {'world_id': _worldId(required: true)},
   'world_started': {

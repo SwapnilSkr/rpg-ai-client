@@ -4,6 +4,10 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../shared/models/realm_play_status.dart';
+import '../../../shared/models/world_instance.dart';
+import '../../../shared/models/world_template.dart';
+import '../../templates/data/template_repository.dart';
+import '../../../core/telemetry/telemetry_vocabulary.dart';
 import '../../../shared/models/persona.dart';
 import '../../../shared/widgets/everlore_session_loader.dart';
 import '../../../shared/widgets/neu.dart';
@@ -97,6 +101,63 @@ Future<void> beginNewRealmStory(
       msg,
       tone: NoticeTone.error,
     );
+  }
+}
+
+Future<String>? _firstStoryInFlight;
+
+/// Where a player who just finished onboarding should land: the opening of a
+/// story in the world the server picked, or Explore when that cannot happen.
+///
+/// Always resolves (never throws), so the caller can `context.go` the result
+/// and the player is never left on a spinner. A second call while one is
+/// running joins it instead of creating a second story. The persona sheet is
+/// skipped on purpose: nothing may interrupt the first scene.
+///
+/// The three loaders are seams for tests; production uses the repositories.
+Future<String> resolveFirstStoryRoute({
+  Future<List<WorldInstance>> Function()? loadInstances,
+  Future<WorldTemplate?> Function()? loadStarter,
+  Future<WorldInstance> Function(String templateId)? createStory,
+}) {
+  return _firstStoryInFlight ??= _resolveFirstStoryRoute(
+    loadInstances ??
+        () => HomeRepository.getInstances(forceRefresh: true),
+    loadStarter ?? TemplateRepository.starter,
+    createStory ?? (id) => HomeRepository.createInstance(id),
+  ).whenComplete(() => _firstStoryInFlight = null);
+}
+
+const _exploreRoute = '/discover';
+
+Future<String> _resolveFirstStoryRoute(
+  Future<List<WorldInstance>> Function() loadInstances,
+  Future<WorldTemplate?> Function() loadStarter,
+  Future<WorldInstance> Function(String templateId) createStory,
+) async {
+  String fallback(String reason) {
+    Telemetry.instance.track('starter_fallback', {'reason': reason});
+    return _exploreRoute;
+  }
+
+  try {
+    // A player who already has saves (a resumed onboarding on a returning
+    // account) keeps Explore; a surprise new story would bury theirs.
+    final saves = await loadInstances().timeout(const Duration(seconds: 6));
+    if (saves.isNotEmpty) return fallback('has_saves');
+
+    final template = await loadStarter();
+    if (template == null) return fallback('none');
+    if (!isWorldId(template.id)) return fallback('error');
+
+    Telemetry.instance.track('starter_started', {'world_id': template.id});
+    final instance = await createStory(
+      template.id,
+    ).timeout(const Duration(seconds: 20));
+    if (instance.id.isEmpty) return fallback('error');
+    return '/play/${instance.id}?starter=1';
+  } catch (_) {
+    return fallback('error');
   }
 }
 

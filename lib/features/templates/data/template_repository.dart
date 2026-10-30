@@ -134,6 +134,26 @@ class TemplateRepository {
     return result;
   }
 
+  /// The world the server picked for a brand-new player, or null when there
+  /// is none or it could not be reached. Never throws: this runs while the
+  /// player waits at the end of onboarding, and the caller's fallback is
+  /// Explore, so a failure here must read as "no starter", not as an error.
+  static Future<WorldTemplate?> starter({
+    Duration timeout = const Duration(seconds: 6),
+  }) async {
+    try {
+      final response = await ApiClient.get('/templates/starter').timeout(
+        timeout,
+      );
+      final raw = response is Map ? response['template'] : null;
+      if (raw is! Map) return null;
+      final template = WorldTemplate.fromJson(Map<String, dynamic>.from(raw));
+      return template.id.isEmpty ? null : template;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<WorldTemplate> getById(
     String id, {
     bool forceRefresh = false,

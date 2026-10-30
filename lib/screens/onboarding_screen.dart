@@ -8,6 +8,7 @@ import '../core/auth/auth_service.dart';
 import '../core/errors/user_message.dart';
 import '../core/onboarding/interests_store.dart';
 import '../core/telemetry/telemetry.dart';
+import '../features/home/presentation/realm_entry_flow.dart';
 import '../shared/models/user.dart';
 import '../shared/widgets/keyboard_aware_scroll.dart';
 import '../shared/widgets/player_avatar.dart';
@@ -39,6 +40,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _nameFocus = FocusNode();
   PlayerGender? _gender;
   bool _saving = false;
+
+  /// True from the last step's "done" until the router leaves. Guards a second
+  /// tap from starting a second story.
+  bool _starting = false;
 
   /// Set when a step's save fails, so the player is told instead of being
   /// advanced past work that was never persisted. Cleared on each attempt.
@@ -138,24 +143,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _onMatureComplete() async {
+    if (_starting) return;
+    _starting = true;
     await InterestsStore.markMatureStepDone();
     final picked = await InterestsStore.getInterests();
     Telemetry.instance.track('onboarding_completed', {
       'interests_count': picked.length,
     });
     if (!mounted) return;
-    context.go('/discover');
+    setState(() {});
+    final route = await resolveFirstStoryRoute();
+    if (!mounted) return;
+    context.go(route);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_bootstrapping) {
-      return const Scaffold(
+    if (_bootstrapping || _starting) {
+      return Scaffold(
         backgroundColor: EverloreTheme.void0,
         body: Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: EverloreTheme.gold,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(
+                strokeWidth: 2,
+                color: EverloreTheme.gold,
+              ),
+              if (_starting) ...[
+                const SizedBox(height: 20),
+                Text(
+                  'Finding your first story…',
+                  style: EverloreTheme.aiText.copyWith(fontSize: 16),
+                ),
+              ],
+            ],
           ),
         ),
       );
