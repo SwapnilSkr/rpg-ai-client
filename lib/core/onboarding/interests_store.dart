@@ -4,7 +4,7 @@ import '../../shared/models/user.dart';
 
 /// Local cache for post-auth onboarding progress and genre interests.
 ///
-/// Flow: name (required) → gender (skippable) → interests (skippable).
+/// Flow: name (required) → gender (skippable) → interests (skippable) → mature (gentle/allow).
 /// Genre keys drive discovery ranking and mirror to the server via
 /// `AuthService.updatePreferences`. Logout clears this store; returning users
 /// re-hydrate from `user.preferences` on sign-in (see `syncFromUser`).
@@ -13,6 +13,8 @@ class InterestsStore {
   static const _interestsKey = 'user_interests';
   static const _onboardedKey = 'onboarding_done';
   static const _genderStepKey = 'onboarding_gender_done';
+  static const _interestsStepKey = 'onboarding_interests_done';
+  static const _matureStepKey = 'onboarding_mature_done';
 
   /// Saved interest style keys (e.g. `['noir', 'kdrama']`). Empty if unset.
   static Future<List<String>> getInterests() async {
@@ -37,6 +39,7 @@ class InterestsStore {
   /// Mark interests step finished (completed or skipped).
   static Future<void> markOnboarded() async {
     await _storage.write(key: _onboardedKey, value: 'true');
+    await _storage.write(key: _interestsStepKey, value: 'true');
   }
 
   static Future<bool> isGenderStepDone() async {
@@ -45,6 +48,24 @@ class InterestsStore {
 
   static Future<void> markGenderStepDone() async {
     await _storage.write(key: _genderStepKey, value: 'true');
+  }
+
+  static Future<bool> isInterestsStepDone() async {
+    return (await _storage.read(key: _interestsStepKey)) == 'true' ||
+        (await _storage.read(key: _onboardedKey)) == 'true';
+  }
+
+  static Future<void> markInterestsStepDone() async {
+    await _storage.write(key: _interestsStepKey, value: 'true');
+    await _storage.write(key: _onboardedKey, value: 'true');
+  }
+
+  static Future<bool> isMatureStepDone() async {
+    return (await _storage.read(key: _matureStepKey)) == 'true';
+  }
+
+  static Future<void> markMatureStepDone() async {
+    await _storage.write(key: _matureStepKey, value: 'true');
   }
 
   /// Restore local state from the account after logout wiped device storage.
@@ -57,24 +78,29 @@ class InterestsStore {
     if (user.preferences.gender != null) {
       await markGenderStepDone();
     }
+    if (user.ageConfirmedAt != null || user.preferences.nsfwEnabled) {
+      await markMatureStepDone();
+    }
   }
 
-  /// Whether to skip the full onboarding flow (name + gender + interests done).
+  /// Whether to skip the full onboarding flow (name + gender + interests + mature done).
   static Future<bool> hasCompletedOnboarding({User? user}) async {
     if (user != null) await syncFromUser(user);
 
     final name = user?.preferences.playerName ?? '';
     if (name.trim().length < 2) return false;
     if (!await isGenderStepDone()) return false;
-    return await isOnboarded();
+    if (!await isInterestsStepDone()) return false;
+    return await isMatureStepDone();
   }
 
-  /// Resume step for the multi-step onboarding screen (0 = name, 1 = gender, 2 = interests).
+  /// Resume step for the multi-step onboarding screen (0 = name, 1 = gender, 2 = interests, 3 = mature).
   static Future<int> resolveStartStep({User? user}) async {
     if (user != null) await syncFromUser(user);
     final name = user?.preferences.playerName ?? '';
     if (name.trim().length < 2) return 0;
     if (!await isGenderStepDone()) return 1;
-    return 2;
+    if (!await isInterestsStepDone()) return 2;
+    return 3;
   }
 }

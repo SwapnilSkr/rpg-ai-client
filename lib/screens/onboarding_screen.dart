@@ -12,8 +12,9 @@ import '../shared/widgets/player_avatar.dart';
 import '../shared/widgets/realm_backdrop.dart';
 import '../shared/widgets/neu.dart';
 import 'onboarding_interests_step.dart';
+import 'onboarding_mature_step.dart';
 
-/// Post-auth onboarding — name → gender → interests, then Discover.
+/// Post-auth onboarding — name → gender → interests → mature themes, then Discover.
 ///
 /// One question per step (DESIGN_PHILOSOPHY §2.9). Smooth fade+slide between
 /// beats, shared [RealmBackdrop], neumorphic chrome throughout.
@@ -25,7 +26,7 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  static const _stepCount = 3;
+  static const _stepCount = 4;
   static const _transitionMs = 320;
 
   int _step = 0;
@@ -128,20 +129,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _goToStep(2);
   }
 
-  Future<void> _finishInterests({required bool skipped}) async {
-    if (!skipped) {
-      // Interests step handles its own persistence.
-      return;
-    }
-    await InterestsStore.markOnboarded();
-    Telemetry.instance.track('onboarding_completed', {'interests_count': 0});
+  Future<void> _onInterestsDone() async {
+    await InterestsStore.markInterestsStepDone();
     if (!mounted) return;
-    context.go('/discover');
+    _goToStep(3);
   }
 
-  Future<void> _onInterestsComplete() async {
-    // The step saved the picks just before calling back; count them, send
-    // only the number.
+  Future<void> _onMatureComplete() async {
+    await InterestsStore.markMatureStepDone();
     final picked = await InterestsStore.getInterests();
     Telemetry.instance.track('onboarding_completed', {
       'interests_count': picked.length,
@@ -204,10 +199,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       onContinue: () => _saveGender(_gender),
                       onSkip: () => _saveGender(null),
                     ),
-                    _ => OnboardingInterestsStep(
+                    2 => OnboardingInterestsStep(
                       key: const ValueKey('interests'),
-                      onComplete: _onInterestsComplete,
-                      onSkip: () => _finishInterests(skipped: true),
+                      onComplete: _onInterestsDone,
+                      onSkip: _onInterestsDone,
+                    ),
+                    _ => OnboardingMatureStep(
+                      key: const ValueKey('mature'),
+                      onComplete: _onMatureComplete,
                     ),
                   },
                 ),

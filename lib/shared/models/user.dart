@@ -102,6 +102,7 @@ class User {
   final UserPreferences preferences;
   final int? tokenBalance;
   final bool? canForge;
+  final DateTime? ageConfirmedAt;
 
   const User({
     required this.id,
@@ -112,6 +113,7 @@ class User {
     this.preferences = const UserPreferences(),
     this.tokenBalance,
     this.canForge,
+    this.ageConfirmedAt,
   });
 
   bool get canAccessForge =>
@@ -126,6 +128,7 @@ class User {
     UserPreferences? preferences,
     int? tokenBalance,
     bool? canForge,
+    DateTime? ageConfirmedAt,
   }) {
     return User(
       id: id ?? this.id,
@@ -136,6 +139,7 @@ class User {
       preferences: preferences ?? this.preferences,
       tokenBalance: tokenBalance ?? this.tokenBalance,
       canForge: canForge ?? this.canForge,
+      ageConfirmedAt: ageConfirmedAt ?? this.ageConfirmedAt,
     );
   }
 
@@ -151,6 +155,9 @@ class User {
           : const UserPreferences(),
       tokenBalance: json['token_balance'],
       canForge: json['can_forge'] as bool?,
+      ageConfirmedAt: json['age_confirmed_at'] != null
+          ? DateTime.tryParse(json['age_confirmed_at'] as String)
+          : null,
     );
   }
 
@@ -163,5 +170,7 @@ class User {
     'preferences': preferences.toJson(),
     'token_balance': tokenBalance,
     if (canForge != null) 'can_forge': canForge,
+    if (ageConfirmedAt != null)
+      'age_confirmed_at': ageConfirmedAt!.toIso8601String(),
   };
 }

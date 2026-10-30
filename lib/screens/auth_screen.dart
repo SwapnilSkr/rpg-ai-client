@@ -24,6 +24,7 @@ import '../shared/widgets/interest_picker.dart';
 import '../shared/narrative_styles.dart';
 import '../shared/widgets/everlore_sheet.dart';
 import '../shared/widgets/everlore_notice.dart';
+import '../shared/widgets/age_confirm_dialog.dart';
 import 'sharing_switch_row.dart';
 
 typedef SendCodeFn = Future<bool> Function(String phone);
@@ -451,7 +452,13 @@ class AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _handleNsfwToggle(bool enabled) async {
-    if (_currentUser == null || _isUpdatingPreferences) return;
+    final user = _currentUser;
+    if (user == null || _isUpdatingPreferences) return;
+
+    if (enabled && user.ageConfirmedAt == null) {
+      final confirmed = await showAgeConfirmDialog(context);
+      if (!confirmed) return;
+    }
 
     setState(() {
       _isUpdatingPreferences = true;
@@ -459,7 +466,11 @@ class AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      final updated = await AuthService.setNsfwEnabled(enabled);
+      final payload = <String, dynamic>{
+        'nsfw_enabled': enabled,
+        if (enabled && user.ageConfirmedAt == null) 'age_confirmed': true,
+      };
+      final updated = await AuthService.updatePreferences(payload);
       if (!mounted) return;
       setState(() => _currentUser = updated);
       showEverloreNotice(
