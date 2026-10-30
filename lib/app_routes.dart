@@ -42,7 +42,11 @@ final router = GoRouter(
     GoRoute(
       path: '/auth',
       name: 'auth',
-      builder: (context, state) => const AuthScreen(),
+      // `?from=story` is how a guest is sent here from a story that asked them
+      // to sign in; they are returned to it afterwards.
+      builder: (context, state) => AuthScreen(
+        returnToStory: state.uri.queryParameters['from'] == 'story',
+      ),
     ),
     GoRoute(
       path: '/onboarding',

@@ -13,6 +13,7 @@ import 'core/network/ws_manager.dart';
 import 'core/auth/auth_service.dart';
 import 'core/guide/guide_controller.dart';
 import 'core/guide/widgets/guide_host.dart';
+import 'core/guest/keep_story_host.dart';
 import 'core/telemetry/route_name.dart';
 import 'core/reminders/reminder_service.dart';
 import 'core/telemetry/telemetry.dart';
@@ -165,7 +166,9 @@ class _EverloreAppState extends State<EverloreApp> {
       // player on 200% system text gets large type rather than a clipped one.
       builder: (context, child) => EvTextScaleGuard(
         child: GuideHost(
-          child: DismissKeyboard(child: child ?? const SizedBox.shrink()),
+          child: KeepStoryHost(
+            child: DismissKeyboard(child: child ?? const SizedBox.shrink()),
+          ),
         ),
       ),
     );

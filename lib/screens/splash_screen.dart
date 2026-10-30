@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/auth/auth_service.dart';
+import '../core/guest/guest_session.dart';
 import '../core/guide/guide_controller.dart';
 import '../core/onboarding/interests_store.dart';
 import '../app/theme/nexus_theme.dart';
@@ -112,8 +113,14 @@ class _SplashScreenState extends State<SplashScreen>
     // Hold on the fully-revealed orbit so it can breathe before navigating.
     await Future.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
-    final user = await AuthService.getCachedUser();
+    var user = await AuthService.getCachedUser();
     if (!mounted) return;
+    if (user != null && user.guest) {
+      // A guest is signed in like anyone else: the server confirms the stored
+      // token, and only a rejected one is answered with a resume.
+      user = await GuestSession.instance.resume();
+      if (!mounted) return;
+    }
     if (user != null) {
       // Fold the account's guide record into the device cache before any
       // surface can trigger an arc.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app/theme/nexus_theme.dart';
+import '../core/guest/guest_session.dart';
 import '../shared/widgets/realm_backdrop.dart';
 import '../shared/widgets/neu.dart';
 
@@ -18,6 +19,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _fadeIn;
+  bool _starting = false;
 
   @override
   void initState() {
@@ -33,6 +35,23 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   void dispose() {
     _fadeController.dispose();
     super.dispose();
+  }
+
+  /// Opens a guest session and goes on to the first-run questions. If the
+  /// session cannot be made the player still has the sign-in door.
+  Future<void> _begin() async {
+    if (_starting) return;
+    setState(() => _starting = true);
+    try {
+      await GuestSession.instance.start();
+      if (!mounted) return;
+      context.go('/onboarding');
+    } catch (_) {
+      if (!mounted) return;
+      context.push('/auth');
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
   }
 
   @override
@@ -116,14 +135,26 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
                   const Spacer(flex: 2),
 
-                  // Signing in is the only way in. Browsing worlds first used
-                  // to be offered here, but a realm you cannot enter is a
-                  // worse first impression than a door, so the door is all
-                  // this screen shows.
+                  // The door opens without an account: the journey begins as a
+                  // guest, and signing in later keeps everything. Players who
+                  // already have an account take the quiet link below.
                   NeuButton(
                     label: 'BEGIN YOUR JOURNEY',
                     icon: Icons.auto_awesome,
-                    onTap: () => context.push('/auth'),
+                    loading: _starting,
+                    onTap: _starting ? null : _begin,
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _starting ? null : () => context.push('/auth'),
+                    child: Text(
+                      'I already have an account',
+                      style: TextStyle(
+                        fontFamily: EverloreTheme.uiFamily,
+                        color: EverloreTheme.ash,
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
 
                   const SizedBox(height: 40),

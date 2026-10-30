@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../core/auth/auth_service.dart';
 import '../core/auth/google_auth_service.dart';
 import '../core/errors/user_message.dart';
+import '../core/guest/guest_session.dart';
 import '../core/network/api_client.dart';
 import '../core/telemetry/reasons.dart';
 import '../core/telemetry/telemetry.dart';
@@ -37,8 +38,13 @@ class AuthScreen extends StatefulWidget {
     this.title,
     this.sendCode = AuthService.sendOtp,
     this.verifyCode = AuthService.verifyOtp,
+    this.returnToStory = false,
   });
   final String? title;
+
+  /// A guest sent here from a story that asked them to sign in. Signing in
+  /// returns them to that story instead of starting over at Discover.
+  final bool returnToStory;
 
   /// Seams for tests; production always uses [AuthService].
   final SendCodeFn sendCode;
@@ -75,6 +81,10 @@ class AuthScreenState extends State<AuthScreen> {
   final _nameEditCtrl = TextEditingController();
   final _nameEditFocus = FocusNode();
   bool _isDeletingAccount = false;
+
+  /// A guest session is waiting to be claimed by whatever the player signs in
+  /// with. Drives the copy only; the token itself is read when signing in.
+  bool _guestPending = false;
   bool _isSavingInterests = false;
 
   /// Genre picks shown on the profile tab. Sourced from the account, falling
@@ -139,7 +149,12 @@ class AuthScreenState extends State<AuthScreen> {
     final cachedUser = await AuthService.getCachedUser();
     if (!mounted) return;
 
-    if (cachedUser != null) {
+    // A guest has no account to show. On the profile they see their profile
+    // with the sign-in options in place of sign-out; anywhere else this is
+    // simply the sign-in screen, with the guest kept to be claimed.
+    final isGuest = cachedUser != null && cachedUser.guest;
+    _guestPending = isGuest;
+    if (cachedUser != null && !(isGuest && !_isProfileTab(context))) {
       final interests = await _resolveInterests(cachedUser);
       if (!mounted) return;
       setState(() {
@@ -171,7 +186,16 @@ class AuthScreenState extends State<AuthScreen> {
   }
 
   /// After sign-in: interests onboarding for new accounts; Discover otherwise.
-  Future<void> _routeAfterAuth() async {
+  Future<void> _routeAfterAuth({bool wasGuest = false}) async {
+    if (wasGuest && mounted) {
+      // Back to the story that asked, with the same save and the same turn.
+      if (widget.returnToStory && context.canPop()) {
+        context.pop();
+        return;
+      }
+      // From the profile there is nowhere to go: it now shows the account.
+      if (_isProfileTab(context)) return;
+    }
     final user = await AuthService.getCachedUser();
     final onboarded = await InterestsStore.hasCompletedOnboarding(user: user);
     if (!mounted) return;
@@ -207,11 +231,15 @@ class AuthScreenState extends State<AuthScreen> {
         });
         return;
       }
+      final wasGuest = await GuestSession.instance.pendingGuestToken() != null;
       final user = await AuthService.loginWithGoogle(idToken);
       _signedIn('google');
       if (!mounted) return;
-      setState(() => _currentUser = user);
-      await _routeAfterAuth();
+      setState(() {
+        _currentUser = user;
+        _guestPending = false;
+      });
+      await _routeAfterAuth(wasGuest: wasGuest);
     } catch (e) {
       Telemetry.instance.track('sign_in_failed', {
         'method': 'google',
@@ -311,14 +339,18 @@ class AuthScreenState extends State<AuthScreen> {
       _clearMessages();
     });
     try {
+      final wasGuest = await GuestSession.instance.pendingGuestToken() != null;
       final user = await widget.verifyCode(
         phone: _normalizePhone('${_dialCode.code}${_phoneController.text}'),
         code: code,
       );
       _signedIn('phone');
       if (!mounted) return;
-      setState(() => _currentUser = user);
-      await _routeAfterAuth();
+      setState(() {
+        _currentUser = user;
+        _guestPending = false;
+      });
+      await _routeAfterAuth(wasGuest: wasGuest);
     } catch (e) {
       Telemetry.instance.track('sign_in_failed', {
         'method': 'phone',
@@ -326,7 +358,11 @@ class AuthScreenState extends State<AuthScreen> {
       });
       setState(() {
         if (e is ApiException) {
-          if (e.code == 'code_locked' || e.code == 'code_expired') {
+          // A pending guest transfer may have used the code up, and a spent
+          // code is never posted again.
+          if (e.code == 'code_locked' ||
+              e.code == 'code_expired' ||
+              e.code == 'guest_transfer_pending') {
             _needsNewCode = true;
           } else if (e.code == 'verify_limited') {
             _holdFor(e);
@@ -860,21 +896,46 @@ class AuthScreenState extends State<AuthScreen> {
 
         const SizedBox(height: 32),
 
-        NeuButton(
-          label: 'Sign Out',
-          icon: Icons.logout,
-          primary: false,
-          accent: EverloreTheme.crimson,
-          onTap: _handleSignOut,
-        ),
-        const SizedBox(height: 16),
-        NeuButton(
-          label: 'Delete Account',
-          icon: Icons.delete_forever_outlined,
-          primary: false,
-          accent: EverloreTheme.crimson,
-          onTap: _isDeletingAccount ? null : _confirmDeleteAccount,
-        ),
+        if (user.guest) ...[
+          // A guest has nothing to sign out of or delete; what they can do is
+          // keep the story by signing in.
+          Text(
+            'Keep Your Story',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.cinzel(
+              color: EverloreTheme.gold,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Sign in to save everything you have done and play on from any device.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.ebGaramond(
+              color: EverloreTheme.ash,
+              fontSize: 15,
+              height: 1.5,
+            ),
+          ),
+          ..._signInOptions(),
+        ] else ...[
+          NeuButton(
+            label: 'Sign Out',
+            icon: Icons.logout,
+            primary: false,
+            accent: EverloreTheme.crimson,
+            onTap: _handleSignOut,
+          ),
+          const SizedBox(height: 16),
+          NeuButton(
+            label: 'Delete Account',
+            icon: Icons.delete_forever_outlined,
+            primary: false,
+            accent: EverloreTheme.crimson,
+            onTap: _isDeletingAccount ? null : _confirmDeleteAccount,
+          ),
+        ],
         const SizedBox(height: 96), // clear the floating nav on the profile tab
       ],
     );
@@ -888,6 +949,98 @@ class AuthScreenState extends State<AuthScreen> {
     };
   }
 
+  /// Messages, phone code entry and Google: the ways to sign in. Shared by the
+  /// sign-in screen and a guest's profile.
+  List<Widget> _signInOptions() {
+    return [
+      // Messages
+      //
+      // Above the form, not below it. These used to sit under the Google
+      // button — off the bottom of the screen while the number pad is up, so
+      // a failed "Send the Code" showed the player nothing at all and read as
+      // a dead button. That is exactly how the 1.0.1 outage was reported to
+      // us: "Send the Code seems to have no action". The failure was being
+      // announced the whole time, just somewhere nobody could see it.
+      if (_errorMessage != null) ...[
+        const SizedBox(height: 24),
+        EngravedBanner(message: _errorMessage!, error: true),
+      ],
+      if (_successMessage != null) ...[
+        const SizedBox(height: 24),
+        EngravedBanner(message: _successMessage!),
+      ],
+
+      const SizedBox(height: 32),
+
+      PhoneTab(
+        phoneController: _phoneController,
+        otpController: _otpController,
+        isLoading: _isPhoneLoading,
+        codeSent: _codeSent,
+        dialCode: _dialCode,
+        onDialCodeChanged: (c) => setState(() => _dialCode = c),
+        onSendCode: _handleSendCode,
+        onVerifyCode: _handleVerifyCode,
+        onEditPhone: _handleEditPhone,
+        needsNewCode: _needsNewCode,
+        onSendNewCode: _handleSendNewCode,
+        holdSeconds: _holdSeconds,
+        holdToken: _holdToken,
+      ),
+
+      const SizedBox(height: 28),
+      Row(
+        children: [
+          Expanded(
+            child: Divider(
+              color: EverloreTheme.ash.withValues(alpha: 0.35),
+              height: 1,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Text(
+              'or',
+              style: TextStyle(
+                fontFamily: EverloreTheme.uiFamily,
+                color: EverloreTheme.ash,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Divider(
+              color: EverloreTheme.ash.withValues(alpha: 0.35),
+              height: 1,
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 28),
+      NeuButton(
+        label: _isGoogleLoading ? 'Signing in…' : 'Continue with Google',
+        icon: Icons.g_mobiledata,
+        primary: false,
+        loading: _isGoogleLoading,
+        onTap: (_isGoogleLoading || !_googleReady) ? null : _handleGoogleSignIn,
+      ),
+      if (!_googleReady)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(
+            'Google sign-in is not available right now.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: EverloreTheme.uiFamily,
+              color: EverloreTheme.ash.withValues(alpha: 0.6),
+              fontSize: 11,
+            ),
+          ),
+        ),
+    ];
+  }
+
   Widget _buildSignIn() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -898,7 +1051,7 @@ class AuthScreenState extends State<AuthScreen> {
         const Center(child: ForgeMark(size: 76)),
         const SizedBox(height: 20),
         Text(
-          'Cross the Threshold',
+          _guestPending ? 'Keep Your Story' : 'Cross the Threshold',
           textAlign: TextAlign.center,
           style: GoogleFonts.cinzel(
             color: EverloreTheme.gold,
@@ -909,7 +1062,9 @@ class AuthScreenState extends State<AuthScreen> {
         ),
         const SizedBox(height: 10),
         Text(
-          'Sign in to step back into your realms and continue your story.',
+          _guestPending
+              ? 'Sign in to save everything you have done and play on from any device.'
+              : 'Sign in to step back into your realms and continue your story.',
           textAlign: TextAlign.center,
           style: GoogleFonts.ebGaramond(
             color: EverloreTheme.ash,
@@ -918,93 +1073,7 @@ class AuthScreenState extends State<AuthScreen> {
           ),
         ),
 
-        // Messages
-        //
-        // Above the form, not below it. These used to sit under the Google
-        // button — off the bottom of the screen while the number pad is up, so
-        // a failed "Send the Code" showed the player nothing at all and read as
-        // a dead button. That is exactly how the 1.0.1 outage was reported to
-        // us: "Send the Code seems to have no action". The failure was being
-        // announced the whole time, just somewhere nobody could see it.
-        if (_errorMessage != null) ...[
-          const SizedBox(height: 24),
-          EngravedBanner(message: _errorMessage!, error: true),
-        ],
-        if (_successMessage != null) ...[
-          const SizedBox(height: 24),
-          EngravedBanner(message: _successMessage!),
-        ],
-
-        const SizedBox(height: 32),
-
-        PhoneTab(
-          phoneController: _phoneController,
-          otpController: _otpController,
-          isLoading: _isPhoneLoading,
-          codeSent: _codeSent,
-          dialCode: _dialCode,
-          onDialCodeChanged: (c) => setState(() => _dialCode = c),
-          onSendCode: _handleSendCode,
-          onVerifyCode: _handleVerifyCode,
-          onEditPhone: _handleEditPhone,
-          needsNewCode: _needsNewCode,
-          onSendNewCode: _handleSendNewCode,
-          holdSeconds: _holdSeconds,
-          holdToken: _holdToken,
-        ),
-
-        const SizedBox(height: 28),
-        Row(
-          children: [
-            Expanded(
-              child: Divider(
-                color: EverloreTheme.ash.withValues(alpha: 0.35),
-                height: 1,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Text(
-                'or',
-                style: TextStyle(
-                  fontFamily: EverloreTheme.uiFamily,
-                  color: EverloreTheme.ash,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Divider(
-                color: EverloreTheme.ash.withValues(alpha: 0.35),
-                height: 1,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 28),
-        NeuButton(
-          label: _isGoogleLoading ? 'Signing in…' : 'Continue with Google',
-          icon: Icons.g_mobiledata,
-          primary: false,
-          loading: _isGoogleLoading,
-          onTap: (_isGoogleLoading || !_googleReady)
-              ? null
-              : _handleGoogleSignIn,
-        ),
-        if (!_googleReady)
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Text(
-              'Google sign-in is not available right now.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: EverloreTheme.uiFamily,
-                color: EverloreTheme.ash.withValues(alpha: 0.6),
-                fontSize: 11,
-              ),
-            ),
-          ),
+        ..._signInOptions(),
 
         const SizedBox(height: 32),
       ],

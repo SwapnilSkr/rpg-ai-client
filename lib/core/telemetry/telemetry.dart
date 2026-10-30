@@ -100,6 +100,10 @@ class Telemetry with WidgetsBindingObserver {
   Timer? _timer;
   Future<void> _writes = Future<void>.value();
 
+  /// This install's id, minted on first start whether or not sharing is on.
+  /// Empty until [init] has run. The guest session is bound to it.
+  String get installId => _installId;
+
   /// Whether sharing is on. Default on; the profile switch flips it.
   bool get enabled => _enabled;
 

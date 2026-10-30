@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/env.dart';
+import '../guest/sign_in_required.dart';
 import '../storage/secure_storage.dart';
 
 class ApiClient {
@@ -109,6 +110,11 @@ class ApiClient {
     final error = body is Map ? body['error'] : null;
     final code = body is Map ? body['code'] : null;
     final retryAfter = body is Map ? body['retryAfter'] : null;
+    // One place for every call site: a guest who is refused for want of an
+    // account is asked to sign in, and the call still fails as it always did.
+    if (response.statusCode == 403 && code == 'sign_in_required') {
+      SignInRequired.raise();
+    }
     throw ApiException(
       statusCode: response.statusCode,
       message: error?.toString() ?? 'Unknown error',

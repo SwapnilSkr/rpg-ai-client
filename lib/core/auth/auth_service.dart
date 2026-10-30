@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../network/api_client.dart';
+import '../guest/guest_session.dart';
 import '../network/ws_manager.dart';
 import '../guide/guide_controller.dart';
 import '../onboarding/interests_store.dart';
@@ -33,12 +34,21 @@ class AuthService {
   static bool newAccountFrom(Map<String, dynamic> response) =>
       response['new_account'] == true;
 
+  /// Stores a session the server just issued. [GuestSession] uses this for a
+  /// guest it starts; a sign-in goes through the private path below.
+  static Future<void> persistSession(Map<String, dynamic> response) =>
+      _persistSession(response);
+
   static Future<void> _persistSession(Map<String, dynamic> response) async {
     _lastSignInCreatedAccount = newAccountFrom(response);
     await SecureStore.saveToken(response['token']);
     await SecureStore.saveUserData(jsonEncode(response['user']));
     await _wsManager.connect(response['token']);
     final user = User.fromJson(response['user']);
+    // A claim or merge answers with a user that is no longer a guest, which is
+    // what ends the guest state. Reminders and guide state are not touched:
+    // only a sign-out clears those.
+    GuestSession.instance.noteUser(user);
     await InterestsStore.syncFromUser(user);
     await _hydrateGuide(user);
     _bumpSessionEpoch();
@@ -74,10 +84,11 @@ class AuthService {
   }
 
   static Future<User> loginWithGoogle(String idToken) async {
-    final response = await ApiClient.post(
-      '/auth/google',
-      body: {'id_token': idToken},
-    );
+    // Carries the guest along when there is one: the server claims or merges
+    // everything they did. Their work may still be settling, so Google retries.
+    final response = await GuestSession.instance.exchange('/auth/google', {
+      'id_token': idToken,
+    }, retryTransfer: true);
 
     await _persistSession(response);
     final user = User.fromJson(response['user']);
@@ -96,10 +107,12 @@ class AuthService {
     required String phone,
     required String code,
   }) async {
-    final response = await ApiClient.post(
-      '/auth/otp/verify',
-      body: {'phone': phone, 'code': code},
-    );
+    // No retry here: a code can only be used once, so on a pending transfer
+    // the player is told and asks for a fresh one.
+    final response = await GuestSession.instance.exchange('/auth/otp/verify', {
+      'phone': phone,
+      'code': code,
+    });
 
     await _persistSession(response);
     final user = User.fromJson(response['user']);
@@ -128,6 +141,7 @@ class AuthService {
     final response = await ApiClient.get('/auth/me');
     final user = User.fromJson(response);
     await SecureStore.saveUserData(jsonEncode(user.toJson()));
+    GuestSession.instance.noteUser(user);
     await InterestsStore.syncFromUser(user);
     await _hydrateGuide(user);
     return user;
@@ -153,6 +167,7 @@ class AuthService {
     final fresh = await getCurrentUser();
     if (fresh != null) {
       await SecureStore.saveUserData(jsonEncode(fresh.toJson()));
+      GuestSession.instance.noteUser(fresh);
       await InterestsStore.syncFromUser(fresh);
       await _hydrateGuide(fresh);
       return fresh;
@@ -171,7 +186,10 @@ class AuthService {
     await logout();
   }
 
+  /// Ends the local session. For a guest that is all it does: nothing is sent,
+  /// and the server drops an abandoned guest after 30 days.
   static Future<void> logout() async {
+    GuestSession.instance.clear();
     await _wsManager.disconnect(clearToken: true);
     // Pending reminders would otherwise fire into the next player's session.
     await ReminderService.instance.clear();

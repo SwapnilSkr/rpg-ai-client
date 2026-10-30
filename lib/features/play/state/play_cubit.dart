@@ -1,7 +1,9 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show VoidCallback, visibleForTesting;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import '../../../core/auth/auth_service.dart';
+import '../../../core/guest/guest_session.dart';
 import '../../../core/network/ws_manager.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../../../core/storage/local_db.dart';
@@ -1021,6 +1023,13 @@ class PlayCubit extends Cubit<PlayState> {
     });
 
     _errorSub = _ws.onError.listen((msg) {
+      if (msg['code']?.toString() == 'SIGN_IN_REQUIRED') {
+        // The guest's turns are spent. Not a failed turn and not an error to
+        // show: the sign-in sheet is the whole answer.
+        GuestSession.instance.raiseSignInRequired();
+        _refuseForSignIn(msg);
+        return;
+      }
       // Only a turn's own failure frame names its turn; direct socket errors
       // (no id) answer the latest send, as before.
       final failedJobId = msg['jobId']?.toString();
@@ -1488,6 +1497,67 @@ class PlayCubit extends Cubit<PlayState> {
 
   void _trackStoryAction(String action) =>
       Telemetry.instance.track('story_action', {'action': action});
+
+  /// Silent teardown of the turn a guest was refused: no error bar, no retry,
+  /// the typed line goes back to the composer, and every flag the send set is
+  /// released so the screen is usable the moment the player comes back.
+  void _refuseForSignIn(Map<String, dynamic> frame) {
+    final jobId = frame['jobId']?.toString();
+    if (jobId != null &&
+        jobId.isNotEmpty &&
+        _ownerOf(frame) == _FrameOwner.none) {
+      return;
+    }
+    _playerTurnsInFlight = 0;
+    _streamBuffer = '';
+    _streamTarget = '';
+    _awaitingRetryReplacement = false;
+    _proseStreamEnded = false;
+    _clearGenerationTimers();
+    if (_replayEventId != null) {
+      _restoreReplayedEvent('');
+    }
+    final dropped = state.events.where((e) => e.isOptimistic).toList();
+    final droppedInput = dropped.isNotEmpty ? dropped.last.playerInput : null;
+    final queued = _takeQueuedSend();
+    emit(
+      state.copyWith(
+        events: state.events.where((e) => !e.isOptimistic).toList(),
+        isGenerating: false,
+        narrativeStreaming: false,
+        choicesPreview: false,
+        nextTurnReady: false,
+        replayingEventId: null,
+        notice: null,
+        error: null,
+        canRetry: false,
+        lastFailedInput: null,
+        hasQueuedSend: false,
+        restoreComposerText:
+            (droppedInput != null && droppedInput.trim().isNotEmpty)
+            ? droppedInput
+            : queued,
+      ),
+    );
+    _rejoinOnNextSession();
+  }
+
+  VoidCallback? _sessionListener;
+
+  /// Signing in swaps the socket onto the new session (and, on a merge, the
+  /// save changes owner). Ask for the save again under it; the request waits
+  /// in the socket's queue until the new connection is up.
+  void _rejoinOnNextSession() {
+    if (_sessionListener != null) return;
+    void onSession() {
+      AuthService.sessionEpoch.removeListener(onSession);
+      _sessionListener = null;
+      if (!isClosed) _ws.loadInstance(instanceId);
+    }
+
+    _sessionListener = onSession;
+    AuthService.sessionEpoch.addListener(onSession);
+  }
 
   void _trackTurnFailed(Map<String, dynamic> frame) {
     final reason = turnFailureReason(frame);
@@ -2767,6 +2837,9 @@ class PlayCubit extends Cubit<PlayState> {
 
   @override
   Future<void> close() async {
+    final listener = _sessionListener;
+    if (listener != null) AuthService.sessionEpoch.removeListener(listener);
+    _sessionListener = null;
     _replayWatchdog?.cancel();
     _reconciliationTimer?.cancel();
     _reconciliationTimer = null;

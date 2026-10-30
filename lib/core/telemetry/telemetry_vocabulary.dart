@@ -102,6 +102,7 @@ final Map<String, Map<String, PropSpec>> telemetryEvents = {
     'partial': _boolProp(),
     'from': _slugProp(),
   },
+  'guest_started': {},
   'sign_in_started': {
     'method': _oneOf(['google', 'phone']),
   },

@@ -22,6 +22,8 @@ String signInFailureReason(Object error) {
 String? turnFailureReason(Map<String, dynamic> frame) {
   switch (frame['code']?.toString()) {
     case 'GENERATION_IN_PROGRESS':
+    // A guest who has used their turns is asked to sign in; nothing failed.
+    case 'SIGN_IN_REQUIRED':
       return null;
     case 'STORY_RESTING':
       return 'rest';

@@ -104,6 +104,13 @@ class User {
   final bool? canForge;
   final DateTime? ageConfirmedAt;
 
+  /// Playing without an account. The server marks the session; a claim or
+  /// merge hands back a user without it.
+  final bool guest;
+
+  /// Turns a guest has used of their allowance. Only meaningful when [guest].
+  final int? guestTurns;
+
   const User({
     required this.id,
     required this.email,
@@ -114,6 +121,8 @@ class User {
     this.tokenBalance,
     this.canForge,
     this.ageConfirmedAt,
+    this.guest = false,
+    this.guestTurns,
   });
 
   bool get canAccessForge =>
@@ -129,6 +138,8 @@ class User {
     int? tokenBalance,
     bool? canForge,
     DateTime? ageConfirmedAt,
+    bool? guest,
+    int? guestTurns,
   }) {
     return User(
       id: id ?? this.id,
@@ -140,6 +151,8 @@ class User {
       tokenBalance: tokenBalance ?? this.tokenBalance,
       canForge: canForge ?? this.canForge,
       ageConfirmedAt: ageConfirmedAt ?? this.ageConfirmedAt,
+      guest: guest ?? this.guest,
+      guestTurns: guestTurns ?? this.guestTurns,
     );
   }
 
@@ -158,6 +171,8 @@ class User {
       ageConfirmedAt: json['age_confirmed_at'] != null
           ? DateTime.tryParse(json['age_confirmed_at'] as String)
           : null,
+      guest: json['guest'] == true,
+      guestTurns: json['guest_turns'] is int ? json['guest_turns'] as int : null,
     );
   }
 
@@ -172,5 +187,7 @@ class User {
     if (canForge != null) 'can_forge': canForge,
     if (ageConfirmedAt != null)
       'age_confirmed_at': ageConfirmedAt!.toIso8601String(),
+    if (guest) 'guest': true,
+    if (guestTurns != null) 'guest_turns': guestTurns,
   };
 }
