@@ -1056,7 +1056,8 @@ class PhoneTabState extends State<PhoneTab> {
   void initState() {
     super.initState();
     if (widget.codeSent) _startCooldown();
-    widget.otpController.addListener(_onOtpChanged);
+    widget.otpController.addListener(_onFieldChanged);
+    widget.phoneController.addListener(_onFieldChanged);
   }
 
   @override
@@ -1071,21 +1072,37 @@ class PhoneTabState extends State<PhoneTab> {
       _startCooldown(widget.holdSeconds!, true);
     }
     if (widget.otpController != oldWidget.otpController) {
-      oldWidget.otpController.removeListener(_onOtpChanged);
-      widget.otpController.addListener(_onOtpChanged);
+      oldWidget.otpController.removeListener(_onFieldChanged);
+      widget.otpController.addListener(_onFieldChanged);
+    }
+    if (widget.phoneController != oldWidget.phoneController) {
+      oldWidget.phoneController.removeListener(_onFieldChanged);
+      widget.phoneController.addListener(_onFieldChanged);
     }
   }
 
   @override
   void dispose() {
-    widget.otpController.removeListener(_onOtpChanged);
+    widget.otpController.removeListener(_onFieldChanged);
+    widget.phoneController.removeListener(_onFieldChanged);
     _timer?.cancel();
     _phoneFocus.dispose();
     super.dispose();
   }
 
-  void _onOtpChanged() {
+  void _onFieldChanged() {
     if (mounted) setState(() {});
+  }
+
+  /// Mirrors the server's own check (`^\+[1-9]\d{7,14}$`): 8 to 15 digits
+  /// counting the country code. Without it the button sent a bare `+91`, the
+  /// server refused it, and the player saw a generic error with no reason.
+  bool get _numberComplete {
+    final national = widget.phoneController.text.replaceAll(RegExp(r'\D'), '');
+    final digits =
+        widget.dialCode.code.replaceAll(RegExp(r'\D'), '').length +
+        national.length;
+    return national.isNotEmpty && digits >= 8 && digits <= 15;
   }
 
   void _startCooldown([int seconds = _resendSeconds, bool hold = false]) {
@@ -1168,7 +1185,10 @@ class PhoneTabState extends State<PhoneTab> {
                     ? 'Try again in ${_clock(_cooldown)}'
                     : 'Send the Code',
                 loading: widget.isLoading,
-                onTap: (widget.isLoading || (_holding && _cooldown > 0))
+                onTap:
+                    (widget.isLoading ||
+                        (_holding && _cooldown > 0) ||
+                        !_numberComplete)
                     ? null
                     : widget.onSendCode,
               ),
