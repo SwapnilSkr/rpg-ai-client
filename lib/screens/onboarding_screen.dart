@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -303,72 +305,101 @@ class _NameStepState extends State<_NameStep> {
     return Column(
       children: [
         Expanded(
-          child: KeyboardAwareScroll(
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Center(child: ForgeMark(size: 68)),
-                const SizedBox(height: 28),
-                Text(
-                  'What shall we call you?',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.cinzel(
-                    color: EverloreTheme.gold,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+              const topPadding = 20.0;
+              const bottomPadding = 20.0;
+              final availableHeight = keyboard > 0
+                  ? 0.0
+                  : math.max(
+                      0.0,
+                      constraints.maxHeight - topPadding - bottomPadding,
+                    );
+
+              return KeyboardAwareScroll(
+                padding: const EdgeInsets.fromLTRB(
+                  28,
+                  topPadding,
+                  28,
+                  bottomPadding,
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'Your name travels with you across every realm.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.ebGaramond(
-                    color: EverloreTheme.ash,
-                    fontSize: 17,
-                    height: 1.5,
+                closedBottomSlack: bottomPadding,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: availableHeight,
                   ),
-                ),
-                const SizedBox(height: 8),
-                // The name is editable from the profile tab, so say so — this
-                // step reads as a permanent choice otherwise.
-                Text(
-                  'You can change it later in your profile.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.ebGaramond(
-                    color: EverloreTheme.ash.withValues(alpha: 0.75),
-                    fontSize: 15,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: 36),
-                KeyboardAwareInputGroup(
-                  focusNode: widget.focusNode,
-                  child: NeuField(
-                    controller: widget.controller,
-                    focusNode: widget.focusNode,
-                    hintText: 'Your name',
-                    // Without this the platform guesses what the field wants
-                    // and has offered saved phone numbers here.
-                    autofillHints: const [AutofillHints.name],
-                    onChanged: (_) {},
-                  ),
-                ),
-                if (widget.error != null) ...[
-                  const SizedBox(height: 14),
-                  Text(
-                    widget.error!,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.ebGaramond(
-                      color: EverloreTheme.ember,
-                      fontSize: 15,
-                      height: 1.4,
+                  child: IntrinsicHeight(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Spacer(flex: 2),
+                        const Center(child: ForgeMark(size: 68)),
+                        const SizedBox(height: 28),
+                        Text(
+                          'What shall we call you?',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.cinzel(
+                            color: EverloreTheme.gold,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Your name travels with you across every realm.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.ebGaramond(
+                            color: EverloreTheme.ash,
+                            fontSize: 17,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // The name is editable from the profile tab, so say so — this
+                        // step reads as a permanent choice otherwise.
+                        Text(
+                          'You can change it later in your profile.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.ebGaramond(
+                            color: EverloreTheme.ash.withValues(alpha: 0.75),
+                            fontSize: 15,
+                            height: 1.45,
+                          ),
+                        ),
+                        const SizedBox(height: 36),
+                        KeyboardAwareInputGroup(
+                          focusNode: widget.focusNode,
+                          child: NeuField(
+                            controller: widget.controller,
+                            focusNode: widget.focusNode,
+                            hintText: 'Your name',
+                            // Without this the platform guesses what the field wants
+                            // and has offered saved phone numbers here.
+                            autofillHints: const [AutofillHints.name],
+                            onChanged: (_) {},
+                          ),
+                        ),
+                        if (widget.error != null) ...[
+                          const SizedBox(height: 14),
+                          Text(
+                            widget.error!,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.ebGaramond(
+                              color: EverloreTheme.ember,
+                              fontSize: 15,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                        const Spacer(flex: 3),
+                      ],
                     ),
                   ),
-                ],
-              ],
-            ),
+                ),
+              );
+            },
           ),
         ),
         Padding(
@@ -423,57 +454,82 @@ class _GenderStep extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 8, 28, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Center(child: ForgeMark(size: 60)),
-                const SizedBox(height: 18),
-                Text(
-                  'How do you see yourself?',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.cinzel(
-                    color: EverloreTheme.gold,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const topPadding = 8.0;
+              const bottomPadding = 20.0;
+              final availableHeight = math.max(
+                0.0,
+                constraints.maxHeight - topPadding - bottomPadding,
+              );
+
+              return SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(
+                  28,
+                  topPadding,
+                  28,
+                  bottomPadding,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: availableHeight,
+                  ),
+                  child: IntrinsicHeight(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Spacer(flex: 2),
+                        const Center(child: ForgeMark(size: 60)),
+                        const SizedBox(height: 18),
+                        Text(
+                          'How do you see yourself?',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.cinzel(
+                            color: EverloreTheme.gold,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'We\'ll forge your portrait. You can skip — we\'ll choose a '
+                          'timeless hero look for you.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.ebGaramond(
+                            color: EverloreTheme.ash,
+                            fontSize: 16,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        _GenderOption(
+                          label: 'Male',
+                          gender: PlayerGender.male,
+                          selected: selected == PlayerGender.male,
+                          onTap: saving ? null : () => onSelect(PlayerGender.male),
+                        ),
+                        const SizedBox(height: 12),
+                        _GenderOption(
+                          label: 'Female',
+                          gender: PlayerGender.female,
+                          selected: selected == PlayerGender.female,
+                          onTap: saving ? null : () => onSelect(PlayerGender.female),
+                        ),
+                        const SizedBox(height: 12),
+                        _GenderOption(
+                          label: 'Non-binary',
+                          gender: PlayerGender.nonBinary,
+                          selected: selected == PlayerGender.nonBinary,
+                          onTap: saving ? null : () => onSelect(PlayerGender.nonBinary),
+                        ),
+                        const Spacer(flex: 3),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  'We\'ll forge your portrait. You can skip — we\'ll choose a '
-                  'timeless hero look for you.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.ebGaramond(
-                    color: EverloreTheme.ash,
-                    fontSize: 16,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                _GenderOption(
-                  label: 'Male',
-                  gender: PlayerGender.male,
-                  selected: selected == PlayerGender.male,
-                  onTap: saving ? null : () => onSelect(PlayerGender.male),
-                ),
-                const SizedBox(height: 12),
-                _GenderOption(
-                  label: 'Female',
-                  gender: PlayerGender.female,
-                  selected: selected == PlayerGender.female,
-                  onTap: saving ? null : () => onSelect(PlayerGender.female),
-                ),
-                const SizedBox(height: 12),
-                _GenderOption(
-                  label: 'Non-binary',
-                  gender: PlayerGender.nonBinary,
-                  selected: selected == PlayerGender.nonBinary,
-                  onTap: saving ? null : () => onSelect(PlayerGender.nonBinary),
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
         Padding(

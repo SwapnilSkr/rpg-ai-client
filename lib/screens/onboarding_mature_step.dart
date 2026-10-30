@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app/theme/nexus_theme.dart';
@@ -68,67 +70,92 @@ class _OnboardingMatureStepState extends State<OnboardingMatureStep> {
     return Column(
       children: [
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Center(child: ForgeMark(size: 60)),
-                const SizedBox(height: 18),
-                Text(
-                  'Mature themes',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.cinzel(
-                    color: EverloreTheme.gold,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const topPadding = 20.0;
+              const bottomPadding = 24.0;
+              final availableHeight = math.max(
+                0.0,
+                constraints.maxHeight - topPadding - bottomPadding,
+              );
+
+              return SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(
+                  28,
+                  topPadding,
+                  28,
+                  bottomPadding,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: availableHeight,
                   ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Some worlds can include romance, violence and mature themes. '
-                  'You can change this any time in your profile.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.ebGaramond(
-                    color: EverloreTheme.ash,
-                    fontSize: 16,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 36),
-                _MatureChoiceCard(
-                  label: 'Keep it gentle',
-                  onTap: _saving ? null : _onKeepGentle,
-                ),
-                const SizedBox(height: 14),
-                _MatureChoiceCard(
-                  label: 'Allow mature themes',
-                  onTap: _saving ? null : _onAllowMature,
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    _error!,
-                    textAlign: TextAlign.center,
-                    style: EverloreTheme.ui(
-                      color: EverloreTheme.crimson,
-                      size: 13,
-                      weight: FontWeight.w500,
+                  child: IntrinsicHeight(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Spacer(flex: 2),
+                        const Center(child: ForgeMark(size: 60)),
+                        const SizedBox(height: 18),
+                        Text(
+                          'Mature themes',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.cinzel(
+                            color: EverloreTheme.gold,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Some worlds can include romance, violence and mature themes. '
+                          'You can change this any time in your profile.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.ebGaramond(
+                            color: EverloreTheme.ash,
+                            fontSize: 16,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        _MatureChoiceCard(
+                          label: 'Keep it gentle',
+                          onTap: _saving ? null : _onKeepGentle,
+                        ),
+                        const SizedBox(height: 12),
+                        _MatureChoiceCard(
+                          label: 'Allow mature themes',
+                          onTap: _saving ? null : _onAllowMature,
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            _error!,
+                            textAlign: TextAlign.center,
+                            style: EverloreTheme.ui(
+                              color: EverloreTheme.crimson,
+                              size: 13,
+                              weight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                        if (_saving) ...[
+                          const SizedBox(height: 24),
+                          const Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: EverloreTheme.gold,
+                            ),
+                          ),
+                        ],
+                        const Spacer(flex: 3),
+                      ],
                     ),
                   ),
-                ],
-                if (_saving) ...[
-                  const SizedBox(height: 24),
-                  const Center(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: EverloreTheme.gold,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+                ),
+              );
+            },
           ),
         ),
       ],
