@@ -15,6 +15,7 @@ import 'widgets/story_timeline_sheet.dart';
 import 'widgets/the_ink_rests_dialog.dart';
 import 'widgets/anchored_menu_popup.dart';
 import 'widgets/reminder_ask_sheet.dart';
+import 'widgets/starter_story_link.dart';
 import '../../../../core/reminders/reminder_service.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../shared/app_icons.dart';
@@ -68,32 +69,43 @@ class PlayScreen extends StatelessWidget {
   final String? focusEventId;
   final PlayCubit? cubit;
 
+  /// Opened straight from onboarding (FR-3). The route stack was replaced, so
+  /// back goes to Explore instead of closing the app.
+  final bool starter;
+
   const PlayScreen({
     super.key,
     required this.instanceId,
     this.focusEventId,
     this.cubit,
+    this.starter = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (cubit != null) {
-      return BlocProvider<PlayCubit>.value(
-        value: cubit!,
-        child: _PlayView(focusEventId: focusEventId),
-      );
-    }
-    return BlocProvider(
-      create: (_) => PlayCubit(instanceId: instanceId),
-      child: _PlayView(focusEventId: focusEventId),
+    final view = _PlayView(focusEventId: focusEventId, starter: starter);
+    final provided = cubit != null
+        ? BlocProvider<PlayCubit>.value(value: cubit!, child: view)
+        : BlocProvider(
+            create: (_) => PlayCubit(instanceId: instanceId),
+            child: view,
+          );
+    if (!starter) return provided;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.go('/discover');
+      },
+      child: provided,
     );
   }
 }
 
 class _PlayView extends StatefulWidget {
   final String? focusEventId;
+  final bool starter;
 
-  const _PlayView({this.focusEventId});
+  const _PlayView({this.focusEventId, this.starter = false});
 
   @override
   State<_PlayView> createState() => _PlayViewState();
@@ -119,6 +131,43 @@ class _PlayViewState extends State<_PlayView> {
   bool _inkModalVisible = false;
   bool _restModalVisible = false;
   bool _reminderSheetOpen = false;
+  bool _playerTurnSent = false;
+
+  bool _hasSentFirstTurn(PlayState state) {
+    if (_playerTurnSent) return true;
+    if (state.totalEvents > 1) {
+      _playerTurnSent = true;
+      return true;
+    }
+    for (final event in state.events) {
+      if (event.isOptimistic) {
+        _playerTurnSent = true;
+        return true;
+      }
+      if (event.playerInput != null && event.playerInput!.trim().isNotEmpty) {
+        _playerTurnSent = true;
+        return true;
+      }
+      final isSeedGreeting = event.modelUsed == 'seed' ||
+          (event.modelUsed.isEmpty &&
+              event.sequence <= 1 &&
+              (event.playerInput?.trim().isEmpty ?? true));
+      if (!isSeedGreeting) {
+        _playerTurnSent = true;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _handleBack() {
+    if (widget.starter) {
+      context.go('/discover');
+    } else {
+      context.pop();
+    }
+  }
+
 
   /// One-shot composer prefill consumed by [PlayerInput] (bond actions).
   final _composerDraft = ValueNotifier<String?>(null);
@@ -1643,6 +1692,7 @@ class _PlayViewState extends State<_PlayView> {
             ? state.events.last.sceneTag
             : null;
         final accent = EverloreTheme.sceneAccent(latestTag);
+        final showStarterLink = widget.starter && !_hasSentFirstTurn(state);
 
         return Scaffold(
           backgroundColor: EverloreTheme.void0,
@@ -1696,7 +1746,7 @@ class _PlayViewState extends State<_PlayView> {
                     title: title,
                     accent: accent,
                     isConnected: state.isConnected,
-                    onBack: () => context.pop(),
+                    onBack: _handleBack,
                     onOpenRealm:
                         state.instance != null && state.template != null
                         ? () => context.push(
@@ -1729,6 +1779,8 @@ class _PlayViewState extends State<_PlayView> {
                         ? () => _showChatMenu(context)
                         : null,
                   ),
+
+                  if (showStarterLink) const StarterStoryLink(),
 
                   if (state.instance != null &&
                       state.instance!.worldState.isNotEmpty)

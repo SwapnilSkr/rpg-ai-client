@@ -80,6 +80,7 @@ final router = GoRouter(
       builder: (context, state) => PlayScreen(
         instanceId: state.pathParameters['instanceId']!,
         focusEventId: state.uri.queryParameters['event'],
+        starter: state.uri.queryParameters['starter'] == '1',
       ),
     ),
     GoRoute(
