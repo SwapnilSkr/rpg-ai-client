@@ -84,6 +84,18 @@ abstract final class RigTuning {
   /// within a fifth of a pixel of the long hair at the hardest pose.
   static const int hairJoinBandRows = 10;
 
+  /// Half the height of the band around the hair join where the base painting's
+  /// mesh gets fine rows. The base is the reference both hair layers blend to at
+  /// the join, so its rows must sample the depth falloff as finely as theirs —
+  /// a 40 / 64 px cell straddling the seam interpolated a straight chord of the
+  /// head's turn and opened the dark line the owner saw. 20 px each side covers
+  /// the join row and the hair_long crop's few unpainted rows above it.
+  static const double baseJoinBandHalfPx = 20;
+
+  /// Rows inside the base's band: 5 px, a little finer than hair_long's 6 px
+  /// band rows, so the base is never the coarser side of the seam.
+  static const int baseJoinBandCells = 8;
+
   /// Bangs: a stiffer, smaller spring, and a fraction of the tips' lag.
   static const double frontStiffness = 140;
   static const double frontDamping = 11;

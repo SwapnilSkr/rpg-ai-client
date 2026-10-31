@@ -10,6 +10,23 @@ import 'rig_manifest.dart';
 import 'rig_quality.dart';
 import 'rig_tuning.dart';
 
+/// A stretch of a layer's rows with its own cell count (crop-local y range).
+class _RowBand {
+  const _RowBand(this.top, this.bottom, this.cells);
+
+  final double top;
+  final double bottom;
+  final int cells;
+}
+
+/// Appends the far edge of each of [cells] even cells from [from] to [to];
+/// [from] itself is already an edge.
+void _evenCells(List<double> edges, double from, double to, int cells) {
+  for (var k = 1; k <= cells; k++) {
+    edges.add(from + (to - from) * k / cells);
+  }
+}
+
 /// A layer as a grid of quads over its crop of the canvas.
 ///
 /// `rest` holds canvas-space positions, `tex` the matching pixel positions in
@@ -25,12 +42,15 @@ class LayerMesh {
   /// texture may be smaller than its crop when it was decoded at display size,
   /// and a shader samples its own image.
   ///
-  /// [tailPx] splits the bottom of the crop into [tailCells] even rows instead
-  /// of covering it with cells of [cellPx]. Only hair_front asks for it: its
-  /// motion fades over the last few dozen px before the join with hair_long,
-  /// and one 40 px cell across a 60 px band would sample that fade so coarsely
-  /// that the seam still showed. Never more than half the crop: the body above
-  /// needs cells of its own.
+  /// Three optional fine bands refine the rows, because the GPU interpolates
+  /// positions linearly between vertices and a seam needs that chord to be
+  /// short: [headPx] / [headCells] split the top of the crop into even rows
+  /// (hair_long, whose top row is the join), [tailPx] / [tailCells] the bottom
+  /// (hair_front, whose fade runs up to the join), and [bandPx] / [bandCells]
+  /// a band of [bandPx] canvas px centred on canvas row [bandY] (the base
+  /// painting, which must agree with both at the join). Every other row covers
+  /// its stretch with cells of at most [cellPx]. The tail never takes more than
+  /// half the crop: the body above needs cells of its own.
   factory LayerMesh.grid({
     required double x,
     required double y,
@@ -39,23 +59,56 @@ class LayerMesh {
     int? cols,
     double cellPx = RigTuning.meshCellPxHigh,
     double texScale = 1,
+    double headPx = 0,
+    int headCells = 0,
     double tailPx = 0,
     int tailCells = 0,
+    double bandY = 0,
+    double bandPx = 0,
+    int bandCells = 0,
   }) {
     final c = cols ?? math.max(3, (w / cellPx).ceil());
+    // The fine bands as crop-local y ranges. A band with no height or no rows is
+    // dropped: rows of zero height would collapse the grid and the deformations
+    // would be read off the wrong cell.
+    final bands = <_RowBand>[];
+    final headH = headPx.clamp(0.0, h);
+    if (headH > 0 && headCells > 0) bands.add(_RowBand(0, headH, headCells));
     final tailH = tailPx.clamp(0.0, h * 0.5);
-    // No tail height means no tail rows: rows of zero height would collapse
-    // the grid and the deformations would be read off the wrong cell.
-    final tail = tailH > 0 ? tailCells : 0;
-    final bodyH = h - tailH;
-    final body = tail > 0
-        ? math.max(1, (bodyH / cellPx).ceil())
-        : math.max(3, (h / cellPx).ceil());
-    final r = body + tail;
-    // Row j's height above the crop's top: even cells of [cellPx] down to the
-    // tail, then the tail's own even rows.
-    double rowH(int j) =>
-        j <= body ? bodyH * j / body : bodyH + tailH * (j - body) / tail;
+    if (tailH > 0 && tailCells > 0) {
+      bands.add(_RowBand(h - tailH, h, tailCells));
+    }
+    if (bandPx > 0 && bandCells > 0) {
+      final mid = (bandY - y).clamp(0.0, h);
+      final top = math.max(0.0, mid - bandPx * 0.5);
+      final bottom = math.min(h, mid + bandPx * 0.5);
+      if (bottom > top) bands.add(_RowBand(top, bottom, bandCells));
+    }
+    bands.sort((a, b) => a.top.compareTo(b.top));
+    // Row edges, crop-local y: the first is always 0, the last always h.
+    final edges = <double>[0];
+    if (bands.isEmpty) {
+      // Unrefined layers keep the even grid they always had, three rows even
+      // for a crop shorter than one cell.
+      _evenCells(edges, 0, h, math.max(3, (h / cellPx).ceil()));
+    } else {
+      var at = 0.0;
+      for (final b in bands) {
+        // Bands never overlap in practice; a band that starts above the cursor
+        // keeps only the part not already covered.
+        if (b.bottom <= at) continue;
+        final top = math.max(b.top, at);
+        if (top > at) {
+          _evenCells(edges, at, top, math.max(1, ((top - at) / cellPx).ceil()));
+        }
+        _evenCells(edges, top, b.bottom, b.cells);
+        at = b.bottom;
+      }
+      if (at < h) {
+        _evenCells(edges, at, h, math.max(1, ((h - at) / cellPx).ceil()));
+      }
+    }
+    final r = edges.length - 1;
     final count = (c + 1) * (r + 1);
     final rest = Float32List(count * 2);
     final tex = Float32List(count * 2);
@@ -63,7 +116,7 @@ class LayerMesh {
       for (var i = 0; i <= c; i++) {
         final k = (j * (c + 1) + i) * 2;
         final u = w * i / c;
-        final v = rowH(j);
+        final v = edges[j];
         tex[k] = u * texScale;
         tex[k + 1] = v * texScale;
         rest[k] = x + u;
@@ -125,25 +178,37 @@ class RigLayerArt {
     required ui.Image image,
     required RigDeformer deformer,
     RigQuality quality = RigQuality.high,
+    required double hairJoinY,
   }) {
-    // The two hair layers are one painted strand cut in two at this row: the
-    // front's crop ends and the long crop begins. Everything the join needs is
-    // derived from the specs, never from a hand-written pixel number.
-    final joinY = spec.y + spec.h;
-    final blends = part == RigPart.hairFront;
+    // The hair is one painted strand cut in three at the join: the base
+    // painting ends its hair, hair_front's crop ends, and hair_long's crop
+    // begins. hair_front's own join is its bottom row and hair_long's is its
+    // top row; both are derived from their specs. The base cannot see the other
+    // layer's spec, so the set passes hair_long's top row (rig.json).
+    final frontJoinY = spec.y + spec.h;
+    final longTopY = spec.y;
+    final isLong = part == RigPart.hairLong;
+    final isFront = part == RigPart.hairFront;
     final mesh = LayerMesh.grid(
       x: spec.x,
       y: spec.y,
       w: spec.w,
       h: spec.h,
       // One spring per vertex column: n columns of vertices is n - 1 cells.
-      cols: part == RigPart.hairLong ? quality.hairColumns - 1 : null,
+      cols: isLong ? quality.hairColumns - 1 : null,
       cellPx: quality.meshCellPx,
       texScale: image.width / spec.w,
-      // Only the front fades, and only over its last hairJoinBandPx, so only it
-      // gets the fine rows that sample the fade.
-      tailPx: blends ? RigTuning.hairJoinBandPx : 0,
-      tailCells: blends ? RigTuning.hairJoinBandRows : 0,
+      // hair_long's top and hair_front's bottom rows sit on the join. Fine rows
+      // there sample the depth fade instead of stretching it across one cell.
+      headPx: isLong ? RigTuning.hairJoinBandPx : 0,
+      headCells: isLong ? RigTuning.hairJoinBandRows : 0,
+      tailPx: isFront ? RigTuning.hairJoinBandPx : 0,
+      tailCells: isFront ? RigTuning.hairJoinBandRows : 0,
+      // The base is the reference at the join, so its mesh refines rows around
+      // hair_long's top: a coarse chord across the seam is what opened the line.
+      bandY: part == RigPart.base ? hairJoinY : 0,
+      bandPx: part == RigPart.base ? 2 * RigTuning.baseJoinBandHalfPx : 0,
+      bandCells: part == RigPart.base ? RigTuning.baseJoinBandCells : 0,
     );
     final n = mesh.vertexCount;
     final depth = Float32List(n);
@@ -153,31 +218,50 @@ class RigLayerArt {
       for (var i = 0; i <= mesh.cols; i++) {
         final v = j * (mesh.cols + 1) + i;
         final rest = ui.Offset(mesh.rest[v * 2], mesh.rest[v * 2 + 1]);
+        // The base painting's own depth field: the base uses it everywhere and
+        // the two hair layers blend to it at their joins.
+        final joinDepth = part == RigPart.base || isLong || isFront
+            ? deformer.baseDepth(rest)
+            : 0.0;
         depth[v] = switch (part) {
-          RigPart.base => deformer.baseDepth(rest),
+          RigPart.base => joinDepth,
           RigPart.outfit => RigTuning.depthFace,
           RigPart.patch || RigPart.mouth || RigPart.eyes => RigTuning.depthFeatures,
           RigPart.hairLong => RigTuning.depthHairLong,
           RigPart.hairFront => RigTuning.depthHairFront,
         };
-        // Roots stay with the head (0), tips trail (1).
-        if (part == RigPart.hairLong || part == RigPart.hairFront) {
-          // The curve follows the vertex's height in the crop, not its row
-          // index: the front's rows are finer near the bottom, and the bangs
-          // above the band must keep exactly the weight they always had.
+        if (isLong || isFront) {
+          // Roots stay with the head (0), tips trail (1). The curve follows the
+          // vertex's height in the crop, not its row index: the rows are finer
+          // near a join, and the bangs above the band must keep exactly the
+          // weight they always had.
           final f = ((rest.dy - spec.y) / spec.h).clamp(0.0, 1.0);
           lagWeight[v] = math.pow(f, RigTuning.hairLagCurve).toDouble();
           column[v] = i;
-          if (blends) {
-            // At the join the front must move as the long hair's root row
-            // does — depthHairLong and no lag — or the strand tears there.
-            // The blend reaches exactly depthHairLong and weight 0 at joinY.
+          if (isLong) {
+            // s = 0 exactly at hair_long's top row, 1 at the far side of the
+            // band. The top row must move as the base painting does, or the
+            // painted seam opens; below the band the long hair keeps its own
+            // depth. Multiplying the lag by s also pins the root row to the
+            // head.
             final s = smoothstep(
-              joinY - RigTuning.hairJoinBandPx,
-              joinY,
+              longTopY,
+              longTopY + RigTuning.hairJoinBandPx,
               rest.dy,
             );
-            depth[v] += (RigTuning.depthHairLong - RigTuning.depthHairFront) * s;
+            depth[v] = joinDepth + (RigTuning.depthHairLong - joinDepth) * s;
+            lagWeight[v] *= s;
+          } else {
+            // The bangs blend from their own depth above the band to the base's
+            // depth exactly at their bottom row, so front, long and base all
+            // agree where the strand is cut. Lag fades to 0 there as before.
+            final s = smoothstep(
+              frontJoinY - RigTuning.hairJoinBandPx,
+              frontJoinY,
+              rest.dy,
+            );
+            depth[v] = RigTuning.depthHairFront +
+                (joinDepth - RigTuning.depthHairFront) * s;
             lagWeight[v] *= 1 - s;
           }
         }
@@ -264,6 +348,9 @@ class RigArtSet {
 
   void _buildLayers(RigQuality quality) {
     _quality = quality;
+    // The row where the long hair takes over from the base painting, from
+    // rig.json: the base mesh refines its rows around it.
+    final hairJoinY = manifest.layer('hair_long').y;
     RigLayerArt art(String name, RigPart part) {
       final spec = manifest.layer(name);
       final image = images[spec.file];
@@ -274,6 +361,7 @@ class RigArtSet {
         image: image,
         deformer: deformer,
         quality: quality,
+        hairJoinY: hairJoinY,
       );
     }
 
