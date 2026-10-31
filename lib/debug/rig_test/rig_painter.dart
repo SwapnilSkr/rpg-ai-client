@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
 
 import 'rig_art.dart';
+import 'rig_quality.dart';
 import 'rig_sim.dart';
 import 'rig_tuning.dart';
 
@@ -50,7 +51,9 @@ class RigPainter extends CustomPainter {
       layer(art.mouths[e]!, sim.mouthAlpha(e));
     }
 
-    // Glances sit under the lids, so a blink covers them.
+    // Eyes: one drawing at full opacity, chosen by the eye state. OPEN draws
+    // nothing — the face under it already carries open eyes — and the glance
+    // layers take the little nudge that follows the switch.
     final nudge = sim.pose.eyeX * RigTuning.glanceNudgePx;
     layer(art.glanceLeft, sim.glanceAlpha(right: false), nudge: nudge);
     layer(art.glanceRight, sim.glanceAlpha(right: true), nudge: nudge);
@@ -65,8 +68,15 @@ class RigPainter extends CustomPainter {
   void _drawFlat(Canvas canvas, RigLayerArt a) {
     _paint
       ..colorFilter = null
-      ..filterQuality = RigTuning.mipmap ? FilterQuality.medium : FilterQuality.low;
-    canvas.drawImage(a.image, Offset(a.spec.x, a.spec.y), _paint);
+      ..filterQuality = art.quality.filterQuality;
+    // A rect, not an offset: the texture may have been decoded smaller than
+    // its crop of the canvas.
+    canvas.drawImageRect(
+      a.image,
+      Rect.fromLTWH(0, 0, a.image.width.toDouble(), a.image.height.toDouble()),
+      Rect.fromLTWH(a.spec.x, a.spec.y, a.spec.w, a.spec.h),
+      _paint,
+    );
   }
 
   void _drawMesh(Canvas canvas, RigLayerArt a, double alpha, double nudge) {

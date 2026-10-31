@@ -1,7 +1,25 @@
 import 'dart:math';
 
 import 'package:everlore/debug/rig_test/rig_scheduler.dart';
+import 'package:everlore/debug/rig_test/rig_tuning.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Every phase change over [seconds], with the time it happened.
+List<(double, BlinkPhase)> _changes(
+  BlinkScheduler b,
+  double seconds, {
+  bool withHalf = true,
+}) {
+  const dt = 0.002;
+  final out = <(double, BlinkPhase)>[];
+  var last = BlinkPhase.open;
+  for (var t = 0.0; t < seconds; t += dt) {
+    final p = b.phase(t, withHalf: withHalf);
+    if (p != last) out.add((t, p));
+    last = p;
+  }
+  return out;
+}
 
 void main() {
   group('BlinkScheduler', () {
@@ -11,7 +29,7 @@ void main() {
         final starts = <double>[];
         var seen = 0;
         for (var t = 0.0; t < 600; t += 1 / 60) {
-          b.update(t);
+          b.phase(t);
           if (b.groups != seen) {
             seen = b.groups;
             starts.add(b.lastGroupStart);
@@ -25,33 +43,43 @@ void main() {
       }
     });
 
-    test('a blink goes open, half, closed, half, open in about 150 ms', () {
+    test('a blink steps half, shut, half for their tuned holds', () {
       final b = BlinkScheduler(Random(3));
-      final samples = <double>[];
-      var start = double.nan;
-      for (var t = 0.0; t < 10; t += 0.005) {
-        final v = b.update(t);
-        if (start.isNaN && b.groups > 0) start = b.lastGroupStart;
-        if (!start.isNaN && t >= start && t <= start + 0.15) samples.add(v);
-      }
-      expect(samples.first, greaterThan(0.9));
-      expect(samples.reduce(min), 0);
-      expect(samples.any((v) => (v - 0.5).abs() < 0.12), isTrue,
-          reason: 'half-closed in-between frame on the way');
-      expect(samples.last, greaterThan(0.9));
-      // Down then up, no flicker in between.
-      final low = samples.indexOf(0);
-      for (var i = 1; i < low; i++) {
-        expect(samples[i], lessThanOrEqualTo(samples[i - 1] + 1e-9));
-      }
+      final changes = _changes(b, 10);
+      final firstHalf = changes.indexWhere((c) => c.$2 == BlinkPhase.half);
+      expect(firstHalf, greaterThanOrEqualTo(0), reason: 'a blink happened');
+      expect(
+        changes.sublist(firstHalf, firstHalf + 3).map((c) => c.$2),
+        [BlinkPhase.half, BlinkPhase.closed, BlinkPhase.half],
+        reason: 'open, half, shut, half, open — never any other order',
+      );
+      expect(changes[firstHalf + 3].$2, BlinkPhase.open);
+      expect(changes[firstHalf + 1].$1 - changes[firstHalf].$1,
+          closeTo(RigTuning.blinkHalfHold, 0.003));
+      expect(changes[firstHalf + 2].$1 - changes[firstHalf + 1].$1,
+          closeTo(RigTuning.blinkClosedHold, 0.003));
+      expect(changes[firstHalf + 3].$1 - changes[firstHalf + 2].$1,
+          closeTo(RigTuning.blinkHalfHold, 0.003));
+    });
+
+    test('without a half step the blink is one shut of its own length', () {
+      final b = BlinkScheduler(Random(3));
+      final changes = _changes(b, 10, withHalf: false);
+      expect(changes.every((c) => c.$2 != BlinkPhase.half), isTrue,
+          reason: 'the half-lid drawing is a neutral-face painting');
+      final firstClosed = changes.indexWhere((c) => c.$2 == BlinkPhase.closed);
+      expect(firstClosed, greaterThanOrEqualTo(0));
+      expect(changes[firstClosed + 1].$2, BlinkPhase.open);
+      expect(changes[firstClosed + 1].$1 - changes[firstClosed].$1,
+          closeTo(RigTuning.blinkClosedHoldExpression, 0.003));
     });
 
     test('same seed, same blinks; and some of them are doubles', () {
-      List<double> run() {
+      List<BlinkPhase> run() {
         final b = BlinkScheduler(Random(99));
-        final out = <double>[];
+        final out = <BlinkPhase>[];
         for (var t = 0.0; t < 120; t += 0.01) {
-          out.add(b.update(t));
+          out.add(b.phase(t));
         }
         return out;
       }
@@ -59,9 +87,11 @@ void main() {
       final a = run();
       expect(run(), a);
       // A double shows as two closures within ~0.3 s of each other.
-      var closures = <int>[];
+      final closures = <int>[];
       for (var i = 1; i < a.length; i++) {
-        if (a[i] == 0 && a[i - 1] != 0) closures.add(i);
+        if (a[i] == BlinkPhase.closed && a[i - 1] != BlinkPhase.closed) {
+          closures.add(i);
+        }
       }
       var doubles = 0;
       for (var i = 1; i < closures.length; i++) {
@@ -71,7 +101,7 @@ void main() {
     });
 
     test('is open at the very start', () {
-      expect(BlinkScheduler(Random(5)).update(0), 1);
+      expect(BlinkScheduler(Random(5)).phase(0), BlinkPhase.open);
     });
   });
 
@@ -114,6 +144,24 @@ void main() {
         if (v > 0) sawRight = true;
       }
       expect(sawLeft && sawRight, isTrue);
+    });
+
+    test('nothing starts while it is disabled, and nothing is owed after', () {
+      final g = GlanceScheduler(Random(11));
+      for (var t = 0.0; t < 60; t += 1 / 60) {
+        expect(g.update(t, enabled: false), 0);
+      }
+      expect(g.glances, 0, reason: 'an expression face never glances');
+      // The clock kept running, so the first glance after turning back to
+      // neutral is at most one gap away.
+      var firstAt = double.nan;
+      for (var t = 60.0; t < 65; t += 1 / 60) {
+        final was = g.glances;
+        g.update(t, enabled: true);
+        if (g.glances != was && firstAt.isNaN) firstAt = t;
+      }
+      expect(g.glances, greaterThan(0));
+      expect(firstAt - 60, lessThanOrEqualTo(GlanceScheduler.maxGap + 1 / 60));
     });
   });
 

@@ -2,10 +2,15 @@ import 'dart:math' as math;
 
 import 'rig_tuning.dart';
 
+/// The lid phase of a blink. Cartoon and anime eyes are discrete drawings: a
+/// blink steps through these holds instead of fading between them, and these
+/// are the only states there are.
+enum BlinkPhase { open, half, closed }
+
 /// Blinks at random, 2-6 s apart (start to start), now and then a double.
 ///
 /// The clock is injected: callers pass the current time in seconds to
-/// [update], so a test can run an hour of blinks in a loop and the record
+/// [phase], so a test can run an hour of blinks in a loop and the record
 /// script can replay the same sequence from the same seed.
 class BlinkScheduler {
   BlinkScheduler(this._random) {
@@ -26,17 +31,12 @@ class BlinkScheduler {
   double lastGroupStart = double.negativeInfinity;
   int groups = 0;
 
-  /// Openness at the keyframe `u` (0..1 through the blink): open, closing with
-  /// the half-closed frame on the way, a beat shut, opening more slowly.
-  static double profile(double u) {
-    if (u <= 0 || u >= 1) return 1;
-    if (u < 0.38) return 1 - u / 0.38;
-    if (u < 0.45) return 0;
-    return (u - 0.45) / 0.55;
-  }
-
-  /// Eye openness at [t]: 1 open, 0.5 half, 0 closed.
-  double update(double t) {
+  /// The lid phase at [t].
+  ///
+  /// [withHalf] is false on an expression face: its patch carries its own eyes,
+  /// so the blink is one shut of [RigTuning.blinkClosedHoldExpression] and the
+  /// neutral half-lid drawing never appears.
+  BlinkPhase phase(double t, {bool withHalf = true}) {
     if (t >= _nextGroup) {
       final start = _nextGroup;
       lastGroupStart = start;
@@ -45,16 +45,33 @@ class BlinkScheduler {
         ..clear()
         ..add(start);
       if (_random.nextDouble() < doubleChance) {
-        _blinkStarts.add(start + RigTuning.blinkSeconds + _doubleSpacing);
+        _blinkStarts.add(start + RigTuning.blinkNeutralSeconds + _doubleSpacing);
       }
       _nextGroup = start + minGap + (maxGap - minGap) * _random.nextDouble();
     }
-    var open = 1.0;
+    var out = BlinkPhase.open;
     for (final s in _blinkStarts) {
-      final u = (t - s) / RigTuning.blinkSeconds;
-      if (u > 0 && u < 1) open = math.min(open, profile(u));
+      final p = _phaseAt(t - s, withHalf);
+      // A double's two blinks never overlap; take the more closed if they ever
+      // do, so the lids can never lift for a frame inside a blink.
+      if (p.index > out.index) out = p;
     }
-    return open;
+    return out;
+  }
+
+  static BlinkPhase _phaseAt(double u, bool withHalf) {
+    if (!withHalf) {
+      return u >= 0 && u < RigTuning.blinkClosedHoldExpression
+          ? BlinkPhase.closed
+          : BlinkPhase.open;
+    }
+    if (u < 0) return BlinkPhase.open;
+    if (u < RigTuning.blinkHalfHold) return BlinkPhase.half;
+    if (u < RigTuning.blinkHalfHold + RigTuning.blinkClosedHold) {
+      return BlinkPhase.closed;
+    }
+    if (u < RigTuning.blinkNeutralSeconds) return BlinkPhase.half;
+    return BlinkPhase.open;
   }
 }
 
@@ -79,17 +96,24 @@ class GlanceScheduler {
   int glances = 0;
 
   /// Target eye direction at [t], -1..1; 0 between glances.
-  double update(double t) {
+  ///
+  /// Glances belong to the neutral face, whose eye layers match its eyeballs.
+  /// While [enabled] is false no glance starts and a running one is cut, but
+  /// the clock keeps ticking, so coming back to neutral does not release a
+  /// backlog of glances at once.
+  double update(double t, {bool enabled = true}) {
     if (t >= _nextStart) {
       final start = _nextStart;
-      lastStart = start;
-      glances++;
-      final sign = _random.nextBool() ? 1.0 : -1.0;
-      _direction = sign * (0.7 + 0.3 * _random.nextDouble());
-      _holdUntil = start + minHold + (maxHold - minHold) * _random.nextDouble();
+      if (enabled) {
+        lastStart = start;
+        glances++;
+        final sign = _random.nextBool() ? 1.0 : -1.0;
+        _direction = sign * (0.7 + 0.3 * _random.nextDouble());
+        _holdUntil = start + minHold + (maxHold - minHold) * _random.nextDouble();
+      }
       _nextStart = start + minGap + (maxGap - minGap) * _random.nextDouble();
     }
-    return t < _holdUntil ? _direction : 0;
+    return enabled && t < _holdUntil ? _direction : 0;
   }
 }
 

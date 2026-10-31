@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 /// Every number that changes how the rig looks, in one place.
 ///
 /// Distances are canvas pixels (the art is a 1024 x 1536 canvas); turns are
@@ -48,8 +50,10 @@ abstract final class RigTuning {
   // ---- Hair springs -------------------------------------------------------
 
   /// Number of vertex columns on hair_long (so one fewer cell across), one
-  /// damped spring each.
-  static const int hairColumns = 16;
+  /// damped spring each. The low tier halves them: the same swing, half the
+  /// springs to step and half the vertices to push across that layer.
+  static const int hairColumnsHigh = 16;
+  static const int hairColumnsLow = 8;
 
   /// Stiffness 60 / damping 7 is a damping ratio of ~0.45: one clear overshoot
   /// of ~20%, then it settles in ~1.4 s. Heavier-feeling hair: lower the
@@ -74,27 +78,65 @@ abstract final class RigTuning {
 
   // ---- Face ---------------------------------------------------------------
 
-  /// A glance layer slides this far with eyeX, so it starts moving before the
-  /// crossfade has finished.
+  /// The glance layer slides this far as the nudge eases in. The switch itself
+  /// is instant (a glance is a saccade); the slide is the follow-through that
+  /// makes the whole head read as having moved.
   static const double glanceNudgePx = 2;
 
-  /// Blink timing: 150 ms from open to open, closing faster than opening.
-  static const double blinkSeconds = 0.15;
+  /// How long that slide takes after the switch. A saccade is over in ~40 ms;
+  /// this is quick enough to stay after it and slow enough to be seen.
+  static const double glanceNudgeSeconds = 0.08;
 
-  /// Under this openness the paper doll shows the closed eyes (about 115 ms of
-  /// each blink).
-  static const double paperClosedBelow = 0.75;
+  /// Blink holds, seconds. Anime eyes are discrete drawings and are never
+  /// cross-faded, so a blink is a sequence of holds: on the neutral face
+  /// half, shut, half (40 + 60 + 40 ms, 140 ms all told). An expression face
+  /// only shuts for the shorter hold, because the half-lid drawing is a
+  /// neutral-face painting and would change the eye shape mid-blink.
+  static const double blinkHalfHold = 0.04;
+  static const double blinkClosedHold = 0.06;
+  static const double blinkClosedHoldExpression = 0.09;
+
+  /// One neutral blink, open to open: half, shut, half.
+  static const double blinkNeutralSeconds = 2 * blinkHalfHold + blinkClosedHold;
 
   /// Expression crossfade.
   static const double expressionSeconds = 0.2;
 
-  // ---- Mesh ---------------------------------------------------------------
+  // ---- Mesh and quality ---------------------------------------------------
 
   /// Target cell size in canvas px. 40 gives the base ~24 x 36 cells: fine
-  /// enough for the depth falloff round the face, ~2k triangles.
-  static const double meshCellPx = 40;
+  /// enough for the depth falloff round the face, ~2k triangles. 64 is a third
+  /// of those triangles for a GPU that cannot afford them.
+  static const double meshCellPxHigh = 40;
+  static const double meshCellPxLow = 64;
 
   /// Texture sampling. `medium` mip-maps; the art is drawn at ~0.6 scale and
-  /// plain bilinear shimmers on hair strands.
-  static const bool mipmap = true;
+  /// plain bilinear shimmers on hair strands, which is what the low tier
+  /// accepts to pay less for every sample.
+  static const ui.FilterQuality filterQualityHigh = ui.FilterQuality.medium;
+  static const ui.FilterQuality filterQualityLow = ui.FilterQuality.low;
+
+  // ---- Quality auto-select ------------------------------------------------
+
+  /// Only the first seconds of a run are judged: a warm-up frame or a garbage
+  /// collection later on is not the GPU's speed.
+  static const double autoQualityWindowSeconds = 3;
+
+  /// Raster p90 at which the tier drops. Above 12 ms a 16.7 ms budget is
+  /// already gone before the build phase has run, so waiting to miss it is
+  /// pointless.
+  static const double autoQualityRasterP90Ms = 12;
+
+  // ---- Benchmark ----------------------------------------------------------
+
+  /// Length of the benchmark clip, seconds.
+  static const double benchSeconds = 20;
+
+  /// Gap between look-aways while the benchmark runs: constant load, not a
+  /// realistic idle.
+  static const double benchLookEverySeconds = 5;
+
+  /// The two deadlines a 60 fps budget is judged against, ms.
+  static const double frameBudgetMs = 16.7;
+  static const double stutterMs = 33;
 }

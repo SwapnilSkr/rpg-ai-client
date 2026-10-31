@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'rig_deform.dart';
 import 'rig_expression.dart';
 import 'rig_mouth.dart';
+import 'rig_quality.dart';
 import 'rig_scheduler.dart';
 import 'rig_script.dart';
 import 'rig_spring.dart';
@@ -12,14 +13,26 @@ import 'rig_tuning.dart';
 
 enum RigMode { paperDoll, mesh }
 
+/// The one eye drawing that is visible this frame.
+///
+/// Anime eyes are discrete drawings, so the rig never cross-fades two of them:
+/// the state is either OPEN (which draws nothing — the base painting or the
+/// expression patch already carries the open eyes), one of the three neutral
+/// lids, or one of the two glance drawings. Both modes read the same state.
+enum RigEyeState { open, half, closed, glanceLeft, glanceRight }
+
 /// All the rig's moving parts, with no drawing in it.
 ///
 /// [update] advances time; every input is smoothed toward a target so the
-/// painter only reads [pose], the layer alphas and the hair lag. Both modes run
-/// this same simulation (the paper doll just reads it more coarsely), so a
-/// recorded A clip and B clip share their blinks, glances and mouth beats.
+/// painter only reads [pose], [eyeState] and the hair lag. Both modes run this
+/// same simulation (the paper doll just reads it more coarsely), so a recorded
+/// A clip and B clip share their blinks, glances and mouth beats.
 class RigSim extends ChangeNotifier {
-  RigSim({required this.deformer, math.Random? random}) {
+  RigSim({
+    required this.deformer,
+    RigQuality quality = RigQuality.high,
+    math.Random? random,
+  }) : _quality = quality {
     _build(random ?? math.Random());
   }
 
@@ -28,8 +41,14 @@ class RigSim extends ChangeNotifier {
   RigMode mode = RigMode.mesh;
   bool outfit = false;
 
+  /// The one eye drawing on top of the face this frame.
+  RigEyeState eyeState = RigEyeState.open;
+
   /// True while the 30 s record clip runs.
   bool get recording => _recording;
+
+  /// True while the 20 s benchmark clip runs.
+  bool get benchmarking => _benchmarking;
 
   /// Bumped when anything the control bar shows changes.
   final ValueNotifier<int> uiRevision = ValueNotifier<int>(0);
@@ -46,10 +65,14 @@ class RigSim extends ChangeNotifier {
   late GlanceScheduler _glance;
   late SmoothNoise _noise;
 
-  // Smoothers: critically damped, so a changed target eases in.
-  late Spring _headX, _headY, _tilt, _bodyX, _eyeX;
+  RigQuality _quality;
+  RigQuality get quality => _quality;
 
-  /// One spring per hair_long vertex column and one for the bangs.
+  // Smoothers: critically damped, so a changed target eases in.
+  late Spring _headX, _headY, _tilt, _bodyX;
+
+  /// One spring per hair_long vertex column and one for the bangs. The count
+  /// follows the quality tier, so a tier switch rebuilds them.
   late List<Spring> _longHair;
   late Spring _frontHair;
 
@@ -61,6 +84,10 @@ class RigSim extends ChangeNotifier {
   bool _recording = false;
   double _recordStart = 0;
   int _nextEvent = 0;
+
+  bool _benchmarking = false;
+  double _benchAge = 0;
+  double _benchLookAge = 0;
 
   // Talk.
   int _line = -1;
@@ -74,6 +101,13 @@ class RigSim extends ChangeNotifier {
   double _lookAge = double.infinity;
   double _lookSide = 1;
   double _nextLookSide = 1;
+
+  // Glance nudge: the iris switches instantly, then the whole head follows for
+  // a few frames.
+  double _nudge = 0;
+  double _nudgeFrom = 0;
+  double _nudgeTo = 0;
+  double _nudgeAge = 0;
 
   bool get isTalking => _line >= 0;
   bool get isLookingAway => _lookAge < lookAwaySeconds;
@@ -90,34 +124,42 @@ class RigSim extends ChangeNotifier {
     _headY = Spring.critical(11);
     _tilt = Spring.critical(10);
     _bodyX = Spring.critical(6);
-    _eyeX = Spring.critical(25);
-    _longHair = [
-      for (var c = 0; c < RigTuning.hairColumns; c++) _hairSpring(c),
-    ];
+    _longHair = _hairSprings(_quality.hairColumns);
     _frontHair = Spring(
       stiffness: RigTuning.frontStiffness,
       damping: RigTuning.frontDamping,
     );
-    longHairLag = Float64List(RigTuning.hairColumns);
+    longHairLag = Float64List(_quality.hairColumns);
     frontHairLag = 0;
     time = 0;
+    eyeState = RigEyeState.open;
     _line = -1;
     _lineAge = 0;
     _nodAge = double.infinity;
     _lookAge = double.infinity;
     _nextLookSide = 1;
     _nextEvent = 0;
+    _benchmarking = false;
+    _benchAge = 0;
+    _benchLookAge = 0;
+    _nudge = 0;
+    _nudgeFrom = 0;
+    _nudgeTo = 0;
+    _nudgeAge = 0;
     pose
       ..headX = 0
       ..headY = 0
       ..headTilt = 0
       ..bodyX = 0
       ..breath = 0
-      ..eyeOpen = 1
       ..eyeX = 0
       ..mouthOpen = 0;
     subtitle.value = null;
   }
+
+  List<Spring> _hairSprings(int columns) => [
+        for (var c = 0; c < columns; c++) _hairSpring(c),
+      ];
 
   Spring _hairSpring(int column) {
     // A fixed wobble per column; the damping scales with sqrt(stiffness) so
@@ -139,6 +181,16 @@ class RigSim extends ChangeNotifier {
   void setOutfit(bool on) {
     if (on == outfit) return;
     outfit = on;
+    _touchUi();
+  }
+
+  /// Switches the tier. The hair springs follow the column count; the meshes
+  /// are rebuilt by the art set, which the caller changes in the same breath.
+  void setQuality(RigQuality q) {
+    if (q == _quality) return;
+    _quality = q;
+    _longHair = _hairSprings(q.hairColumns);
+    longHairLag = Float64List(q.hairColumns);
     _touchUi();
   }
 
@@ -165,12 +217,26 @@ class RigSim extends ChangeNotifier {
 
   /// Restarts the simulation from a fixed seed and plays the 30 s script.
   void startRecord() {
-    if (_recording) return;
+    if (_recording || _benchmarking) return;
     _build(math.Random(RecordScript.seed));
     _recording = true;
     _recordStart = 0;
     _touchUi();
     notifyListeners();
+  }
+
+  /// Runs the 20 s benchmark: mode B, outfit on, the four lines restarting as
+  /// they end and a look away every few seconds. Constant load, so the numbers
+  /// mean something on a cheap phone instead of measuring an idle character.
+  void startBenchmark() {
+    if (_benchmarking || _recording) return;
+    _benchmarking = true;
+    _benchAge = 0;
+    _benchLookAge = 0;
+    setMode(RigMode.mesh);
+    setOutfit(true);
+    talk();
+    _touchUi();
   }
 
   void _touchUi() => uiRevision.value++;
@@ -199,6 +265,7 @@ class RigSim extends ChangeNotifier {
     dt = dt.clamp(0.0, 0.05);
     time += dt;
     _runScript();
+    _runBenchmark(dt);
     _advanceTalk(dt);
     if (_lookAge < double.infinity) _lookAge += dt;
     if (_nodAge < double.infinity) _nodAge += dt;
@@ -207,6 +274,9 @@ class RigSim extends ChangeNotifier {
 
     final t = time;
     final looking = isLookingAway;
+    // The neutral eye drawings match the plain face only: an expression patch
+    // carries its own eyes and brows.
+    final neutralFace = _neutralFace;
 
     // Idle drift: two incommensurate slow sines plus a little noise.
     const w = 2 * math.pi;
@@ -226,21 +296,32 @@ class RigSim extends ChangeNotifier {
     if (_nodAge < _nodSeconds) {
       headY += 0.05 * math.sin(math.pi * _nodAge / _nodSeconds);
     }
-    var eyeTarget = _glance.update(t);
+    var glanceDir = _glance.update(t, enabled: neutralFace);
     if (looking) {
       // Eased in and out so the turn doesn't snap at either end.
       final env = _lookEnvelope(_lookAge);
       headX += _lookSide * lookAwayTurn * env;
       headY += lookAwayPitch * env;
       tilt += _lookSide * 0.02 * env;
-      eyeTarget = _lookSide * (env > 0.3 ? 1.0 : 0.0);
+      glanceDir = neutralFace ? _lookSide * (env > 0.3 ? 1.0 : 0.0) : 0;
     }
 
     _headX.step(headX, dt);
     _headY.step(headY, dt);
     _tilt.step(tilt, dt);
     _bodyX.step(sway, dt);
-    _eyeX.step(eyeTarget, dt);
+    _stepNudge(glanceDir, dt);
+
+    final blink = _blink.phase(t, withHalf: neutralFace);
+    eyeState = switch (blink) {
+      BlinkPhase.half => RigEyeState.half,
+      BlinkPhase.closed => RigEyeState.closed,
+      BlinkPhase.open => glanceDir == 0
+          ? RigEyeState.open
+          : glanceDir > 0
+              ? RigEyeState.glanceRight
+              : RigEyeState.glanceLeft,
+    };
 
     pose
       ..headX = _headX.position
@@ -248,8 +329,7 @@ class RigSim extends ChangeNotifier {
       ..headTilt = _tilt.position
       ..bodyX = _bodyX.position
       ..breath = 0.5 - 0.5 * math.cos(w * t / 3.6)
-      ..eyeOpen = _blink.update(t)
-      ..eyeX = _eyeX.position
+      ..eyeX = _nudge
       ..mouthOpen = mouth.value;
 
     // Hair: each column chases where the scalp is; the lag is the difference.
@@ -270,7 +350,26 @@ class RigSim extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// True when the face is the plain painting: no patch visible at any opacity.
+  bool get _neutralFace =>
+      expression.from == RigExpression.neutral &&
+      expression.to == RigExpression.neutral;
+
   static const double _nodSeconds = 0.4;
+
+  /// Eases the little slide that follows a glance's switch over
+  /// [RigTuning.glanceNudgeSeconds]. The eye drawings themselves never blend.
+  void _stepNudge(double target, double dt) {
+    if (target != _nudgeTo) {
+      _nudgeFrom = _nudge;
+      _nudgeTo = target;
+      _nudgeAge = 0;
+    }
+    if (_nudge == _nudgeTo) return;
+    _nudgeAge += dt;
+    final u = (_nudgeAge / RigTuning.glanceNudgeSeconds).clamp(0.0, 1.0);
+    _nudge = u >= 1 ? _nudgeTo : _nudgeFrom + (_nudgeTo - _nudgeFrom) * _ease(u);
+  }
 
   static double _lookEnvelope(double age) {
     // 0.25 s in, hold, 0.35 s out.
@@ -300,6 +399,23 @@ class RigSim extends ChangeNotifier {
           lookAway();
       }
       _nextEvent++;
+    }
+  }
+
+  void _runBenchmark(double dt) {
+    if (!_benchmarking) return;
+    _benchAge += dt;
+    _benchLookAge += dt;
+    // The four lines take 10 s, so restarting them keeps the mouth and the
+    // expression crossfades running for the whole clip.
+    if (!isTalking) talk();
+    if (_benchLookAge >= RigTuning.benchLookEverySeconds) {
+      _benchLookAge = 0;
+      lookAway();
+    }
+    if (_benchAge >= RigTuning.benchSeconds) {
+      _benchmarking = false;
+      _touchUi();
     }
   }
 
@@ -335,26 +451,16 @@ class RigSim extends ChangeNotifier {
     return mouth.isOpen && e == expression.target ? 1 : 0;
   }
 
-  double get _lidClosedness => 1 - ((pose.eyeOpen - 0.5) * 2).clamp(0.0, 1.0);
+  /// Opacity of the half-lid drawing. Exactly one eye layer is ever above zero,
+  /// and it is drawn at full opacity: discrete drawings, never a cross-fade.
+  double get halfAlpha => eyeState == RigEyeState.half ? 1 : 0;
 
-  double get halfAlpha {
-    if (!_mesh) return 0;
-    // Fades in as the lid starts down; stays under the closed layer.
-    return pose.eyeOpen >= 0.5 ? (1 - pose.eyeOpen) * 2 : 1;
-  }
+  /// Opacity of the closed-lid drawing.
+  double get closedAlpha => eyeState == RigEyeState.closed ? 1 : 0;
 
-  double get closedAlpha {
-    if (!_mesh) return pose.eyeOpen < RigTuning.paperClosedBelow ? 1 : 0;
-    return pose.eyeOpen >= 0.5 ? 0 : (0.5 - pose.eyeOpen) * 2;
-  }
-
-  /// Opacity of the glance layers: -1 left, +1 right.
+  /// Opacity of a glance drawing; the two can never both be lit.
   double glanceAlpha({required bool right}) {
-    if (_mesh) {
-      final side = right ? pose.eyeX : -pose.eyeX;
-      return side.clamp(0.0, 1.0) * (1 - _lidClosedness);
-    }
-    if (!isLookingAway || pose.eyeOpen < RigTuning.paperClosedBelow) return 0;
-    return (_lookSide > 0) == right ? 1 : 0;
+    final glance = right ? RigEyeState.glanceRight : RigEyeState.glanceLeft;
+    return eyeState == glance ? 1 : 0;
   }
 }

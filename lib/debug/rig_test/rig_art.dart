@@ -7,26 +7,34 @@ import 'dart:ui' as ui;
 import 'rig_deform.dart';
 import 'rig_expression.dart';
 import 'rig_manifest.dart';
+import 'rig_quality.dart';
 import 'rig_tuning.dart';
 
 /// A layer as a grid of quads over its crop of the canvas.
 ///
 /// `rest` holds canvas-space positions, `tex` the matching pixel positions in
 /// the layer's own image (an ImageShader samples in image pixels), `indices`
-/// two triangles per cell. Built once; only the deformed positions change.
+/// two triangles per cell. Built once per quality tier; only the deformed
+/// positions change per frame.
 class LayerMesh {
   LayerMesh._(this.cols, this.rows, this.rest, this.tex, this.indices);
 
   /// A grid for a crop at (x, y) of size w x h. [cols] overrides the cell size.
+  ///
+  /// [texScale] converts canvas pixels to the decoded image's pixels: the
+  /// texture may be smaller than its crop when it was decoded at display size,
+  /// and a shader samples its own image.
   factory LayerMesh.grid({
     required double x,
     required double y,
     required double w,
     required double h,
     int? cols,
+    double cellPx = RigTuning.meshCellPxHigh,
+    double texScale = 1,
   }) {
-    final c = cols ?? math.max(3, (w / RigTuning.meshCellPx).ceil());
-    final r = math.max(3, (h / RigTuning.meshCellPx).ceil());
+    final c = cols ?? math.max(3, (w / cellPx).ceil());
+    final r = math.max(3, (h / cellPx).ceil());
     final count = (c + 1) * (r + 1);
     final rest = Float32List(count * 2);
     final tex = Float32List(count * 2);
@@ -35,8 +43,8 @@ class LayerMesh {
         final k = (j * (c + 1) + i) * 2;
         final u = w * i / c;
         final v = h * j / r;
-        tex[k] = u;
-        tex[k + 1] = v;
+        tex[k] = u * texScale;
+        tex[k + 1] = v * texScale;
         rest[k] = x + u;
         rest[k + 1] = y + v;
       }
@@ -95,6 +103,7 @@ class RigLayerArt {
     required RigPart part,
     required ui.Image image,
     required RigDeformer deformer,
+    RigQuality quality = RigQuality.high,
   }) {
     final mesh = LayerMesh.grid(
       x: spec.x,
@@ -102,7 +111,9 @@ class RigLayerArt {
       w: spec.w,
       h: spec.h,
       // One spring per vertex column: n columns of vertices is n - 1 cells.
-      cols: part == RigPart.hairLong ? RigTuning.hairColumns - 1 : null,
+      cols: part == RigPart.hairLong ? quality.hairColumns - 1 : null,
+      cellPx: quality.meshCellPx,
+      texScale: image.width / spec.w,
     );
     final n = mesh.vertexCount;
     final depth = Float32List(n);
@@ -131,7 +142,7 @@ class RigLayerArt {
       ui.TileMode.clamp,
       ui.TileMode.clamp,
       _identity,
-      filterQuality: RigTuning.mipmap ? ui.FilterQuality.medium : ui.FilterQuality.low,
+      filterQuality: quality.filterQuality,
     );
     return RigLayerArt._(
       spec: spec,
@@ -164,68 +175,91 @@ class RigLayerArt {
 }
 
 /// All layers of the character, typed by role.
+///
+/// The decoded images are shared by every quality tier: switching tier rebuilds
+/// the meshes and shaders only, so a mid-session switch costs a vertex buffer
+/// per layer and no decode.
 class RigArtSet {
-  RigArtSet._({
-    required this.manifest,
-    required this.deformer,
-    required this.base,
-    required this.outfit,
-    required this.patches,
-    required this.mouths,
-    required this.eyesHalf,
-    required this.eyesClosed,
-    required this.glanceLeft,
-    required this.glanceRight,
-    required this.hairLong,
-    required this.hairFront,
-  });
+  RigArtSet._(this.manifest, this.images, this.deformer, RigQuality quality) {
+    _buildLayers(quality);
+  }
 
   /// Builds the set from decoded images keyed by file name. Throws a
   /// [FormatException] when rig.json and the images disagree.
-  factory RigArtSet.build(RigManifest manifest, Map<String, ui.Image> images) {
-    final deformer = RigDeformer(RigGeometry.fromManifest(manifest));
+  factory RigArtSet.build(
+    RigManifest manifest,
+    Map<String, ui.Image> images, {
+    RigQuality quality = RigQuality.high,
+  }) =>
+      RigArtSet._(
+        manifest,
+        images,
+        RigDeformer(RigGeometry.fromManifest(manifest)),
+        quality,
+      );
+
+  final RigManifest manifest;
+  final Map<String, ui.Image> images;
+  final RigDeformer deformer;
+
+  late RigLayerArt base;
+  late RigLayerArt outfit;
+  late Map<RigExpression, RigLayerArt> patches;
+  late Map<RigExpression, RigLayerArt> mouths;
+  late RigLayerArt eyesHalf;
+  late RigLayerArt eyesClosed;
+  late RigLayerArt glanceLeft;
+  late RigLayerArt glanceRight;
+  late RigLayerArt hairLong;
+  late RigLayerArt hairFront;
+
+  RigQuality _quality = RigQuality.high;
+  RigQuality get quality => _quality;
+
+  void _buildLayers(RigQuality quality) {
+    _quality = quality;
     RigLayerArt art(String name, RigPart part) {
       final spec = manifest.layer(name);
       final image = images[spec.file];
       if (image == null) throw FormatException('missing image ${spec.file}');
-      return RigLayerArt.build(spec: spec, part: part, image: image, deformer: deformer);
+      return RigLayerArt.build(
+        spec: spec,
+        part: part,
+        image: image,
+        deformer: deformer,
+        quality: quality,
+      );
     }
 
     final others = RigExpression.values.where((e) => e != RigExpression.neutral);
-    return RigArtSet._(
-      manifest: manifest,
-      deformer: deformer,
-      base: art('base', RigPart.base),
-      outfit: art('outfit_blazer', RigPart.outfit),
-      patches: {for (final e in others) e: art('face_${e.name}', RigPart.patch)},
-      mouths: {
-        for (final e in RigExpression.values)
-          e: art(
-            e == RigExpression.neutral ? 'mouth_open' : 'mouth_open_${e.name}',
-            RigPart.mouth,
-          ),
-      },
-      eyesHalf: art('eyes_half', RigPart.eyes),
-      eyesClosed: art('eyes_closed', RigPart.eyes),
-      glanceLeft: art('eyes_glance_left', RigPart.eyes),
-      glanceRight: art('eyes_glance_right', RigPart.eyes),
-      hairLong: art('hair_long', RigPart.hairLong),
-      hairFront: art('hair_front', RigPart.hairFront),
-    );
+    base = art('base', RigPart.base);
+    outfit = art('outfit_blazer', RigPart.outfit);
+    patches = {for (final e in others) e: art('face_${e.name}', RigPart.patch)};
+    mouths = {
+      for (final e in RigExpression.values)
+        e: art(
+          e == RigExpression.neutral ? 'mouth_open' : 'mouth_open_${e.name}',
+          RigPart.mouth,
+        ),
+    };
+    eyesHalf = art('eyes_half', RigPart.eyes);
+    eyesClosed = art('eyes_closed', RigPart.eyes);
+    glanceLeft = art('eyes_glance_left', RigPart.eyes);
+    glanceRight = art('eyes_glance_right', RigPart.eyes);
+    hairLong = art('hair_long', RigPart.hairLong);
+    hairFront = art('hair_front', RigPart.hairFront);
   }
 
-  final RigManifest manifest;
-  final RigDeformer deformer;
-  final RigLayerArt base;
-  final RigLayerArt outfit;
-  final Map<RigExpression, RigLayerArt> patches;
-  final Map<RigExpression, RigLayerArt> mouths;
-  final RigLayerArt eyesHalf;
-  final RigLayerArt eyesClosed;
-  final RigLayerArt glanceLeft;
-  final RigLayerArt glanceRight;
-  final RigLayerArt hairLong;
-  final RigLayerArt hairFront;
+  /// Rebuilds the meshes at [quality]. The images are reused and stay owned by
+  /// this set, so nothing needs decoding and nothing is disposed here but the
+  /// old shaders.
+  void setQuality(RigQuality quality) {
+    if (quality == _quality) return;
+    for (final a in all) {
+      a.shader.dispose();
+    }
+    _buildLayers(quality);
+  }
 
   Iterable<RigLayerArt> get all => [
         base,
@@ -247,8 +281,24 @@ class RigArtSet {
   }
 }
 
-/// Reads rig.json and the PNGs from [dir] and decodes each image once.
-Future<RigArtSet> loadRigArt(Directory dir) async {
+/// The width to decode a layer at: the pixels it will actually cover on screen,
+/// i.e. its width times how many physical pixels the canvas height spans.
+///
+/// Returns 0 for "native size" when the display height is unknown. The codec is
+/// asked not to upscale, so a screen bigger than the art caps it at the source
+/// width — this only ever saves GPU memory, never spends it.
+int textureTargetWidth({
+  required double layerW,
+  required double canvasH,
+  required double displayHeightPx,
+}) {
+  if (displayHeightPx <= 0 || canvasH <= 0) return 0;
+  return math.max(1, (layerW * displayHeightPx / canvasH).round());
+}
+
+/// Reads rig.json and the PNGs from [dir] and decodes each image once, at
+/// roughly the size it will occupy on a [displayHeightPx]-tall screen.
+Future<RigArtSet> loadRigArt(Directory dir, {double displayHeightPx = 0}) async {
   final manifestFile = File('${dir.path}/rig.json');
   if (!await manifestFile.exists()) {
     throw FileSystemException('rig.json not found', manifestFile.path);
@@ -260,7 +310,16 @@ Future<RigArtSet> loadRigArt(Directory dir) async {
   try {
     for (final l in manifest.layers) {
       final bytes = await File('${dir.path}/${l.file}').readAsBytes();
-      final codec = await ui.instantiateImageCodec(bytes);
+      final width = textureTargetWidth(
+        layerW: l.w,
+        canvasH: manifest.canvasH,
+        displayHeightPx: displayHeightPx,
+      );
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: width == 0 ? null : width,
+        allowUpscaling: false,
+      );
       final frame = await codec.getNextFrame();
       codec.dispose();
       images[l.file] = frame.image;

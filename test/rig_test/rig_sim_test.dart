@@ -2,8 +2,10 @@ import 'dart:math';
 
 import 'package:everlore/debug/rig_test/rig_deform.dart';
 import 'package:everlore/debug/rig_test/rig_expression.dart';
+import 'package:everlore/debug/rig_test/rig_quality.dart';
 import 'package:everlore/debug/rig_test/rig_script.dart';
 import 'package:everlore/debug/rig_test/rig_sim.dart';
+import 'package:everlore/debug/rig_test/rig_tuning.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 RigSim _sim([int seed = 1]) => RigSim(
@@ -17,6 +19,38 @@ void _run(RigSim s, double seconds, {double dt = 1 / 60}) {
   for (var t = 0.0; t < seconds; t += dt) {
     s.update(dt);
   }
+}
+
+bool _isGlance(RigEyeState e) =>
+    e == RigEyeState.glanceLeft || e == RigEyeState.glanceRight;
+
+/// The invariant: one eye drawing at most, and never a faded one.
+void _expectOneEye(RigSim s, [String where = '']) {
+  final lit = [
+    s.halfAlpha,
+    s.closedAlpha,
+    s.glanceAlpha(right: false),
+    s.glanceAlpha(right: true),
+  ].where((a) => a > 0).toList();
+  final state = s.eyeState;
+  expect(lit.length, lessThanOrEqualTo(1),
+      reason: 'two eye drawings in $state $where');
+  for (final a in lit) {
+    expect(a, 1.0, reason: 'an eye drawing at $a opacity $where');
+  }
+}
+
+/// The state of every frame, run-length encoded: (state, frames).
+List<({RigEyeState state, int frames})> _runs(List<RigEyeState> states) {
+  final out = <({RigEyeState state, int frames})>[];
+  for (final st in states) {
+    if (out.isNotEmpty && out.last.state == st) {
+      out[out.length - 1] = (state: st, frames: out.last.frames + 1);
+    } else {
+      out.add((state: st, frames: 1));
+    }
+  }
+  return out;
 }
 
 void main() {
@@ -118,6 +152,21 @@ void main() {
     expect(s.pose.eyeX.abs(), lessThan(0.05));
   });
 
+  test('the glance nudge eases in behind the switch, in about 80 ms', () {
+    final s = _sim();
+    _run(s, 0.5);
+    s.lookAway();
+    var frames = 0;
+    while (!_isGlance(s.eyeState) && frames++ < 60) {
+      s.update(1 / 60);
+    }
+    expect(_isGlance(s.eyeState), isTrue, reason: 'the drawing switched');
+    expect(s.pose.eyeX.abs(), lessThan(0.2), reason: 'before the slide');
+    _run(s, RigTuning.glanceNudgeSeconds);
+    expect(s.pose.eyeX.abs(), closeTo(1, 0.05));
+    expect(_isGlance(s.eyeState), isTrue);
+  });
+
   test('hair trails the head and settles when it stops', () {
     final s = _sim();
     s.lookAway();
@@ -146,14 +195,7 @@ void main() {
         expect(s.patchAlpha(e), inInclusiveRange(0, 1));
         expect(s.mouthAlpha(e), inInclusiveRange(0, 1));
       }
-      for (final a in [
-        s.halfAlpha,
-        s.closedAlpha,
-        s.glanceAlpha(right: true),
-        s.glanceAlpha(right: false),
-      ]) {
-        expect(a, inInclusiveRange(0, 1));
-      }
+      _expectOneEye(s);
     }
   });
 
@@ -174,13 +216,201 @@ void main() {
     expect(seen, contains(1.0));
   });
 
-  test('the paper doll shows a glance only while looking away', () {
+  test('both modes read the same eye state', () {
+    final a = _sim(9);
+    final b = _sim(9)..setMode(RigMode.paperDoll);
+    for (var i = 0; i < 60 * 30; i++) {
+      if (i == 60 * 12) a.lookAway();
+      if (i == 60 * 12) b.lookAway();
+      a.update(1 / 60);
+      b.update(1 / 60);
+      expect(b.eyeState, a.eyeState, reason: 'frame $i');
+      _expectOneEye(b, 'paper doll');
+    }
+  });
+
+  test('the paper doll shows a glance while looking away', () {
     final s = _sim()..setMode(RigMode.paperDoll);
-    _run(s, 20);
-    expect(s.glanceAlpha(right: true) + s.glanceAlpha(right: false), 0);
     s.lookAway();
     _run(s, 0.8);
     expect(s.glanceAlpha(right: true) + s.glanceAlpha(right: false), 1);
+  });
+
+  group('eyes', () {
+    test('property: 30 s of mode B never draws two eye layers', () {
+      final rec = _sim(7)..startRecord();
+      for (var i = 0; i < 60 * 30; i++) {
+        rec.update(1 / 60);
+        _expectOneEye(rec, 'record ${(i / 60).toStringAsFixed(2)} s');
+      }
+      for (final seed in [1, 2, 3]) {
+        final s = _sim(seed)..talk();
+        for (var i = 0; i < 60 * 30; i++) {
+          if (i % 600 == 0) s.lookAway();
+          if (i % 420 == 0) s.nextExpression();
+          s.update(1 / 60);
+          _expectOneEye(s, 'seed $seed frame $i');
+        }
+      }
+    });
+
+    test('a neutral blink holds half, shut, half for its tuned times', () {
+      final s = _sim(3);
+      const dt = 1 / 60;
+      final states = <RigEyeState>[];
+      for (var i = 0; i < 60 * 40; i++) {
+        s.update(dt);
+        states.add(s.eyeState);
+      }
+      final runs = _runs(states);
+      var at = -1;
+      for (var i = 0; i + 2 < runs.length; i++) {
+        if (runs[i].state == RigEyeState.half &&
+            runs[i + 1].state == RigEyeState.closed &&
+            runs[i + 2].state == RigEyeState.half) {
+          at = i;
+          break;
+        }
+      }
+      expect(at, greaterThan(0), reason: 'half, shut, half happened');
+      expect(runs[at].frames * dt, closeTo(RigTuning.blinkHalfHold, dt));
+      expect(runs[at + 1].frames * dt, closeTo(RigTuning.blinkClosedHold, dt));
+      expect(runs[at + 2].frames * dt, closeTo(RigTuning.blinkHalfHold, dt));
+    });
+
+    test('a blink on an expression face never shows the half lid', () {
+      final s = _sim(4)..nextExpression(); // happy
+      _run(s, 0.3);
+      const dt = 1 / 60;
+      final closedRuns = <int>[];
+      var run = 0;
+      for (var i = 0; i < 60 * 20; i++) {
+        s.update(dt);
+        expect(s.eyeState, anyOf(RigEyeState.open, RigEyeState.closed),
+            reason: 'frame $i, happy face');
+        if (s.eyeState == RigEyeState.closed) {
+          run++;
+        } else if (run > 0) {
+          closedRuns.add(run);
+          run = 0;
+        }
+      }
+      expect(closedRuns, isNotEmpty, reason: 'it did blink');
+      for (final r in closedRuns) {
+        expect(r * dt, closeTo(RigTuning.blinkClosedHoldExpression, dt));
+      }
+    });
+
+    test('no glance happens while the face is not neutral', () {
+      final s = _sim(5)..nextExpression()..nextExpression(); // shy
+      _run(s, 0.3);
+      for (var i = 0; i < 60 * 20; i++) {
+        s.update(1 / 60);
+        expect(_isGlance(s.eyeState), isFalse, reason: 'frame $i');
+      }
+    });
+
+    test('changing the expression drops a running glance', () {
+      final s = _sim(2);
+      var frames = 0;
+      while (!_isGlance(s.eyeState) && frames++ < 60 * 60) {
+        s.update(1 / 60);
+      }
+      expect(_isGlance(s.eyeState), isTrue, reason: 'a glance got going');
+      s.nextExpression();
+      s.update(1 / 60);
+      expect(_isGlance(s.eyeState), isFalse);
+    });
+
+    test('a blink during a glance is covered by the lids, which give it back', () {
+      final s = _sim(13);
+      var recoveries = 0;
+      var blinked = false;
+      for (var i = 0; i < 60 * 120; i++) {
+        if (i % 180 == 0) s.lookAway(); // a 1.5 s glance every 3 s
+        s.update(1 / 60);
+        if (!s.isLookingAway) {
+          blinked = false;
+          continue;
+        }
+        if (s.eyeState == RigEyeState.half ||
+            s.eyeState == RigEyeState.closed) {
+          blinked = true;
+        } else if (blinked && _isGlance(s.eyeState)) {
+          recoveries++;
+          blinked = false;
+        }
+      }
+      expect(recoveries, greaterThan(0),
+          reason: 'the lids covered a running glance, then the glance returned');
+    });
+
+    test('the expression crossfade shows only open or shut eyes', () {
+      final s = _sim(6);
+      for (final e in [
+        RigExpression.happy,
+        RigExpression.shy,
+        RigExpression.surprised,
+        RigExpression.neutral,
+      ]) {
+        s.expression.set(e);
+        for (var i = 0; i < 6; i++) {
+          s.update(1 / 60);
+          expect(s.eyeState, anyOf(RigEyeState.open, RigEyeState.closed),
+              reason: 'mid-blend to ${e.name}');
+        }
+      }
+    });
+  });
+
+  group('benchmark', () {
+    test('runs 20 s in mode B with the outfit, talking and looking away', () {
+      final s = _sim()..startBenchmark();
+      expect(s.benchmarking, isTrue);
+      expect(s.mode, RigMode.mesh);
+      expect(s.outfit, isTrue);
+      var looks = 0;
+      var wasLooking = false;
+      var talkingFrames = 0;
+      for (var i = 0; i < 60 * 21; i++) {
+        s.update(1 / 60);
+        if (s.isLookingAway && !wasLooking) looks++;
+        wasLooking = s.isLookingAway;
+        if (s.isTalking) talkingFrames++;
+        if (i < 60 * 19) expect(s.benchmarking, isTrue);
+      }
+      expect(s.benchmarking, isFalse);
+      expect(looks, greaterThanOrEqualTo(3), reason: 'a look away every few s');
+      expect(talkingFrames, greaterThan(60 * 18), reason: 'constant load');
+    });
+
+    test('a record clip and the benchmark never run together', () {
+      final s = _sim()..startBenchmark();
+      s.startRecord();
+      expect(s.recording, isFalse);
+      expect(s.benchmarking, isTrue);
+      final r = _sim()..startRecord();
+      r.startBenchmark();
+      expect(r.benchmarking, isFalse);
+      expect(r.recording, isTrue);
+    });
+  });
+
+  group('quality', () {
+    test('the low tier halves the hair springs, which still swing', () {
+      final s = _sim();
+      expect(s.longHairLag.length, RigTuning.hairColumnsHigh);
+      s.setQuality(RigQuality.low);
+      expect(s.longHairLag.length, RigTuning.hairColumnsLow);
+      s.lookAway();
+      _run(s, 1.5);
+      var lag = 0.0;
+      for (final v in s.longHairLag) {
+        expect(v.isFinite, isTrue);
+        lag = max(lag, v.abs());
+      }
+      expect(lag, greaterThan(0.5), reason: 'the remaining springs still swing');
+    });
   });
 
   group('record', () {
@@ -210,7 +440,7 @@ void main() {
       for (var i = 0; i < 60 * 12; i++) {
         a.update(1 / 60);
         b.update(1 / 60);
-        expect(a.pose.eyeOpen, b.pose.eyeOpen);
+        expect(a.eyeState, b.eyeState);
         expect(a.pose.mouthOpen, b.pose.mouthOpen);
         expect(a.pose.eyeX, b.pose.eyeX);
         expect(a.pose.headX, b.pose.headX);

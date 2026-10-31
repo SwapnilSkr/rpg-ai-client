@@ -49,9 +49,6 @@ class RigPose {
   /// Breath, 0 (out) .. 1 (in).
   double breath = 0;
 
-  /// 1 open, 0.5 half, 0 closed.
-  double eyeOpen = 1;
-
   /// -1 left .. 1 right.
   double eyeX = 0;
 

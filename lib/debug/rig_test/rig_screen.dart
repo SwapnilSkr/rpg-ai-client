@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -9,7 +10,9 @@ import 'package:path_provider/path_provider.dart';
 import 'rig_art.dart';
 import 'rig_frame_stats.dart';
 import 'rig_painter.dart';
+import 'rig_quality.dart';
 import 'rig_sim.dart';
+import 'rig_tuning.dart';
 
 const Color _stage = Color(0xFF0F0C0A);
 
@@ -35,7 +38,14 @@ class _RigLoadScreenState extends State<RigLoadScreen> {
     } catch (_) {
       // Keep the fallback path in the message.
     }
-    return loadRigArt(Directory(_path));
+    return loadRigArt(Directory(_path), displayHeightPx: _displayHeightPx());
+  }
+
+  /// The rig fills the screen's height, so this is the scale the art is drawn
+  /// at: the textures can be decoded for it instead of at full canvas size.
+  static double _displayHeightPx() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    return views.isEmpty ? 0 : views.first.physicalSize.height;
   }
 
   @override
@@ -77,23 +87,41 @@ class RigScreen extends StatefulWidget {
 
 class _RigScreenState extends State<RigScreen>
     with SingleTickerProviderStateMixin {
-  late final RigSim _sim = RigSim(deformer: widget.art.deformer);
+  late final RigSim _sim = RigSim(
+    deformer: widget.art.deformer,
+    quality: widget.art.quality,
+  );
   late final Ticker _ticker;
   Duration _last = Duration.zero;
 
   final FrameStats _ticks = FrameStats();
   final FrameStats _raster = FrameStats();
   final ValueNotifier<String> _fps = ValueNotifier<String>('');
+  final ValueNotifier<String?> _benchText = ValueNotifier<String?>(null);
   final Stopwatch _clock = Stopwatch()..start();
+  late final QualityGovernor _quality =
+      QualityGovernor(start: widget.art.quality);
+
   int _lastReadout = 0;
+  int? _firstVsync;
+  Size _screenPx = Size.zero;
   bool _wasRecording = false;
+  bool _wasBenchmarking = false;
+  final List<double> _benchBuild = [];
+  final List<double> _benchRaster = [];
 
   @override
   void initState() {
     super.initState();
     _ticker = createTicker(_onTick)..start();
     SchedulerBinding.instance.addTimingsCallback(_onTimings);
-    _sim.uiRevision.addListener(_syncChrome);
+    _sim.uiRevision.addListener(_onUi);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _screenPx = View.of(context).physicalSize;
   }
 
   void _onTick(Duration elapsed) {
@@ -108,36 +136,120 @@ class _RigScreenState extends State<RigScreen>
       final r = _raster.snapshot(now);
       _fps.value = '${t.count} fps  avg ${t.avgMs.toStringAsFixed(1)}  '
           'worst ${t.worstMs.toStringAsFixed(1)} ms'
-          '${r.count > 0 ? '  raster worst ${r.worstMs.toStringAsFixed(1)}' : ''}';
+          '${r.count > 0 ? '  raster worst ${r.worstMs.toStringAsFixed(1)}' : ''}'
+          '  · ${_quality.label}';
     }
   }
 
-  // Frame timings arrive in batches; keep the build + raster span of each.
+  // Frame timings arrive in batches; keep the build + raster span of each, feed
+  // the tier's judge while it is still deciding, and keep every frame while the
+  // benchmark runs.
   void _onTimings(List<ui.FrameTiming> timings) {
     final now = _clock.elapsedMicroseconds;
     for (final t in timings) {
-      _raster.add(now, t.rasterDuration.inMicroseconds / 1000);
+      final raster = t.rasterDuration.inMicroseconds / 1000;
+      _raster.add(now, raster);
+      final vsync = t.timestampInMicroseconds(ui.FramePhase.vsyncStart);
+      _firstVsync ??= vsync;
+      final sinceStart = (vsync - _firstVsync!) / 1e6;
+      if (_quality.addRaster(raster, sinceStart)) {
+        _applyQuality(_quality.quality);
+      }
+      if (_sim.benchmarking) {
+        _benchBuild.add(t.buildDuration.inMicroseconds / 1000);
+        _benchRaster.add(raster);
+      }
     }
   }
 
-  // Record mode hides the system bars so the clip is only the character.
-  void _syncChrome() {
-    final rec = _sim.recording;
-    if (rec == _wasRecording) return;
-    _wasRecording = rec;
-    SystemChrome.setEnabledSystemUIMode(
-      rec ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+  /// Switches the tier everywhere: the meshes are rebuilt at the new density and
+  /// the hair springs follow the new column count.
+  void _applyQuality(RigQuality q) {
+    widget.art.setQuality(q);
+    _sim.setQuality(q);
+    setState(() {});
+  }
+
+  void _toggleQuality() {
+    _quality.choose(
+      _quality.quality == RigQuality.high ? RigQuality.low : RigQuality.high,
     );
+    _applyQuality(_quality.quality);
+  }
+
+  void _startBench() {
+    if (_sim.benchmarking || _sim.recording) return;
+    _benchBuild.clear();
+    _benchRaster.clear();
+    _benchText.value = null;
+    _wasBenchmarking = true;
+    _sim.startBenchmark();
+  }
+
+  /// Turns the run's frame times into the numbers the orchestrator reads, and
+  /// prints ONE line so `adb logcat | grep RIGBENCH` finds it.
+  void _finishBench() {
+    final build = FramePercentiles.of(_benchBuild);
+    final raster = FramePercentiles.of(_benchRaster);
+    final tier = _quality.quality.name;
+    final screen = '${_screenPx.width.round()}x${_screenPx.height.round()}';
+    debugPrint('RIGBENCH ${jsonEncode({
+      'quality': tier,
+      'screen': screen,
+      'seconds': RigTuning.benchSeconds,
+      'frames': raster.count,
+      'build': {
+        'p50': _round(build.p50),
+        'p90': _round(build.p90),
+        'p99': _round(build.p99),
+      },
+      'raster': {
+        'p50': _round(raster.p50),
+        'p90': _round(raster.p90),
+        'p99': _round(raster.p99),
+      },
+      'over16ms': {'build': build.overBudget, 'raster': raster.overBudget},
+      'over33ms': {'build': build.overStutter, 'raster': raster.overStutter},
+    })}');
+    _benchText.value = [
+      'BENCH · $tier · $screen · ${raster.count} frames',
+      'build   p50 ${_ms(build.p50)}  p90 ${_ms(build.p90)}  p99 ${_ms(build.p99)} ms',
+      'raster  p50 ${_ms(raster.p50)}  p90 ${_ms(raster.p90)}  p99 ${_ms(raster.p99)} ms',
+      'over 16.7 ms: build ${build.overBudget}  raster ${raster.overBudget}',
+      'over 33 ms:   build ${build.overStutter}  raster ${raster.overStutter}',
+    ].join('\n');
+  }
+
+  static String _ms(double v) => v.toStringAsFixed(1);
+
+  /// One decimal place, still a JSON number rather than a string.
+  static double _round(double v) => (v * 10).roundToDouble() / 10;
+
+  // Record mode hides the system bars so the clip is only the character; the
+  // benchmark's end is what turns its numbers into a panel.
+  void _onUi() {
+    final rec = _sim.recording;
+    if (rec != _wasRecording) {
+      _wasRecording = rec;
+      SystemChrome.setEnabledSystemUIMode(
+        rec ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      );
+    }
+    if (_wasBenchmarking && !_sim.benchmarking) {
+      _wasBenchmarking = false;
+      _finishBench();
+    }
   }
 
   @override
   void dispose() {
     SchedulerBinding.instance.removeTimingsCallback(_onTimings);
     _ticker.dispose();
-    _sim.uiRevision.removeListener(_syncChrome);
+    _sim.uiRevision.removeListener(_onUi);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _sim.dispose();
     _fps.dispose();
+    _benchText.dispose();
     widget.art.dispose();
     super.dispose();
   }
@@ -170,6 +282,7 @@ class _RigScreenState extends State<RigScreen>
                 builder: (context, _) => Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    _BenchPanel(text: _benchText),
                     _Subtitle(text: _sim.subtitle),
                     if (!_sim.recording) _controls(),
                   ],
@@ -219,6 +332,14 @@ class _RigScreenState extends State<RigScreen>
                 onPressed: _sim.nextExpression,
                 child: Text('Next: ${_sim.expression.target.name}'),
               ),
+              TextButton(
+                onPressed: _sim.benchmarking || _sim.recording ? null : _startBench,
+                child: Text(_sim.benchmarking ? 'Bench…' : 'Bench'),
+              ),
+              TextButton(
+                onPressed: _toggleQuality,
+                child: Text('Quality: ${_quality.quality.name}'),
+              ),
             ],
           ),
           Row(
@@ -240,6 +361,44 @@ class _RigScreenState extends State<RigScreen>
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The benchmark's numbers, in the panel above the subtitle. Tap to dismiss.
+class _BenchPanel extends StatelessWidget {
+  const _BenchPanel({required this.text});
+
+  final ValueNotifier<String?> text;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String?>(
+      valueListenable: text,
+      builder: (_, body, _) {
+        if (body == null) return const SizedBox.shrink();
+        return GestureDetector(
+          onTap: () => text.value = null,
+          child: Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xCC1A1512),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              body,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 11,
+                height: 1.4,
+                color: Colors.white70,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

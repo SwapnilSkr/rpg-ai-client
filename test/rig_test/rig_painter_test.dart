@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:everlore/debug/rig_test/rig_art.dart';
 import 'package:everlore/debug/rig_test/rig_manifest.dart';
 import 'package:everlore/debug/rig_test/rig_painter.dart';
+import 'package:everlore/debug/rig_test/rig_quality.dart';
 import 'package:everlore/debug/rig_test/rig_sim.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -77,6 +78,18 @@ void main() {
           painter.paint(ui.Canvas(rec), const ui.Size(300, 450));
           rec.endRecording().dispose();
         }
+      }
+
+      // And the same again after a tier switch, which rebuilds every mesh and
+      // every hair spring: a mismatch between the two would throw here.
+      art.setQuality(RigQuality.low);
+      sim.setQuality(RigQuality.low);
+      sim.setMode(RigMode.mesh);
+      for (var i = 0; i < 30; i++) {
+        sim.update(1 / 60);
+        final rec = ui.PictureRecorder();
+        painter.paint(ui.Canvas(rec), const ui.Size(300, 450));
+        rec.endRecording().dispose();
       }
       art.dispose();
     });
