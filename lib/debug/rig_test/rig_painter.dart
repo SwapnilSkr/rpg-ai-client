@@ -39,17 +39,13 @@ class RigPainter extends CustomPainter {
     layer(art.base, 1);
     if (sim.outfit) layer(art.outfit, 1);
 
-    // Outgoing expression first, incoming on top (see ExpressionBlend).
-    final order = sim.expression.from == sim.expression.to
-        ? [sim.expression.to]
-        : [sim.expression.from, sim.expression.to];
-    for (final e in order) {
-      final patch = art.patches[e];
-      if (patch != null) layer(patch, sim.patchAlpha(e));
-    }
-    for (final e in order) {
-      layer(art.mouths[e]!, sim.mouthAlpha(e));
-    }
+    // One expression drawing at a time: the one on the face, at full opacity.
+    // Two patches on screen at once is what read as a doubled, pixelated face,
+    // so the switch is a cut under a closed-eyed cover blink, never a fade.
+    final shown = sim.expression.shown;
+    final patch = art.patches[shown];
+    if (patch != null) layer(patch, sim.patchAlpha(shown));
+    layer(art.mouths[shown]!, sim.mouthAlpha(shown));
 
     // Eyes: one drawing at full opacity, chosen by the eye state. OPEN draws
     // nothing — the face under it already carries open eyes — and the glance

@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:everlore/debug/rig_test/rig_mouth.dart';
+import 'package:everlore/debug/rig_test/rig_tuning.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -66,5 +67,55 @@ void main() {
     for (final l in lengths.skip(1)) {
       expect(l, greaterThanOrEqualTo(0.09 - 0.003));
     }
+  });
+
+  group('the painted mouth is discrete', () {
+    test('a beat that flips every frame still holds each shape', () {
+      final g = DiscreteMouth();
+      const dt = 1 / 60;
+      final runs = <int>[];
+      var frames = 0;
+      var last = g.open;
+      var raw = true;
+      for (var i = 0; i < 120; i++) {
+        raw = !raw; // the worst case: the flapper is unsettled every frame
+        g.update(dt, rawOpen: raw);
+        frames++;
+        if (g.open != last) {
+          runs.add(frames);
+          frames = 0;
+          last = g.open;
+        }
+      }
+      expect(runs, isNotEmpty);
+      // The first entry is the time the constructor's shut shape spent on
+      // screen before the first beat arrived, counted from the first frame;
+      // it had been held since long before, so skip it.
+      for (final r in runs.skip(1)) {
+        expect(r * dt, greaterThanOrEqualTo(RigTuning.mouthMinHoldSeconds - dt),
+            reason: 'a shape lasted $r frames');
+      }
+    });
+
+    test('a beat that comes after the hold changes at once', () {
+      final g = DiscreteMouth();
+      const dt = 1 / 60;
+      g.update(dt, rawOpen: true);
+      expect(g.open, isTrue, reason: 'the first switch is not delayed');
+      for (var i = 0; i < 4; i++) {
+        g.update(dt, rawOpen: false);
+        expect(g.open, isTrue, reason: 'inside the hold');
+      }
+      g.update(dt, rawOpen: false);
+      expect(g.open, isFalse, reason: 'held five frames, then shut');
+    });
+
+    test('stays shut while the beat is shut', () {
+      final g = DiscreteMouth();
+      for (var i = 0; i < 120; i++) {
+        g.update(1 / 60, rawOpen: false);
+        expect(g.open, isFalse);
+      }
+    });
   });
 }

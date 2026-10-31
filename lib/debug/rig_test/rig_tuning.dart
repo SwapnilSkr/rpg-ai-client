@@ -166,6 +166,11 @@ abstract final class RigTuning {
   /// half, shut, half (40 + 60 + 40 ms, 140 ms all told). An expression face
   /// only shuts for the shorter hold, because the half-lid drawing is a
   /// neutral-face painting and would change the eye shape mid-blink.
+  ///
+  /// The expression cover blink uses the same shut hold: it *is* a blink on an
+  /// expression face, and its whole job is to hide the swap of brows, lids and
+  /// blush. A second constant of the same value would only drift away from it,
+  /// and a length that reads as a blink on one face must read as one on both.
   static const double blinkHalfHold = 0.04;
   static const double blinkClosedHold = 0.06;
   static const double blinkClosedHoldExpression = 0.09;
@@ -173,8 +178,12 @@ abstract final class RigTuning {
   /// One neutral blink, open to open: half, shut, half.
   static const double blinkNeutralSeconds = 2 * blinkHalfHold + blinkClosedHold;
 
-  /// Expression crossfade.
-  static const double expressionSeconds = 0.2;
+  /// Shortest time a mouth drawing is kept, seconds (~4 frames at 60 fps).
+  /// The mouth is two drawings, open and shut, swapped on a beat; a shape that
+  /// showed for a single frame would read as a glitch rather than a syllable,
+  /// and one frame is also exactly what a beat landing on a frame boundary
+  /// would produce.
+  static const double mouthMinHoldSeconds = 0.07;
 
   // ---- Mesh and quality ---------------------------------------------------
 

@@ -40,6 +40,38 @@ void _expectOneEye(RigSim s, [String where = '']) {
   }
 }
 
+/// The invariant for the face: one patch at most, at exactly full opacity, and
+/// it is the expression's own (a neutral face has no patch).
+void _expectOnePatch(RigSim s, [String where = '']) {
+  final lit =
+      RigExpression.values.where((e) => s.patchAlpha(e) > 0).toList();
+  expect(lit.length, lessThanOrEqualTo(1), reason: 'two patches $where');
+  for (final e in RigExpression.values) {
+    final a = s.patchAlpha(e);
+    expect(a, anyOf(0.0, 1.0), reason: 'patch ${e.name} at $a $where');
+  }
+  if (s.expression.shown != RigExpression.neutral) {
+    expect(lit, [s.expression.shown], reason: 'the shown patch is not lit $where');
+  } else {
+    expect(lit, isEmpty, reason: 'the neutral face grew a patch $where');
+  }
+}
+
+/// The same for the mouth: one open drawing at most, and it belongs to the
+/// expression on the face.
+void _expectOneMouth(RigSim s, [String where = '']) {
+  final lit =
+      RigExpression.values.where((e) => s.mouthAlpha(e) > 0).toList();
+  expect(lit.length, lessThanOrEqualTo(1), reason: 'two mouths $where');
+  for (final e in RigExpression.values) {
+    final a = s.mouthAlpha(e);
+    expect(a, anyOf(0.0, 1.0), reason: 'mouth ${e.name} at $a $where');
+  }
+  if (lit.isNotEmpty) {
+    expect(lit, [s.expression.shown], reason: 'a stray mouth $where');
+  }
+}
+
 /// The state of every frame, run-length encoded: (state, frames).
 List<({RigEyeState state, int frames})> _runs(List<RigEyeState> states) {
   final out = <({RigEyeState state, int frames})>[];
@@ -207,13 +239,13 @@ void main() {
   test('the paper doll switches layers instead of blending them', () {
     final s = _sim()..setMode(RigMode.paperDoll);
     s.nextExpression(); // happy
-    _run(s, 0.05);
+    _run(s, 0.1); // past the cover blink's midpoint
     expect(s.patchAlpha(RigExpression.happy), 1);
     s.talk();
     final seen = <double>{};
     for (var t = 0.0; t < 3; t += 1 / 60) {
       s.update(1 / 60);
-      seen.add(s.mouthAlpha(s.expression.target));
+      seen.add(s.mouthAlpha(s.expression.shown));
       seen.add(s.closedAlpha);
       seen.add(s.halfAlpha);
     }
@@ -239,6 +271,96 @@ void main() {
     s.lookAway();
     _run(s, 0.8);
     expect(s.glanceAlpha(right: true) + s.glanceAlpha(right: false), 1);
+  });
+
+  group('expressions', () {
+    test('a change is covered by a shut blink, and the patch swaps mid-hold', () {
+      final s = _sim(3);
+      const dt = 1 / 60;
+      _run(s, 0.5);
+      s.nextExpression(); // happy
+      final states = <RigEyeState>[];
+      final shown = <RigExpression>[];
+      for (var i = 0; i < 12; i++) {
+        s.update(dt);
+        states.add(s.eyeState);
+        shown.add(s.expression.shown);
+      }
+      var closed = 0;
+      while (closed < states.length && states[closed] == RigEyeState.closed) {
+        closed++;
+      }
+      expect(closed, greaterThan(0), reason: 'the cover blink ran');
+      expect(closed * dt, closeTo(RigTuning.blinkClosedHoldExpression, dt));
+
+      // The patch swaps while the eyes are shut, at the middle of the hold.
+      final switchFrame = shown.indexOf(RigExpression.happy);
+      expect(switchFrame, greaterThan(0), reason: 'the patch switched');
+      expect(switchFrame, lessThan(closed), reason: 'within the shut hold');
+      final midpoint = RigTuning.blinkClosedHoldExpression / 2 / dt;
+      expect((switchFrame + 1 - midpoint).abs(), lessThanOrEqualTo(1.0));
+
+      expect(s.eyeState, RigEyeState.open, reason: 'reopened on the new face');
+      expect(s.patchAlpha(RigExpression.happy), 1);
+    });
+
+    test('two quick requests switch the patch once per cover, to the latest', () {
+      final s = _sim(3);
+      const dt = 1 / 60;
+      _run(s, 0.5);
+      s.nextExpression(); // happy starts a cover
+      s.update(dt); // still before its midpoint
+      s.nextExpression(); // shy retargets the pending switch
+      var closed = s.eyeState == RigEyeState.closed ? 1 : 0;
+      final shown = <RigExpression>[s.expression.shown];
+      for (var i = 0; i < 12; i++) {
+        s.update(dt);
+        if (s.eyeState == RigEyeState.closed) closed++;
+        if (shown.last != s.expression.shown) shown.add(s.expression.shown);
+      }
+      expect(shown, [RigExpression.neutral, RigExpression.shy],
+          reason: 'one switch, to the latest');
+      expect(s.expression.shown, RigExpression.shy);
+      expect(s.expression.target, RigExpression.shy);
+      expect(closed * dt, closeTo(RigTuning.blinkClosedHoldExpression, dt),
+          reason: 'the retarget did not restart the hold');
+    });
+
+    test('while talking no mouth shape is held less than the minimum', () {
+      final s = _sim(11)..talk();
+      const dt = 1 / 60;
+      var last = s.mouthAlpha(s.expression.shown) > 0;
+      var run = 0.0;
+      final runs = <double>[];
+      for (var i = 0; i < 60 * 12; i++) {
+        s.update(dt);
+        final open = s.mouthAlpha(s.expression.shown) > 0;
+        if (open != last) {
+          runs.add(run);
+          run = 0;
+          last = open;
+        }
+        run += dt;
+      }
+      expect(runs.length, greaterThan(20), reason: 'the mouth flapped');
+      // The first entry ends on the opening beat of the line; nothing was on
+      // screen before it.
+      for (final r in runs.skip(1)) {
+        expect(r, greaterThanOrEqualTo(RigTuning.mouthMinHoldSeconds - dt),
+            reason: 'a mouth shape lasted only $r s');
+      }
+    });
+
+    test('property: 30 s of mode B draws one patch, one mouth, one eye layer', () {
+      final rec = _sim(7)..startRecord();
+      for (var i = 0; i < 60 * 30; i++) {
+        rec.update(1 / 60);
+        final where = 'record ${(i / 60).toStringAsFixed(2)} s';
+        _expectOnePatch(rec, where);
+        _expectOneMouth(rec, where);
+        _expectOneEye(rec, where);
+      }
+    });
   });
 
   group('eyes', () {
@@ -350,7 +472,7 @@ void main() {
           reason: 'the lids covered a running glance, then the glance returned');
     });
 
-    test('the expression crossfade shows only open or shut eyes', () {
+    test('an expression change only ever shows open or shut eyes', () {
       final s = _sim(6);
       for (final e in [
         RigExpression.happy,
@@ -362,7 +484,8 @@ void main() {
         for (var i = 0; i < 6; i++) {
           s.update(1 / 60);
           expect(s.eyeState, anyOf(RigEyeState.open, RigEyeState.closed),
-              reason: 'mid-blend to ${e.name}');
+              reason: 'during the cover blink to ${e.name}');
+          _expectOnePatch(s, 'during the cover blink to ${e.name}');
         }
       }
     });

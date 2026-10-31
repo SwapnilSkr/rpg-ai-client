@@ -61,6 +61,7 @@ class RigSim extends ChangeNotifier {
 
   late ExpressionBlend expression;
   late MouthFlapper mouth;
+  late DiscreteMouth _mouthShape;
   late BlinkScheduler _blink;
   late GlanceScheduler _glance;
   late SmoothNoise _noise;
@@ -116,6 +117,7 @@ class RigSim extends ChangeNotifier {
     math.Random r() => math.Random(seedSource.nextInt(1 << 30));
     expression = ExpressionBlend();
     mouth = MouthFlapper(r());
+    _mouthShape = DiscreteMouth();
     _blink = BlinkScheduler(r());
     _glance = GlanceScheduler(r());
     _noise = SmoothNoise(r());
@@ -270,6 +272,7 @@ class RigSim extends ChangeNotifier {
     if (_nodAge < double.infinity) _nodAge += dt;
     expression.update(dt);
     mouth.update(dt);
+    _mouthShape.update(dt, rawOpen: mouth.isOpen);
 
     final t = time;
     final looking = isLookingAway;
@@ -316,15 +319,20 @@ class RigSim extends ChangeNotifier {
     _stepNudge(glanceDir, dt);
 
     final blink = _blink.phase(t, withHalf: neutralFace);
-    eyeState = switch (blink) {
-      BlinkPhase.half => RigEyeState.half,
-      BlinkPhase.closed => RigEyeState.closed,
-      BlinkPhase.open => glanceDir == 0
-          ? RigEyeState.open
-          : glanceDir > 0
-              ? RigEyeState.glanceRight
-              : RigEyeState.glanceLeft,
-    };
+    // The cover blink is the face change itself: the lids are shut for the
+    // whole hold so the patch swap at its midpoint is hidden, whatever the
+    // natural blink clock happens to be doing.
+    eyeState = expression.covering
+        ? RigEyeState.closed
+        : switch (blink) {
+            BlinkPhase.half => RigEyeState.half,
+            BlinkPhase.closed => RigEyeState.closed,
+            BlinkPhase.open => glanceDir == 0
+                ? RigEyeState.open
+                : glanceDir > 0
+                    ? RigEyeState.glanceRight
+                    : RigEyeState.glanceLeft,
+          };
 
     pose
       ..headX = _headX.position
@@ -353,10 +361,10 @@ class RigSim extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// True when the face is the plain painting: no patch visible at any opacity.
-  bool get _neutralFace =>
-      expression.from == RigExpression.neutral &&
-      expression.to == RigExpression.neutral;
+  /// True when the face on screen is the plain painting: the neutral patch,
+  /// not one of the cut-out expressions. The eye drawings and glances belong
+  /// to it alone.
+  bool get _neutralFace => expression.shown == RigExpression.neutral;
 
   static const double _nodSeconds = 0.4;
 
@@ -410,7 +418,7 @@ class RigSim extends ChangeNotifier {
     _benchAge += dt;
     _benchLookAge += dt;
     // The four lines take 10 s, so restarting them keeps the mouth and the
-    // expression crossfades running for the whole clip.
+    // expression switches running for the whole clip.
     if (!isTalking) talk();
     if (_benchLookAge >= RigTuning.benchLookEverySeconds) {
       _benchLookAge = 0;
@@ -440,19 +448,15 @@ class RigSim extends ChangeNotifier {
 
   // ---- What to draw -------------------------------------------------------
 
-  bool get _mesh => mode == RigMode.mesh;
+  /// Opacity of the brow/eye/blush patch for [e]: 1 for the expression on the
+  /// face, 0 for every other (neutral has no patch). Never a fraction.
+  double patchAlpha(RigExpression e) => expression.patchAlpha(e);
 
-  /// Opacity of the brow/eye/blush patch for [e].
-  double patchAlpha(RigExpression e) {
-    if (_mesh) return expression.patchAlpha(e);
-    return e != RigExpression.neutral && e == expression.target ? 1 : 0;
-  }
-
-  /// Opacity of the open-mouth layer for [e].
-  double mouthAlpha(RigExpression e) {
-    if (_mesh) return pose.mouthOpen * expression.mouthWeight(e);
-    return mouth.isOpen && e == expression.target ? 1 : 0;
-  }
+  /// Opacity of the open-mouth layer for [e]: 1 only when [e] is the expression
+  /// on the face and the mouth's held beat is open, 0 otherwise. Both modes
+  /// read this same pair of drawings.
+  double mouthAlpha(RigExpression e) =>
+      _mouthShape.open && e == expression.shown ? 1 : 0;
 
   /// Opacity of the half-lid drawing. Exactly one eye layer is ever above zero,
   /// and it is drawn at full opacity: discrete drawings, never a cross-fade.

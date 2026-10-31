@@ -2,59 +2,88 @@ import 'rig_tuning.dart';
 
 enum RigExpression { neutral, happy, shy, surprised }
 
-/// The crossfade between two expressions.
+/// The expression on the face, changed the way limited animation does it: a
+/// drawing is swapped, never cross-faded.
 ///
-/// The outgoing patch stays fully opaque while the incoming one fades in over
-/// it, so the face never shows the neutral painting through a half-faded pair.
-/// Fading *to* neutral (which has no patch) fades the outgoing one out instead.
-/// The painter draws [from] first and [to] on top.
+/// Two paintings of the same face half-visible at once read as a smeared,
+/// doubled image, and on a phone screen the face is drawn about one-to-one, so
+/// the doubling is the first thing the eye sees. Instead a change starts a
+/// cover blink — the lids shut for [RigTuning.blinkClosedHoldExpression] — and
+/// [shown] swaps from the old expression to the new one at the midpoint of
+/// that hold, while the eyes are most covered. Brows, lids and blush then
+/// change under a shut pair of eyes, which is the most any one frame can hide.
 class ExpressionBlend {
   ExpressionBlend([RigExpression start = RigExpression.neutral])
-      : from = start,
-        to = start;
+      : shown = start,
+        target = start;
 
-  RigExpression from;
-  RigExpression to;
+  /// The expression whose patch is on the face this frame. Exactly one patch
+  /// is drawn, at opacity 1, or none on the neutral face.
+  RigExpression shown;
 
-  /// 0..1 progress; 1 means settled on [to].
-  double progress = 1;
+  /// Where the face is heading. A request names this at once, so the control
+  /// bar can show what the next press will leave behind.
+  RigExpression target;
 
-  bool get settled => progress >= 1;
+  /// True for the whole cover blink; the eye state is shut while it runs.
+  bool get covering => _covering;
 
-  double get _eased => progress * progress * (3 - 2 * progress);
+  /// True when no switch is pending.
+  bool get settled => !_covering;
 
-  /// Where it is heading; what the paper doll shows.
-  RigExpression get target => to;
+  static const double _coverSeconds = RigTuning.blinkClosedHoldExpression;
+  static const double _midpoint = _coverSeconds / 2;
 
+  bool _covering = false;
+
+  /// Whether the one switch this cover is allowed has already happened. A
+  /// request before it retargets that switch; one after gets a new cover.
+  bool _switched = false;
+  double _coverAge = 0;
+
+  /// Requests [e].
+  ///
+  /// Asked for the expression already on the face, there is nothing to swap and
+  /// no blink. Asked for another one before the midpoint, the pending switch is
+  /// retargeted, so the patch still switches once, to the latest request.
+  /// Asked for one after the midpoint, this cover has spent its switch: a fresh
+  /// cover starts, one switch each.
   void set(RigExpression e) {
-    if (e == to) return;
-    // Mid-blend, restart from whichever side is currently winning.
-    from = progress >= 0.5 ? to : from;
-    to = e;
-    progress = 0;
+    if (_covering) {
+      if (!_switched || e == shown) {
+        target = e;
+        return;
+      }
+      _startCover(e);
+      return;
+    }
+    if (e == shown) return;
+    _startCover(e);
+  }
+
+  void _startCover(RigExpression e) {
+    target = e;
+    _covering = true;
+    _switched = false;
+    _coverAge = 0;
   }
 
   void update(double dt) {
-    if (progress >= 1) return;
-    progress = (progress + dt / RigTuning.expressionSeconds).clamp(0.0, 1.0);
-    if (progress >= 1) from = to;
+    if (!_covering) return;
+    _coverAge += dt;
+    if (!_switched && _coverAge >= _midpoint) {
+      shown = target;
+      _switched = true;
+    }
+    if (_coverAge >= _coverSeconds) {
+      shown = target;
+      _covering = false;
+      _switched = false;
+      _coverAge = 0;
+    }
   }
 
-  /// Opacity of the brow/eye/blush patch for [e]. Neutral has none.
-  double patchAlpha(RigExpression e) {
-    if (e == RigExpression.neutral) return 0;
-    if (from == to) return e == to ? 1 : 0;
-    if (e == from) return to == RigExpression.neutral ? 1 - _eased : 1;
-    if (e == to) return _eased;
-    return 0;
-  }
-
-  /// Weight of the open-mouth layer for [e] (neutral has one); multiply by the
-  /// mouth's openness.
-  double mouthWeight(RigExpression e) {
-    if (from == to) return e == to ? 1 : 0;
-    if (e == from) return 1;
-    if (e == to) return _eased;
-    return 0;
-  }
+  /// Opacity of the brow/eye/blush patch for [e]: 0 or 1, never between.
+  double patchAlpha(RigExpression e) =>
+      e != RigExpression.neutral && e == shown ? 1 : 0;
 }

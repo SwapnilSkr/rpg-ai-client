@@ -1,8 +1,14 @@
 import 'dart:math' as math;
 
+import 'rig_tuning.dart';
+
 /// The talking mouth: while a line plays, a new random opening is picked every
 /// 90-160 ms, now and then a closed beat, smoothed so it flaps rather than
 /// flickers.
+///
+/// The smoothed [value] is never an alpha: two lip drawings at partial opacity
+/// would be two pairs of lips on one mouth. [DiscreteMouth] turns the raw beat
+/// into the open/shut drawing that is actually painted.
 class MouthFlapper {
   MouthFlapper(this._random);
 
@@ -65,5 +71,30 @@ class MouthFlapper {
     _target = 0;
     _value = 0;
     _untilNext = 0;
+  }
+}
+
+/// The mouth as the painter sees it: one open drawing or one shut drawing,
+/// never a fade, and each held at least [RigTuning.mouthMinHoldSeconds].
+///
+/// The flapper's beat already runs slower than that hold, so in a steady line
+/// this gate passes every change through on the frame it lands. The hold exists
+/// for the edges: a line starting or ending, or a flapper restarted in the
+/// middle of a syllable, must not put a shape on screen for one frame.
+class DiscreteMouth {
+  bool _open = false;
+
+  /// Time since the last switch. It starts at the minimum because the hold
+  /// applies between shapes: the first switch has waited long enough already.
+  double _held = RigTuning.mouthMinHoldSeconds;
+
+  /// True when the open-mouth drawing is the one on screen.
+  bool get open => _open;
+
+  void update(double dt, {required bool rawOpen}) {
+    _held += dt;
+    if (rawOpen == _open || _held < RigTuning.mouthMinHoldSeconds) return;
+    _open = rawOpen;
+    _held = 0;
   }
 }
