@@ -732,28 +732,40 @@ class AuthScreenState extends State<AuthScreen> {
 
         if (user.guest) ...[
           const SizedBox(height: 28),
-          // A guest has nothing to sign out of or delete; what they can do is
-          // keep the story by signing in.
-          Text(
-            'Keep Your Story',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.cinzel(
-              color: EverloreTheme.gold,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
+          // A guest's profile offers a dedicated call-to-action to keep their
+          // story, opening the full sign-in flow on /auth.
+          Container(
+            decoration: EverloreTheme.cardDecorationGlow,
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Keep your story',
+                  style: EverloreTheme.ui(
+                    size: 16,
+                    weight: FontWeight.w700,
+                    color: EverloreTheme.parchment,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Sign in to save everything you've done and play on any device.",
+                  style: EverloreTheme.ui(
+                    size: 13,
+                    color: EverloreTheme.ash,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                NeuButton(
+                  label: 'Sign in',
+                  primary: true,
+                  onTap: () => context.push('/auth'),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Sign in to save everything you have done and play on from any device.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.ebGaramond(
-              color: EverloreTheme.ash,
-              fontSize: 15,
-              height: 1.5,
-            ),
-          ),
-          ..._signInOptions(),
         ] else ...[
           const SizedBox(height: 28),
           Center(
@@ -792,8 +804,8 @@ class AuthScreenState extends State<AuthScreen> {
     };
   }
 
-  /// Messages, phone code entry and Google: the ways to sign in. Shared by the
-  /// sign-in screen and a guest's profile.
+  /// Messages, phone code entry and Google: the ways to sign in. Used by the
+  /// sign-in screen (/auth).
   List<Widget> _signInOptions() {
     return [
       // Messages

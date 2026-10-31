@@ -240,8 +240,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               SettingsNavRow(
                 icon: Icons.delete_outline_rounded,
-                label: 'Delete account',
+                label: _isDeletingAccount
+                    ? 'Deleting your account…'
+                    : 'Delete account',
                 tone: EverloreTheme.crimson,
+                busy: _isDeletingAccount,
                 onTap: _isDeletingAccount ? null : _confirmDeleteAccount,
               ),
             ],

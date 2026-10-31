@@ -80,7 +80,7 @@ class SettingsGroup extends StatelessWidget {
 ///
 /// 56 dp min height, 18 dp horizontal padding. Leading icon in 24 dp box with
 /// 14 dp gap to the label. Trailing chevron is omitted when a destructive [tone]
-/// is specified.
+/// is specified. Shows a 16 dp progress indicator instead of the icon when [busy].
 class SettingsNavRow extends StatelessWidget {
   const SettingsNavRow({
     super.key,
@@ -89,6 +89,7 @@ class SettingsNavRow extends StatelessWidget {
     this.onTap,
     this.detail,
     this.tone,
+    this.busy = false,
   });
 
   final IconData icon;
@@ -96,6 +97,7 @@ class SettingsNavRow extends StatelessWidget {
   final VoidCallback? onTap;
   final String? detail;
   final Color? tone;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -106,7 +108,7 @@ class SettingsNavRow extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: busy ? null : onTap,
         splashColor: EverloreTheme.gold.withValues(alpha: 0.08),
         highlightColor: EverloreTheme.gold.withValues(alpha: 0.04),
         child: ConstrainedBox(
@@ -119,11 +121,20 @@ class SettingsNavRow extends StatelessWidget {
                   width: 24,
                   height: 24,
                   child: Center(
-                    child: Icon(
-                      icon,
-                      size: 20,
-                      color: iconColor,
-                    ),
+                    child: busy
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: iconColor,
+                            ),
+                          )
+                        : Icon(
+                            icon,
+                            size: 20,
+                            color: iconColor,
+                          ),
                   ),
                 ),
                 const SizedBox(width: 14),
