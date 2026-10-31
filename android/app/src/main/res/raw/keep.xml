@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Release builds strip resources no code refers to. The reminder plugin
+     names the notification icon only as a string from Dart, so without this
+     the icon was stripped and release builds could not post a reminder. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_everlore" />
