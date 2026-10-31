@@ -35,12 +35,15 @@ void main() {
     expect((mouth - face).distance, lessThan(1));
   });
 
-  test('a patch one depth step in front stays within a pixel of the face', () {
+  test('a patch moves exactly with the face under it, in the same field', () {
+    // A patch cut from the base painting takes the base's own depth at its
+    // vertex, so the two deformations are the same function of the same point.
     final pose = RigPose()..headX = 0.12;
     for (final p in const [Offset(430, 410), Offset(560, 410), Offset(513, 537)]) {
-      final patch = _move(p, pose, depth: RigTuning.depthFeatures);
-      final base = _move(p, pose, depth: RigTuning.depthFace);
-      expect((patch - base).distance, lessThan(1), reason: '$p');
+      final patch = _move(p, pose, depth: _deformer.baseDepth(p));
+      final base = _move(p, pose);
+      expect((patch - base).distance, lessThan(1e-9), reason: '$p');
+      expect(_deformer.baseDepth(p), RigTuning.depthFace, reason: 'on the face');
     }
   });
 
@@ -53,6 +56,37 @@ void main() {
     expect(back, lessThan(face));
     expect(face, lessThan(bangs));
     expect(face, closeTo(0.12 * RigTuning.turnPxX, 1));
+  });
+
+  test('the bangs slide about a pixel over the forehead in a look away', () {
+    // Bangs lie on the forehead, so the whole of their parallax against the
+    // skin under them is one pixel: anything more uncovers the painting beneath
+    // the strands (1.25 depth slid 4.8 px at the old 12% turn).
+    const p = Offset(512, 300);
+    final pose = RigPose()..headX = RigTuning.lookAwayTurn;
+    final bangs = _move(p, pose, depth: RigTuning.depthHairFront).dx -
+        _move(p, pose, depth: RigTuning.depthFace).dx;
+    expect(bangs, inInclusiveRange(0.5, 2));
+  });
+
+  test('a full look away shears the neck far less than it did', () {
+    // The pose the sim holds mid look away: head, and the share the torso takes.
+    final pose = RigPose()
+      ..headX = RigTuning.lookAwayTurn
+      ..headY = RigTuning.lookAwayPitch
+      ..headTilt = RigTuning.lookAwayRoll
+      ..bodyX = RigTuning.lookAwayBodyFollow;
+    // Jaw against collarbone: the two canvas rows the neck's bend showed
+    // between, after deform.
+    double shear(RigPose p) => (_deformer.deform(const Offset(512, 600), p) -
+            _deformer.deform(const Offset(512, 760), p))
+        .dx
+        .abs();
+    // Measured on the constants before fix 4 (turn 0.12, pitch 0.10, roll 0.02,
+    // an 80 px band round the neck, no torso follow): 20.2 px.
+    const before = 20.2;
+    final now = shear(pose);
+    expect(now, lessThanOrEqualTo(before * 0.7), reason: 'now $now, was $before');
   });
 
   test('the base painting is deeper at the face than at the hair outline', () {

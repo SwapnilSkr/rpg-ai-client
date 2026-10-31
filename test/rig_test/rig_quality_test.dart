@@ -62,6 +62,9 @@ void main() {
     expect(RigQuality.low.meshCellPx, greaterThan(RigQuality.high.meshCellPx));
     expect(RigQuality.high.filterQuality, ui.FilterQuality.medium);
     expect(RigQuality.low.filterQuality, ui.FilterQuality.low);
-    expect(RigQuality.low.hairColumns * 2, RigQuality.high.hairColumns);
+    // Fewer hair springs, but not half: 13 columns is what keeps the low tier's
+    // seam on the base painting (see RigTuning.hairColumnsLow).
+    expect(RigQuality.low.hairColumns, 14);
+    expect(RigQuality.low.hairColumns, lessThan(RigQuality.high.hairColumns));
   });
 }

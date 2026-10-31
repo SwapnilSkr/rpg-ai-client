@@ -94,10 +94,9 @@ class RigSim extends ChangeNotifier {
   double _lineAge = 0;
   double _nodAge = double.infinity;
 
-  // Look away.
+  // Look away. The head's own turn, pitch and roll, and how much of it the
+  // torso takes, are RigTuning's (the neck has to absorb the rest).
   static const double lookAwaySeconds = 1.5;
-  static const double lookAwayTurn = 0.12;
-  static const double lookAwayPitch = 0.10;
   double _lookAge = double.infinity;
   double _lookSide = 1;
   double _nextLookSide = 1;
@@ -293,6 +292,7 @@ class RigSim extends ChangeNotifier {
     var headX = turn;
     var headY = pitch;
     var tilt = roll;
+    var bodyX = sway;
     if (_nodAge < _nodSeconds) {
       headY += 0.05 * math.sin(math.pi * _nodAge / _nodSeconds);
     }
@@ -300,16 +300,19 @@ class RigSim extends ChangeNotifier {
     if (looking) {
       // Eased in and out so the turn doesn't snap at either end.
       final env = _lookEnvelope(_lookAge);
-      headX += _lookSide * lookAwayTurn * env;
-      headY += lookAwayPitch * env;
-      tilt += _lookSide * 0.02 * env;
+      headX += _lookSide * RigTuning.lookAwayTurn * env;
+      headY += RigTuning.lookAwayPitch * env;
+      tilt += _lookSide * RigTuning.lookAwayRoll * env;
+      // The shoulders take a share of it, so the neck is not bent under a head
+      // that turns while the torso stands still.
+      bodyX += _lookSide * RigTuning.lookAwayBodyFollow * env;
       glanceDir = neutralFace ? _lookSide * (env > 0.3 ? 1.0 : 0.0) : 0;
     }
 
     _headX.step(headX, dt);
     _headY.step(headY, dt);
     _tilt.step(tilt, dt);
-    _bodyX.step(sway, dt);
+    _bodyX.step(bodyX, dt);
     _stepNudge(glanceDir, dt);
 
     final blink = _blink.phase(t, withHalf: neutralFace);

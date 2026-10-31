@@ -133,19 +133,24 @@ void main() {
     expect(peak - before, greaterThan(0.015));
   });
 
-  test('Look away turns about 12%, glances the same way, and comes back', () {
+  test('Look away turns about 8%, leans the torso with it, and comes back', () {
     final s = _sim();
     _run(s, 0.5);
     s.lookAway();
     var turn = 0.0;
     var glance = 0.0;
+    var body = 0.0;
     for (var t = 0.0; t < 1.4; t += 1 / 60) {
       s.update(1 / 60);
       turn = max(turn, s.pose.headX);
       glance = max(glance, s.pose.eyeX);
+      body = max(body, s.pose.bodyX);
     }
-    expect(turn, inInclusiveRange(0.10, 0.16));
+    // The look away's own 8% plus the idle drift, which is up to 3% by itself.
+    expect(turn, inInclusiveRange(0.06, 0.12));
     expect(glance, greaterThan(0.8));
+    // The sway alone tops out at 0.28; the shoulders take a share of the turn.
+    expect(body, greaterThan(0.4));
     _run(s, 2.5);
     expect(s.isLookingAway, isFalse);
     expect(s.pose.headX.abs(), lessThan(0.05));

@@ -60,33 +60,28 @@ const _paintSeamY = 604.0;
 
 /// The mismatch the join bands cannot remove: how each layer's *columns* chord
 /// the base painting's depth falloff (a smoothstep on an ellipse that crosses
-/// the hair at the jaw). hair_long's columns are its springs — 15 / 7 cells
-/// across 946 px (63 / 135 px) — the base's are 22 / 14 (39 / 61 px) and
-/// hair_front's 10 / 7 (39 / 55 px). Rows cannot help: the residual runs across
-/// the columns, not down the rows. The layers' *depth* at the join agrees to
-/// 1e-6 (asserted below); what is left is this chord, worst over the whole pose
-/// grid at the two seam lines:
+/// the hair at the jaw). hair_long's columns are its springs — 15 / 13 cells
+/// across 946 px (63 / 73 px) — the base's are 29 / 23, but down to 24 px across
+/// the face and 39 / 61 elsewhere, and hair_front's 10 / 7 (39 / 55 px). Rows
+/// cannot help: the residual runs across the columns, not down the rows. The
+/// layers' *depth* at the join agrees to 1e-6 (asserted below); what is left is
+/// this chord, worst over the whole pose grid at the two seam lines:
 ///
 /// | tier | pair       | vertical | horizontal |
-/// | high | base/long  | 0.71     | 1.26       |
-/// | high | base/front | 0.24     | 0.67       |
-/// | high | long/front | 0.55     | 1.42       |
-/// | low  | base/long  | 0.98     | 2.13       |
-/// | low  | base/front | 0.51     | 1.47       |
-/// | low  | long/front | 1.11     | 2.23       |
+/// | high | base/long  | 0.71     | 1.28       |
+/// | high | base/front | 0.46     | 1.07       |
+/// | high | long/front | 0.60     | 1.33       |
+/// | low  | base/long  | 0.58     | 1.69       |
+/// | low  | base/front | 0.44     | 1.22       |
+/// | low  | long/front | 0.44     | 1.67       |
 ///
 /// The vertical is what parts the painted rows and lets the background show, so
 /// it keeps the brief's 1 px line; the horizontal is shear inside opaque hair,
-/// where only this chord moves it. Removing the rest needs more columns on
-/// hair_long, i.e. more springs: a sim change, outside this mesh brief.
+/// where only this chord moves it. The figures moved in fix 4: the base's fine
+/// columns over the face (the face patches need them) stopped hiding hair_long's
+/// own chord, which is why the low tier took 13 columns instead of 7.
 double _hairChordPx(RigQuality quality) =>
     quality == RigQuality.high ? 1.5 : 2.3;
-
-/// The one vertical figure over the brief's 1 px line: 1.11 px between
-/// hair_front and hair_long on the low tier, where the long hair's 135 px
-/// columns chord the depth cliff near x 620. The two pairs that paint the two
-/// sides of the painted edge hold 1 px.
-const _longFrontVerticalPx = 1.2;
 
 /// A rest point's cell in a layer's grid, with the weights the GPU uses.
 class _Cell {
@@ -132,20 +127,29 @@ class _Cell {
   }
 }
 
-/// Locates a rest point in a layer. Rows are not evenly spaced on every layer
-/// (the hair layers are finer near the join), so the cell is found by its edges.
+/// Locates a rest point in a layer. Neither axis is evenly spaced on every
+/// layer (the hair layers are finer near the join, the base finer across the
+/// face), so the cell is found by its edges.
 _Cell _locate(RigLayerArt a, double x, double y) {
   final m = a.mesh;
   final head = m.cols + 1;
-  final u = ((x - a.spec.x) / a.spec.w * m.cols).clamp(0.0, m.cols - 1e-9);
-  final i = u.floor().clamp(0, m.cols - 1);
+  double xAt(int i) => m.rest[i * 2];
+  double yAt(int j) => m.rest[j * head * 2 + 1];
+  var i = 0;
+  while (i < m.cols - 1 && x > xAt(i + 1)) {
+    i++;
+  }
   var j = 0;
-  while (j < m.rows - 1 && y > m.rest[(j + 1) * head * 2 + 1]) {
+  while (j < m.rows - 1 && y > yAt(j + 1)) {
     j++;
   }
-  final y0 = m.rest[j * head * 2 + 1];
-  final y1 = m.rest[(j + 1) * head * 2 + 1];
-  return _Cell(a, i, j, u - i, ((y - y0) / (y1 - y0)).clamp(0.0, 1.0));
+  return _Cell(
+    a,
+    i,
+    j,
+    ((x - xAt(i)) / (xAt(i + 1) - xAt(i))).clamp(0.0, 1.0),
+    ((y - yAt(j)) / (yAt(j + 1) - yAt(j))).clamp(0.0, 1.0),
+  );
 }
 
 Future<ui.Image> _solid(int w, int h) {
@@ -412,10 +416,9 @@ void main() {
         // heights: 1 px is not visible, 9 px of shear and a 5 px gap is the
         // tear this join band exists to prevent.
         for (final e in worst.entries) {
-          final vertical = e.key == 'long/front' ? _longFrontVerticalPx : 1.0;
           expect(
             e.value.v,
-            lessThanOrEqualTo(vertical),
+            lessThanOrEqualTo(1.0),
             reason:
                 '${quality.name} ${e.key} vertical worst ${e.value.v} '
                 'at ${e.value.atV}',

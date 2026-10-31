@@ -16,9 +16,12 @@ abstract final class RigTuning {
   /// than they yaw before the neck has to bend.
   static const double turnPxY = 110;
 
-  /// Half-width of the band around the neck's y where the head's motion fades
-  /// out (80 px in all). Wide enough that no seam shows across the neck.
-  static const double neckBlendHalf = 40;
+  /// Half-width of the band *below* the neck's y where the head's motion fades
+  /// out: 70 px of neck, so the slide is shared by 140 px (was 40, and 80 px of
+  /// neck reading as bent sideways). Above the neck the band stops at the jaw
+  /// ([RigGeometry.jawY]) instead of reaching as far up: the face has to move as
+  /// one piece, and a fade starting under the chin pulls it toward the shoulder.
+  static const double neckBlendHalf = 70;
 
   /// How much the side of the face turning away is squeezed, per unit of turn,
   /// and the hard cap. 0.35 x 0.12 = 4%: the cheap 3D trick, kept small so the
@@ -26,13 +29,40 @@ abstract final class RigTuning {
   static const double compressPerTurn = 0.35;
   static const double compressMax = 0.06;
 
+  // ---- Look away ----------------------------------------------------------
+
+  /// The head at the hold of a look away: turn, pitch and roll. Small on
+  /// purpose. The torso stands still, so the whole slide is absorbed by the neck
+  /// below the jaw, and a 12% turn with a 0.10 pitch made the neck look bent
+  /// sideways with the chin dropped toward the shoulder (the owner, on a phone).
+  static const double lookAwayTurn = 0.08;
+  static const double lookAwayPitch = 0.04;
+
+  /// A slight lean with the turn, no visible tilt of the head (0.02 rad did).
+  static const double lookAwayRoll = 0.008;
+
+  /// How much of a look away the torso takes, as a share of the sway target. The
+  /// shoulders turn with the head instead of standing still under it. The sign
+  /// is the sway's: bodyX > 0 moves the neck toward +x, the direction headX > 0
+  /// moves the face.
+  static const double lookAwayBodyFollow = 0.35;
+
   // ---- Depth: how much a layer slides during a head turn -------------------
 
   static const double depthBackHead = 0.6; // back of the head, hair outline
   static const double depthFace = 1.0;
-  static const double depthFeatures = 1.05; // eyes, mouth, expression patches
   static const double depthHairLong = 0.8;
-  static const double depthHairFront = 1.25; // bangs: nearest the viewer
+
+  // The expression patches, the mouths and the eye layers have no depth of their
+  // own: they are rectangles cut from edits of the base painting, so each takes
+  // `RigDeformer.baseDepth` at its vertex, exactly as the base does. Any extra
+  // slide showed their edges and let the base's own irises and brows peek out.
+
+  /// Bangs: nearest the viewer, but only just. Bangs lie on the forehead, so
+  /// their parallax there is tiny; a deeper front hair slides across the
+  /// forehead in a turn and uncovers the painting beneath the strands (1.25 was
+  /// ~5 px at a look away).
+  static const double depthHairFront = 1.08;
 
   // ---- Body ---------------------------------------------------------------
 
@@ -50,10 +80,14 @@ abstract final class RigTuning {
   // ---- Hair springs -------------------------------------------------------
 
   /// Number of vertex columns on hair_long (so one fewer cell across), one
-  /// damped spring each. The low tier halves them: the same swing, half the
-  /// springs to step and half the vertices to push across that layer.
+  /// damped spring each. The low tier takes seven eighths of them: the same
+  /// swing, fewer springs to step and fewer vertices to push across that layer.
+  /// Not half: 135 px cells chord the depth falloff at the jaw, and with the
+  /// fine base columns under the face (the patches need those) the long hair
+  /// sat up to a pixel off the base along the seam. 73 px cells hold that to
+  /// 0.6 px.
   static const int hairColumnsHigh = 16;
-  static const int hairColumnsLow = 8;
+  static const int hairColumnsLow = 14;
 
   /// Stiffness 60 / damping 7 is a damping ratio of ~0.45: one clear overshoot
   /// of ~20%, then it settles in ~1.4 s. Heavier-feeling hair: lower the
@@ -96,6 +130,19 @@ abstract final class RigTuning {
   /// band rows, so the base is never the coarser side of the seam.
   static const int baseJoinBandCells = 8;
 
+  /// Columns of the base painting over the face. The face patches are drawn by
+  /// their own meshes over the base, and the GPU interpolates the base's
+  /// positions linearly between its vertex columns, so the base's columns must
+  /// be fine enough to follow the squeeze curve a patch's vertices follow: 61 px
+  /// cells (the low tier) let a patch drift up to 1.5 px off the painting under
+  /// it and its edge showed; 24 px cells hold that under a tenth of a pixel.
+  static const double baseFaceCellPx = 24;
+
+  /// How far those columns reach either side of the face's centre, as a share of
+  /// the face's half-width: past the skin, so a patch's outer crop edge (the
+  /// blush, the outer brow) is on fine columns too.
+  static const double baseFaceBandShare = 1.05;
+
   /// Bangs: a stiffer, smaller spring, and a fraction of the tips' lag.
   static const double frontStiffness = 140;
   static const double frontDamping = 11;
@@ -103,10 +150,12 @@ abstract final class RigTuning {
 
   // ---- Face ---------------------------------------------------------------
 
-  /// The glance layer slides this far as the nudge eases in. The switch itself
-  /// is instant (a glance is a saccade); the slide is the follow-through that
-  /// makes the whole head read as having moved.
-  static const double glanceNudgePx = 2;
+  /// How far the glance layer slides as the nudge eases in: none at all, and it
+  /// must stay none. The glance drawing is a patch cut from the face; any slide
+  /// at all shows its edges against the painting under it (2 px did). The switch
+  /// itself is the whole gesture — a glance is a saccade — and the head's own
+  /// motion carries the rest.
+  static const double glanceNudgePx = 0;
 
   /// How long that slide takes after the switch. A saccade is over in ~40 ms;
   /// this is quick enough to stay after it and slow enough to be seen.

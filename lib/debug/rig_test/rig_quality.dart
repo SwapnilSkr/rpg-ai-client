@@ -7,7 +7,7 @@ import 'rig_tuning.dart';
 ///
 /// `high` is the tuned look. `low` gives back the three things a cheap GPU
 /// spends the frame on: triangle count (a coarser mesh), texture sampling
-/// (bilinear instead of mip-mapped) and the hair springs (half the columns).
+/// (bilinear instead of mip-mapped) and the hair springs (fewer columns).
 enum RigQuality { high, low }
 
 extension RigQualityTuning on RigQuality {

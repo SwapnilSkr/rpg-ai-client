@@ -12,6 +12,7 @@ class RigGeometry {
     this.headCenter = const Offset(520, 410),
     this.headRadii = const Offset(170, 215),
     this.hairRoot = const Offset(512, 400),
+    this.jawY = 608,
   });
 
   /// Anchors from rig.json; the head centre and radii are measured off the
@@ -32,6 +33,11 @@ class RigGeometry {
 
   /// A point on the scalp the hair springs chase.
   final Offset hairRoot;
+
+  /// The bottom of the painted jaw, in canvas rows, measured off the painting
+  /// (the hair_front crop ends on it, 42 px above the neck pivot). The head's
+  /// motion is rigid down to here and only fades below it.
+  final double jawY;
 }
 
 /// What the rig is told to do this frame. Everything is zero / at rest by
@@ -83,10 +89,18 @@ class RigDeformer {
 
   final RigGeometry geometry;
 
-  /// 1 above the neck band, 0 below it, smooth in between.
+  /// 1 above the jaw, 0 a [RigTuning.neckBlendHalf] below the neck, smooth in
+  /// between. The band is asymmetric on purpose: it never starts above the jaw,
+  /// so the face stays rigid and only the neck bends. A symmetric band would
+  /// reach up under the chin — the jaw lagging the face is what reads as a neck
+  /// bent sideways — and would drop the hair join rows off the head.
   double headWeight(double y) {
     final n = geometry.neck.dy;
-    return 1 - smoothstep(n - RigTuning.neckBlendHalf, n + RigTuning.neckBlendHalf, y);
+    // Never above the jaw, and never below the pivot: a stand-in character with
+    // a shorter neck gets a band from its pivot down, not an inverted one.
+    final top =
+        math.min(n, math.max(geometry.jawY, n - RigTuning.neckBlendHalf));
+    return 1 - smoothstep(top, n + RigTuning.neckBlendHalf, y);
   }
 
   /// How far a point of the base painting slides in a turn: the face fully,
