@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:everlore/screens/sharing_switch_row.dart';
 import 'package:flutter/material.dart';
+import 'package:everlore/shared/widgets/settings_group.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -20,7 +21,7 @@ void main() {
         home: Scaffold(body: SharingSwitchRow(telemetry: rig.telemetry)),
       ),
     );
-    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue);
+    expect(tester.widget<SettingsSwitchRow>(find.byType(SettingsSwitchRow)).value, isTrue);
     expect(find.text('Share usage and crash reports'), findsOneWidget);
 
     await tester.tap(find.byType(Switch));
@@ -30,7 +31,7 @@ void main() {
     await tester.pump();
 
     expect(rig.telemetry.enabled, isFalse);
-    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse);
+    expect(tester.widget<SettingsSwitchRow>(find.byType(SettingsSwitchRow)).value, isFalse);
     // The one last event went out before the queue was wiped.
     final names = [
       for (final b in rig.transport.bodies)

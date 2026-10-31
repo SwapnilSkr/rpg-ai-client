@@ -385,7 +385,7 @@ void main() {
       expect(find.byType(AuthScreen), findsOneWidget);
       expect(find.text('Your worlds'), findsOneWidget);
       expect(find.text('Membership & Ink'), findsOneWidget);
-      expect(find.text('Allow mature themes'), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
 
       final yourWorldsY = tester.getTopLeft(find.text('Your worlds')).dy;
       final membershipY = tester.getTopLeft(find.text('Membership & Ink')).dy;

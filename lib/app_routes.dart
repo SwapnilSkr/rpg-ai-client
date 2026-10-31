@@ -19,6 +19,7 @@ import 'package:everlore/features/personas/presentation/personas_screen.dart';
 import 'package:everlore/features/billing/presentation/billing_screen.dart';
 import 'package:everlore/shared/models/world_template.dart';
 import 'package:everlore/shared/widgets/everlore_nav_bar.dart';
+import 'package:everlore/screens/settings_screen.dart';
 import 'features/moderation/presentation/blocked_content_screen.dart';
 import 'features/keepsakes/presentation/keepsakes_screen.dart';
 
@@ -137,6 +138,11 @@ final router = GoRouter(
       path: '/blocked-content',
       name: 'blocked-content',
       builder: (context, state) => const BlockedContentScreen(),
+    ),
+    GoRoute(
+      path: '/settings',
+      name: 'settings',
+      builder: (context, state) => const SettingsScreen(),
     ),
 
     // ── The persistent shell: four primary branches, each with its own stack + state,

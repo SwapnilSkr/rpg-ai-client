@@ -25,8 +25,7 @@ import '../shared/widgets/interest_picker.dart';
 import '../shared/narrative_styles.dart';
 import '../shared/widgets/everlore_sheet.dart';
 import '../shared/widgets/everlore_notice.dart';
-import '../shared/widgets/age_confirm_dialog.dart';
-import 'sharing_switch_row.dart';
+import '../shared/widgets/settings_group.dart';
 
 typedef SendCodeFn = Future<bool> Function(String phone);
 typedef VerifyCodeFn =
@@ -75,12 +74,10 @@ class AuthScreenState extends State<AuthScreen> {
   bool _googleReady = false;
   bool _isGoogleLoading = false;
   bool _isPhoneLoading = false;
-  bool _isUpdatingPreferences = false;
   bool _isSavingName = false;
   bool _editingName = false;
   final _nameEditCtrl = TextEditingController();
   final _nameEditFocus = FocusNode();
-  bool _isDeletingAccount = false;
 
   /// A guest session is waiting to be claimed by whatever the player signs in
   /// with. Drives the copy only; the token itself is read when signing in.
@@ -407,127 +404,6 @@ class AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  void _confirmDeleteAccount() {
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: EverloreTheme.void2,
-        title: Text(
-          'Delete your account?',
-          style: EverloreTheme.serifDisplay(
-            size: 18,
-            color: EverloreTheme.parchment,
-          ),
-        ),
-        content: Text(
-          'This permanently deletes your profile, all your realms and chats, '
-          'and any worlds you created. This cannot be undone.',
-          style: EverloreTheme.ui(
-            size: 14,
-            color: EverloreTheme.ash,
-            height: 1.5,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: Text(
-              'Cancel',
-              style: EverloreTheme.ui(color: EverloreTheme.ash),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogCtx);
-              _handleDeleteAccount();
-            },
-            child: Text(
-              'Delete',
-              style: EverloreTheme.ui(color: EverloreTheme.crimson),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _handleDeleteAccount() async {
-    setState(() => _isDeletingAccount = true);
-    try {
-      await AuthService.deleteAccount();
-      Telemetry.instance.track('account_action', {'action': 'account_deleted'});
-      try {
-        await _googleAuthService.signOut();
-      } catch (_) {}
-      if (!mounted) return;
-      setState(() {
-        _currentUser = null;
-        _codeSent = false;
-        _phoneController.clear();
-        _otpController.clear();
-        _isDeletingAccount = false;
-      });
-      context.go('/auth');
-      showEverloreNotice(
-        context,
-        'Your account was deleted.',
-        tone: NoticeTone.success,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      final message = userFacingError(
-        e,
-        fallback: 'Your account was not deleted. Please try again.',
-      );
-      setState(() {
-        _errorMessage = message;
-        _isDeletingAccount = false;
-      });
-      showEverloreNotice(context, message, tone: NoticeTone.error);
-    }
-  }
-
-  Future<void> _handleNsfwToggle(bool enabled) async {
-    final user = _currentUser;
-    if (user == null || _isUpdatingPreferences) return;
-
-    if (enabled && user.ageConfirmedAt == null) {
-      final confirmed = await showAgeConfirmDialog(context);
-      if (!confirmed) return;
-    }
-
-    setState(() {
-      _isUpdatingPreferences = true;
-      _clearMessages();
-    });
-
-    try {
-      final payload = <String, dynamic>{
-        'nsfw_enabled': enabled,
-        if (enabled && user.ageConfirmedAt == null) 'age_confirmed': true,
-      };
-      final updated = await AuthService.updatePreferences(payload);
-      if (!mounted) return;
-      setState(() => _currentUser = updated);
-      showEverloreNotice(
-        context,
-        enabled
-            ? 'Mature content enabled for eligible worlds.'
-            : 'Mature content disabled.',
-        tone: NoticeTone.success,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      final message = userFacingError(
-        e,
-        fallback: 'Could not update that preference. Please try again.',
-      );
-      showEverloreNotice(context, message, tone: NoticeTone.error);
-    } finally {
-      if (mounted) setState(() => _isUpdatingPreferences = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -826,77 +702,34 @@ class AuthScreenState extends State<AuthScreen> {
         ),
         const SizedBox(height: 16),
 
-        NeuButton(
-          label: 'Your worlds',
-          icon: Icons.public_rounded,
-          primary: false,
-          accent: EverloreTheme.gold,
-          onTap: () => context.push('/my-worlds'),
+        SettingsGroup(
+          children: [
+            SettingsNavRow(
+              icon: Icons.public_rounded,
+              label: 'Your worlds',
+              onTap: () => context.push('/my-worlds'),
+            ),
+            SettingsNavRow(
+              icon: Icons.auto_awesome_rounded,
+              label: 'Membership & Ink',
+              onTap: () => context.push('/membership?source=profile'),
+            ),
+            SettingsNavRow(
+              icon: Icons.tune_rounded,
+              label: 'Settings',
+              onTap: () => context.push('/settings'),
+            ),
+          ],
         ),
-        const SizedBox(height: 16),
-
-        NeuButton(
-          label: 'Membership & Ink',
-          icon: Icons.auto_awesome_rounded,
-          primary: false,
-          accent: EverloreTheme.gold,
-          onTap: () => context.push('/membership?source=profile'),
-        ),
-        const SizedBox(height: 16),
-
-        NeuButton(
-          label: 'Blocked Content',
-          icon: Icons.shield_outlined,
-          primary: false,
-          accent: EverloreTheme.gold,
-          onTap: () => context.push('/blocked-content'),
-        ),
-        const SizedBox(height: 16),
 
         // Debug builds only. There is no player-facing guide switch.
         if (AppConfig.guideRehearsal) ...[
-          const _GuideControls(),
           const SizedBox(height: 16),
+          const _GuideControls(),
         ],
 
-        Container(
-          decoration: EverloreTheme.cardDecoration,
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: user.preferences.nsfwEnabled,
-                onChanged: (_isUpdatingPreferences || _isPhoneLoading)
-                    ? null
-                    : _handleNsfwToggle,
-                activeThumbColor: EverloreTheme.crimson,
-                activeTrackColor: EverloreTheme.crimson.withValues(alpha: 0.35),
-                title: const Text(
-                  'Allow mature themes',
-                  style: TextStyle(
-                    color: EverloreTheme.parchment,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                subtitle: Text(
-                  _isUpdatingPreferences
-                      ? 'Updating...'
-                      : 'Needed before a world with mature themes will open.',
-                  style: const TextStyle(
-                    color: EverloreTheme.ash,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-              const SharingSwitchRow(),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 32),
-
         if (user.guest) ...[
+          const SizedBox(height: 28),
           // A guest has nothing to sign out of or delete; what they can do is
           // keep the story by signing in.
           Text(
@@ -920,20 +753,28 @@ class AuthScreenState extends State<AuthScreen> {
           ),
           ..._signInOptions(),
         ] else ...[
-          NeuButton(
-            label: 'Sign Out',
-            icon: Icons.logout,
-            primary: false,
-            accent: EverloreTheme.crimson,
-            onTap: _handleSignOut,
-          ),
-          const SizedBox(height: 16),
-          NeuButton(
-            label: 'Delete Account',
-            icon: Icons.delete_forever_outlined,
-            primary: false,
-            accent: EverloreTheme.crimson,
-            onTap: _isDeletingAccount ? null : _confirmDeleteAccount,
+          const SizedBox(height: 28),
+          Center(
+            child: TextButton.icon(
+              onPressed: _handleSignOut,
+              icon: const Icon(
+                Icons.logout_rounded,
+                size: 16,
+                color: EverloreTheme.ash,
+              ),
+              label: Text(
+                'Sign out',
+                style: EverloreTheme.ui(
+                  size: 14,
+                  weight: FontWeight.w600,
+                  color: EverloreTheme.ash,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
           ),
         ],
         const SizedBox(height: 96), // clear the floating nav on the profile tab
@@ -1460,18 +1301,22 @@ class _InterestsSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: EverloreTheme.cardDecoration,
-      padding: const EdgeInsets.all(20),
+      // Same icon column and text column as the settings rows below it.
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.auto_stories_outlined,
-                size: 18,
-                color: EverloreTheme.goldDim,
+              SizedBox(
+                width: 24,
+                child: Icon(
+                  Icons.auto_stories_outlined,
+                  size: 20,
+                  color: EverloreTheme.gold.withValues(alpha: 0.9),
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 14),
               Expanded(
                 child: Text(
                   'Your Interests',

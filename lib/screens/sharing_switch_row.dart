@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/telemetry/telemetry.dart';
-import '../app/theme/nexus_theme.dart';
+import '../shared/widgets/settings_group.dart';
 
 /// The profile switch for sharing usage and crash reports.
 ///
@@ -31,25 +31,14 @@ class _SharingSwitchRowState extends State<SharingSwitchRow> {
 
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile(
-      contentPadding: EdgeInsets.zero,
+    return SettingsSwitchRow(
+      icon: Icons.insights_outlined,
+      title: 'Share usage and crash reports',
+      subtitle:
+          'Helps us find and fix problems. Never includes what you write.',
       value: _t.enabled,
       onChanged: _updating ? null : _toggle,
-      activeThumbColor: EverloreTheme.crimson,
-      activeTrackColor: EverloreTheme.crimson.withValues(alpha: 0.35),
-      title: const Text(
-        'Share usage and crash reports',
-        style: TextStyle(
-          color: EverloreTheme.parchment,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      subtitle: Text(
-        _updating
-            ? 'Updating...'
-            : 'Helps us find and fix problems. Never includes what you write.',
-        style: const TextStyle(color: EverloreTheme.ash, fontSize: 12),
-      ),
+      busy: _updating,
     );
   }
 }
