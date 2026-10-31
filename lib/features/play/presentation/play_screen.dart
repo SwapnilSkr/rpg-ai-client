@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../core/guest/guest_limit.dart';
+import '../../../core/guest/guest_session.dart';
+import '../../../core/guest/keep_story_host.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -732,6 +735,7 @@ class _PlayViewState extends State<_PlayView> {
     if (state.isGenerating || state.isRewinding || state.isLoading) return;
     // Never while the player is still being asked who they are.
     if (_onboardingOpen) return;
+    if (!_guideMayOpen()) return;
     final turns = state.events.length;
     if (turns == 0) return;
 
@@ -774,7 +778,31 @@ class _PlayViewState extends State<_PlayView> {
       guide.maybeStart(GuideFlows.ink);
       return;
     }
-    if (turns >= 5) guide.maybeStart(GuideFlows.playTools);
+    // A guest's turns run out at five: the tools wait until they have an
+    // account, rather than landing one turn before the sign-in sheet.
+    if (turns >= 5 && !GuestSession.instance.isGuest) {
+      guide.maybeStart(GuideFlows.playTools);
+    }
+  }
+
+  /// Holds auto-started arcs back while a guest's last reply is about to bring
+  /// up (or has brought up) the sign-in sheet, and while the player is typing:
+  /// a card over the box in use is the failure, and the arc will be offered
+  /// again on a later state change.
+  bool _guideMayOpen() {
+    final focus = FocusManager.instance.primaryFocus;
+    final field = focus?.context?.findAncestorWidgetOfExactType<EditableText>();
+    final guest = GuestSession.instance;
+    return mayAutoStartGuide(
+      isGuest: guest.isGuest,
+      used: guest.turnsUsed,
+      limit: kGuestTurnLimit,
+      inputFocused: field != null,
+      draftEmpty:
+          (field?.controller.text.trim().isEmpty ?? true) &&
+          (_composerDraft.value?.trim().isEmpty ?? true),
+      keepStoryShowing: KeepStoryHost.sheetShowing.value,
+    );
   }
 
   void _maybeShowOnboarding(BuildContext context) {

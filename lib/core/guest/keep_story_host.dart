@@ -18,6 +18,10 @@ class KeepStoryHost extends StatefulWidget {
   final Widget child;
   final Duration cooldown;
 
+  /// True while the sheet is on screen, so a guide arc can hold back rather
+  /// than open under it.
+  static final ValueNotifier<bool> sheetShowing = ValueNotifier<bool>(false);
+
   const KeepStoryHost({
     super.key,
     required this.child,
@@ -78,6 +82,7 @@ class _KeepStoryHostState extends State<KeepStoryHost> {
     if (location == '/auth') return;
 
     _showing = true;
+    KeepStoryHost.sheetShowing.value = true;
     try {
       final result = await KeepStorySheet.show(navContext);
 
@@ -94,6 +99,7 @@ class _KeepStoryHostState extends State<KeepStoryHost> {
       }
     } finally {
       _showing = false;
+      KeepStoryHost.sheetShowing.value = false;
     }
   }
 

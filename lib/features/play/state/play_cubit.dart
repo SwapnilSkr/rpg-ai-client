@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show VoidCallback, visibleForTesting;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/auth/auth_service.dart';
+import '../../../core/guest/guest_limit.dart';
 import '../../../core/guest/guest_session.dart';
 import '../../../core/network/ws_manager.dart';
 import '../../../core/storage/secure_storage.dart';
@@ -899,6 +900,8 @@ class PlayCubit extends Cubit<PlayState> {
       unawaited(_rating.recordSuccessfulTurn());
       _anchorReminders();
       unawaited(_refreshInk());
+      // After the emit, so the sheet never lands on a reply still painting.
+      GuestSession.instance.noteTurnCompleted();
       _sendQueuedMessage();
     });
 
@@ -1520,6 +1523,10 @@ class PlayCubit extends Cubit<PlayState> {
     final dropped = state.events.where((e) => e.isOptimistic).toList();
     final droppedInput = dropped.isNotEmpty ? dropped.last.playerInput : null;
     final queued = _takeQueuedSend();
+    final restored = draftAfterRefusal(
+      droppedInput: droppedInput,
+      queued: queued,
+    );
     emit(
       state.copyWith(
         events: state.events.where((e) => !e.isOptimistic).toList(),
@@ -1533,10 +1540,7 @@ class PlayCubit extends Cubit<PlayState> {
         canRetry: false,
         lastFailedInput: null,
         hasQueuedSend: false,
-        restoreComposerText:
-            (droppedInput != null && droppedInput.trim().isNotEmpty)
-            ? droppedInput
-            : queued,
+        restoreComposerText: restored,
       ),
     );
     _rejoinOnNextSession();
@@ -2450,6 +2454,9 @@ class PlayCubit extends Cubit<PlayState> {
     unawaited(_rating.recordSuccessfulTurn());
     _anchorReminders();
     unawaited(_refreshInk());
+    // The active turn may still be streaming behind this one; it will raise
+    // the sheet when it lands if this was the last allowed reply.
+    GuestSession.instance.noteTurnCompleted(streaming: state.isGenerating);
   }
 
   /// A turn the player sent finished: move the story reminders to this save.

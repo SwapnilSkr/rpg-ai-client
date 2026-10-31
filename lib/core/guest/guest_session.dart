@@ -6,6 +6,7 @@ import '../network/api_client.dart';
 import '../storage/secure_storage.dart';
 import '../telemetry/telemetry.dart';
 import '../../shared/models/user.dart';
+import 'guest_limit.dart';
 import 'sign_in_required.dart';
 
 /// A player who is playing without an account yet.
@@ -83,13 +84,69 @@ class GuestSession {
   /// play cubit calls this for its socket frame.
   void raiseSignInRequired() => SignInRequired.raise();
 
+  int _turnsUsed = 0;
+  bool _prompted = false;
+  Timer? _promptTimer;
+
+  /// Time to finish reading the last allowed reply before the sheet covers
+  /// its closing lines; that reply is what should make keeping the story
+  /// worth a sign-in.
+  @visibleForTesting
+  static Duration keepStoryReadingPause = const Duration(seconds: 4);
+
+  /// Turns this guest has had answered, seeded from the stored user's
+  /// `guestTurns` and advanced by [noteTurnCompleted]. Always 0 for an account.
+  int get turnsUsed => _turnsUsed;
+
+  /// Whether this guest has no turns left to play.
+  bool get turnsSpent => isGuest && _turnsUsed >= kGuestTurnLimit;
+
   /// Mirrors the user just saved. A claim or merge returns a user without the
   /// guest flag, which is what turns this off.
-  void noteUser(User? user) => _isGuest.value = user?.guest ?? false;
+  void noteUser(User? user) {
+    final guest = user?.guest ?? false;
+    _isGuest.value = guest;
+    if (!guest) {
+      _turnsUsed = 0;
+      _prompted = false;
+      _promptTimer?.cancel();
+      return;
+    }
+    // A user saved mid-story can be older than the replies counted since, so
+    // the count never goes backwards while the guest stays the same.
+    final seeded = user?.guestTurns ?? 0;
+    if (seeded > _turnsUsed) _turnsUsed = seeded;
+  }
+
+  /// A guest's reply finished successfully. Counts it and, when it was the
+  /// last allowed one and nothing is still streaming, raises the sign-in sheet
+  /// once. Failed or refused turns never reach here; the server gives those
+  /// back too. Claimed or merged guests are neither counted nor prompted.
+  void noteTurnCompleted({bool streaming = false}) {
+    if (!isGuest) return;
+    _turnsUsed++;
+    if (shouldPromptKeepStory(
+      used: _turnsUsed,
+      limit: kGuestTurnLimit,
+      streaming: streaming,
+      alreadyPrompted: _prompted,
+    )) {
+      _prompted = true;
+      _promptTimer?.cancel();
+      _promptTimer = Timer(keepStoryReadingPause, () {
+        if (isGuest) raiseSignInRequired();
+      });
+    }
+  }
 
   /// Forgets the guest locally. The server purges an abandoned guest by itself
   /// after 30 days, so there is nothing to delete over the network.
-  void clear() => _isGuest.value = false;
+  void clear() {
+    _isGuest.value = false;
+    _turnsUsed = 0;
+    _prompted = false;
+    _promptTimer?.cancel();
+  }
 
   Future<User?> _storedUser() async {
     final raw = await _readUser();
