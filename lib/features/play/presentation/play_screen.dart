@@ -35,6 +35,7 @@ import '../../../shared/widgets/everlore_notice.dart';
 import '../../../shared/widgets/everlore_network_image.dart';
 import '../../../shared/widgets/ink_mark.dart';
 import '../../billing/data/billing_repository.dart';
+import '../../../core/auth/auth_service.dart';
 import '../../../core/storage/local_db.dart';
 import '../../home/data/home_repository.dart';
 import '../../chronicle/data/chronicle_repository.dart';
@@ -44,6 +45,16 @@ import '../../../shared/text_format.dart';
 import '../../../core/telemetry/telemetry.dart';
 import '../../media/presentation/floating_mini_player.dart';
 import '../../media/presentation/spoken_line_menu.dart';
+
+/// The name a starter story adopts as the protagonist without asking again, or
+/// null when the "Who are you?" sheet should open. The player already typed
+/// this name on the onboarding step that promised it travels with them.
+@visibleForTesting
+String? starterAutoName({required bool starter, String? playerName}) {
+  if (!starter) return null;
+  final name = playerName?.trim() ?? '';
+  return name.isEmpty ? null : name;
+}
 
 /// Whether [c] should be treated as in the current scene. [presence] is the set
 /// of lowercased names the latest turn reported present, or null when presence
@@ -780,6 +791,25 @@ class _PlayViewState extends State<_PlayView> {
     BuildContext context,
     PlayCubit cubit,
   ) async {
+    if (widget.starter) {
+      String? autoName;
+      try {
+        final user = await AuthService.getCachedUser();
+        autoName = starterAutoName(
+          starter: true,
+          playerName: user?.preferences.playerName,
+        );
+      } catch (_) {
+        // No name to reuse: fall through to the sheet.
+      }
+      if (!mounted) return;
+      if (autoName != null) {
+        cubit.setPlayerProtagonist(autoName);
+        _maybeGuide(cubit.state);
+        _maybeShowReminderSheet();
+        return;
+      }
+    }
     List<ReusableProtagonist> reusable = const [];
     try {
       reusable = await cubit.loadReusableProtagonists();
