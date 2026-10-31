@@ -383,7 +383,14 @@ class RigArtSet {
   late Map<RigExpression, RigLayerArt> patches;
   late Map<RigExpression, RigLayerArt> mouths;
   late RigLayerArt eyesHalf;
-  late RigLayerArt eyesClosed;
+
+  /// The shut eyes, one drawing per face.
+  ///
+  /// `eyes_closed` is a drawing of the neutral face, brows included, so it only
+  /// sits honestly on a neutral face. A pack that carries `eyes_closed_<face>`
+  /// for an expression gets that face's own shut eyes here; one that does not
+  /// falls back to the neutral drawing for every face.
+  late Map<RigExpression, RigLayerArt> eyesClosed;
   late RigLayerArt glanceLeft;
   late RigLayerArt glanceRight;
   late RigLayerArt hairLong;
@@ -423,7 +430,21 @@ class RigArtSet {
         ),
     };
     eyesHalf = art('eyes_half', RigPart.eyes);
-    eyesClosed = art('eyes_closed', RigPart.eyes);
+    // Every blink on a non-neutral face draws this layer. The neutral drawing's
+    // patch covers the eyes and the brows' lower edge, so over happy, shy or
+    // surprised it left the neutral brow under the expression's own — a doubled
+    // or cut brow for the blink's few frames — and on surprised its wide-open
+    // upper lash line showed above the neutral lid as a dark smudge. A pack with
+    // `eyes_closed_<face>` (that face's eyes, shut, with its own brows) fixes
+    // it; without one the neutral drawing is still all there is.
+    final closedNeutral = art('eyes_closed', RigPart.eyes);
+    RigLayerArt shutEyes(RigExpression e) {
+      if (e == RigExpression.neutral) return closedNeutral;
+      final own = manifest.layerOrNull('eyes_closed_${e.name}');
+      return own == null ? closedNeutral : art(own.name, RigPart.eyes);
+    }
+
+    eyesClosed = {for (final e in RigExpression.values) e: shutEyes(e)};
     glanceLeft = art('eyes_glance_left', RigPart.eyes);
     glanceRight = art('eyes_glance_right', RigPart.eyes);
     hairLong = art('hair_long', RigPart.hairLong);
@@ -441,18 +462,28 @@ class RigArtSet {
     _buildLayers(quality);
   }
 
-  Iterable<RigLayerArt> get all => [
+  /// The shut-eye drawing to draw for [expression].
+  ///
+  /// The lids belong to the face under them: drawn over another expression the
+  /// neutral drawing's brows sit under that expression's own and read as a
+  /// doubled brow. This is the one place the choice is made, so the painter and
+  /// a test ask the same question.
+  RigLayerArt closedFor(RigExpression expression) => eyesClosed[expression]!;
+
+  /// A set, not a list: the faces that fall back share the neutral drawing, and
+  /// the same layer must not be disposed (or its shader rebuilt) twice.
+  Iterable<RigLayerArt> get all => {
         base,
         outfit,
         ...patches.values,
         ...mouths.values,
         eyesHalf,
-        eyesClosed,
+        ...eyesClosed.values,
         glanceLeft,
         glanceRight,
         hairLong,
         hairFront,
-      ];
+      };
 
   void dispose() {
     for (final a in all) {

@@ -428,6 +428,25 @@ void main() {
       }
     });
 
+    test('the shut lids belong to the face on screen, switching mid-cover', () {
+      final s = _sim(3);
+      const dt = 1 / 60;
+      _run(s, 0.5);
+      s.nextExpression(); // happy; the cover starts
+      final lids = <RigExpression>[];
+      for (var i = 0; i < 8; i++) {
+        s.update(dt);
+        if (s.eyeState != RigEyeState.closed) continue;
+        expect(s.closedAlpha, 1, reason: 'frame $i');
+        lids.add(s.closedExpression);
+      }
+      expect(lids.first, RigExpression.neutral,
+          reason: 'the old face\'s lids before the midpoint');
+      expect(lids.last, RigExpression.happy,
+          reason: 'the new face\'s lids after it');
+      expect(lids.indexOf(RigExpression.happy), greaterThan(0));
+    });
+
     test('no glance happens while the face is not neutral', () {
       final s = _sim(5)..nextExpression()..nextExpression(); // shy
       _run(s, 0.3);

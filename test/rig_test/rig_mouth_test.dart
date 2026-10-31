@@ -4,6 +4,30 @@ import 'package:everlore/debug/rig_test/rig_mouth.dart';
 import 'package:everlore/debug/rig_test/rig_tuning.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// One held state of the painted mouth: how long it was on screen, in frames.
+typedef _Run = ({bool open, int frames});
+
+/// The painted mouth's runs over [seconds] of a line begun at frame zero.
+List<_Run> _paintedRuns({
+  required int seed,
+  required double seconds,
+  double dt = 1 / 60,
+}) {
+  final flap = MouthFlapper(Random(seed))..start();
+  final g = DiscreteMouth();
+  final runs = <_Run>[];
+  for (var i = 0; i < (seconds / dt).round(); i++) {
+    flap.update(dt);
+    g.update(dt, rawOpen: flap.isOpen);
+    if (runs.isNotEmpty && runs.last.open == g.open) {
+      runs[runs.length - 1] = (open: g.open, frames: runs.last.frames + 1);
+    } else {
+      runs.add((open: g.open, frames: 1));
+    }
+  }
+  return runs;
+}
+
 void main() {
   test('stays within 0..1 and actually moves while a line plays', () {
     final m = MouthFlapper(Random(8))..start();
@@ -12,6 +36,12 @@ void main() {
     for (var i = 0; i < 60 * 10; i++) {
       m.update(1 / 60);
       expect(m.value, inInclusiveRange(0, 1));
+      if (m.isOpen) {
+        expect(m.target, greaterThanOrEqualTo(RigTuning.mouthMinOpen));
+        expect(m.target, lessThanOrEqualTo(1));
+      } else {
+        expect(m.target, 0);
+      }
       lo = min(lo, m.value);
       hi = max(hi, m.value);
     }
@@ -46,30 +76,83 @@ void main() {
     expect(m.isOpen, isFalse);
   });
 
-  test('beats last 90-160 ms and open beats are at least 0.3', () {
+  test('beats alternate, each lasting its tuned span', () {
     final m = MouthFlapper(Random(6))..start();
-    final lengths = <double>[];
-    double? last;
-    var run = 0.0;
     const dt = 0.002;
-    for (var i = 0; i < 20000; i++) {
+    final spans = <({bool open, double seconds})>[];
+    var open = m.isOpen;
+    var run = 0.0;
+    for (var i = 0; i < 6000; i++) {
       m.update(dt);
-      if (last != null && m.target != last) {
-        lengths.add(run);
-        run = 0;
-      }
-      if (m.target > 0) expect(m.target, greaterThanOrEqualTo(0.3));
-      last = m.target;
       run += dt;
+      if (m.isOpen != open) {
+        spans.add((open: open, seconds: run));
+        run = 0;
+        open = m.isOpen;
+      }
     }
-    // Consecutive open beats have different targets, so each change is a beat
-    // boundary; none can be shorter than the minimum interval.
-    for (final l in lengths.skip(1)) {
-      expect(l, greaterThanOrEqualTo(0.09 - 0.003));
+    // The first span is the shut mouth before the line's first syllable, and the
+    // last is cut by the end of the loop.
+    final beats = spans.skip(1).toList();
+    expect(beats.length, greaterThan(10), reason: 'the mouth flapped');
+    for (var i = 0; i < beats.length - 1; i++) {
+      expect(beats[i + 1].open, isNot(beats[i].open),
+          reason: 'open and shut never meet as two of a kind');
+    }
+    for (final b in beats.take(beats.length - 1)) {
+      // A shut beat is either the gap between syllables or a pause.
+      final lo = b.open
+          ? RigTuning.mouthOpenMinSeconds
+          : RigTuning.mouthShutMinSeconds;
+      final hi = b.open
+          ? RigTuning.mouthOpenMaxSeconds
+          : RigTuning.mouthPauseMaxSeconds;
+      expect(b.seconds, greaterThanOrEqualTo(lo - dt),
+          reason: 'an ${b.open ? 'open' : 'shut'} beat of ${b.seconds} s');
+      expect(b.seconds, lessThanOrEqualTo(hi + dt),
+          reason: 'an ${b.open ? 'open' : 'shut'} beat of ${b.seconds} s');
     }
   });
 
+  test('a line starts on an open beat', () {
+    final m = MouthFlapper(Random(4))..start();
+    m.update(1 / 60);
+    expect(m.isOpen, isTrue);
+  });
+
   group('the painted mouth is discrete', () {
+    test('property: 12 s of talking never holds one drawing too long', () {
+      const dt = 1 / 60;
+      for (final seed in [1, 7, 41]) {
+        final runs = _paintedRuns(seed: seed, seconds: 12, dt: dt);
+        expect(runs.length, greaterThan(20), reason: 'it flapped, seed $seed');
+        expect(runs.any((r) => r.open), isTrue, reason: 'seed $seed');
+        expect(runs.any((r) => !r.open), isTrue, reason: 'seed $seed');
+        // The last run is cut by the end of the loop rather than by the mouth.
+        for (var i = 0; i < runs.length - 1; i++) {
+          final r = runs[i];
+          final where = 'seed $seed run $i: ${r.frames} frames';
+          if (r.open) {
+            // An open drawing held for more than a fifth of a second is the
+            // frozen mouth the owner saw.
+            expect(r.frames * dt,
+                lessThanOrEqualTo(RigTuning.mouthOpenMaxSeconds + dt),
+                reason: 'open too long, $where');
+          } else {
+            expect(r.frames * dt,
+                greaterThanOrEqualTo(RigTuning.mouthMinHoldSeconds - dt),
+                reason: 'a shape shown for less than the hold, $where');
+          }
+        }
+        // Every open run is followed by a shut one: the machine alternates, so
+        // two runs of a kind can only be separated by the other.
+        for (var i = 0; i + 1 < runs.length; i++) {
+          expect(runs[i + 1].open, isNot(runs[i].open),
+              reason: 'seed $seed run $i');
+        }
+      }
+    });
+
     test('a beat that flips every frame still holds each shape', () {
       final g = DiscreteMouth();
       const dt = 1 / 60;

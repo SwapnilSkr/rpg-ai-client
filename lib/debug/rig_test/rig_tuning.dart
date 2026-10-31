@@ -185,6 +185,29 @@ abstract final class RigTuning {
   /// would produce.
   static const double mouthMinHoldSeconds = 0.07;
 
+  /// The talking mouth's beat spans, seconds. The mouth is two drawings, so it
+  /// only reads as speech if they alternate: one drawing held for longer than
+  /// ~0.2 s reads as a frozen open mouth rather than as speech (the owner saw
+  /// holds of 0.7 to 1.4 s on a phone). Real limited animation flaps — the lips
+  /// open on a syllable and shut between two — so each beat is short and the
+  /// beat machine alternates them.
+  static const double mouthOpenMinSeconds = 0.08;
+  static const double mouthOpenMaxSeconds = 0.16;
+  static const double mouthShutMinSeconds = 0.06;
+  static const double mouthShutMaxSeconds = 0.12;
+
+  /// Some shut beats are the pause between words instead of the gap between two
+  /// syllables: that is what keeps a line from reading as a wall of flaps. A
+  /// pause is long enough to be seen as one, and rare, so the mouth does not
+  /// stop and start.
+  static const double mouthPauseChance = 0.15;
+  static const double mouthPauseMinSeconds = 0.18;
+  static const double mouthPauseMaxSeconds = 0.30;
+
+  /// The least an open beat's smoothed value starts from. Only shapes
+  /// `pose.mouthOpen`; the drawn mouth is open or shut, never in between.
+  static const double mouthMinOpen = 0.3;
+
   // ---- Mesh and quality ---------------------------------------------------
 
   /// Target cell size in canvas px. 40 gives the base ~24 x 36 cells: fine

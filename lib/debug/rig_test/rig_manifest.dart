@@ -72,10 +72,20 @@ class RigManifest {
   }
 
   RigLayerSpec layer(String name) {
+    final spec = layerOrNull(name);
+    if (spec == null) throw FormatException('rig.json has no layer "$name"');
+    return spec;
+  }
+
+  /// The layer called [name], or null when the pack does not carry it.
+  ///
+  /// A pack may be older than the code that asks: the per-expression shut eyes
+  /// are optional, and a pack without them still has to load.
+  RigLayerSpec? layerOrNull(String name) {
     for (final l in layers) {
       if (l.name == name) return l;
     }
-    throw FormatException('rig.json has no layer "$name"');
+    return null;
   }
 
   Offset anchor(String name) {

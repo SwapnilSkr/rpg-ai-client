@@ -2,9 +2,16 @@ import 'dart:math' as math;
 
 import 'rig_tuning.dart';
 
-/// The talking mouth: while a line plays, a new random opening is picked every
-/// 90-160 ms, now and then a closed beat, smoothed so it flaps rather than
-/// flickers.
+/// The talking mouth: two drawings, open and shut, alternating while a line
+/// plays.
+///
+/// A beat is one held openness: an open one, then a shut one, then an open one.
+/// The alternation is in the machine, not in the odds: re-rolling an open beat
+/// straight into another open beat (what an independent chance per beat does)
+/// joins two beats into one long open hold, and an open mouth held for a second
+/// reads as frozen, not as speech. Each beat's length comes from its own span in
+/// [RigTuning], drawn from the flapper's seeded [math.Random] so a recorded clip
+/// is identical every run.
 ///
 /// The smoothed [value] is never an alpha: two lip drawings at partial opacity
 /// would be two pairs of lips on one mouth. [DiscreteMouth] turns the raw beat
@@ -14,17 +21,15 @@ class MouthFlapper {
 
   final math.Random _random;
 
-  static const double minInterval = 0.09;
-  static const double maxInterval = 0.16;
-  static const double minOpen = 0.3;
-
-  /// Chance that the next beat is a closed gap (never twice running).
-  static const double gapChance = 0.2;
-
   /// Smoothing time constant, s. Short enough to read as syllables.
   static const double _tau = 0.035;
 
   bool _talking = false;
+
+  /// Which way the beat machine is; every beat flips it, so no two beats of the
+  /// same state can touch.
+  bool _beatOpen = false;
+
   double _target = 0;
   double _value = 0;
   double _untilNext = 0;
@@ -34,13 +39,18 @@ class MouthFlapper {
   /// Smoothed openness, always within 0..1.
   double get value => _value;
 
-  /// The raw beat: 0 in a gap or when silent. The paper doll uses it as an
-  /// on/off switch so both rigs flap on the same timings.
+  /// The raw beat: 0 in a shut beat or when silent, the beat's openness when
+  /// open. The paper doll uses it as an on/off switch so both rigs flap on the
+  /// same timings.
   double get target => _target;
   bool get isOpen => _target > 0;
 
   void start() {
     _talking = true;
+    // A line opens on a syllable: the first beat is an open one, and it lands on
+    // the first frame of the line.
+    _beatOpen = false;
+    _target = 0;
     _untilNext = 0;
   }
 
@@ -54,20 +64,38 @@ class MouthFlapper {
     if (_talking) {
       _untilNext -= dt;
       while (_untilNext <= 0) {
-        if (_target > 0 && _random.nextDouble() < gapChance) {
-          _target = 0;
+        _beatOpen = !_beatOpen;
+        if (_beatOpen) {
+          _target = RigTuning.mouthMinOpen +
+              (1 - RigTuning.mouthMinOpen) * _random.nextDouble();
+          _untilNext += _span(
+            RigTuning.mouthOpenMinSeconds,
+            RigTuning.mouthOpenMaxSeconds,
+          );
         } else {
-          _target = minOpen + (1 - minOpen) * _random.nextDouble();
+          _target = 0;
+          _untilNext += _random.nextDouble() < RigTuning.mouthPauseChance
+              ? _span(
+                  RigTuning.mouthPauseMinSeconds,
+                  RigTuning.mouthPauseMaxSeconds,
+                )
+              : _span(
+                  RigTuning.mouthShutMinSeconds,
+                  RigTuning.mouthShutMaxSeconds,
+                );
         }
-        _untilNext += minInterval + (maxInterval - minInterval) * _random.nextDouble();
       }
     }
     _value += (_target - _value) * (1 - math.exp(-dt / _tau));
     _value = _value.clamp(0.0, 1.0);
   }
 
+  double _span(double min, double max) =>
+      min + (max - min) * _random.nextDouble();
+
   void reset() {
     _talking = false;
+    _beatOpen = false;
     _target = 0;
     _value = 0;
     _untilNext = 0;
@@ -77,10 +105,11 @@ class MouthFlapper {
 /// The mouth as the painter sees it: one open drawing or one shut drawing,
 /// never a fade, and each held at least [RigTuning.mouthMinHoldSeconds].
 ///
-/// The flapper's beat already runs slower than that hold, so in a steady line
-/// this gate passes every change through on the frame it lands. The hold exists
-/// for the edges: a line starting or ending, or a flapper restarted in the
-/// middle of a syllable, must not put a shape on screen for one frame.
+/// The shortest beat is [RigTuning.mouthShutMinSeconds], which is below the
+/// hold, so a very short shut beat is stretched to the hold rather than shown
+/// as a glitch. The hold matters at the edges too: a line starting or ending, or
+/// a flapper restarted in the middle of a syllable, must not put a shape on
+/// screen for one frame.
 class DiscreteMouth {
   bool _open = false;
 

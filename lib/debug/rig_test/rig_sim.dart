@@ -465,6 +465,15 @@ class RigSim extends ChangeNotifier {
   /// Opacity of the closed-lid drawing.
   double get closedAlpha => eyeState == RigEyeState.closed ? 1 : 0;
 
+  /// The face whose shut-eye drawing is the one to draw when
+  /// [eyeState] is [RigEyeState.closed].
+  ///
+  /// It follows [ExpressionBlend.shown], which switches at the cover blink's
+  /// midpoint: a cover keeps the old face's lids until the halfway point and
+  /// takes the new face's after it, exactly as the patch does. So a blink never
+  /// draws one face's brows over another's.
+  RigExpression get closedExpression => expression.shown;
+
   /// Opacity of a glance drawing; the two can never both be lit.
   double glanceAlpha({required bool right}) {
     final glance = right ? RigEyeState.glanceRight : RigEyeState.glanceLeft;

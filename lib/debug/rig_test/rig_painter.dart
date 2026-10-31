@@ -49,12 +49,14 @@ class RigPainter extends CustomPainter {
 
     // Eyes: one drawing at full opacity, chosen by the eye state. OPEN draws
     // nothing — the face under it already carries open eyes — and the glance
-    // layers take the little nudge that follows the switch.
+    // layers take the little nudge that follows the switch. The shut lids are
+    // the face's own, so a blink on happy, shy or surprised does not lay the
+    // neutral brows over the expression's.
     final nudge = sim.pose.eyeX * RigTuning.glanceNudgePx;
     layer(art.glanceLeft, sim.glanceAlpha(right: false), nudge: nudge);
     layer(art.glanceRight, sim.glanceAlpha(right: true), nudge: nudge);
     layer(art.eyesHalf, sim.halfAlpha);
-    layer(art.eyesClosed, sim.closedAlpha);
+    layer(art.closedFor(sim.closedExpression), sim.closedAlpha);
 
     layer(art.hairLong, 1);
     layer(art.hairFront, 1);
