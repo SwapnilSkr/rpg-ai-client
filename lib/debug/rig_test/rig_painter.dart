@@ -1,0 +1,116 @@
+import 'dart:ui' as ui;
+
+import 'package:flutter/widgets.dart';
+
+import 'rig_art.dart';
+import 'rig_sim.dart';
+import 'rig_tuning.dart';
+
+/// Draws the character in either mode. One painter, repainted by the sim's
+/// notifications: one repaint per frame, no widget rebuilds.
+class RigPainter extends CustomPainter {
+  RigPainter({required this.art, required this.sim}) : super(repaint: sim);
+
+  final RigArtSet art;
+  final RigSim sim;
+
+  // 256 alpha filters made lazily: a `modulate` filter scales the layer's
+  // colour and alpha, which is how a layer fades without a saveLayer per layer.
+  static final List<ColorFilter?> _alphaFilters = List.filled(256, null);
+  final Paint _paint = Paint()..isAntiAlias = true;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final m = art.manifest;
+    // Fill the height, centre the width (the canvas is wider than a phone).
+    final scale = size.height / m.canvasH;
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    canvas.translate((size.width - m.canvasW * scale) / 2, 0);
+    canvas.scale(scale);
+
+    final mesh = sim.mode == RigMode.mesh;
+    void layer(RigLayerArt a, double alpha, {double nudge = 0}) {
+      if (alpha <= 0.004) return;
+      mesh ? _drawMesh(canvas, a, alpha, nudge) : _drawFlat(canvas, a);
+    }
+
+    layer(art.base, 1);
+    if (sim.outfit) layer(art.outfit, 1);
+
+    // Outgoing expression first, incoming on top (see ExpressionBlend).
+    final order = sim.expression.from == sim.expression.to
+        ? [sim.expression.to]
+        : [sim.expression.from, sim.expression.to];
+    for (final e in order) {
+      final patch = art.patches[e];
+      if (patch != null) layer(patch, sim.patchAlpha(e));
+    }
+    for (final e in order) {
+      layer(art.mouths[e]!, sim.mouthAlpha(e));
+    }
+
+    // Glances sit under the lids, so a blink covers them.
+    final nudge = sim.pose.eyeX * RigTuning.glanceNudgePx;
+    layer(art.glanceLeft, sim.glanceAlpha(right: false), nudge: nudge);
+    layer(art.glanceRight, sim.glanceAlpha(right: true), nudge: nudge);
+    layer(art.eyesHalf, sim.halfAlpha);
+    layer(art.eyesClosed, sim.closedAlpha);
+
+    layer(art.hairLong, 1);
+    layer(art.hairFront, 1);
+    canvas.restore();
+  }
+
+  void _drawFlat(Canvas canvas, RigLayerArt a) {
+    _paint
+      ..colorFilter = null
+      ..filterQuality = RigTuning.mipmap ? FilterQuality.medium : FilterQuality.low;
+    canvas.drawImage(a.image, Offset(a.spec.x, a.spec.y), _paint);
+  }
+
+  void _drawMesh(Canvas canvas, RigLayerArt a, double alpha, double nudge) {
+    final mesh = a.mesh;
+    final pos = a.positions;
+    final rest = mesh.rest;
+    final pose = sim.pose;
+    final deformer = art.deformer;
+    final long = a.part == RigPart.hairLong;
+    final hair = long || a.part == RigPart.hairFront;
+    final lag = sim.longHairLag;
+    for (var i = 0; i < mesh.vertexCount; i++) {
+      final o = deformer.deform(
+        Offset(rest[i * 2], rest[i * 2 + 1]),
+        pose,
+        depth: a.depth[i],
+        lagWeight: a.lagWeight[i],
+        lagX: !hair ? 0 : (long ? lag[a.column[i]] : sim.frontHairLag),
+        localDx: nudge,
+      );
+      pos[i * 2] = o.dx;
+      pos[i * 2 + 1] = o.dy;
+    }
+    final vertices = ui.Vertices.raw(
+      ui.VertexMode.triangles,
+      pos,
+      textureCoordinates: mesh.tex,
+      indices: mesh.indices,
+    );
+    _paint
+      ..shader = a.shader
+      ..colorFilter = _filterFor(alpha);
+    canvas.drawVertices(vertices, BlendMode.srcOver, _paint);
+    _paint.shader = null;
+    vertices.dispose();
+  }
+
+  ColorFilter? _filterFor(double alpha) {
+    final k = (alpha.clamp(0.0, 1.0) * 255).round();
+    if (k >= 255) return null;
+    return _alphaFilters[k] ??=
+        ColorFilter.mode(Color.fromARGB(k, 255, 255, 255), BlendMode.modulate);
+  }
+
+  @override
+  bool shouldRepaint(RigPainter old) => old.art != art || old.sim != sim;
+}
