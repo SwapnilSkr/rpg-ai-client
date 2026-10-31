@@ -86,7 +86,7 @@ class RigDeformer {
   /// 1 above the neck band, 0 below it, smooth in between.
   double headWeight(double y) {
     final n = geometry.neck.dy;
-    return 1 - _smooth(n - RigTuning.neckBlendHalf, n + RigTuning.neckBlendHalf, y);
+    return 1 - smoothstep(n - RigTuning.neckBlendHalf, n + RigTuning.neckBlendHalf, y);
   }
 
   /// How far a point of the base painting slides in a turn: the face fully,
@@ -96,7 +96,7 @@ class RigDeformer {
     final r = geometry.headRadii;
     final dx = (p.dx - c.dx) / r.dx;
     final dy = (p.dy - c.dy) / r.dy;
-    final t = _smooth(1.0, 1.45, math.sqrt(dx * dx + dy * dy));
+    final t = smoothstep(1.0, 1.45, math.sqrt(dx * dx + dy * dy));
     return RigTuning.depthFace + (RigTuning.depthBackHead - RigTuning.depthFace) * t;
   }
 
@@ -131,7 +131,7 @@ class RigDeformer {
         final cx = geometry.headCenter.dx;
         final u = (x - cx) / geometry.headRadii.dx;
         final toward = turn > 0 ? u : -u;
-        final edge = _smooth(0.2, 1.0, toward) * (1 - _smooth(1.3, 2.3, toward));
+        final edge = smoothstep(0.2, 1.0, toward) * (1 - smoothstep(1.3, 2.3, toward));
         final c = math.min(turn.abs() * RigTuning.compressPerTurn, RigTuning.compressMax);
         nx -= (x - cx) * c * edge * hw * depth;
       }
@@ -157,7 +157,7 @@ class RigDeformer {
 
     // --- Torso: sway grows from the waist (still) to the neck (full). ---
     final up = (waist.dy - y) / (waist.dy - neck.dy);
-    nx += pose.bodyX * RigTuning.bodyPx * _smooth(0, 1, up);
+    nx += pose.bodyX * RigTuning.bodyPx * smoothstep(0, 1, up);
 
     final b = pose.breath;
     if (b != 0) {
@@ -181,7 +181,8 @@ class RigDeformer {
   }
 }
 
-double _smooth(double a, double b, double x) {
+/// 0 at or below [a], 1 at or above [b], smooth and flat at both ends between.
+double smoothstep(double a, double b, double x) {
   final t = ((x - a) / (b - a)).clamp(0.0, 1.0);
   return t * t * (3 - 2 * t);
 }

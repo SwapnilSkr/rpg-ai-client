@@ -71,6 +71,19 @@ abstract final class RigTuning {
   /// Lag grows from the root (0) to the tips (1) as `row ^ curve`.
   static const double hairLagCurve = 1.4;
 
+  /// The last canvas px above the join where hair_front's motion blends into
+  /// hair_long's. The two layers are one strand cut in two at the jaw, so
+  /// without the blend the front slides 1.25-deep while the long layer starts
+  /// 0.8-deep and the strand tears at the seam. 60 px is long enough to hide
+  /// the fade among the side strands and short enough to leave the bangs their
+  /// full swing.
+  static const double hairJoinBandPx = 60;
+
+  /// Rows the mesh puts inside that band, so the smoothstep is sampled rather
+  /// than stretched across one cell. 10 rows of 6 px keep what the seam sees
+  /// within a fifth of a pixel of the long hair at the hardest pose.
+  static const int hairJoinBandRows = 10;
+
   /// Bangs: a stiffer, smaller spring, and a fraction of the tips' lag.
   static const double frontStiffness = 140;
   static const double frontDamping = 11;

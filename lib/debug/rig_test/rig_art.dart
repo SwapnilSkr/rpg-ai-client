@@ -24,6 +24,13 @@ class LayerMesh {
   /// [texScale] converts canvas pixels to the decoded image's pixels: the
   /// texture may be smaller than its crop when it was decoded at display size,
   /// and a shader samples its own image.
+  ///
+  /// [tailPx] splits the bottom of the crop into [tailCells] even rows instead
+  /// of covering it with cells of [cellPx]. Only hair_front asks for it: its
+  /// motion fades over the last few dozen px before the join with hair_long,
+  /// and one 40 px cell across a 60 px band would sample that fade so coarsely
+  /// that the seam still showed. Never more than half the crop: the body above
+  /// needs cells of its own.
   factory LayerMesh.grid({
     required double x,
     required double y,
@@ -32,9 +39,23 @@ class LayerMesh {
     int? cols,
     double cellPx = RigTuning.meshCellPxHigh,
     double texScale = 1,
+    double tailPx = 0,
+    int tailCells = 0,
   }) {
     final c = cols ?? math.max(3, (w / cellPx).ceil());
-    final r = math.max(3, (h / cellPx).ceil());
+    final tailH = tailPx.clamp(0.0, h * 0.5);
+    // No tail height means no tail rows: rows of zero height would collapse
+    // the grid and the deformations would be read off the wrong cell.
+    final tail = tailH > 0 ? tailCells : 0;
+    final bodyH = h - tailH;
+    final body = tail > 0
+        ? math.max(1, (bodyH / cellPx).ceil())
+        : math.max(3, (h / cellPx).ceil());
+    final r = body + tail;
+    // Row j's height above the crop's top: even cells of [cellPx] down to the
+    // tail, then the tail's own even rows.
+    double rowH(int j) =>
+        j <= body ? bodyH * j / body : bodyH + tailH * (j - body) / tail;
     final count = (c + 1) * (r + 1);
     final rest = Float32List(count * 2);
     final tex = Float32List(count * 2);
@@ -42,7 +63,7 @@ class LayerMesh {
       for (var i = 0; i <= c; i++) {
         final k = (j * (c + 1) + i) * 2;
         final u = w * i / c;
-        final v = h * j / r;
+        final v = rowH(j);
         tex[k] = u * texScale;
         tex[k + 1] = v * texScale;
         rest[k] = x + u;
@@ -105,6 +126,11 @@ class RigLayerArt {
     required RigDeformer deformer,
     RigQuality quality = RigQuality.high,
   }) {
+    // The two hair layers are one painted strand cut in two at this row: the
+    // front's crop ends and the long crop begins. Everything the join needs is
+    // derived from the specs, never from a hand-written pixel number.
+    final joinY = spec.y + spec.h;
+    final blends = part == RigPart.hairFront;
     final mesh = LayerMesh.grid(
       x: spec.x,
       y: spec.y,
@@ -114,6 +140,10 @@ class RigLayerArt {
       cols: part == RigPart.hairLong ? quality.hairColumns - 1 : null,
       cellPx: quality.meshCellPx,
       texScale: image.width / spec.w,
+      // Only the front fades, and only over its last hairJoinBandPx, so only it
+      // gets the fine rows that sample the fade.
+      tailPx: blends ? RigTuning.hairJoinBandPx : 0,
+      tailCells: blends ? RigTuning.hairJoinBandRows : 0,
     );
     final n = mesh.vertexCount;
     final depth = Float32List(n);
@@ -132,8 +162,24 @@ class RigLayerArt {
         };
         // Roots stay with the head (0), tips trail (1).
         if (part == RigPart.hairLong || part == RigPart.hairFront) {
-          lagWeight[v] = math.pow(j / mesh.rows, RigTuning.hairLagCurve).toDouble();
+          // The curve follows the vertex's height in the crop, not its row
+          // index: the front's rows are finer near the bottom, and the bangs
+          // above the band must keep exactly the weight they always had.
+          final f = ((rest.dy - spec.y) / spec.h).clamp(0.0, 1.0);
+          lagWeight[v] = math.pow(f, RigTuning.hairLagCurve).toDouble();
           column[v] = i;
+          if (blends) {
+            // At the join the front must move as the long hair's root row
+            // does — depthHairLong and no lag — or the strand tears there.
+            // The blend reaches exactly depthHairLong and weight 0 at joinY.
+            final s = smoothstep(
+              joinY - RigTuning.hairJoinBandPx,
+              joinY,
+              rest.dy,
+            );
+            depth[v] += (RigTuning.depthHairLong - RigTuning.depthHairFront) * s;
+            lagWeight[v] *= 1 - s;
+          }
         }
       }
     }
