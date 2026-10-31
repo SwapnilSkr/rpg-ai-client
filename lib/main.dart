@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'app_routes.dart';
 import 'app/theme/nexus_theme.dart';
 import 'app/layout/responsive.dart';
@@ -69,6 +70,18 @@ Future<void> main() async {
   }
   await telemetryReady;
   await remindersReady;
+  // Cinzel and EB Garamond ship in assets/google_fonts. With fetching off, a
+  // weight someone forgot to bundle fails loudly in debug instead of quietly
+  // downloading (and, offline, falling back to a system font on every title).
+  GoogleFonts.config.allowRuntimeFetching = false;
+  LicenseRegistry.addLicense(() async* {
+    for (final name in const ['Cinzel', 'EBGaramond']) {
+      final text = await rootBundle.loadString(
+        'assets/google_fonts/$name-OFL.txt',
+      );
+      yield LicenseEntryWithLineBreaks([name], text);
+    }
+  });
   runApp(const EverloreApp());
 }
 

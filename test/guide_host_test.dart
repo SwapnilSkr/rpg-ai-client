@@ -1709,7 +1709,9 @@ void main() {
     await _arrive(tester);
 
     expect(find.text('Stay quiet'), findsOneWidget);
-    final card = tester.getRect(find.text('SHALL I LEAVE YOU TO IT?'));
+    // The wrapped prose spans the card's content width; the short title does
+    // not once the real Cinzel is measured, so it can't stand in for the card.
+    final card = tester.getRect(find.textContaining('You seem to know your way'));
     final quiet = tester.getRect(find.text('Stay quiet'));
     final keep = tester.getRect(find.text('Keep them'));
     // Right-aligned: the primary action ends where the prose does, and the

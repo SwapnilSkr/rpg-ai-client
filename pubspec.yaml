@@ -91,6 +91,7 @@ flutter:
     - assets/art/
     - assets/splash/
     - assets/player-avatars/
+    - assets/google_fonts/
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
@@ -101,7 +102,9 @@ flutter:
   # https://flutter.dev/to/asset-from-package
 
   # General Sans — the neutral premium UI grotesk (labels, buttons, body).
-  # Cinzel (display) and EB Garamond (prose) still load via google_fonts.
+  # Cinzel (display) and EB Garamond (prose) are used through google_fonts but
+  # bundled in assets/google_fonts (static instances named the way the package
+  # looks them up), so they render with no network.
   fonts:
     - family: GeneralSans
       fonts:
