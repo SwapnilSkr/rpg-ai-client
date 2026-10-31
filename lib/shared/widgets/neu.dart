@@ -929,7 +929,7 @@ class EngravedBanner extends StatelessWidget {
   }
 }
 
-/// Everlore AI's shared app mark for headers and branded entry points.
+/// Everlore's shared app mark for headers and branded entry points.
 class ForgeMark extends StatelessWidget {
   final double size;
   const ForgeMark({super.key, this.size = 84});
@@ -963,7 +963,7 @@ class ForgeMark extends StatelessWidget {
       child: Image.asset(
         AppIcons.appIcon,
         fit: BoxFit.cover,
-        semanticLabel: 'Everlore AI',
+        semanticLabel: 'Everlore',
       ),
     );
   }

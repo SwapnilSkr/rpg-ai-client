@@ -12,6 +12,7 @@ class AppIcons {
 
   static const forgeSigil = 'assets/icons/forge_sigil.png';
   static const appIcon = 'assets/icons/app_icon.png';
+  static const threshold = 'assets/icons/threshold.webp';
 
   static const echo = 'assets/icons/echo.png';
   static const event = 'assets/icons/event.png';

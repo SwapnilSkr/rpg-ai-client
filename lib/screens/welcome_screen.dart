@@ -70,36 +70,23 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
                   const ForgeMark(size: 96),
                   const SizedBox(height: 24),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'EVERLORE',
-                        style: GoogleFonts.cinzel(
-                          color: EverloreTheme.gold,
-                          fontSize: 34,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 6.0,
-                        ),
+                  // Trailing letter-spacing would push the name off-centre;
+                  // pad it back.
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6.0),
+                    child: Text(
+                      'EVERLORE',
+                      style: GoogleFonts.cinzel(
+                        color: EverloreTheme.gold,
+                        fontSize: 34,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 6.0,
                       ),
-                      Transform.translate(
-                        offset: const Offset(4, -7),
-                        child: Text(
-                          'AI',
-                          style: GoogleFonts.cinzel(
-                            color: EverloreTheme.goldDim,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Every choice echoes through eternity',
+                    'Step into a story that remembers you',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.ebGaramond(
                       color: EverloreTheme.ash,
