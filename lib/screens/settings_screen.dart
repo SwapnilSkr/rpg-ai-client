@@ -158,7 +158,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await AuthService.deleteAccount();
       Telemetry.instance.track('account_action', {'action': 'account_deleted'});
       try {
-        await GoogleAuthService().signOut();
+        // Best-effort: the account is already gone. Offline, the Google and
+        // Firebase sign-out can hang for many seconds before giving up.
+        await GoogleAuthService().signOut().timeout(const Duration(seconds: 2));
       } catch (_) {}
       router.go('/auth');
       // The notice rides the root overlay, which outlives this screen; with

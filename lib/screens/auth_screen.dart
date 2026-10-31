@@ -395,7 +395,9 @@ class AuthScreenState extends State<AuthScreen> {
     });
     try {
       try {
-        await _googleAuthService.signOut();
+        // Bounded: offline, the Google and Firebase sign-out can hang for many
+        // seconds, and the session must still end promptly.
+        await _googleAuthService.signOut().timeout(const Duration(seconds: 2));
       } catch (_) {}
       await AuthService.logout();
       Telemetry.instance.track('account_action', {'action': 'signed_out'});
