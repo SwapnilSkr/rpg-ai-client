@@ -53,10 +53,13 @@ abstract final class RigTuning {
   static const double depthFace = 1.0;
   static const double depthHairLong = 0.8;
 
-  // The expression patches, the mouths and the eye layers have no depth of their
-  // own: they are rectangles cut from edits of the base painting, so each takes
-  // `RigDeformer.baseDepth` at its vertex, exactly as the base does. Any extra
-  // slide showed their edges and let the base's own irises and brows peek out.
+  // The expression patches, the mouths, the eye layers and the brows have no
+  // depth of their own: they are rectangles cut from edits of the base painting,
+  // so each takes `RigDeformer.baseDepth` at its vertex, exactly as the base
+  // does. Any extra slide showed their edges and let the base's own irises and
+  // brows peek out. For the brows this is the whole point: they are drawn over
+  // the bangs but must stay on the face, so they take the face's depth (1.0),
+  // not the bangs' (1.08).
 
   /// Bangs: nearest the viewer, but only just. Bangs lie on the forehead, so
   /// their parallax there is tiny; a deeper front hair slides across the

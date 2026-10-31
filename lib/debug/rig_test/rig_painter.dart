@@ -60,6 +60,16 @@ class RigPainter extends CustomPainter {
 
     layer(art.hairLong, 1);
     layer(art.hairFront, 1);
+
+    // Brows last, on top of the bangs: the painting follows the anime convention
+    // of drawing them over the hair. They take the face's depth (not the bangs'),
+    // so they stay pixel-for-pixel on the face while the hair slides past them,
+    // and they follow `shown` so a new face's brows arrive on the same frame as
+    // its patch and lids. A blink never moves them: the eyes are their own
+    // layers, below the hair. A pack with no brows draws none and leaves them
+    // where that painting has them.
+    final brows = art.browsFor(shown);
+    if (brows != null) layer(brows, sim.browsAlpha(shown));
     canvas.restore();
   }
 

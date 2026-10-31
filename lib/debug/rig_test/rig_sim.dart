@@ -458,6 +458,14 @@ class RigSim extends ChangeNotifier {
   double mouthAlpha(RigExpression e) =>
       _mouthShape.open && e == expression.shown ? 1 : 0;
 
+  /// Opacity of the brow drawing for [e]: 1 for the face on screen, 0 otherwise.
+  ///
+  /// The brows are one drawing per face, swapped with the patch at the cover
+  /// blink's midpoint, so they land on the same frame as the lids and the blush
+  /// and no second face's brows can be lit. Kept here beside [patchAlpha] so the
+  /// painter and the property test ask the same question.
+  double browsAlpha(RigExpression e) => e == expression.shown ? 1 : 0;
+
   /// Opacity of the half-lid drawing. Exactly one eye layer is ever above zero,
   /// and it is drawn at full opacity: discrete drawings, never a cross-fade.
   double get halfAlpha => eyeState == RigEyeState.half ? 1 : 0;

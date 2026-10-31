@@ -72,6 +72,19 @@ void _expectOneMouth(RigSim s, [String where = '']) {
   }
 }
 
+/// The brows: at most one face's drawing, at full opacity, and it is the face
+/// on screen. They live above the hair and follow `shown`, so a blink (an eye
+/// state) never changes or adds one.
+void _expectOneBrow(RigSim s, [String where = '']) {
+  final lit = RigExpression.values.where((e) => s.browsAlpha(e) > 0).toList();
+  expect(lit.length, lessThanOrEqualTo(1), reason: 'two brow layers $where');
+  for (final e in RigExpression.values) {
+    final a = s.browsAlpha(e);
+    expect(a, anyOf(0.0, 1.0), reason: 'brows ${e.name} at $a $where');
+  }
+  expect(lit, [s.expression.shown], reason: 'the brows are not shown\'s $where');
+}
+
 /// The state of every frame, run-length encoded: (state, frames).
 List<({RigEyeState state, int frames})> _runs(List<RigEyeState> states) {
   final out = <({RigEyeState state, int frames})>[];
@@ -359,6 +372,7 @@ void main() {
         _expectOnePatch(rec, where);
         _expectOneMouth(rec, where);
         _expectOneEye(rec, where);
+        _expectOneBrow(rec, where);
       }
     });
   });

@@ -184,7 +184,7 @@ final Float64List _identity = Float64List.fromList(
   [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
 );
 
-enum RigPart { base, outfit, patch, mouth, eyes, hairLong, hairFront }
+enum RigPart { base, outfit, patch, mouth, eyes, brows, hairLong, hairFront }
 
 /// One decoded layer, ready to draw either way: the image for the paper doll,
 /// the mesh + shader for the deformed rig. Everything per-vertex that does not
@@ -264,13 +264,17 @@ class RigLayerArt {
         // of that same painting, so they take it too — only then do a patch
         // vertex and the base vertex under it slide identically, and only then
         // are the patch's edges and the base's own irises and brows invisible.
+        // The brows are cut from the same painting: they get it for the same
+        // reason, and it is what keeps them on the face while the bangs, deeper
+        // at 1.08, slide past under them.
         // The two hair layers blend to it at their joins.
         final field = deformer.baseDepth(rest);
         depth[v] = switch (part) {
           RigPart.base ||
           RigPart.patch ||
           RigPart.mouth ||
-          RigPart.eyes =>
+          RigPart.eyes ||
+          RigPart.brows =>
             field,
           RigPart.outfit => RigTuning.depthFace,
           RigPart.hairLong => RigTuning.depthHairLong,
@@ -393,6 +397,16 @@ class RigArtSet {
   late Map<RigExpression, RigLayerArt> eyesClosed;
   late RigLayerArt glanceLeft;
   late RigLayerArt glanceRight;
+
+  /// The brow drawing for each face; a face is absent when the pack has no
+  /// brows at all.
+  ///
+  /// The painting draws the brows on top of the bangs (the anime convention),
+  /// so `hair_front` carries no brows and they are cut as their own layers. A
+  /// face without its own drawing (`brows_<face>`) uses the neutral `brows`;
+  /// a pack older than this carries neither and draws none, which leaves the
+  /// brows where that pack painted them, in the hair.
+  late Map<RigExpression, RigLayerArt> brows;
   late RigLayerArt hairLong;
   late RigLayerArt hairFront;
 
@@ -449,6 +463,24 @@ class RigArtSet {
     glanceRight = art('eyes_glance_right', RigPart.eyes);
     hairLong = art('hair_long', RigPart.hairLong);
     hairFront = art('hair_front', RigPart.hairFront);
+
+    // Brows, bottom to top after the hair: the painter draws them on top of
+    // hair_front. The neutral drawing serves every face that does not carry its
+    // own, and is built once so the fallback is the same layer, not a copy of
+    // it. A pack with no `brows` at all has no entry for any face.
+    final neutralBrows = manifest.layerOrNull('brows') == null
+        ? null
+        : art('brows', RigPart.brows);
+    brows = {};
+    for (final e in RigExpression.values) {
+      if (e == RigExpression.neutral) {
+        if (neutralBrows != null) brows[e] = neutralBrows;
+        continue;
+      }
+      final own = manifest.layerOrNull('brows_${e.name}');
+      final layer = own == null ? neutralBrows : art(own.name, RigPart.brows);
+      if (layer != null) brows[e] = layer;
+    }
   }
 
   /// Rebuilds the meshes at [quality]. The images are reused and stay owned by
@@ -470,6 +502,13 @@ class RigArtSet {
   /// a test ask the same question.
   RigLayerArt closedFor(RigExpression expression) => eyesClosed[expression]!;
 
+  /// The brow drawing to draw for [expression], or null when the pack has no
+  /// brows.
+  ///
+  /// The brows belong to the face under them and are swapped with its patch,
+  /// never blended: the painter asks this one question, so a test asks the same.
+  RigLayerArt? browsFor(RigExpression expression) => brows[expression];
+
   /// A set, not a list: the faces that fall back share the neutral drawing, and
   /// the same layer must not be disposed (or its shader rebuilt) twice.
   Iterable<RigLayerArt> get all => {
@@ -479,6 +518,7 @@ class RigArtSet {
         ...mouths.values,
         eyesHalf,
         ...eyesClosed.values,
+        ...brows.values,
         glanceLeft,
         glanceRight,
         hairLong,
