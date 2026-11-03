@@ -22,6 +22,7 @@ import 'package:everlore/shared/widgets/everlore_nav_bar.dart';
 import 'package:everlore/screens/settings_screen.dart';
 import 'features/moderation/presentation/blocked_content_screen.dart';
 import 'features/keepsakes/presentation/keepsakes_screen.dart';
+import 'features/group_chat/presentation/screens/group_room_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -82,6 +83,16 @@ final router = GoRouter(
         instanceId: state.pathParameters['instanceId']!,
         focusEventId: state.uri.queryParameters['event'],
         starter: state.uri.queryParameters['starter'] == '1',
+      ),
+    ),
+    GoRoute(
+      path: '/group/:instanceId',
+      name: 'group_chat',
+      builder: (context, state) => GroupRoomScreen(
+        instanceId: state.pathParameters['instanceId']!,
+        title: state.extra is Map
+            ? (state.extra as Map)['title'] as String?
+            : null,
       ),
     ),
     GoRoute(

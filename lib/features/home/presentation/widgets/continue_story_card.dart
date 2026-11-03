@@ -112,7 +112,9 @@ class ContinueStoryCardState extends State<ContinueStoryCard>
 
       if (!mounted || token != _loadToken) return;
 
-      final active = instances.where((i) => !i.meta.isArchived).toList();
+      final active = instances
+          .where((i) => !i.meta.isArchived && i.template?['kind'] != 'group')
+          .toList();
       setState(() {
         _latestInstance = active.isNotEmpty ? active.first : null;
       });
@@ -125,7 +127,11 @@ class ContinueStoryCardState extends State<ContinueStoryCard>
 
   Future<void> _openStory(BuildContext context, WorldInstance instance) async {
     widget.onContinued?.call();
-    await context.push('/play/${instance.id}');
+    if (instance.template?['kind'] == 'group') {
+      await context.push('/group/${instance.id}');
+    } else {
+      await context.push('/play/${instance.id}');
+    }
     if (mounted) {
       refresh(forceRefresh: true);
     }

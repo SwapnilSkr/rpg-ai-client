@@ -92,6 +92,10 @@ Future<void> beginNewRealmStory(
           HomeRepository.createInstance(templateId, personaId: personaId),
     );
     if (!context.mounted || instance == null) return;
+    if (instance.template?['kind'] == 'group') {
+      context.push('/group/${instance.id}');
+      return;
+    }
     context.push('/play/${instance.id}');
   } catch (e) {
     if (!context.mounted) return;

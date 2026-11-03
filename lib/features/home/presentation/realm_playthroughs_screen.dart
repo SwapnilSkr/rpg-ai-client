@@ -289,7 +289,11 @@ class _RealmPlaythroughsScreenState extends State<RealmPlaythroughsScreen> {
                   child: _StoryCard(
                     story: story,
                     onTap: () async {
-                      await context.push('/play/${story.summary.id}');
+                      if (_data?.template?['kind'] == 'group') {
+                        await context.push('/group/${story.summary.id}');
+                      } else {
+                        await context.push('/play/${story.summary.id}');
+                      }
                       if (mounted) unawaited(_load());
                     },
                     onArchive: () => _archive(story.summary.id),

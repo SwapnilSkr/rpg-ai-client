@@ -1,0 +1,144 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../../app/theme/nexus_theme.dart';
+import '../../models/group_chat_models.dart';
+import '../../state/group_chat_cubit.dart';
+import '../../state/group_chat_state.dart';
+import '../widgets/bond_sheet.dart';
+import '../widgets/group_composer.dart';
+import '../widgets/group_message_list.dart';
+import '../widgets/member_avatar.dart';
+
+/// Direct thread screen with one character: same list and composer, no `@` and no action toggle.
+class DirectThreadScreen extends StatefulWidget {
+  final GroupChatCubit cubit;
+  final GroupMember member;
+
+  const DirectThreadScreen({
+    super.key,
+    required this.cubit,
+    required this.member,
+  });
+
+  @override
+  State<DirectThreadScreen> createState() => _DirectThreadScreenState();
+}
+
+class _DirectThreadScreenState extends State<DirectThreadScreen> {
+  @override
+  void initState() {
+    super.initState();
+    widget.cubit.selectThread(widget.member.id);
+  }
+
+  @override
+  void dispose() {
+    widget.cubit.selectThread(kGroupThreadKey);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<GroupChatCubit, GroupChatState>(
+      bloc: widget.cubit,
+      builder: (context, state) {
+        final thread = state.thread(widget.member.id);
+        final typingName = thread.typingId == widget.member.id
+            ? widget.member.name
+            : null;
+        final failedSends = state.failedSends
+            .where((f) => f.directWith == widget.member.id)
+            .toList();
+
+        final memberMap = {widget.member.id: widget.member};
+
+        return Scaffold(
+          backgroundColor: EverloreTheme.void1,
+          appBar: AppBar(
+            backgroundColor: EverloreTheme.void0,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            leading: IconButton(
+              icon: const Icon(
+                Icons.arrow_back_ios_new,
+                color: EverloreTheme.ash,
+                size: 18,
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            title: Row(
+              children: [
+                MemberAvatar(member: widget.member, size: 34),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.member.name,
+                        style: EverloreTheme.screenTitle.copyWith(
+                          fontSize: 16,
+                          color: EverloreTheme.parchment,
+                        ),
+                      ),
+                      if (widget.member.role.isNotEmpty)
+                        Text(
+                          widget.member.role,
+                          style: EverloreTheme.caption.copyWith(
+                            fontSize: 11,
+                            color: EverloreTheme.ash,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(
+                  Icons.favorite_outline_rounded,
+                  color: EverloreTheme.gold,
+                ),
+                tooltip: 'Bond',
+                onPressed: () => BondSheet.show(
+                  context,
+                  cubit: widget.cubit,
+                  member: widget.member,
+                ),
+              ),
+            ],
+          ),
+          body: Column(
+            children: [
+              Expanded(
+                child: GroupMessageList(
+                  lines: thread.lines,
+                  memberMap: memberMap,
+                  onCharacterTap: (_) => BondSheet.show(
+                    context,
+                    cubit: widget.cubit,
+                    member: widget.member,
+                  ),
+                ),
+              ),
+              GroupComposer(
+                members: [widget.member],
+                typingName: typingName,
+                failedSends: failedSends,
+                enableMentions: false, // No @ in direct threads
+                enableActionToggle: false, // No action toggle in direct threads
+                onSend: (text, _) {
+                  widget.cubit.send(text, directWith: widget.member.id);
+                },
+                onRetryFailed: widget.cubit.retryFailed,
+                onDiscardFailed: widget.cubit.discardFailed,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}

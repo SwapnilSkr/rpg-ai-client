@@ -9,6 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../state/home_cubit.dart';
 import 'widgets/realm_group_card.dart';
+import 'widgets/group_chats_row.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/app_icons.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
@@ -180,24 +181,46 @@ class _HomeViewState extends State<_HomeView> {
                             controller: _scrollController,
                             physics: const AlwaysScrollableScrollPhysics(),
                             slivers: [
-                              if (state.isLoading && state.realms.isEmpty)
+                              if (state.isLoading &&
+                                  state.realms.isEmpty &&
+                                  state.groupTemplates.isEmpty)
                                 const SliverFillRemaining(child: _LoadingView())
-                              else if (state.needsSignIn && state.realms.isEmpty)
+                              else if (state.needsSignIn &&
+                                  state.realms.isEmpty &&
+                                  state.groupTemplates.isEmpty)
                                 const SliverFillRemaining(child: _UnauthView())
                               else if (state.error != null &&
-                                  state.realms.isEmpty)
+                                  state.realms.isEmpty &&
+                                  state.groupTemplates.isEmpty)
                                 SliverFillRemaining(
                                   child: _ErrorView(message: state.error!),
                                 )
-                              else if (state.realms.isEmpty)
-                                SliverFillRemaining(
-                                  child: _EmptyView(
-                                    isSearchEmpty:
-                                        _searchController.text.isNotEmpty,
+                              else ...[
+                                if (state.groupTemplates.isNotEmpty)
+                                  SliverToBoxAdapter(
+                                    child: GroupChatsRow(
+                                      templates: state.groupTemplates,
+                                      existingChats: state.groupChats,
+                                      onRefreshed: () {
+                                        unawaited(
+                                          context
+                                              .read<HomeCubit>()
+                                              .loadInstances(silent: true),
+                                        );
+                                      },
+                                    ),
                                   ),
-                                )
-                              else
-                                _buildRealmList(context, state),
+                                if (state.realms.isEmpty)
+                                  SliverFillRemaining(
+                                    hasScrollBody: false,
+                                    child: _EmptyView(
+                                      isSearchEmpty:
+                                          _searchController.text.isNotEmpty,
+                                    ),
+                                  )
+                                else
+                                  _buildRealmList(context, state),
+                              ],
                             ],
                           ),
                         );
@@ -245,7 +268,11 @@ class _HomeViewState extends State<_HomeView> {
             RealmGroupCard(
               group: group,
               onContinue: (story) async {
-                await context.push('/play/${story.id}');
+                if (story.template?['kind'] == 'group') {
+                  await context.push('/group/${story.id}');
+                } else {
+                  await context.push('/play/${story.id}');
+                }
                 if (context.mounted) {
                   unawaited(
                     context.read<HomeCubit>().loadInstances(silent: true),

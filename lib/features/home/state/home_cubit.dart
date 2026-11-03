@@ -5,6 +5,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/storage/local_db.dart';
 import '../../../shared/models/world_instance.dart';
+import '../../../shared/models/world_template.dart';
+import '../../templates/data/template_repository.dart';
 import '../data/home_repository.dart';
 import '../domain/realm_group.dart';
 import '../../../core/errors/user_message.dart';
@@ -13,6 +15,8 @@ import '../../../core/network/api_client.dart';
 class HomeState extends Equatable {
   final List<WorldInstance> instances;
   final List<RealmGroup> realms;
+  final List<WorldTemplate> groupTemplates;
+  final List<WorldInstance> groupChats;
   final bool isLoading;
   final bool isLoadingMore;
   final bool hasMore;
@@ -27,6 +31,8 @@ class HomeState extends Equatable {
   const HomeState({
     this.instances = const [],
     this.realms = const [],
+    this.groupTemplates = const [],
+    this.groupChats = const [],
     this.isLoading = false,
     this.isLoadingMore = false,
     this.hasMore = false,
@@ -39,6 +45,8 @@ class HomeState extends Equatable {
   HomeState copyWith({
     List<WorldInstance>? instances,
     List<RealmGroup>? realms,
+    List<WorldTemplate>? groupTemplates,
+    List<WorldInstance>? groupChats,
     bool? isLoading,
     bool? isLoadingMore,
     bool? hasMore,
@@ -50,6 +58,8 @@ class HomeState extends Equatable {
     return HomeState(
       instances: instances ?? this.instances,
       realms: realms ?? this.realms,
+      groupTemplates: groupTemplates ?? this.groupTemplates,
+      groupChats: groupChats ?? this.groupChats,
       isLoading: isLoading ?? this.isLoading,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       hasMore: hasMore ?? this.hasMore,
@@ -65,6 +75,8 @@ class HomeState extends Equatable {
   List<Object?> get props => [
     instances,
     realms,
+    groupTemplates,
+    groupChats,
     isLoading,
     isLoadingMore,
     hasMore,
@@ -107,9 +119,40 @@ class HomeCubit extends Cubit<HomeState> {
     if (!silent) emit(state.copyWith(isLoading: true, error: null));
     try {
       final result = await HomeRepository.getRealmPage(search: _search);
+      final filteredRealms = result.realms
+          .where((r) => r.template?['kind'] != 'group')
+          .toList();
+
+      List<WorldTemplate> groupTemplates = state.groupTemplates;
+      List<WorldInstance> groupChats = state.groupChats;
+
+      try {
+        final groupResult = await TemplateRepository.listPublished(
+          kind: 'group',
+          forceRefresh: forceRefresh,
+        );
+        final raw = groupResult['templates'] as List? ?? [];
+        groupTemplates = raw
+            .map((e) => e is WorldTemplate
+                ? e
+                : WorldTemplate.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      } catch (_) {}
+
+      try {
+        final allInstances = await HomeRepository.getInstances(
+          forceRefresh: forceRefresh,
+        );
+        groupChats = allInstances
+            .where((i) => i.template?['kind'] == 'group')
+            .toList();
+      } catch (_) {}
+
       emit(
         state.copyWith(
-          realms: result.realms,
+          realms: filteredRealms,
+          groupTemplates: groupTemplates,
+          groupChats: groupChats,
           isLoading: false,
           page: result.page,
           total: result.total,
@@ -137,12 +180,13 @@ class HomeCubit extends Cubit<HomeState> {
         page: state.page + 1,
         search: _search,
       );
+      final filteredNext = result.realms.where((r) => r.template?['kind'] != 'group');
       final known = state.realms.map((realm) => realm.templateId).toSet();
       emit(
         state.copyWith(
           realms: [
             ...state.realms,
-            ...result.realms.where((realm) => known.add(realm.templateId)),
+            ...filteredNext.where((realm) => known.add(realm.templateId)),
           ],
           isLoadingMore: false,
           page: result.page,

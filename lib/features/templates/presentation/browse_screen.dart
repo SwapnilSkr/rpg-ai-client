@@ -47,6 +47,7 @@ class _BrowseTemplatesScreenState extends State<BrowseTemplatesScreen> {
             creatorId: t.creatorId,
           ),
         )
+        .where((t) => t.kind != 'group')
         .toList();
 
     if (_kindFilter == 'character') {
