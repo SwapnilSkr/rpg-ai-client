@@ -196,9 +196,13 @@ class GroupSnapshot extends Equatable {
   /// The group's name; empty when the frame's template carries none.
   final String title;
 
+  /// The group's cover; empty when the frame's template carries none.
+  final String imageUrl;
+
   const GroupSnapshot({
     required this.instanceId,
     this.title = '',
+    this.imageUrl = '',
     this.members = const [],
     this.events = const [],
     this.pendingFrom = const [],
@@ -265,6 +269,7 @@ class GroupSnapshot extends Equatable {
       ],
       matureCapable: _map(data['template'])['is_nsfw_capable'] == true,
       title: _str(_map(data['template'])['title']),
+      imageUrl: _str(_map(data['template'])['image_url']),
       operation: operation == null ? null : _str(operation),
       hasOlder: window['hasOlder'] == true,
     );

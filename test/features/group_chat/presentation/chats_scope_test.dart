@@ -285,10 +285,11 @@ void main() {
     addTearDown(room.close);
     await room.start();
     final frame = loadedFrame();
-    (frame['data'] as Map)['template'] = {'title': 'Guild'};
+    (frame['data'] as Map)['template'] = {'title': 'Guild', 'image_url': 'https://cdn/cover.png'};
     gateway.pushLoaded(frame);
     await Future<void>.delayed(Duration.zero);
     expect(room.state.title, 'Guild');
+    expect(room.state.imageUrl, 'https://cdn/cover.png');
     gateway.pushLoaded(loadedFrame());
     await Future<void>.delayed(Duration.zero);
     expect(room.state.title, 'Guild');
