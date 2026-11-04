@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/nexus_theme.dart';
 import '../../models/group_chat_models.dart';
 import '../../state/group_chat_state.dart';
+import 'group_chat_backdrop.dart';
 import 'member_avatar.dart';
 
 /// Bottom composer for group and direct threads with actions toggle, `@` member suggestions,
@@ -143,7 +144,7 @@ class _GroupComposerState extends State<GroupComposer> {
 
     return Container(
       decoration: BoxDecoration(
-        color: EverloreTheme.void1,
+        color: EverloreTheme.void0.withValues(alpha: kGroupChromeAlpha),
         border: const Border(
           top: BorderSide(color: EverloreTheme.white10, width: 0.9),
         ),

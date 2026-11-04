@@ -16,6 +16,7 @@ import '../../state/group_chat_state.dart';
 import '../widgets/actions_tab.dart';
 import '../widgets/bond_sheet.dart';
 import '../widgets/character_sheet.dart';
+import '../widgets/group_chat_backdrop.dart';
 import '../widgets/group_composer.dart';
 import '../widgets/group_message_list.dart';
 import '../widgets/member_avatar.dart';
@@ -373,113 +374,123 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
               .where((f) => f.directWith == null || f.directWith == kGroupThreadKey)
               .toList();
 
-          return Scaffold(
-            backgroundColor: EverloreTheme.void1,
-            appBar: AppBar(
-              backgroundColor: EverloreTheme.void0,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              leading: IconButton(
-                icon: const Icon(
-                  Icons.arrow_back_ios_new,
-                  color: EverloreTheme.ash,
-                  size: 18,
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(
+                child: GroupChatBackdrop(
+                  imageUrl: state.imageUrl,
                 ),
-                onPressed: () => context.canPop() ? context.pop() : context.go('/'),
               ),
-              title: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    chatTitle,
-                    style: EverloreTheme.screenTitle.copyWith(
-                      fontSize: 16,
-                      color: EverloreTheme.parchment,
+              Scaffold(
+                backgroundColor: Colors.transparent,
+                appBar: AppBar(
+                  backgroundColor: EverloreTheme.void0.withValues(alpha: kGroupChromeAlpha),
+                  elevation: 0,
+                  scrolledUnderElevation: 0,
+                  leading: IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new,
+                      color: EverloreTheme.ash,
+                      size: 18,
                     ),
+                    onPressed: () => context.canPop() ? context.pop() : context.go('/'),
                   ),
-                  if (memberNamesSubtitle.isNotEmpty)
-                    Text(
-                      memberNamesSubtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: EverloreTheme.caption.copyWith(
-                        fontSize: 11,
-                        color: EverloreTheme.ash,
+                  title: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        chatTitle,
+                        style: EverloreTheme.screenTitle.copyWith(
+                          fontSize: 16,
+                          color: EverloreTheme.parchment,
+                        ),
                       ),
-                    ),
-                ],
-              ),
-              actions: [
-                GestureDetector(
-                  onTap: () => MembersSheet.show(
-                    context,
-                    cubit: _cubit,
-                    state: state,
-                    onSelectMember: _openCharacterSheet,
+                      if (memberNamesSubtitle.isNotEmpty)
+                        Text(
+                          memberNamesSubtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: EverloreTheme.caption.copyWith(
+                            fontSize: 11,
+                            color: EverloreTheme.ash,
+                          ),
+                        ),
+                    ],
                   ),
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Center(
-                      child: _buildHeaderAvatars(context, state),
-                    ),
-                  ),
-                ),
-              ],
-              bottom: TabBar(
-                controller: _tabController,
-                indicatorColor: EverloreTheme.gold,
-                indicatorWeight: 2.2,
-                dividerColor: EverloreTheme.gold.withValues(alpha: 0.12),
-                labelColor: EverloreTheme.gold,
-                unselectedLabelColor: EverloreTheme.ash,
-                labelStyle: EverloreTheme.ui(
-                  size: 13,
-                  weight: FontWeight.w600,
-                  spacing: 1.2,
-                ),
-                unselectedLabelStyle: EverloreTheme.ui(
-                  size: 13,
-                  weight: FontWeight.w500,
-                ),
-                tabs: const [
-                  Tab(text: 'Chat'),
-                  Tab(text: 'Actions'),
-                ],
-              ),
-            ),
-            body: TabBarView(
-              controller: _tabController,
-              children: [
-                // Chat tab
-                Column(
-                  children: [
-                    Expanded(
-                      child: GroupMessageList(
-                        lines: groupThread.lines,
-                        memberMap: memberMap,
-                        onCharacterTap: _openCharacterSheet,
-                        someoneTyping: typingName != null,
+                  actions: [
+                    GestureDetector(
+                      onTap: () => MembersSheet.show(
+                        context,
+                        cubit: _cubit,
+                        state: state,
+                        onSelectMember: _openCharacterSheet,
                       ),
-                    ),
-                    GroupComposer(
-                      members: state.members,
-                      typingName: typingName,
-                      failedSends: failedSends,
-                      enableMentions: true,
-                      enableActionToggle: true,
-                      onSend: (text, isAction) {
-                        _cubit.send(text, action: isAction);
-                      },
-                      onRetryFailed: _cubit.retryFailed,
-                      onDiscardFailed: _cubit.discardFailed,
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Center(
+                          child: _buildHeaderAvatars(context, state),
+                        ),
+                      ),
                     ),
                   ],
+                  bottom: TabBar(
+                    controller: _tabController,
+                    indicatorColor: EverloreTheme.gold,
+                    indicatorWeight: 2.2,
+                    dividerColor: EverloreTheme.gold.withValues(alpha: 0.12),
+                    labelColor: EverloreTheme.gold,
+                    unselectedLabelColor: EverloreTheme.ash,
+                    labelStyle: EverloreTheme.ui(
+                      size: 13,
+                      weight: FontWeight.w600,
+                      spacing: 1.2,
+                    ),
+                    unselectedLabelStyle: EverloreTheme.ui(
+                      size: 13,
+                      weight: FontWeight.w500,
+                    ),
+                    tabs: const [
+                      Tab(text: 'Chat'),
+                      Tab(text: 'Actions'),
+                    ],
+                  ),
                 ),
-                // Actions tab
-                ActionsTab(cubit: _cubit),
-              ],
-            ),
+                body: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // Chat tab
+                    Column(
+                      children: [
+                        Expanded(
+                          child: GroupMessageList(
+                            lines: groupThread.lines,
+                            memberMap: memberMap,
+                            onCharacterTap: _openCharacterSheet,
+                            someoneTyping: typingName != null,
+                          ),
+                        ),
+                        GroupComposer(
+                          members: state.members,
+                          typingName: typingName,
+                          failedSends: failedSends,
+                          enableMentions: true,
+                          enableActionToggle: true,
+                          onSend: (text, isAction) {
+                            _cubit.send(text, action: isAction);
+                          },
+                          onRetryFailed: _cubit.retryFailed,
+                          onDiscardFailed: _cubit.discardFailed,
+                        ),
+                      ],
+                    ),
+                    // Actions tab
+                    ActionsTab(cubit: _cubit),
+                  ],
+                ),
+              ),
+            ],
           );
         },
       ),

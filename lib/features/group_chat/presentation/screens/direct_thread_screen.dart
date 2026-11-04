@@ -9,6 +9,7 @@ import '../../state/chats_cubit.dart';
 import '../../state/group_chat_cubit.dart';
 import '../../state/group_chat_state.dart';
 import '../widgets/bond_sheet.dart';
+import '../widgets/group_chat_backdrop.dart';
 import '../widgets/group_composer.dart';
 import '../widgets/group_message_list.dart';
 import '../widgets/member_avatar.dart';
@@ -72,90 +73,108 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
 
         final memberMap = {widget.member.id: widget.member};
 
-        return Scaffold(
-          backgroundColor: EverloreTheme.void1,
-          appBar: AppBar(
-            backgroundColor: EverloreTheme.void0,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            leading: IconButton(
-              icon: const Icon(
-                Icons.arrow_back_ios_new,
-                color: EverloreTheme.ash,
-                size: 18,
+        final portrait = widget.member.portraitUrl?.trim();
+        final hasPortrait = portrait != null && portrait.isNotEmpty;
+        final backdropUrl = hasPortrait ? portrait : state.imageUrl;
+        final backdropAlignment = hasPortrait
+            ? const Alignment(0, -0.6)
+            : Alignment.center;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: GroupChatBackdrop(
+                imageUrl: backdropUrl,
+                alignment: backdropAlignment,
               ),
-              onPressed: () => Navigator.of(context).pop(),
             ),
-            title: Row(
-              children: [
-                MemberAvatar(member: widget.member, size: 34),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.member.name,
-                        style: EverloreTheme.screenTitle.copyWith(
-                          fontSize: 16,
-                          color: EverloreTheme.parchment,
-                        ),
-                      ),
-                      if (widget.member.role.isNotEmpty)
-                        Text(
-                          widget.member.role,
-                          style: EverloreTheme.caption.copyWith(
-                            fontSize: 11,
-                            color: EverloreTheme.ash,
+            Scaffold(
+              backgroundColor: Colors.transparent,
+              appBar: AppBar(
+                backgroundColor: EverloreTheme.void0.withValues(alpha: kGroupChromeAlpha),
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                leading: IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new,
+                    color: EverloreTheme.ash,
+                    size: 18,
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                title: Row(
+                  children: [
+                    MemberAvatar(member: widget.member, size: 34),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.member.name,
+                            style: EverloreTheme.screenTitle.copyWith(
+                              fontSize: 16,
+                              color: EverloreTheme.parchment,
+                            ),
                           ),
-                        ),
-                    ],
-                  ),
+                          if (widget.member.role.isNotEmpty)
+                            Text(
+                              widget.member.role,
+                              style: EverloreTheme.caption.copyWith(
+                                fontSize: 11,
+                                color: EverloreTheme.ash,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+                actions: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.favorite_outline_rounded,
+                      color: EverloreTheme.gold,
+                    ),
+                    tooltip: 'Bond',
+                    onPressed: () => BondSheet.show(
+                      context,
+                      cubit: widget.cubit,
+                      member: widget.member,
+                    ),
+                  ),
+                ],
+              ),
+              body: Column(
+                children: [
+                  Expanded(
+                    child: GroupMessageList(
+                      lines: thread.lines,
+                      memberMap: memberMap,
+                      onCharacterTap: (_) => BondSheet.show(
+                        context,
+                        cubit: widget.cubit,
+                        member: widget.member,
+                      ),
+                    ),
+                  ),
+                  GroupComposer(
+                    members: [widget.member],
+                    typingName: typingName,
+                    failedSends: failedSends,
+                    enableMentions: false, // No @ in direct threads
+                    enableActionToggle: false, // No action toggle in direct threads
+                    onSend: (text, _) {
+                      widget.cubit.send(text, directWith: widget.member.id);
+                    },
+                    onRetryFailed: widget.cubit.retryFailed,
+                    onDiscardFailed: widget.cubit.discardFailed,
+                  ),
+                ],
+              ),
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(
-                  Icons.favorite_outline_rounded,
-                  color: EverloreTheme.gold,
-                ),
-                tooltip: 'Bond',
-                onPressed: () => BondSheet.show(
-                  context,
-                  cubit: widget.cubit,
-                  member: widget.member,
-                ),
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              Expanded(
-                child: GroupMessageList(
-                  lines: thread.lines,
-                  memberMap: memberMap,
-                  onCharacterTap: (_) => BondSheet.show(
-                    context,
-                    cubit: widget.cubit,
-                    member: widget.member,
-                  ),
-                ),
-              ),
-              GroupComposer(
-                members: [widget.member],
-                typingName: typingName,
-                failedSends: failedSends,
-                enableMentions: false, // No @ in direct threads
-                enableActionToggle: false, // No action toggle in direct threads
-                onSend: (text, _) {
-                  widget.cubit.send(text, directWith: widget.member.id);
-                },
-                onRetryFailed: widget.cubit.retryFailed,
-                onDiscardFailed: widget.cubit.discardFailed,
-              ),
-            ],
-          ),
+          ],
         );
       },
     );
