@@ -451,3 +451,155 @@ class GroupActionsPage extends Equatable {
   @override
   List<Object?> get props => [actions, next];
 }
+
+/// Who wrote a Chats preview line.
+enum GroupLastFrom { member, player }
+
+/// The newest line the player has been shown in a conversation. A player's own
+/// line has no [name].
+class GroupLastLine extends Equatable {
+  final GroupLastFrom from;
+  final String name;
+  final String text;
+  final DateTime at;
+
+  const GroupLastLine({
+    required this.from,
+    this.name = '',
+    required this.text,
+    required this.at,
+  });
+
+  bool get isPlayer => from == GroupLastFrom.player;
+
+  /// Null when [raw] is absent or has no usable time; a line we cannot place
+  /// in time cannot be sorted or marked read, so it counts as no line.
+  static GroupLastLine? parse(Object? raw) {
+    final json = _map(raw);
+    final at = _date(json['at']);
+    if (at == null) return null;
+    final from = switch (_str(json['from'])) {
+      'member' => GroupLastFrom.member,
+      'player' => GroupLastFrom.player,
+      _ => null,
+    };
+    if (from == null) return null;
+    return GroupLastLine(
+      from: from,
+      name: _str(json['name']),
+      text: _str(json['text']),
+      at: at,
+    );
+  }
+
+  @override
+  List<Object?> get props => [from, name, text, at];
+}
+
+/// One direct thread in a Chats row. [last] is absent when every shown line
+/// is hidden from this player, though [messageCount] is above 0.
+class GroupThreadRow extends Equatable {
+  final String memberId;
+  final GroupLastLine? last;
+  final int messageCount;
+
+  const GroupThreadRow({
+    required this.memberId,
+    this.last,
+    this.messageCount = 0,
+  });
+
+  static GroupThreadRow? parse(Object? raw) {
+    final json = _map(raw);
+    final id = _str(json['member_id']);
+    if (id.isEmpty) return null;
+    return GroupThreadRow(
+      memberId: id,
+      last: GroupLastLine.parse(json['last']),
+      messageCount: _int(json['message_count']) ?? 0,
+    );
+  }
+
+  @override
+  List<Object?> get props => [memberId, last, messageCount];
+}
+
+/// One group save as the Chats tab lists it.
+class GroupChatRow extends Equatable {
+  final String instanceId;
+  final String templateId;
+  final String title;
+  final String? imageUrl;
+  final List<GroupMember> members;
+
+  /// The main room's newest shown line; null for a new group, or when every
+  /// line so far is hidden from this player.
+  final GroupLastLine? last;
+
+  /// Members with a direct message waiting to be opened.
+  final List<String> pendingFrom;
+  final List<GroupThreadRow> threads;
+
+  const GroupChatRow({
+    required this.instanceId,
+    required this.templateId,
+    this.title = '',
+    this.imageUrl,
+    this.members = const [],
+    this.last,
+    this.pendingFrom = const [],
+    this.threads = const [],
+  });
+
+  /// Null when the row has no save id: nothing could open it.
+  static GroupChatRow? parse(Object? raw) {
+    try {
+      final json = _map(raw);
+      final instanceId = _str(json['instance_id']);
+      if (instanceId.isEmpty) return null;
+      final image = _str(json['image_url']);
+      return GroupChatRow(
+        instanceId: instanceId,
+        templateId: _str(json['template_id']),
+        title: _str(json['title']),
+        imageUrl: image.isEmpty ? null : image,
+        members: [
+          for (final m in _maps(json['members']))
+            if (_str(m['id']).isNotEmpty && _str(m['name']).isNotEmpty)
+              GroupMember(
+                id: _str(m['id']),
+                name: _str(m['name']),
+                role: _str(m['role']),
+                portraitUrl: _str(m['portrait_url']).isEmpty
+                    ? null
+                    : _str(m['portrait_url']),
+              ),
+        ],
+        last: GroupLastLine.parse(json['last']),
+        pendingFrom: [
+          if (json['pending_from'] is List)
+            for (final id in json['pending_from'] as List)
+              if (_str(id).isNotEmpty) _str(id),
+        ],
+        threads: [
+          if (json['threads'] is List)
+            for (final t in json['threads'] as List) ?GroupThreadRow.parse(t),
+        ],
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  List<Object?> get props => [
+    instanceId,
+    templateId,
+    title,
+    imageUrl,
+    members,
+    last,
+    pendingFrom,
+    threads,
+  ];
+}

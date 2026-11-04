@@ -28,6 +28,28 @@ class StatDefinition {
   };
 }
 
+/// A person in a group template, as the preview shows them before joining.
+class TemplateMember {
+  final String name;
+  final String role;
+  final String? portraitUrl;
+
+  const TemplateMember({required this.name, this.role = '', this.portraitUrl});
+
+  /// Null for anything without a name; it could not be shown.
+  static TemplateMember? parse(Object? raw) {
+    if (raw is! Map) return null;
+    final name = raw['name']?.toString() ?? '';
+    if (name.isEmpty) return null;
+    final portrait = raw['portrait_url']?.toString() ?? '';
+    return TemplateMember(
+      name: name,
+      role: raw['role']?.toString() ?? '',
+      portraitUrl: portrait.isEmpty ? null : portrait,
+    );
+  }
+}
+
 enum WorldReviewState {
   unpublished,
   private,
@@ -66,6 +88,9 @@ class WorldTemplate {
   final String? reviewNote;
   final String? genre;
 
+  /// Who is in a group template; empty for every other kind.
+  final List<TemplateMember> members;
+
   const WorldTemplate({
     required this.id,
     required this.creatorId,
@@ -95,6 +120,7 @@ class WorldTemplate {
     this.reviewStatus,
     this.reviewNote,
     this.genre,
+    this.members = const [],
   });
 
   bool get isCharacter => kind == 'character';
@@ -149,6 +175,7 @@ class WorldTemplate {
     String? reviewStatus,
     String? reviewNote,
     String? genre,
+    List<TemplateMember>? members,
   }) {
     return WorldTemplate(
       id: id ?? this.id,
@@ -179,6 +206,7 @@ class WorldTemplate {
       reviewStatus: reviewStatus ?? this.reviewStatus,
       reviewNote: reviewNote ?? this.reviewNote,
       genre: genre ?? this.genre,
+      members: members ?? this.members,
     );
   }
 
@@ -225,6 +253,10 @@ class WorldTemplate {
       reviewStatus: json['review_status'] as String?,
       reviewNote: json['review_note'] as String?,
       genre: json['genre'] as String?,
+      members: [
+        if (json['members'] is List)
+          for (final m in json['members'] as List) ?TemplateMember.parse(m),
+      ],
     );
   }
 }

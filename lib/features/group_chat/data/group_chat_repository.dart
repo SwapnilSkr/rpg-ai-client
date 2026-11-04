@@ -4,6 +4,10 @@ import '../models/group_chat_models.dart';
 /// The HTTP side of a group chat: thread list, bonds, actions, and opening a
 /// thread that has a message waiting.
 abstract class GroupChatRepository {
+  /// The Chats tab: this player's group saves, newest activity first. A row
+  /// that does not parse is dropped.
+  Future<List<GroupChatRow>> chats();
+
   Future<List<GroupThreadSummary>> threads(String instanceId);
 
   /// Whether the server started writing the waiting message. The words
@@ -29,6 +33,16 @@ abstract class GroupChatRepository {
 
 class HttpGroupChatRepository implements GroupChatRepository {
   const HttpGroupChatRepository();
+
+  @override
+  Future<List<GroupChatRow>> chats() async {
+    final body = await ApiClient.get('/instances/group-chats');
+    final rows = body is Map ? body['chats'] : null;
+    return [
+      if (rows is List)
+        for (final row in rows) ?GroupChatRow.parse(row),
+    ];
+  }
 
   @override
   Future<List<GroupThreadSummary>> threads(String instanceId) async {

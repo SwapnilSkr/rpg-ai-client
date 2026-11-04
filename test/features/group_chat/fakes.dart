@@ -137,6 +137,9 @@ class FakeRepository implements GroupChatRepository {
   Future<List<GroupThreadSummary>> threads(String instanceId) async => threadRows;
 
   @override
+  Future<List<GroupChatRow>> chats() async => const [];
+
+  @override
   Future<bool> openThread(String instanceId, String characterId) async {
     opened.add(characterId);
     if (openError != null) throw openError!;
