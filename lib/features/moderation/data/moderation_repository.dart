@@ -128,6 +128,8 @@ class ModerationRepository {
     required String targetId,
     required ReportReason reason,
     String? details,
+    String? characterId,
+    String? text,
   }) async {
     await ApiClient.post(
       '/moderation/reports',
@@ -135,6 +137,8 @@ class ModerationRepository {
         'target_type': targetType,
         'target_id': targetId,
         'reason': reason.wire,
+        if (characterId != null) 'character_id': characterId,
+        if (text != null) 'text': text,
         if (details != null && details.trim().isNotEmpty)
           'details': details.trim(),
       },

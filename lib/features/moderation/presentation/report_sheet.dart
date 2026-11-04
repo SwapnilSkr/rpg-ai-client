@@ -52,15 +52,45 @@ Future<bool> showReportCreatorSheet(
   return filed ?? false;
 }
 
+/// Opens the report flow for a character message in a group or direct thread.
+Future<bool> showReportLineSheet(
+  BuildContext context, {
+  required String eventId,
+  required String characterId,
+  required String text,
+  required String speakerName,
+}) async {
+  Telemetry.instance.sheet('report');
+  final filed = await showModalBottomSheet<bool>(
+    useRootNavigator: true,
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => _ReportSheet(
+      targetType: 'group_line',
+      targetId: eventId,
+      targetTitle: speakerName.isNotEmpty ? speakerName : 'Someone',
+      characterId: characterId,
+      lineText: text,
+    ),
+  );
+  return filed ?? false;
+}
+
 class _ReportSheet extends StatefulWidget {
   final String targetType;
   final String targetId;
   final String targetTitle;
+  final String? characterId;
+  final String? lineText;
 
   const _ReportSheet({
     required this.targetType,
     required this.targetId,
     required this.targetTitle,
+    this.characterId,
+    this.lineText,
   });
 
   @override
@@ -101,10 +131,14 @@ class _ReportSheetState extends State<_ReportSheet> {
         targetId: widget.targetId,
         reason: _reason!,
         details: _detailsController.text,
+        characterId: widget.characterId,
+        text: widget.lineText,
       );
       // A creator report has no §3.1 target of its own, so it is `other`.
       Telemetry.instance.track('report_submitted', {
-        'target': widget.targetType == 'world' ? 'world' : 'other',
+        'target': widget.targetType == 'world'
+            ? 'world'
+            : (widget.targetType == 'group_line' ? 'message' : 'other'),
       });
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -176,6 +210,15 @@ class _ReportSheetState extends State<_ReportSheet> {
   }
 
   Widget _header() {
+    final title = widget.targetType == 'group_line'
+        ? 'Report this message'
+        : 'Report this ${widget.targetType == 'user' ? 'creator' : 'world'}';
+
+    final blurb = widget.targetType == 'group_line'
+        ? 'Reports are private, and we read every one.'
+        : 'Reports are private — the creator is never told who reported them. '
+            'Anything that breaks our rules is removed.';
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
       child: Column(
@@ -185,7 +228,7 @@ class _ReportSheetState extends State<_ReportSheet> {
             children: [
               Expanded(
                 child: Text(
-                  'Report this ${widget.targetType == 'user' ? 'creator' : 'world'}',
+                  title,
                   style: EverloreTheme.serifDisplay(
                     size: 21,
                     color: EverloreTheme.parchment,
@@ -215,10 +258,23 @@ class _ReportSheetState extends State<_ReportSheet> {
               weight: FontWeight.w600,
             ),
           ),
+          if (widget.lineText != null && widget.lineText!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              widget.lineText!,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: EverloreTheme.aiText.copyWith(
+                fontSize: 14,
+                color: EverloreTheme.parchment,
+                fontStyle: FontStyle.italic,
+                height: 1.4,
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Text(
-            'Reports are private — the creator is never told who reported them. '
-            'Anything that breaks our rules is removed.',
+            blurb,
             style: EverloreTheme.ui(
               size: 12.5,
               color: EverloreTheme.ash,

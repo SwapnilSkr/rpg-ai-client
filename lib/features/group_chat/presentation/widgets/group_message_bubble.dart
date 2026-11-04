@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../moderation/presentation/report_sheet.dart';
 import '../../models/group_chat_models.dart';
 import 'member_avatar.dart';
 
@@ -11,6 +13,7 @@ class GroupMessageBubble extends StatelessWidget {
   final bool isFirstInGroup;
   final bool isLastInGroup;
   final VoidCallback? onCharacterTap;
+  final void Function(GroupLine line, String speakerName)? onReportLine;
 
   const GroupMessageBubble({
     super.key,
@@ -19,6 +22,7 @@ class GroupMessageBubble extends StatelessWidget {
     this.isFirstInGroup = true,
     this.isLastInGroup = true,
     this.onCharacterTap,
+    this.onReportLine,
   });
 
   @override
@@ -29,7 +33,7 @@ class GroupMessageBubble extends StatelessWidget {
     if (line.isPlayer) {
       return _buildPlayerBubble();
     }
-    return _buildCharacterBubble();
+    return _buildCharacterBubble(context);
   }
 
   Widget _buildActionLine() {
@@ -118,12 +122,15 @@ class GroupMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildCharacterBubble() {
+  Widget _buildCharacterBubble(BuildContext context) {
     final topPadding = isFirstInGroup ? 8.0 : 2.0;
     final bottomPadding = isLastInGroup ? 8.0 : 2.0;
     final displayName = line.name.isNotEmpty
         ? line.name
         : (member?.name ?? 'Someone');
+    final canReport = line.eventId != null &&
+        line.characterId != null &&
+        line.characterId!.isNotEmpty;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(16, topPadding, 54, bottomPadding),
@@ -163,30 +170,49 @@ class GroupMessageBubble extends StatelessWidget {
                       ),
                     ),
                   ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: EverloreTheme.void2,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(isFirstInGroup ? 16 : 4),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(isLastInGroup ? 16 : 4),
-                      bottomRight: const Radius.circular(16),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onLongPress: canReport
+                      ? () {
+                          HapticFeedback.lightImpact();
+                          if (onReportLine != null) {
+                            onReportLine!(line, displayName);
+                          } else {
+                            showReportLineSheet(
+                              context,
+                              eventId: line.eventId!,
+                              characterId: line.characterId!,
+                              text: line.text,
+                              speakerName: displayName,
+                            );
+                          }
+                        }
+                      : null,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
                     ),
-                    border: Border.all(
-                      color: EverloreTheme.white10,
-                      width: 0.9,
+                    decoration: BoxDecoration(
+                      color: EverloreTheme.void2,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(isFirstInGroup ? 16 : 4),
+                        topRight: const Radius.circular(16),
+                        bottomLeft: Radius.circular(isLastInGroup ? 16 : 4),
+                        bottomRight: const Radius.circular(16),
+                      ),
+                      border: Border.all(
+                        color: EverloreTheme.white10,
+                        width: 0.9,
+                      ),
                     ),
-                  ),
-                  child: Text(
-                    line.text,
-                    style: EverloreTheme.aiText.copyWith(
-                      fontSize: 16,
-                      height: 1.45,
-                      color: EverloreTheme.parchment,
+                    child: Text(
+                      line.text,
+                      style: EverloreTheme.aiText.copyWith(
+                        fontSize: 16,
+                        height: 1.45,
+                        color: EverloreTheme.parchment,
+                      ),
                     ),
                   ),
                 ),

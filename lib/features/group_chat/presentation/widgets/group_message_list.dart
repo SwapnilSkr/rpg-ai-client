@@ -9,6 +9,7 @@ class GroupMessageList extends StatefulWidget {
   final List<GroupLine> lines;
   final Map<String, GroupMember> memberMap;
   final ValueChanged<GroupMember>? onCharacterTap;
+  final void Function(GroupLine line, String speakerName)? onReportLine;
 
   /// Someone is about to speak, so an empty room isn't waiting on the player.
   final bool someoneTyping;
@@ -18,6 +19,7 @@ class GroupMessageList extends StatefulWidget {
     required this.lines,
     this.memberMap = const {},
     this.onCharacterTap,
+    this.onReportLine,
     this.someoneTyping = false,
   });
 
@@ -125,6 +127,7 @@ class _GroupMessageListState extends State<GroupMessageList> {
           onCharacterTap: member != null && widget.onCharacterTap != null
               ? () => widget.onCharacterTap!(member)
               : null,
+          onReportLine: widget.onReportLine,
         );
       },
     );
