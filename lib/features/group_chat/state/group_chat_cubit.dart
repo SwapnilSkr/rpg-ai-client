@@ -275,6 +275,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
         error: null,
         members: members,
         matureCapable: snapshot.matureCapable,
+        title: snapshot.title.isEmpty ? null : snapshot.title,
         pendingFrom: snapshot.pendingFrom,
         threads: {
           ...state.threads,

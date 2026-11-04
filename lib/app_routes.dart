@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:everlore/screens/splash_screen.dart';
 import 'package:everlore/screens/welcome_screen.dart';
@@ -22,9 +23,33 @@ import 'package:everlore/shared/widgets/everlore_nav_bar.dart';
 import 'package:everlore/screens/settings_screen.dart';
 import 'features/moderation/presentation/blocked_content_screen.dart';
 import 'features/keepsakes/presentation/keepsakes_screen.dart';
+import 'features/group_chat/presentation/screens/chats_screen.dart';
+import 'features/group_chat/presentation/screens/group_preview_screen.dart';
 import 'features/group_chat/presentation/screens/group_room_screen.dart';
+import 'features/group_chat/state/chats_cubit.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
+
+/// Reads the chats list the first time the tab shell is built, which is after
+/// sign-in; the cubit itself lives above the Navigator and starts empty.
+class _RefreshChatsOnce extends StatefulWidget {
+  final Widget child;
+  const _RefreshChatsOnce({required this.child});
+
+  @override
+  State<_RefreshChatsOnce> createState() => _RefreshChatsOnceState();
+}
+
+class _RefreshChatsOnceState extends State<_RefreshChatsOnce> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<ChatsCubit>().refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
 
 final router = GoRouter(
   navigatorKey: _rootNavigatorKey,
@@ -86,6 +111,14 @@ final router = GoRouter(
       ),
     ),
     GoRoute(
+      path: '/group-preview/:templateId',
+      name: 'group_preview',
+      builder: (context, state) => GroupPreviewScreen(
+        templateId: state.pathParameters['templateId']!,
+        template: state.extra as WorldTemplate?,
+      ),
+    ),
+    GoRoute(
       path: '/group/:instanceId',
       name: 'group_chat',
       builder: (context, state) => GroupRoomScreen(
@@ -93,6 +126,7 @@ final router = GoRouter(
         title: state.extra is Map
             ? (state.extra as Map)['title'] as String?
             : null,
+        initialMemberId: state.uri.queryParameters['member'],
       ),
     ),
     GoRoute(
@@ -155,12 +189,19 @@ final router = GoRouter(
       name: 'settings',
       builder: (context, state) => const SettingsScreen(),
     ),
+    GoRoute(
+      path: '/personas',
+      name: 'personas',
+      builder: (context, state) =>
+          PersonasScreen(from: state.uri.queryParameters['from']),
+    ),
 
     // ── The persistent shell: four primary branches, each with its own stack + state,
     // wrapped by the always-on EverloreNavBar. ──
     StatefulShellRoute.indexedStack(
-      builder: (context, state, navigationShell) =>
-          ScaffoldWithNavBar(shell: navigationShell),
+      builder: (context, state, navigationShell) => _RefreshChatsOnce(
+        child: ScaffoldWithNavBar(shell: navigationShell),
+      ),
       branches: [
         StatefulShellBranch(
           routes: [
@@ -183,18 +224,18 @@ final router = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/keepsakes',
-              name: 'keepsakes',
-              builder: (context, state) => const KeepsakesScreen(),
+              path: '/chats',
+              name: 'chats',
+              builder: (context, state) => const ChatsScreen(),
             ),
           ],
         ),
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/personas',
-              name: 'personas',
-              builder: (context, state) => const PersonasScreen(),
+              path: '/keepsakes',
+              name: 'keepsakes',
+              builder: (context, state) => const KeepsakesScreen(),
             ),
           ],
         ),

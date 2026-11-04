@@ -84,6 +84,7 @@ class PersonaRepository {
     int? age,
     String description = '',
     String otherInfo = '',
+    String? entryPoint,
   }) async {
     final response = await ApiClient.post(
       '/personas',
@@ -97,7 +98,9 @@ class PersonaRepository {
     );
     _cacheEpoch = AuthService.sessionEpoch.value;
     _cache = null;
-    Telemetry.instance.track('persona_created');
+    Telemetry.instance.track('persona_created', {
+      if (entryPoint != null) 'entry_point': entryPoint,
+    });
     return Persona.fromJson(Map<String, dynamic>.from(response['persona']));
   }
 

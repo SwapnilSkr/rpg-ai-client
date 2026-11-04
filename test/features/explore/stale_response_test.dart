@@ -110,6 +110,10 @@ void main() {
         String? sort,
         bool forceRefresh = false,
       }) {
+        // The group chats the feed also asks for are not what these tests count.
+        if (kind == 'group') {
+          return Future.value({'templates': <WorldTemplate>[], 'total': 0});
+        }
         callCount++;
         if (callCount == 1) {
           return completer1.future;
@@ -185,6 +189,10 @@ void main() {
         String? sort,
         bool forceRefresh = false,
       }) {
+        // The group chats the feed also asks for are not what these tests count.
+        if (kind == 'group') {
+          return Future.value({'templates': <WorldTemplate>[], 'total': 0});
+        }
         callCount++;
         if (callCount == 1) {
           return initialLoad.future;

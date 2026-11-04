@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,6 +19,7 @@ import 'core/guest/keep_story_host.dart';
 import 'core/telemetry/route_name.dart';
 import 'core/reminders/reminder_service.dart';
 import 'core/telemetry/telemetry.dart';
+import 'features/group_chat/state/chats_cubit.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -94,6 +96,12 @@ class EverloreApp extends StatefulWidget {
 
 class _EverloreAppState extends State<EverloreApp> {
   StreamSubscription<void>? _accountDeletedSub;
+  StreamSubscription<void>? _signedOutSub;
+
+  /// One chats list for the whole app, above the Navigator: the room, the
+  /// thread and the preview are pushed outside the tab shell and still mark
+  /// and refresh it. Nothing is fetched until the shell first builds.
+  final ChatsCubit _chats = ChatsCubit();
 
   /// Lets the guide answer system back before the router does.
   ChildBackButtonDispatcher? _guideBack;
@@ -108,6 +116,8 @@ class _EverloreAppState extends State<EverloreApp> {
       await AuthService.logout();
       router.go('/auth');
     });
+    // One account's chats must never show to the next.
+    _signedOutSub = AuthService.onSignedOut.listen((_) => _chats.reset());
     // Guide arcs are screen-scoped: leaving the surface ends the running arc
     // rather than trailing a tip onto the next one. Modal sheets do not change
     // location, so sheet-bound arcs (the Realm Menu) survive.
@@ -161,6 +171,8 @@ class _EverloreAppState extends State<EverloreApp> {
   @override
   void dispose() {
     _accountDeletedSub?.cancel();
+    _signedOutSub?.cancel();
+    _chats.close();
     _guideBack?.removeCallback(guide.handleSystemBack);
     router.routerDelegate.removeListener(_onRouteChanged);
     super.dispose();
@@ -178,9 +190,12 @@ class _EverloreAppState extends State<EverloreApp> {
       // Text scale is clamped before anything below it lays out, so a
       // player on 200% system text gets large type rather than a clipped one.
       builder: (context, child) => EvTextScaleGuard(
-        child: GuideHost(
-          child: KeepStoryHost(
-            child: DismissKeyboard(child: child ?? const SizedBox.shrink()),
+        child: BlocProvider<ChatsCubit>.value(
+          value: _chats,
+          child: GuideHost(
+            child: KeepStoryHost(
+              child: DismissKeyboard(child: child ?? const SizedBox.shrink()),
+            ),
           ),
         ),
       ),

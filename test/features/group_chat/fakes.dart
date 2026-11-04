@@ -245,3 +245,16 @@ Map<String, dynamic> wireLine(String who, String text, DateTime at) => {
   'text': text,
   'shownAt': at.toIso8601String(),
 };
+
+/// The chats list as a screen outside the tab shell sees it: nothing to read,
+/// so the cubit stays quiet and only the marks a screen makes show up.
+class FakeChatsRepository implements GroupChatRepository {
+  final List<GroupChatRow> rows;
+  FakeChatsRepository([this.rows = const []]);
+
+  @override
+  Future<List<GroupChatRow>> chats() async => rows;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}

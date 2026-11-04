@@ -28,6 +28,8 @@ class MemberAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+    final cacheWidth = (size * dpr).ceil();
     final initial = _displayName.trim().isNotEmpty
         ? _displayName.trim()[0].toUpperCase()
         : '?';
@@ -48,6 +50,9 @@ class MemberAvatar extends StatelessWidget {
           ? EverloreNetworkImage(
               imageUrl: _url!,
               fit: BoxFit.cover,
+              memCacheWidth: cacheWidth,
+              // Portraits are tall: keep the face, not the chest.
+              alignment: const Alignment(0, -0.6),
               errorWidget: _InitialFallback(initial: initial, size: size),
             )
           : _InitialFallback(initial: initial, size: size),

@@ -73,9 +73,19 @@ const List<String> sheetValues = [
   'story_intro',
 ];
 
+/// Where a persona was made from. Optional on the event: a creation that
+/// doesn't know its origin reports none.
+const List<String> personaEntryPoints = [
+  'story_start',
+  'in_story_settings',
+  'create_menu',
+  'profile',
+];
+
 /// First-run guide arc ids, as §3.1 lists them.
 const List<String> guideArcValues = [
   'arrival',
+  'chats',
   'chronicle',
   'explore_genres',
   'home',
@@ -119,7 +129,9 @@ final Map<String, Map<String, PropSpec>> telemetryEvents = {
   'starter_fallback': {
     'reason': _oneOf(['none', 'error', 'has_saves'], required: true),
   },
-  'persona_created': {},
+  'persona_created': {
+    'entry_point': _oneOf(personaEntryPoints),
+  },
   'world_viewed': {'world_id': _worldId(required: true)},
   'world_started': {
     'world_id': _worldId(required: true),

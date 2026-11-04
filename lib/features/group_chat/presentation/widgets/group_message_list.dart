@@ -10,11 +10,15 @@ class GroupMessageList extends StatefulWidget {
   final Map<String, GroupMember> memberMap;
   final ValueChanged<GroupMember>? onCharacterTap;
 
+  /// Someone is about to speak, so an empty room isn't waiting on the player.
+  final bool someoneTyping;
+
   const GroupMessageList({
     super.key,
     required this.lines,
     this.memberMap = const {},
     this.onCharacterTap,
+    this.someoneTyping = false,
   });
 
   @override
@@ -74,6 +78,7 @@ class _GroupMessageListState extends State<GroupMessageList> {
   @override
   Widget build(BuildContext context) {
     if (widget.lines.isEmpty) {
+      if (widget.someoneTyping) return const SizedBox.expand();
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40),

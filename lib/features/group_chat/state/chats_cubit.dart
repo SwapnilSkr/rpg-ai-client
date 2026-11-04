@@ -47,6 +47,10 @@ class ChatsCubit extends Cubit<ChatsState> {
   Future<void>? _running;
   bool _again = false;
 
+  /// Bumped by [reset]. A read or an open that started under an older number
+  /// belongs to the previous account and must not draw.
+  int _generation = 0;
+
   ChatsCubit({
     GroupChatRepository repository = const HttpGroupChatRepository(),
     ChatsReadMarks marks = const ChatsReadMarks(),
@@ -80,8 +84,25 @@ class ChatsCubit extends Cubit<ChatsState> {
     if (!isClosed) emit(state.copyWith(isLoading: false));
   }
 
+  /// Forgets everything held for the signed-in account. Called at sign-out so
+  /// the next account never sees these chats; a read still running when this
+  /// is called is dropped, not drawn.
+  void reset() {
+    _generation++;
+    _marks = null;
+    _rows = const [];
+    _templates = const [];
+    _rowsKnown = false;
+    _openedPending.clear();
+    _again = false;
+    if (!isClosed) emit(const ChatsState());
+  }
+
   Future<void> _fetch() async {
-    _marks ??= await _marksStore.read();
+    final generation = _generation;
+    final read = _marks ?? await _marksStore.read();
+    if (generation != _generation) return;
+    _marks ??= read;
     final templatesFuture = _loadTemplates().then<List<WorldTemplate>?>(
       (t) => t,
       onError: (Object _) => null,
@@ -93,8 +114,9 @@ class ChatsCubit extends Cubit<ChatsState> {
       rows = null;
     }
     final templates = await templatesFuture;
-    // A newer read is queued: drawing this one would only flicker.
-    if (isClosed || _again) return;
+    // A newer read is queued: drawing this one would only flicker. A reset
+    // since this read began means it belongs to another account.
+    if (isClosed || _again || generation != _generation) return;
 
     if (templates != null) _templates = templates;
     if (rows != null) {
@@ -117,8 +139,10 @@ class ChatsCubit extends Cubit<ChatsState> {
   /// read can't come back as unread because the phone's clock runs behind.
   Future<void> markOpened(String instanceId, {String? memberId}) async {
     final key = chatKey(instanceId, memberId);
-    final marks = _marks ??= await _marksStore.read();
-    if (isClosed) return;
+    final generation = _generation;
+    final read = _marks ?? await _marksStore.read();
+    if (isClosed || generation != _generation) return;
+    final marks = _marks ??= read;
     final listed = state.conversations
         .where((c) => c.key == key)
         .map((c) => c.at)

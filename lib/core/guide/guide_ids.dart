@@ -67,4 +67,7 @@ abstract final class GuideIds {
 
   // ── Shell ──
   static const navCreate = 'nav.create';
+
+  // ── Chats ──
+  static const chatsFirst = 'chats.first';
 }

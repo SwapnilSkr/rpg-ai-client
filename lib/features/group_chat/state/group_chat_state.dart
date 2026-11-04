@@ -80,6 +80,9 @@ class GroupChatState extends Equatable {
   final List<GroupMember> members;
   final bool matureCapable;
 
+  /// The group's name, from the template in the room's frames.
+  final String title;
+
   /// Members with a message waiting for the player.
   final List<String> pendingFrom;
 
@@ -115,6 +118,7 @@ class GroupChatState extends Equatable {
     this.connected = false,
     this.members = const [],
     this.matureCapable = false,
+    this.title = '',
     this.pendingFrom = const [],
     this.threads = const {},
     this.threadSummaries = const [],
@@ -148,6 +152,7 @@ class GroupChatState extends Equatable {
     bool? connected,
     List<GroupMember>? members,
     bool? matureCapable,
+    String? title,
     List<String>? pendingFrom,
     Map<String, GroupThreadView>? threads,
     List<GroupThreadSummary>? threadSummaries,
@@ -169,6 +174,7 @@ class GroupChatState extends Equatable {
     connected: connected ?? this.connected,
     members: members ?? this.members,
     matureCapable: matureCapable ?? this.matureCapable,
+    title: title ?? this.title,
     pendingFrom: pendingFrom ?? this.pendingFrom,
     threads: threads ?? this.threads,
     threadSummaries: threadSummaries ?? this.threadSummaries,
@@ -199,6 +205,7 @@ class GroupChatState extends Equatable {
     connected,
     members,
     matureCapable,
+    title,
     pendingFrom,
     threads,
     threadSummaries,

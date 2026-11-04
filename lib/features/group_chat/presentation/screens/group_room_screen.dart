@@ -10,6 +10,7 @@ import '../../../../shared/widgets/everlore_notice.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
 import '../../data/group_chat_gateway.dart';
 import '../../models/group_chat_models.dart';
+import '../../state/chats_cubit.dart';
 import '../../state/group_chat_cubit.dart';
 import '../../state/group_chat_state.dart';
 import '../widgets/actions_tab.dart';
@@ -17,6 +18,7 @@ import '../widgets/bond_sheet.dart';
 import '../widgets/character_sheet.dart';
 import '../widgets/group_composer.dart';
 import '../widgets/group_message_list.dart';
+import '../widgets/member_avatar.dart';
 import '../widgets/members_sheet.dart';
 import 'direct_thread_screen.dart';
 
@@ -24,12 +26,14 @@ import 'direct_thread_screen.dart';
 class GroupRoomScreen extends StatefulWidget {
   final String instanceId;
   final String? title;
+  final String? initialMemberId;
   final GroupChatCubit? cubit; // Optional for testing injection
 
   const GroupRoomScreen({
     super.key,
     required this.instanceId,
     this.title,
+    this.initialMemberId,
     this.cubit,
   });
 
@@ -41,10 +45,14 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
     with SingleTickerProviderStateMixin {
   late final GroupChatCubit _cubit;
   late final TabController _tabController;
+  late final ChatsCubit _chats;
+  bool _openedDirectThreadOnce = false;
 
   @override
   void initState() {
     super.initState();
+    // Kept in a field: a context can't be read once the State is going away.
+    _chats = context.read<ChatsCubit>();
     _tabController = TabController(length: 2, vsync: this);
     if (widget.cubit != null) {
       _cubit = widget.cubit!;
@@ -55,6 +63,28 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
       );
       unawaited(_cubit.start());
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _callMarkOpened();
+      // A cubit that already holds the cast raises no state change to listen to.
+      if (mounted) _openInitialThread(_cubit.state);
+    });
+  }
+
+  /// A thread opened from the Chats list sits on top of this room. Once, and
+  /// only when the cast is known.
+  void _openInitialThread(GroupChatState state) {
+    final id = widget.initialMemberId;
+    if (_openedDirectThreadOnce || id == null || state.members.isEmpty) return;
+    final target = state.member(id);
+    if (target == null) return;
+    _openedDirectThreadOnce = true;
+    _openDirectThread(target, closeRoomAfter: true);
+  }
+
+  void _callMarkOpened() {
+    // Opened only to carry a direct thread, this room was never read.
+    if (widget.initialMemberId != null) return;
+    unawaited(_chats.markOpened(widget.instanceId));
   }
 
   @override
@@ -63,6 +93,8 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
     if (widget.cubit == null) {
       _cubit.close();
     }
+    _callMarkOpened();
+    unawaited(_chats.refresh());
     super.dispose();
   }
 
@@ -213,12 +245,21 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
     );
   }
 
-  void _openDirectThread(GroupMember member) {
-    Navigator.of(context).push(
+  /// [closeRoomAfter]: the player asked for the thread, not the room, so
+  /// leaving the thread returns to wherever they came from.
+  void _openDirectThread(GroupMember member, {bool closeRoomAfter = false}) {
+    unawaited(_chats.markOpened(widget.instanceId, memberId: member.id));
+    Navigator.of(context)
+        .push(
       MaterialPageRoute(
         builder: (_) => DirectThreadScreen(cubit: _cubit, member: member),
       ),
-    );
+    )
+        .then((_) {
+      unawaited(_chats.markOpened(widget.instanceId, memberId: member.id));
+      unawaited(_chats.refresh());
+      if (closeRoomAfter && mounted && context.canPop()) context.pop();
+    });
   }
 
   @override
@@ -227,10 +268,19 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
       value: _cubit,
       child: BlocConsumer<GroupChatCubit, GroupChatState>(
         bloc: _cubit,
-        listenWhen: (prev, curr) => curr.error != null && prev.error != curr.error,
+        listenWhen: (prev, curr) =>
+            (curr.error != null && prev.error != curr.error) ||
+            (!_openedDirectThreadOnce &&
+                widget.initialMemberId != null &&
+                curr.members.isNotEmpty),
         listener: (context, state) {
           if (state.error != null) {
             _onStateError(context, state.error!);
+          }
+          if (!_openedDirectThreadOnce && widget.initialMemberId != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _openInitialThread(state);
+            });
           }
         },
         builder: (context, state) {
@@ -305,11 +355,9 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
             );
           }
 
-          final chatTitle = widget.title != null && widget.title!.isNotEmpty
+          final chatTitle = widget.title?.isNotEmpty == true
               ? widget.title!
-              : (state.members.isNotEmpty
-                  ? state.members.map((m) => m.name).join(', ')
-                  : 'Group Chat');
+              : state.title;
 
           final memberNamesSubtitle = state.members.map((m) => m.name).join(', ');
 
@@ -362,36 +410,19 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                 ],
               ),
               actions: [
-                IconButton(
-                  icon: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      const Icon(
-                        Icons.people_alt_outlined,
-                        color: EverloreTheme.parchment,
-                        size: 22,
-                      ),
-                      if (state.pendingFrom.isNotEmpty)
-                        Positioned(
-                          right: -2,
-                          top: -2,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: EverloreTheme.aetherBright,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  tooltip: 'Members',
-                  onPressed: () => MembersSheet.show(
+                GestureDetector(
+                  onTap: () => MembersSheet.show(
                     context,
                     cubit: _cubit,
                     state: state,
                     onSelectMember: _openCharacterSheet,
+                  ),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Center(
+                      child: _buildHeaderAvatars(context, state),
+                    ),
                   ),
                 ),
               ],
@@ -428,6 +459,7 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                         lines: groupThread.lines,
                         memberMap: memberMap,
                         onCharacterTap: _openCharacterSheet,
+                        someoneTyping: typingName != null,
                       ),
                     ),
                     GroupComposer(
@@ -451,6 +483,89 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
           );
         },
       ),
+    );
+  }
+
+  Widget _buildHeaderAvatars(BuildContext context, GroupChatState state) {
+    final members = state.members;
+    if (members.isEmpty) {
+      return const Icon(
+        Icons.people_alt_outlined,
+        color: EverloreTheme.parchment,
+        size: 22,
+      );
+    }
+    final displayMembers = members.take(5).toList();
+    final extraCount = members.length - displayMembers.length;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: 28,
+          width: displayMembers.length * 18.0 +
+              10.0 +
+              (extraCount > 0 ? 24.0 : 0.0),
+          child: Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              for (var i = 0; i < displayMembers.length; i++)
+                Positioned(
+                  left: i * 18.0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: EverloreTheme.void0,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: MemberAvatar(
+                      member: displayMembers[i],
+                      size: 24,
+                    ),
+                  ),
+                ),
+              if (extraCount > 0)
+                Positioned(
+                  left: displayMembers.length * 18.0,
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: EverloreTheme.void3,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: EverloreTheme.void0,
+                        width: 1.5,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '+$extraCount',
+                      style: EverloreTheme.caption.copyWith(
+                        color: EverloreTheme.parchment,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (state.pendingFrom.isNotEmpty) ...[
+          const SizedBox(width: 4),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: EverloreTheme.aetherBright,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

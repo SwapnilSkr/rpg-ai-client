@@ -3496,12 +3496,49 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             const SizedBox(height: 20),
 
                             if (!widget.isGmWorld) ...[
-                              GuideAnchor(
-                                id: GuideIds.settingsPersona,
-                                child: const _SettingsLabel(
-                                  icon: AppIcons.createCharacter,
-                                  label: 'YOUR PERSONA',
-                                ),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  GuideAnchor(
+                                    id: GuideIds.settingsPersona,
+                                    child: const _SettingsLabel(
+                                      icon: AppIcons.createCharacter,
+                                      label: 'YOUR PERSONA',
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () async {
+                                      final existingIds = {
+                                        for (final p in widget.personas) p.id,
+                                      };
+                                      await context.push('/personas?from=in_story_settings');
+                                      try {
+                                        final updated =
+                                            await PersonaRepository.list();
+                                        final created = updated
+                                            .where((p) =>
+                                                !existingIds.contains(p.id))
+                                            .lastOrNull;
+                                        if (created != null) {
+                                          if (mounted) {
+                                            setState(() =>
+                                                _personaId = created.id);
+                                          }
+                                        }
+                                      } catch (_) {}
+                                    },
+                                    behavior: HitTestBehavior.opaque,
+                                    child: Text(
+                                      'Manage',
+                                      style: EverloreTheme.ui(
+                                        size: 12,
+                                        weight: FontWeight.w600,
+                                        color: EverloreTheme.gold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 8),
                               GuideAnchor(

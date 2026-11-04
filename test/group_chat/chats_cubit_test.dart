@@ -322,4 +322,64 @@ void main() {
     expect(t.members.last.portraitUrl, isNull);
     expect(WorldTemplate.fromJson({'id': 'w'}).members, isEmpty);
   });
+
+  test('reset forgets the rows and the marks', () async {
+    repo.script.add(() async => _rows([_row('m', last: _line(5))]));
+    templates = [_template('other')];
+    final cubit = make();
+    await cubit.refresh();
+    await cubit.markOpened('m');
+    expect(cubit.state.conversations, isNotEmpty);
+    expect(cubit.state.joinable, isNotEmpty);
+
+    cubit.reset();
+    expect(cubit.state.conversations, isEmpty);
+    expect(cubit.state.joinable, isEmpty);
+    expect(cubit.state.hasLoaded, isFalse);
+
+    // The next account's read starts clean: the old mark is gone from memory
+    // (the device store is keyed by save id, so it is not read back here).
+    repo.script
+      ..clear()
+      ..add(() async => _rows([_row('n', last: _line(5))]));
+    repo.calls = 0;
+    await cubit.refresh();
+    expect(cubit.state.conversations.map((c) => c.key), ['n']);
+    await cubit.close();
+  });
+
+  test('a read still running at reset is dropped, not drawn', () async {
+    final gate = Completer<List<GroupChatRow>>();
+    repo.script.add(() => gate.future);
+    final cubit = make();
+    final read = cubit.refresh();
+    await Future<void>.delayed(Duration.zero);
+
+    cubit.reset();
+    gate.complete(_rows([_row('old', last: _line(5))]));
+    await read;
+
+    expect(cubit.state.conversations, isEmpty);
+    expect(cubit.state.hasLoaded, isFalse);
+    expect(cubit.state.isLoading, isFalse);
+    await cubit.close();
+  });
+
+  test('a refresh asked for after reset is read and drawn', () async {
+    final gate = Completer<List<GroupChatRow>>();
+    repo.script
+      ..add(() => gate.future)
+      ..add(() async => _rows([_row('new', last: _line(5))]));
+    final cubit = make();
+    final read = cubit.refresh();
+    await Future<void>.delayed(Duration.zero);
+
+    cubit.reset();
+    final again = cubit.refresh();
+    gate.complete(_rows([_row('old', last: _line(5))]));
+    await Future.wait([read, again]);
+
+    expect(cubit.state.conversations.map((c) => c.key), ['new']);
+    await cubit.close();
+  });
 }

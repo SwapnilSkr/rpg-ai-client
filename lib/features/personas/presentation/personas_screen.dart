@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../../../core/telemetry/telemetry.dart';
+import '../../../core/telemetry/telemetry_vocabulary.dart';
 import '../../../core/guide/guide_anchor.dart';
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_ids.dart';
@@ -25,7 +26,11 @@ const _genderOptions = [
 ];
 
 class PersonasScreen extends StatefulWidget {
-  const PersonasScreen({super.key});
+  /// Where the player came from, as the route's `from` query says. Only the
+  /// closed list in the telemetry vocabulary is ever reported.
+  final String? from;
+
+  const PersonasScreen({super.key, this.from});
 
   @override
   State<PersonasScreen> createState() => _PersonasScreenState();
@@ -125,6 +130,9 @@ class _PersonasScreenState extends State<PersonasScreen> {
     _searchDebounce = Timer(const Duration(milliseconds: 280), _load);
   }
 
+  String? get _entryPoint =>
+      personaEntryPoints.contains(widget.from) ? widget.from : null;
+
   Future<void> _openEditor([Persona? persona]) async {
     Telemetry.instance.sheet('persona_editor');
     final changed = await showModalBottomSheet<bool>(
@@ -135,7 +143,8 @@ class _PersonasScreenState extends State<PersonasScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _PersonaEditorSheet(persona: persona),
+      builder: (_) =>
+          _PersonaEditorSheet(persona: persona, entryPoint: _entryPoint),
     );
     if (changed == true) _load();
   }
@@ -183,6 +192,7 @@ class _PersonasScreenState extends State<PersonasScreen> {
                       ? 'Saved identities'
                       : '$_total saved identities',
                   backgroundOpacity: 0.68,
+                  showBack: true,
                   actions: [
                     EverloreTopBarIcon(
                       icon: _searchOpen
@@ -298,7 +308,7 @@ class _PersonasScreenState extends State<PersonasScreen> {
                     child: ListView(
                       controller: _scrollController,
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
                       children: [
                         if (_loading)
                           const Padding(
@@ -550,7 +560,8 @@ class _EmptyPersonaState extends StatelessWidget {
 
 class _PersonaEditorSheet extends StatefulWidget {
   final Persona? persona;
-  const _PersonaEditorSheet({this.persona});
+  final String? entryPoint;
+  const _PersonaEditorSheet({this.persona, this.entryPoint});
 
   @override
   State<_PersonaEditorSheet> createState() => _PersonaEditorSheetState();
@@ -598,6 +609,7 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
           age: age,
           description: _description.text,
           otherInfo: _other.text,
+          entryPoint: widget.entryPoint,
         );
       } else {
         await PersonaRepository.update(

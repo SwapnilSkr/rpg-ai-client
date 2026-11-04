@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../network/api_client.dart';
@@ -17,6 +18,13 @@ class AuthService {
   static final ValueNotifier<int> sessionEpoch = ValueNotifier(0);
 
   static void _bumpSessionEpoch() => sessionEpoch.value++;
+
+  static final StreamController<void> _signedOut =
+      StreamController<void>.broadcast();
+
+  /// Fires once per sign-out, after the local session is gone. Holders of
+  /// per-account state in memory (the chats list) drop it here.
+  static Stream<void> get onSignedOut => _signedOut.stream;
 
   /// Whether the last sign-in created the account. The server adds
   /// `new_account: true` to the response only when it did.
@@ -201,6 +209,7 @@ class AuthService {
     // would hide worlds from whoever signs in next.
     ModerationRepository.clearLocalBlocks();
     _bumpSessionEpoch();
+    _signedOut.add(null);
   }
 
   /// Fold the account's guide record into the device cache. Union semantics —

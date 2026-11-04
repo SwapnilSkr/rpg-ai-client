@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -8,15 +10,24 @@ import 'package:everlore/features/group_chat/models/group_chat_models.dart';
 import 'package:everlore/features/group_chat/presentation/screens/direct_thread_screen.dart';
 import 'package:everlore/features/group_chat/presentation/screens/group_room_screen.dart';
 import 'package:everlore/features/group_chat/presentation/widgets/bond_sheet.dart';
+import 'package:everlore/features/group_chat/state/chats_cubit.dart';
 import 'package:everlore/features/group_chat/state/group_chat_cubit.dart';
 
 import '../fakes.dart';
 
-Widget _host(Widget child) => MaterialApp(
-  theme: ThemeData(
-    splashFactory: InkRipple.splashFactory,
+/// The room, thread and preview sit outside the tab shell and read the chats
+/// list from above the Navigator, so the host provides it the same way.
+Widget _host(Widget child) => BlocProvider<ChatsCubit>(
+  create: (_) => ChatsCubit(
+    repository: FakeChatsRepository(),
+    loadTemplates: () async => const [],
   ),
-  home: Scaffold(body: child),
+  child: MaterialApp(
+    theme: ThemeData(
+      splashFactory: InkRipple.splashFactory,
+    ),
+    home: Scaffold(body: child),
+  ),
 );
 
 Map<String, dynamic> linesFrame(
@@ -52,6 +63,7 @@ class _TestRig {
 void main() {
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
+    FlutterSecureStorage.setMockInitialValues({});
     GoogleFonts.config.allowRuntimeFetching = false;
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

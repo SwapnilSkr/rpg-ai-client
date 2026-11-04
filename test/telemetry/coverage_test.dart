@@ -87,7 +87,7 @@ void main() {
       },
       'guide_arc': {
         'arc': [
-          'arrival', 'chronicle', 'explore_genres', 'home', 'ink', 'keepsakes',
+          'arrival', 'chats', 'chronicle', 'explore_genres', 'home', 'ink', 'keepsakes',
           'my_worlds', 'personas', 'realm', 'scene_settings', 'world_detail',
         ],
         'outcome': ['completed', 'skipped'],

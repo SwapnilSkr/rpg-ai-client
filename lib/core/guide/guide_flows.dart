@@ -409,20 +409,31 @@ abstract final class GuideFlows {
 
   static const personas = GuideFlow(
     id: 'personas',
+    version: 2,
     label: 'Masks',
-    route: '/personas',
     beats: [
       GuideBeat(
         anchor: GuideIds.personasCreate,
-        // The empty vault's central button and the header pill that replaces
-        // it are the same affordance wearing two hats. Naming both means the
-        // beat lights a real control whether or not the player already keeps
-        // personas, instead of degrading to a card pointing at nothing.
-        fallbackAnchor: GuideIds.personasAdd,
         title: 'Masks',
         body:
             'A persona is who you are when you cross over — a name, a history, '
             'a way of being. Keep several, and choose one per story.',
+      ),
+    ],
+  );
+
+  /// Fired on the first visit to the Chats tab.
+  static const chats = GuideFlow(
+    id: 'chats',
+    label: 'The Gathering',
+    route: '/chats',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.chatsFirst,
+        title: 'Voices in the Parlour',
+        body:
+            'These rooms are never quiet. The people here speak to each other, '
+            'to you, and to whoever steps through the door.',
       ),
     ],
   );
@@ -523,6 +534,7 @@ abstract final class GuideFlows {
     homeEmpty,
     myWorlds,
     personas,
+    chats,
   ];
 
   static GuideFlow? byId(String id) {

@@ -13,6 +13,8 @@ import '../core/telemetry/telemetry_vocabulary.dart';
 import '../core/guide/guide_flows.dart';
 import '../core/guide/guide_ids.dart';
 import '../core/guide/guide_trigger.dart';
+import '../features/group_chat/data/group_chat_repository.dart';
+import '../features/group_chat/presentation/widgets/group_cover_card.dart';
 import '../features/home/presentation/widgets/continue_story_card.dart';
 import '../features/moderation/data/moderation_repository.dart';
 import '../features/templates/data/genre_repository.dart';
@@ -64,6 +66,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   final Map<int, GlobalKey> _tabKeys = {};
   Timer? _searchDebounce;
   bool _searchOpen = false;
+  List<WorldTemplate> _groupTemplates = const [];
+
+  /// Templates the player already has a save of; null while the saves can't be
+  /// read, in which case the feed offers no group rather than maybe one they
+  /// joined.
+  Set<String>? _savedGroupTemplateIds;
 
   ExploreFilterState _filterForTab(int tab) =>
       _filtersByTab[tab] ?? const ExploreFilterState();
@@ -71,10 +79,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   ExploreFilterState get _currentFilter => _filterForTab(_tab);
 
   String? get _currentGenre =>
-      _tab == 0 ? null : (_tab - 1 < _genres.length ? _genres[_tab - 1].key : null);
+      _tab < 2 ? null : (_tab - 2 < _genres.length ? _genres[_tab - 2].key : null);
 
   Map<String, GenreStyleCount> _styleCountsForTab(int tab) {
-    if (tab == 0) {
+    if (tab == 0 || tab == 1) {
       final combined = <String, GenreStyleCount>{};
       for (final genre in _genres) {
         for (final entry in genre.styles.entries) {
@@ -91,8 +99,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       }
       return combined;
     }
-    if (tab - 1 < _genres.length) {
-      return _genres[tab - 1].styles;
+    if (tab - 2 < _genres.length) {
+      return _genres[tab - 2].styles;
     }
     return const {};
   }
@@ -139,13 +147,43 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   Future<void> _initData() async {
     await _loadGenres();
-    await _load();
+    await Future.wait([
+      _load(),
+      _loadGroupData(),
+    ]);
   }
 
   Future<void> _refreshAll() async {
     _continueCardKey.currentState?.refresh(forceRefresh: true);
-    await _loadGenres(forceRefresh: true);
-    await _load(forceRefresh: true);
+    await Future.wait([
+      _loadGenres(forceRefresh: true),
+      _load(forceRefresh: true),
+      _loadGroupData(forceRefresh: true),
+    ]);
+  }
+
+  Future<void> _loadGroupData({bool forceRefresh = false}) async {
+    try {
+      final result = await TemplateRepository.listPublished(
+        kind: 'group',
+        limit: 50,
+        forceRefresh: forceRefresh,
+      );
+      final templates = [
+        for (final t in result['templates'] as List? ?? const [])
+          if (t is WorldTemplate) t,
+      ];
+      Set<String>? savedIds;
+      try {
+        final chats = await const HttpGroupChatRepository().chats();
+        savedIds = {for (final c in chats) c.templateId};
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _groupTemplates = templates;
+        _savedGroupTemplateIds = savedIds;
+      });
+    } catch (_) {}
   }
 
   Future<void> _loadGenres({bool forceRefresh = false}) async {
@@ -154,7 +192,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       if (!mounted) return;
       setState(() {
         _genres = genres.where((g) => g.hasContent).toList();
-        if (_tab > _genres.length) {
+        if (_tab > 1 + _genres.length) {
           _tab = 0;
         }
       });
@@ -276,14 +314,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         );
       }
     });
-    _load();
+    if (i == 1) {
+      if (_groupTemplates.isEmpty) _loadGroupData();
+    } else {
+      _load();
+    }
   }
 
   /// Genre tab or filter applied. The label is the server's own genre name,
   /// never anything the player typed; the "All" tab has none.
   void _trackFiltered() {
-    final label = _tab > 0 && _tab - 1 < _genres.length
-        ? _genres[_tab - 1].label
+    final label = _tab > 1 && _tab - 2 < _genres.length
+        ? _genres[_tab - 2].label
         : null;
     Telemetry.instance.track('explore_filtered', {
       if (isGenreLabel(label)) 'genre': label,
@@ -321,7 +363,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       _searchController.clear();
       _searchOpen = false;
     });
-    _load(search: '');
+    if (_tab == 1) {
+      _loadGroupData();
+    } else {
+      _load(search: '');
+    }
   }
 
   List<WorldTemplate> get _visible {
@@ -356,7 +402,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     if (!_searchOpen && _searchController.text.isNotEmpty) {
       _searchDebounce?.cancel();
       _searchController.clear();
-      _load(search: '');
+      if (_tab == 1) {
+        setState(() {});
+      } else {
+        _load(search: '');
+      }
     }
   }
 
@@ -365,7 +415,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(
       const Duration(milliseconds: 280),
-      () => _load(search: value.trim()),
+      () {
+        if (_tab == 1) {
+          if (mounted) setState(() {});
+        } else {
+          _load(search: value.trim());
+        }
+      },
     );
   }
 
@@ -536,7 +592,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     // The pill row is a fixed strip, so it has to grow with the player's text
     // size or the labels are trimmed top and bottom.
     final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
-    final totalTabs = 1 + _genres.length;
+    final totalTabs = 2 + _genres.length;
     return SizedBox(
       height: 44 * textScale.clamp(1.0, 1.4),
       child: ListView.separated(
@@ -546,7 +602,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         itemCount: totalTabs,
         separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, i) {
-          final label = i == 0 ? 'For You' : _genres[i - 1].label;
+          final label = i == 0
+              ? 'For You'
+              : (i == 1 ? 'Group chats' : _genres[i - 2].label);
           final key = _tabKeys.putIfAbsent(i, GlobalKey.new);
           return _tabPill(i, label, key);
         },
@@ -605,6 +663,80 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Widget _buildBody() {
+    if (_tab == 1) {
+      if (_isLoading && _groupTemplates.isEmpty) {
+        return const Center(
+          child: EverloreSessionLoader(message: 'Discovering group chats'),
+        );
+      }
+      final query = _searchController.text.trim().toLowerCase();
+      final visibleGroups = query.isEmpty
+          ? _groupTemplates
+          : _groupTemplates
+              .where((t) =>
+                  t.title.toLowerCase().contains(query) ||
+                  t.description.toLowerCase().contains(query))
+              .toList();
+
+      if (visibleGroups.isEmpty) {
+        final hasSearch = _searchController.text.trim().isNotEmpty;
+        return EverloreEmptyState(
+          icon: hasSearch ? Icons.filter_alt_off_rounded : Icons.forum_outlined,
+          eyebrow: 'GATHERING',
+          title: hasSearch ? 'No matches found' : 'No group chats in view',
+          message: hasSearch
+              ? 'Try adjusting your search terms to uncover more group chats.'
+              : 'New group chats are always being forged. Check back soon.',
+          actionLabel: hasSearch ? 'Clear search' : null,
+          actionIcon: hasSearch ? Icons.tune_rounded : null,
+          accent: EverloreTheme.gold,
+          onAction: hasSearch
+              ? () {
+                  setState(() {
+                    _searchController.clear();
+                    _searchOpen = false;
+                  });
+                }
+              : null,
+        );
+      }
+
+      final columnCount = switch (EvLayout.of(context).widthClass) {
+        EvWidthClass.compact => 2,
+        EvWidthClass.regular => 2,
+        EvWidthClass.expanded => 3,
+      };
+      final columns = List.generate(columnCount, (_) => <Widget>[]);
+      for (var i = 0; i < visibleGroups.length; i++) {
+        columns[i % columnCount].add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: GroupCoverCard(template: visibleGroups[i]),
+          ),
+        );
+      }
+
+      return RefreshIndicator(
+        color: EverloreTheme.gold,
+        backgroundColor: EverloreTheme.void2,
+        onRefresh: _refreshAll,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final (index, column) in columns.indexed) ...[
+                if (index > 0) const SizedBox(width: 12),
+                Expanded(child: Column(children: column)),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_isLoading) {
       return const Center(
         child: EverloreSessionLoader(message: 'Discovering realms'),
@@ -675,9 +807,55 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       EvWidthClass.regular => 2,
       EvWidthClass.expanded => 3,
     };
-    final columns = List.generate(columnCount, (_) => <WorldTemplate>[]);
+    final columns = List.generate(columnCount, (_) => <Widget>[]);
+
+    WorldTemplate? inFeedGroup;
+    final saved = _savedGroupTemplateIds;
+    if (saved != null && _tab == 0 && _searchController.text.trim().isEmpty) {
+      for (final t in _groupTemplates) {
+        if (!saved.contains(t.id)) {
+          inFeedGroup = t;
+          break;
+        }
+      }
+    }
+
+    final items = <Widget>[];
     for (var i = 0; i < visible.length; i++) {
-      columns[i % columnCount].add(visible[i]);
+      if (inFeedGroup != null && i == 4) {
+        items.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: GroupCoverCard(template: inFeedGroup),
+          ),
+        );
+      }
+      final t = visible[i];
+      final isAnchor = i == 0;
+      items.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: guideAnchorIf(
+            isAnchor,
+            GuideIds.discoverCard,
+            _DiscoverCard(
+              template: t,
+              onTap: () => context.push('/templates/${t.id}'),
+            ),
+          ),
+        ),
+      );
+    }
+    if (inFeedGroup != null && visible.length <= 4) {
+      items.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: GroupCoverCard(template: inFeedGroup),
+        ),
+      );
+    }
+    for (var i = 0; i < items.length; i++) {
+      columns[i % columnCount].add(items[i]);
     }
 
     return RefreshIndicator(
@@ -700,7 +878,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               children: [
                 for (final (index, column) in columns.indexed) ...[
                   if (index > 0) const SizedBox(width: 12),
-                  Expanded(child: _column(column, anchorFirst: index == 0)),
+                  Expanded(child: Column(children: column)),
                 ],
               ],
             ),
@@ -719,31 +897,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  /// One masonry column. [anchorFirst] belongs to the left column only: an
-  /// anchor id may be claimed by exactly one widget, and anchoring the head of
-  /// both columns left the guide pointing at whichever registered last — the
-  /// right-hand card, for no reason a player could see.
-  Widget _column(List<WorldTemplate> items, {bool anchorFirst = false}) {
-    return Column(
-      children: [
-        for (final (index, t) in items.indexed)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            // Only the first card is a target — the arc points at "a world",
-            // not at one particular world.
-            child: guideAnchorIf(
-              anchorFirst && index == 0,
-              GuideIds.discoverCard,
-              _DiscoverCard(
-                template: t,
-                onTap: () => context.push('/templates/${t.id}'),
-              ),
-            ),
-          ),
-      ],
     );
   }
 }

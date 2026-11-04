@@ -11,6 +11,9 @@ import 'loading_shimmer.dart';
 class EverloreNetworkImage extends StatelessWidget {
   final String imageUrl;
   final BoxFit fit;
+
+  /// Which part of the picture stays in view when [fit] crops it.
+  final Alignment alignment;
   final Widget? placeholder;
   final Widget? errorWidget;
   final String? semanticLabel;
@@ -21,6 +24,7 @@ class EverloreNetworkImage extends StatelessWidget {
     super.key,
     required this.imageUrl,
     this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
     this.placeholder,
     this.errorWidget,
     this.semanticLabel,
@@ -33,6 +37,7 @@ class EverloreNetworkImage extends StatelessWidget {
     return CachedNetworkImage(
       imageUrl: imageUrl,
       fit: fit,
+      alignment: alignment,
       memCacheWidth: memCacheWidth,
       memCacheHeight: memCacheHeight,
       maxWidthDiskCache: memCacheWidth,
@@ -47,7 +52,11 @@ class EverloreNetworkImage extends StatelessWidget {
         label: semanticLabel,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            image: DecorationImage(image: imageProvider, fit: fit),
+            image: DecorationImage(
+              image: imageProvider,
+              fit: fit,
+              alignment: alignment,
+            ),
           ),
         ),
       ),

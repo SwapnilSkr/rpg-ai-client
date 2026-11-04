@@ -193,8 +193,12 @@ class GroupSnapshot extends Equatable {
   final String? operation;
   final bool hasOlder;
 
+  /// The group's name; empty when the frame's template carries none.
+  final String title;
+
   const GroupSnapshot({
     required this.instanceId,
+    this.title = '',
     this.members = const [],
     this.events = const [],
     this.pendingFrom = const [],
@@ -260,6 +264,7 @@ class GroupSnapshot extends Equatable {
           if (_str(id).isNotEmpty) _str(id),
       ],
       matureCapable: _map(data['template'])['is_nsfw_capable'] == true,
+      title: _str(_map(data['template'])['title']),
       operation: operation == null ? null : _str(operation),
       hasOlder: window['hasOlder'] == true,
     );

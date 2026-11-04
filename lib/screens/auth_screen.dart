@@ -707,6 +707,11 @@ class AuthScreenState extends State<AuthScreen> {
         SettingsGroup(
           children: [
             SettingsNavRow(
+              icon: Icons.badge_outlined,
+              label: 'Your personas',
+              onTap: () => context.push('/personas?from=profile'),
+            ),
+            SettingsNavRow(
               icon: Icons.public_rounded,
               label: 'Your worlds',
               onTap: () => context.push('/my-worlds'),

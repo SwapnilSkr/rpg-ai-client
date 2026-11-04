@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
 import '../../models/group_chat_models.dart';
+import '../../state/chats_cubit.dart';
 import '../../state/group_chat_cubit.dart';
 import '../../state/group_chat_state.dart';
 import '../widgets/bond_sheet.dart';
@@ -26,15 +29,31 @@ class DirectThreadScreen extends StatefulWidget {
 }
 
 class _DirectThreadScreenState extends State<DirectThreadScreen> {
+  late final ChatsCubit _chats;
+
   @override
   void initState() {
     super.initState();
+    // Kept in a field: a context can't be read once the State is going away.
+    _chats = context.read<ChatsCubit>();
     widget.cubit.selectThread(widget.member.id);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(
+        _chats.markOpened(
+          widget.cubit.instanceId,
+          memberId: widget.member.id,
+        ),
+      );
+    });
   }
 
   @override
   void dispose() {
     widget.cubit.selectThread(kGroupThreadKey);
+    unawaited(
+      _chats.markOpened(widget.cubit.instanceId, memberId: widget.member.id),
+    );
+    unawaited(_chats.refresh());
     super.dispose();
   }
 

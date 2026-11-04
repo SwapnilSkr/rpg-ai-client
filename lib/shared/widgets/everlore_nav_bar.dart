@@ -1,15 +1,17 @@
 import 'dart:ui';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/telemetry/telemetry.dart';
 import '../../core/guide/guide_anchor.dart';
 import '../../core/guide/guide_ids.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/nexus_theme.dart';
+import '../../features/group_chat/state/chats_cubit.dart';
 import '../app_icons.dart';
 import 'everlore_sheet.dart';
 
 /// Persistent shell scaffold: hosts the four nav branches (Explore · Realms ·
-/// Keepsakes · Personas) and the single, always-on [EverloreNavBar]. The branches keep
+/// Chats · Keepsakes) and the single, always-on [EverloreNavBar]. The branches keep
 /// their own navigation stacks (state preserved across tab switches); detail
 /// screens push over this shell at the root, so back / OS-back behave.
 class ScaffoldWithNavBar extends StatelessWidget {
@@ -18,14 +20,23 @@ class ScaffoldWithNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasUnreadChats = context.select<ChatsCubit, bool>(
+      (c) => c.state.unreadCount > 0,
+    );
+
     return Scaffold(
       backgroundColor: EverloreTheme.void0,
       extendBody: true, // content flows under the floating glass bar
       body: shell,
       bottomNavigationBar: EverloreNavBar(
         currentIndex: shell.currentIndex,
-        onSelect: (i) =>
-            shell.goBranch(i, initialLocation: i == shell.currentIndex),
+        hasUnreadChats: hasUnreadChats,
+        onSelect: (i) {
+          if (i == 2) {
+            context.read<ChatsCubit>().refresh();
+          }
+          shell.goBranch(i, initialLocation: i == shell.currentIndex);
+        },
         onCreate: () => showCreateChooser(context),
       ),
     );
@@ -47,20 +58,22 @@ class EverloreNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onSelect;
   final VoidCallback onCreate;
+  final bool hasUnreadChats;
   const EverloreNavBar({
     super.key,
     required this.currentIndex,
     required this.onSelect,
     required this.onCreate,
+    this.hasUnreadChats = false,
   });
 
-  // Visual order; the null gap is the center Create action.
+  // Visual order: Explore, Realms, +, Chats, Keepsakes.
   static const List<_Slot?> _slots = [
     _Slot(AppIcons.navExplore, 'Explore', 0),
     _Slot(AppIcons.navRealms, 'Realms', 1),
     null,
-    _Slot(AppIcons.navKeepsakes, 'Keepsakes', 2),
-    _Slot(AppIcons.createCharacter, 'Personas', 3),
+    _Slot(AppIcons.navChats, 'Chats', 2),
+    _Slot(AppIcons.navKeepsakes, 'Keepsakes', 3),
   ];
 
   @override
@@ -116,6 +129,7 @@ class EverloreNavBar extends StatelessWidget {
                             : _NavTab(
                                 slot: slot,
                                 active: currentIndex == slot.branch,
+                                showDot: slot.branch == 2 && hasUnreadChats,
                                 onTap: () => onSelect(slot.branch),
                               ),
                       ),
@@ -133,10 +147,12 @@ class EverloreNavBar extends StatelessWidget {
 class _NavTab extends StatelessWidget {
   final _Slot slot;
   final bool active;
+  final bool showDot;
   final VoidCallback onTap;
   const _NavTab({
     required this.slot,
     required this.active,
+    this.showDot = false,
     required this.onTap,
   });
 
@@ -157,9 +173,33 @@ class _NavTab extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Opacity(
-              opacity: active ? 1 : 0.54,
-              child: EvIcon(slot.icon, size: 21),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Opacity(
+                  opacity: active ? 1 : 0.54,
+                  child: EvIcon(slot.icon, size: 21),
+                ),
+                if (showDot)
+                  Positioned(
+                    top: -1,
+                    right: -3,
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: EverloreTheme.gold,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: EverloreTheme.goldGlow,
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 2),
             FittedBox(
@@ -283,6 +323,17 @@ void showCreateChooser(BuildContext context) {
               onTap: () {
                 Navigator.pop(sheetCtx);
                 context.push('/characters/new');
+              },
+            ),
+            const SizedBox(height: 12),
+            _CreateChoice(
+              icon: AppIcons.createCharacter,
+              title: 'Create a Persona',
+              subtitle:
+                  'A saved identity — who you are when you cross over into a story.',
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                context.push('/personas?from=create_menu');
               },
             ),
           ],

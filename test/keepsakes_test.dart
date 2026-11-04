@@ -339,9 +339,9 @@ void main() {
       expect(find.text('Keepsakes'), findsOneWidget);
       expect(find.byType(EvIcon), findsWidgets);
 
-      // Tap Keepsakes slot (index 2)
+      // Tap Keepsakes slot (index 3)
       await tester.tap(find.text('Keepsakes'));
-      expect(selectedIndex, 2);
+      expect(selectedIndex, 3);
 
       // 2. /profile renders AuthScreen with Your worlds above Membership & Ink, and mature-content switch
       FlutterSecureStorage.setMockInitialValues({});

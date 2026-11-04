@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../core/telemetry/telemetry.dart';
+import '../../../core/guide/guide_anchor.dart';
+import '../../../core/guide/guide_flows.dart';
+import '../../../core/guide/guide_ids.dart';
+import '../../../core/guide/guide_trigger.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/nexus_theme.dart';
 import '../../../core/auth/auth_service.dart';
@@ -212,186 +216,164 @@ class _SentientPersonaStartSheet extends StatefulWidget {
 
 class _SentientPersonaStartSheetState
     extends State<_SentientPersonaStartSheet> {
-  final _name = TextEditingController();
-  final _description = TextEditingController();
-  bool _creating = false;
+  late List<Persona> _personas;
 
   @override
-  void dispose() {
-    _name.dispose();
-    _description.dispose();
-    super.dispose();
-  }
-
-  Future<void> _createAndUse() async {
-    final name = _name.text.trim();
-    if (name.isEmpty) return;
-    setState(() => _creating = true);
-    try {
-      final persona = await PersonaRepository.create(
-        name: name,
-        gender: 'non_binary',
-        description: _description.text.trim(),
-      );
-      if (mounted) {
-        Navigator.pop(context, _PersonaStartChoice(personaId: persona.id));
-      }
-    } catch (_) {
-      if (mounted) setState(() => _creating = false);
-    }
+  void initState() {
+    super.initState();
+    _personas = widget.personas;
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          16,
-          20,
-          MediaQuery.viewInsetsOf(context).bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SheetGrabHandle(),
-            const SizedBox(height: 16),
-            Text(
-              'Who enters this story?',
-              style: EverloreTheme.serifDisplay(
-                size: 19,
-                color: EverloreTheme.parchment,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Choose a reusable persona or create one. This story receives a '
-              'snapshot, so your later edits never rewrite its past.',
-              style: EverloreTheme.ui(
-                size: 12.5,
-                color: EverloreTheme.ash,
-                height: 1.45,
-              ),
-            ),
-            if (widget.personas.isNotEmpty) ...[
-              const SizedBox(height: 18),
+    return GuideOnEnter(
+      flow: GuideFlows.personas,
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            16,
+            20,
+            MediaQuery.viewInsetsOf(context).bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SheetGrabHandle(),
+              const SizedBox(height: 16),
               Text(
-                'YOUR PERSONAS',
+                'Who enters this story?',
+                style: EverloreTheme.serifDisplay(
+                  size: 19,
+                  color: EverloreTheme.parchment,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'A persona is who you are when you cross over — a name, a history, a way of being.',
                 style: EverloreTheme.ui(
-                  size: 11,
-                  color: EverloreTheme.gold,
-                  weight: FontWeight.w700,
+                  size: 12.5,
+                  color: EverloreTheme.ash,
+                  height: 1.45,
                 ),
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: widget.personas.map((persona) {
-                  final subtitle = persona.description.trim();
-                  return GestureDetector(
-                    onTap: () => Navigator.pop(
-                      context,
-                      _PersonaStartChoice(personaId: persona.id),
-                    ),
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 280),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 13,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: EverloreTheme.gold.withValues(alpha: 0.09),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: EverloreTheme.gold.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Text(
-                        subtitle.isEmpty
-                            ? persona.name
-                            : '${persona.name} · $subtitle',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: EverloreTheme.ui(
-                          size: 13,
-                          color: EverloreTheme.parchment,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-            const SizedBox(height: 20),
-            Text(
-              'CREATE A NEW PERSONA',
-              style: EverloreTheme.ui(
-                size: 11,
-                color: EverloreTheme.gold,
-                weight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _name,
-              textCapitalization: TextCapitalization.words,
-              style: EverloreTheme.ui(size: 15, color: EverloreTheme.parchment),
-              decoration: _personaDecoration('Name'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _description,
-              minLines: 1,
-              maxLines: 2,
-              textCapitalization: TextCapitalization.sentences,
-              style: EverloreTheme.ui(size: 14, color: EverloreTheme.parchment),
-              decoration: _personaDecoration(
-                'Optional: a few defining details',
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: () =>
-                      Navigator.pop(context, const _PersonaStartChoice()),
-                  child: Text(
-                    'Continue without one',
-                    style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+              if (_personas.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                Text(
+                  'YOUR PERSONAS',
+                  style: EverloreTheme.ui(
+                    size: 11,
+                    color: EverloreTheme.gold,
+                    weight: FontWeight.w700,
                   ),
                 ),
-                const Spacer(),
-                FilledButton(
-                  onPressed: _creating ? null : _createAndUse,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: EverloreTheme.gold,
-                    foregroundColor: EverloreTheme.void1,
-                  ),
-                  child: Text(_creating ? 'Saving…' : 'Create and use'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _personas.map((persona) {
+                    final subtitle = persona.description.trim();
+                    return GestureDetector(
+                      onTap: () => Navigator.pop(
+                        context,
+                        _PersonaStartChoice(personaId: persona.id),
+                      ),
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 280),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 13,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: EverloreTheme.gold.withValues(alpha: 0.09),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: EverloreTheme.gold.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Text(
+                          subtitle.isEmpty
+                              ? persona.name
+                              : '${persona.name} · $subtitle',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: EverloreTheme.ui(
+                            size: 13,
+                            color: EverloreTheme.parchment,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 ),
               ],
-            ),
-          ],
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.pop(context, const _PersonaStartChoice()),
+                    child: Text(
+                      'Continue without one',
+                      style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+                    ),
+                  ),
+                  const Spacer(),
+                  GuideAnchor(
+                    id: GuideIds.personasCreate,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: EverloreTheme.gold,
+                        side: BorderSide(
+                          color: EverloreTheme.goldDim.withValues(alpha: 0.5),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () async {
+                        final existingIds = {for (final p in _personas) p.id};
+                        await context.push('/personas?from=story_start');
+                        try {
+                          final updated = await PersonaRepository.list();
+                          if (!context.mounted) return;
+                          final created = updated
+                              .where((p) => !existingIds.contains(p.id))
+                              .lastOrNull;
+                          if (created != null) {
+                            Navigator.pop(
+                              context,
+                              _PersonaStartChoice(personaId: created.id),
+                            );
+                            return;
+                          }
+                          setState(() => _personas = updated);
+                        } catch (_) {}
+                      },
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: Text(
+                        'Create one',
+                        style: EverloreTheme.ui(
+                          size: 13,
+                          weight: FontWeight.w600,
+                          color: EverloreTheme.gold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
-
-  InputDecoration _personaDecoration(String hint) => InputDecoration(
-    hintText: hint,
-    hintStyle: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
-    filled: true,
-    fillColor: EverloreTheme.void3,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(
-        color: EverloreTheme.goldDim.withValues(alpha: .25),
-      ),
-    ),
-  );
 }
 
 Future<RealmEntryResult?> showRealmContinueSheet(
