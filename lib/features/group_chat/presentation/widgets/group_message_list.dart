@@ -12,6 +12,9 @@ class GroupMessageList extends StatefulWidget {
   final ValueChanged<GroupMember>? onCharacterTap;
   final void Function(GroupLine line, String speakerName)? onReportLine;
 
+  /// Null while rewinding is not possible; see [GroupMessageBubble.onRewindLine].
+  final void Function(GroupLine line)? onRewindLine;
+
   /// Someone is about to speak, so an empty room isn't waiting on the player.
   final bool someoneTyping;
   final double? Function()? composerTop;
@@ -22,6 +25,7 @@ class GroupMessageList extends StatefulWidget {
     this.memberMap = const {},
     this.onCharacterTap,
     this.onReportLine,
+    this.onRewindLine,
     this.someoneTyping = false,
     this.composerTop,
   });
@@ -139,6 +143,7 @@ class _GroupMessageListState extends State<GroupMessageList> {
               ? () => widget.onCharacterTap!(member)
               : null,
           onReportLine: widget.onReportLine,
+          onRewindLine: widget.onRewindLine,
           composerTop: _resolveComposerTop,
         );
       },

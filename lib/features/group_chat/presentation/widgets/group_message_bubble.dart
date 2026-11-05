@@ -8,6 +8,52 @@ import '../../../play/presentation/widgets/anchored_menu_popup.dart';
 import '../../models/group_chat_models.dart';
 import 'member_avatar.dart';
 
+/// Asks whether to rewind the chat. True only when the player confirms.
+Future<bool> confirmGroupRewind(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogCtx) => AlertDialog(
+      backgroundColor: EverloreTheme.void2,
+      title: Text(
+        'Rewind the chat?',
+        style: EverloreTheme.serifDisplay(
+          size: 18,
+          color: EverloreTheme.parchment,
+        ),
+      ),
+      content: Text(
+        'This turn and everything after it will be removed, including later '
+        "messages in the group and in direct chats. This can't be undone.",
+        style: EverloreTheme.ui(
+          size: 14,
+          color: EverloreTheme.ash,
+          height: 1.5,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogCtx, false),
+          child: Text(
+            'Cancel',
+            style: EverloreTheme.ui(color: EverloreTheme.ash),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogCtx, true),
+          child: Text(
+            'Rewind',
+            style: EverloreTheme.ui(
+              color: EverloreTheme.crimson,
+              weight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
+}
+
 /// Single message bubble or action line in a group or direct thread.
 class GroupMessageBubble extends StatelessWidget {
   final GroupLine line;
@@ -18,6 +64,10 @@ class GroupMessageBubble extends StatelessWidget {
   final void Function(GroupLine line, String speakerName)? onReportLine;
   final double? Function()? composerTop;
 
+  /// Offered only while rewinding is possible (no reply being written or
+  /// queued, no rewind running); the bubble adds the line-level checks.
+  final void Function(GroupLine line)? onRewindLine;
+
   const GroupMessageBubble({
     super.key,
     required this.line,
@@ -27,6 +77,7 @@ class GroupMessageBubble extends StatelessWidget {
     this.onCharacterTap,
     this.onReportLine,
     this.composerTop,
+    this.onRewindLine,
   });
 
   @override
@@ -52,6 +103,12 @@ class GroupMessageBubble extends StatelessWidget {
         line.eventId != null &&
         line.characterId != null &&
         line.characterId!.isNotEmpty;
+
+    // The opening (turn 1) is never removed; an unsaved line has no turn yet.
+    final canRewind = onRewindLine != null &&
+        line.status == GroupLineStatus.sent &&
+        line.eventId != null &&
+        (line.sequence ?? 0) > 1;
 
     final rect = globalRectOf(bubbleContext);
 
@@ -99,6 +156,21 @@ class GroupMessageBubble extends StatelessWidget {
                   text: line.text,
                   speakerName: displayName,
                 );
+              }
+            },
+          ),
+        if (canRewind)
+          AnchoredMenuItem(
+            icon: const Icon(
+              Icons.history_toggle_off,
+              color: EverloreTheme.crimson,
+              size: 16,
+            ),
+            label: 'Rewind to here',
+            onTap: () async {
+              if (!bubbleContext.mounted) return;
+              if (await confirmGroupRewind(bubbleContext)) {
+                onRewindLine!(line);
               }
             },
           ),

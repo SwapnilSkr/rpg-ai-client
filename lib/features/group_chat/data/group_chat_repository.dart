@@ -1,4 +1,5 @@
 import '../../../core/network/api_client.dart';
+import '../../chronicle/data/chronicle_repository.dart';
 import '../models/group_chat_models.dart';
 
 /// The HTTP side of a group chat: thread list, bonds, actions, and opening a
@@ -29,6 +30,10 @@ abstract class GroupChatRepository {
     int? before,
     int limit = 30,
   });
+
+  /// Removes the turn at [sequence] and everything after it, in the room and
+  /// in every direct thread. The server refuses the opening (1).
+  Future<void> rewind(String instanceId, int sequence);
 }
 
 class HttpGroupChatRepository implements GroupChatRepository {
@@ -93,4 +98,8 @@ class HttpGroupChatRepository implements GroupChatRepository {
     final body = await ApiClient.get('/instances/$instanceId/actions?$query');
     return GroupActionsPage.parse(body);
   }
+
+  @override
+  Future<void> rewind(String instanceId, int sequence) =>
+      ChronicleRepository.rewind(instanceId, sequence);
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:everlore/core/network/api_client.dart';
 import 'package:everlore/features/group_chat/models/group_chat_models.dart';
 import 'package:everlore/features/group_chat/state/group_chat_cubit.dart';
@@ -853,6 +855,255 @@ void main() {
       expect(lines[0].isAction, isTrue);
       expect(lines[1].isAction, isFalse);
       expect(lines[2].isAction, isFalse);
+    });
+  });
+
+  group('rewind', () {
+    // The room holds turns 1, 2 and 4; Jess's thread holds 3 and 5. Sequence
+    // numbers are shared, so rewinding to 2 empties her thread.
+    Future<Harness> twoThreads() async {
+      final h = Harness();
+      await h.open(
+        frame: loadedFrame(
+          events: [
+            eventRow(id: 'e1', sequence: 1, lines: [storedLine(jess, 'opening', h.ago(90))]),
+            eventRow(id: 'e2', sequence: 2, playerInput: 'two', lines: [storedLine(tom, 'room two', h.ago(80))]),
+            eventRow(id: 'e4', sequence: 4, playerInput: 'four', lines: [storedLine(tom, 'room four', h.ago(60))]),
+          ],
+        ),
+      );
+      h.cubit.selectThread(jess);
+      h.gateway.pushLoaded(
+        loadedFrame(
+          directWith: jess,
+          events: [
+            eventRow(id: 'e3', sequence: 3, playerInput: 'psst', lines: [storedLine(jess, 'dm three', h.ago(70))]),
+            eventRow(id: 'e5', sequence: 5, playerInput: 'again', lines: [storedLine(jess, 'dm five', h.ago(50))]),
+          ],
+        ),
+      );
+      return h;
+    }
+
+    Map<String, dynamic> afterRewind({String? directWith, List<Map<String, dynamic>> events = const []}) =>
+        loadedFrame(directWith: directWith, events: events);
+
+    test('lines carry the sequence of their turn, from history', () async {
+      final h = await twoThreads();
+      expect({for (final l in h.state.thread().lines) l.text: l.sequence}, {
+        'opening': 1,
+        'two': 2,
+        'room two': 2,
+        'four': 4,
+        'room four': 4,
+      });
+      expect(h.state.thread(jess).lines.last.sequence, 5);
+    });
+
+    test('removes later lines from the room AND a direct thread, even an empty one', () async {
+      final h = await twoThreads();
+      final loadsBefore = h.gateway.loads.length;
+      await h.cubit.rewind(2);
+      expect(h.repo.rewindCalls, [2]);
+      // Every thread held is read again, and the veil stays until they answer.
+      expect(h.gateway.loads.length - loadsBefore, 2);
+      expect(h.state.rewinding, isTrue);
+      // The server's truth: the room keeps only turn 1, her thread is empty.
+      h.gateway.pushLoaded(
+        afterRewind(events: [eventRow(id: 'e1', sequence: 1, lines: [storedLine(jess, 'opening', h.ago(90))])]),
+      );
+      expect(h.state.rewinding, isTrue);
+      h.gateway.pushLoaded(afterRewind(directWith: jess));
+      expect(h.state.rewinding, isFalse);
+      expect(h.texts(), ['opening']);
+      expect(h.texts(jess), isEmpty);
+      expect(h.state.thread(jess).loaded, isTrue);
+      expect(h.state.rewindError, isNull);
+    });
+
+    test('a line still waiting to be revealed does not come back', () async {
+      final h = Harness();
+      await h.open(
+        frame: loadedFrame(
+          events: [
+            eventRow(id: 'e2', sequence: 2, lines: [storedLine(jess, 'later', h.ahead(5))]),
+          ],
+        ),
+      );
+      expect(h.texts(), isEmpty);
+      await h.cubit.rewind(2);
+      h.gateway.pushLoaded(afterRewind());
+      h.clock.advance(const Duration(seconds: 30));
+      expect(h.texts(), isEmpty);
+      expect(h.state.thread().typingId, isNull);
+    });
+
+    test('a lingering line with no saved turn is dropped too (history must replace, not merge)', () async {
+      final h = await twoThreads();
+      // A line that arrived by frame and was never tied to a saved turn.
+      h.gateway.pushLines(linesFrame([wireLine(jess, 'ghost', h.ago(55))]));
+      expect(h.texts(), contains('ghost'));
+      await h.cubit.rewind(2);
+      h.gateway.pushLoaded(afterRewind());
+      h.gateway.pushLoaded(afterRewind(directWith: jess));
+      expect(h.texts(), isEmpty);
+    });
+
+    test('the opening can not be rewound to, and lines keep their order after', () async {
+      final h = await twoThreads();
+      await h.cubit.rewind(1);
+      expect(h.repo.rewindCalls, isEmpty);
+      expect(h.state.rewinding, isFalse);
+    });
+
+    test('a line saved live in this session can be rewound', () async {
+      final h = Harness();
+      await h.open(frame: loadedFrame(events: [eventRow(id: 'e1', sequence: 1)]));
+      h.cubit.send('hi');
+      h.gateway.pushAck('j1');
+      // The reply's words arrived first, with no turn number yet.
+      h.gateway.pushLines(linesFrame([wireLine(jess, 'hello', h.ago(1))]));
+      expect(h.state.thread().lines.last.sequence, isNull);
+      h.gateway.pushComplete(
+        completeFrame(jobId: 'j1', eventId: 'e7', sequence: 7, playerInput: 'hi', lines: [storedLine(jess, 'hello', h.ago(1))]),
+      );
+      final lines = h.state.thread().lines;
+      expect([for (final l in lines) l.sequence], [7, 7]);
+      expect([for (final l in lines) l.eventId], ['e7', 'e7']);
+      await h.cubit.rewind(lines.first.sequence!);
+      expect(h.repo.rewindCalls, [7]);
+    });
+
+    test('a completion without a number asks for the history to learn it', () async {
+      final h = Harness();
+      await h.open();
+      h.cubit.send('hi');
+      h.gateway.pushAck('j1');
+      final loads = h.gateway.loads.length;
+      final frame = completeFrame(jobId: 'j1', eventId: 'e7', sequence: 7, playerInput: 'hi', lines: []);
+      (frame['event'] as Map).remove('sequence');
+      h.gateway.pushComplete(frame);
+      expect(h.state.thread().lines.single.sequence, isNull);
+      expect(h.gateway.loads.length, loads + 1);
+      h.gateway.pushLoaded(loadedFrame(events: [eventRow(id: 'e7', sequence: 7, playerInput: 'hi')]));
+      expect(h.state.thread().lines.single.sequence, 7);
+    });
+
+    test('is refused while a turn runs or waits, and while another rewind runs', () async {
+      final h = await twoThreads();
+      h.cubit.send('x');
+      await h.cubit.rewind(2);
+      expect(h.repo.rewindCalls, isEmpty);
+
+      final g = await twoThreads();
+      g.repo.rewindGate = Completer<void>();
+      final first = g.cubit.rewind(2);
+      await g.cubit.rewind(4);
+      expect(g.repo.rewindCalls, [2]);
+      g.repo.rewindGate!.complete();
+      await first;
+    });
+
+    test('sends are blocked during a rewind, and the chat is idle after', () async {
+      final h = await twoThreads();
+      h.repo.rewindGate = Completer<void>();
+      final done = h.cubit.rewind(2);
+      expect(h.state.rewinding, isTrue);
+      expect(h.cubit.send('quick'), isFalse);
+      expect(h.cubit.send('quick', directWith: jess), isFalse);
+      expect(h.gateway.chats, isEmpty);
+      h.repo.rewindGate!.complete();
+      await done;
+      h.gateway.pushLoaded(afterRewind());
+      h.gateway.pushLoaded(afterRewind(directWith: jess));
+      expect(h.state.rewinding, isFalse);
+      expect(h.cubit.send('now'), isTrue);
+    });
+
+    test('failed sends are dropped after a rewind', () async {
+      final h = await twoThreads();
+      h.cubit.send('first');
+      h.gateway.pushError({'type': 'error', 'code': 'INTERNAL'});
+      expect(h.state.failedSends, hasLength(1));
+      await h.cubit.rewind(2);
+      expect(h.state.failedSends, isEmpty);
+    });
+
+    test('a failure clears the state, keeps the lines and resyncs', () async {
+      final h = await twoThreads();
+      h.repo.rewindError = ApiException(statusCode: 500, message: 'boom');
+      final loads = h.gateway.loads.length;
+      await h.cubit.rewind(2);
+      expect(h.state.rewindError, GroupChatError.failed);
+      expect(h.gateway.loads.length - loads, 2);
+      // The reread says nothing was removed.
+      h.gateway.pushLoaded(
+        loadedFrame(events: [
+          eventRow(id: 'e1', sequence: 1, lines: [storedLine(jess, 'opening', h.ago(90))]),
+          eventRow(id: 'e2', sequence: 2, playerInput: 'two', lines: [storedLine(tom, 'room two', h.ago(80))]),
+          eventRow(id: 'e4', sequence: 4, playerInput: 'four', lines: [storedLine(tom, 'room four', h.ago(60))]),
+        ]),
+      );
+      h.gateway.pushLoaded(
+        loadedFrame(directWith: jess, events: [
+          eventRow(id: 'e3', sequence: 3, playerInput: 'psst', lines: [storedLine(jess, 'dm three', h.ago(70))]),
+          eventRow(id: 'e5', sequence: 5, playerInput: 'again', lines: [storedLine(jess, 'dm five', h.ago(50))]),
+        ]),
+      );
+      expect(h.state.rewinding, isFalse);
+      expect(h.texts(), ['opening', 'two', 'room two', 'four', 'room four']);
+      expect(h.texts(jess), ['psst', 'dm three', 'again', 'dm five']);
+    });
+
+    test('a 409 reads as busy, changes nothing on screen and clears the state', () async {
+      final h = await twoThreads();
+      h.repo.rewindError = ApiException(statusCode: 409, message: 'busy');
+      await h.cubit.rewind(2);
+      expect(h.state.rewindError, GroupChatError.busy);
+      expect(h.state.rewinding, isFalse);
+      expect(h.texts(), hasLength(5));
+      expect(h.texts(jess), hasLength(4));
+      // The same failure again still raises a new notice.
+      await h.cubit.rewind(2);
+      expect(h.state.rewindError, GroupChatError.busy);
+      expect(h.repo.rewindCalls, [2, 2]);
+    });
+
+    test('a late frame of a removed turn does not bring its line back', () async {
+      final h = await twoThreads();
+      await h.cubit.rewind(2);
+      // During the rewind and after it.
+      h.gateway.pushLines(linesFrame([wireLine(tom, 'room four', h.ago(60))], eventId: 'e4'));
+      h.gateway.pushLoaded(
+        afterRewind(events: [eventRow(id: 'e1', sequence: 1, lines: [storedLine(jess, 'opening', h.ago(90))])]),
+      );
+      h.gateway.pushLoaded(afterRewind(directWith: jess));
+      h.gateway.pushLines(linesFrame([wireLine(tom, 'room four', h.ago(60))], eventId: 'e4'));
+      h.gateway.pushLines(linesFrame([wireLine(jess, 'dm five', h.ago(50))], directWith: jess, eventId: 'e5'));
+      h.clock.advance(const Duration(seconds: 30));
+      expect(h.texts(), ['opening']);
+      expect(h.texts(jess), isEmpty);
+    });
+
+    test('bonds, actions and the thread list are read again', () async {
+      final h = await twoThreads();
+      h.repo.bondRows = [
+        const GroupBond(characterId: jess, name: 'Jess', meters: BondMeters(trust: 40)),
+      ];
+      await h.cubit.loadBonds();
+      h.repo.actionPages.add(GroupActionsPage(actions: [
+        const GroupAction(eventId: 'a1', sequence: 4, text: 'wave'),
+      ]));
+      await h.cubit.loadActions();
+      h.repo.bondRows = [
+        const GroupBond(characterId: jess, name: 'Jess', meters: BondMeters(trust: 10)),
+      ];
+      h.repo.actionPages.add(GroupActionsPage());
+      h.repo.threadRows = const [];
+      await h.cubit.rewind(2);
+      await Future<void>.delayed(Duration.zero);
+      expect(h.state.bonds.single.meters.trust, 10);
+      expect(h.state.actions, isEmpty);
     });
   });
 }

@@ -20,6 +20,7 @@ import '../widgets/character_sheet.dart';
 import '../widgets/group_chat_backdrop.dart';
 import '../widgets/group_composer.dart';
 import '../widgets/group_message_list.dart';
+import '../widgets/group_rewind.dart';
 import '../widgets/member_avatar.dart';
 import '../widgets/members_sheet.dart';
 import 'direct_thread_screen.dart';
@@ -241,6 +242,13 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
     );
   }
 
+  void _rewindTo(GroupLine line) {
+    final sequence = line.sequence;
+    if (sequence == null) return;
+    // The Chats list must not keep a removed message as its last line.
+    unawaited(_cubit.rewind(sequence).whenComplete(_chats.refresh));
+  }
+
   void _openCharacterSheet(GroupMember member) {
     CharacterSheet.show(
       context,
@@ -275,12 +283,16 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
         bloc: _cubit,
         listenWhen: (prev, curr) =>
             (curr.error != null && prev.error != curr.error) ||
+            (curr.rewindError != null && prev.rewindError != curr.rewindError) ||
             (!_openedDirectThreadOnce &&
                 widget.initialMemberId != null &&
                 curr.members.isNotEmpty),
         listener: (context, state) {
           if (state.error != null) {
             _onStateError(context, state.error!);
+          }
+          if (state.rewindError != null) {
+            showGroupRewindError(context, state.rewindError!);
           }
           if (!_openedDirectThreadOnce && widget.initialMemberId != null) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -474,6 +486,7 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                             onCharacterTap: _openCharacterSheet,
                             someoneTyping: typingName != null,
                             composerTop: () => _composerTop,
+                            onRewindLine: canRewindGroup(state) ? _rewindTo : null,
                           ),
                         ),
                         GroupComposer(
@@ -496,6 +509,7 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                   ],
                 ),
               ),
+              GroupRewindVeil(active: state.rewinding),
             ],
           );
         },

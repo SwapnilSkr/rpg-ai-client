@@ -58,6 +58,15 @@ class GroupChatCubit extends Cubit<GroupChatState> {
   /// this: it has no frame of its own, so its error stands in for the oldest.
   final List<String> _loadFifo = [];
 
+  /// Threads whose next history read replaces what is shown instead of
+  /// merging into it. A rewind removes lines; a merge would keep them.
+  final Set<String> _replacing = {};
+
+  /// Threads a rewind asked to reload and has not heard back from.
+  final Set<String> _rewindLoads = {};
+  bool _rewindRequestOpen = false;
+  void Function()? _rewindTimer;
+
   final Set<String> _opening = {};
   final Set<String> _opened = {};
   final Map<String, String> _writingFrom = {};
@@ -183,15 +192,19 @@ class GroupChatCubit extends Cubit<GroupChatState> {
   void _onInstanceLoaded(Map<String, dynamic> msg) {
     final snapshot = GroupSnapshot.parse(msg);
     if (snapshot == null || snapshot.instanceId != instanceId) return;
+    // Sent before the rewind finished, so it still holds the removed turns.
+    if (_rewindRequestOpen) return;
     // The answer names its thread (omitted for the group), because replies to
     // loads sent together can arrive in either order.
     final key = msg['directWith']?.toString() ?? kGroupThreadKey;
     _loadFifo.remove(key);
     _applyHistory(key, snapshot);
+    _settleRewindLoad(key);
   }
 
   void _applyHistory(String key, GroupSnapshot snapshot) {
     final now = _clock.now();
+    final replace = _replacing.remove(key);
     final members = snapshot.members.isEmpty ? state.members : snapshot.members;
     String nameOf(String id) {
       for (final m in members) {
@@ -214,6 +227,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
             text: event.playerInput,
             shownAt: event.createdAt,
             eventId: event.id,
+            sequence: event.sequence,
             isAction: event.playerAction,
           ),
         );
@@ -237,7 +251,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     }
     _maxSequence[key] = maxSequence;
 
-    final before = state.thread(key).lines;
+    final before = replace ? const <GroupLine>[] : state.thread(key).lines;
     final beforeKeys = {for (final l in before) l.key};
     final hidden = _hidden.putIfAbsent(key, () => []);
     final hiddenKeys = {for (final l in hidden) l.key};
@@ -247,7 +261,10 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     for (final line in history) {
       if (hiddenKeys.contains(line.key)) {
         final i = hidden.indexWhere((h) => h.key == line.key);
-        hidden[i] = hidden[i].copyWith(eventId: line.eventId);
+        hidden[i] = hidden[i].copyWith(
+          eventId: line.eventId,
+          sequence: line.sequence,
+        );
       } else if (beforeKeys.contains(line.key)) {
         visible.add(line);
       } else if (_seen.add('$key#${line.key}') &&
@@ -388,17 +405,27 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     return true;
   }
 
-  void _attachEvent(String key, String eventId, Set<String> lineKeys) {
+  void _attachEvent(
+    String key,
+    String eventId,
+    Set<String> lineKeys, {
+    int? sequence,
+  }) {
     final hidden = _hidden[key];
     if (hidden != null) {
       for (var i = 0; i < hidden.length; i++) {
         if (lineKeys.contains(hidden[i].key)) {
-          hidden[i] = hidden[i].copyWith(eventId: eventId);
+          hidden[i] = hidden[i].copyWith(eventId: eventId, sequence: sequence);
         }
       }
     }
     final view = state.thread(key);
-    if (view.lines.any((l) => lineKeys.contains(l.key) && l.eventId == null)) {
+    // A line may already know its event (from the frame that carried it) but
+    // learn its sequence only from the completion.
+    bool needs(GroupLine l) =>
+        lineKeys.contains(l.key) &&
+        (l.eventId == null || (sequence != null && l.sequence == null));
+    if (view.lines.any(needs)) {
       _emit(
         state.copyWith(
           threads: {
@@ -406,9 +433,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
             key: view.copyWith(
               lines: [
                 for (final l in view.lines)
-                  lineKeys.contains(l.key) && l.eventId == null
-                      ? l.copyWith(eventId: eventId)
-                      : l,
+                  needs(l) ? l.copyWith(eventId: eventId, sequence: sequence) : l,
               ],
             ),
           },
@@ -421,6 +446,8 @@ class GroupChatCubit extends Cubit<GroupChatState> {
 
   void _onGroupLines(Map<String, dynamic> msg) {
     if (msg['instanceId']?.toString() != instanceId) return;
+    // A frame in flight when a rewind began belongs to a removed turn.
+    if (state.rewinding) return;
     final key = msg['directWith']?.toString() ?? kGroupThreadKey;
     final lines = parseSpokenLines(msg['lines']);
     for (final line in lines) {
@@ -437,7 +464,13 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     // An eventId means the turn is saved.
     final eventId = msg['eventId']?.toString();
     if (eventId != null && eventId.isNotEmpty) {
-      _attachEvent(key, eventId, {for (final l in lines) l.key});
+      final sequence = msg['sequence'];
+      _attachEvent(
+        key,
+        eventId,
+        {for (final l in lines) l.key},
+        sequence: sequence is num ? sequence.toInt() : null,
+      );
     }
   }
 
@@ -455,6 +488,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
 
   void _onComplete(Map<String, dynamic> msg) {
     if (msg['instanceId']?.toString() != instanceId) return;
+    if (state.rewinding) return;
     final event = msg['event'];
     final active = _active;
     final jobId = msg['jobId']?.toString();
@@ -467,9 +501,10 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     }
     final key = active.thread;
     final eventId = (event['id'] ?? '').toString();
-    final sequence = event['sequence'];
-    if (sequence is num && sequence.toInt() > (_maxSequence[key] ?? 0)) {
-      _maxSequence[key] = sequence.toInt();
+    final rawSequence = event['sequence'];
+    final sequence = rawSequence is num ? rawSequence.toInt() : null;
+    if (sequence != null && sequence > (_maxSequence[key] ?? 0)) {
+      _maxSequence[key] = sequence;
     }
 
     final send = active.send;
@@ -480,17 +515,26 @@ class GroupChatCubit extends Cubit<GroupChatState> {
         eventId,
         (event['player_input'] ?? send.text).toString(),
         event['player_action'] == true || send.action,
+        sequence,
       );
     }
-    final lines = parseSpokenLines(event['lines'], eventId: eventId.isEmpty ? null : eventId);
+    final lines = parseSpokenLines(
+      event['lines'],
+      eventId: eventId.isEmpty ? null : eventId,
+      sequence: sequence,
+    );
     for (final line in lines) {
       _ingest(key, line.name.isEmpty
           ? line.copyWith(name: state.member(line.characterId!)?.name ?? '')
           : line);
     }
-    if (eventId.isNotEmpty) _attachEvent(key, eventId, {for (final l in lines) l.key});
+    if (eventId.isNotEmpty) {
+      _attachEvent(key, eventId, {for (final l in lines) l.key}, sequence: sequence);
+    }
     _reveal(key);
     _finishTurn();
+    // Without its number a saved line cannot be rewound to; the history has it.
+    if (sequence == null && eventId.isNotEmpty) _requestLoad(key);
     if (key != kGroupThreadKey) unawaited(refreshThreads());
   }
 
@@ -509,6 +553,15 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     } else if (_loadFifo.isNotEmpty) {
       // A refused load has no frame of its own; its error stands in for it.
       final key = _loadFifo.removeAt(0);
+      if (_rewindLoads.contains(key)) {
+        // Not re-read, so what it shows may still hold removed turns. Showing
+        // nothing until it is opened and read again is the honest state.
+        _replacing.remove(key);
+        if (key != kGroupThreadKey) {
+          _emit(state.copyWith(threads: {...state.threads, key: const GroupThreadView()}));
+        }
+        _settleRewindLoad(key);
+      }
       if (key == kGroupThreadKey) {
         _emit(state.copyWith(load: GroupChatLoad.failed, error: error));
       }
@@ -522,6 +575,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
   /// turn. Returns false when the line cannot be sent at all.
   bool send(String text, {String? directWith, bool action = false}) {
     final trimmed = text.trim();
+    if (state.rewinding) return false;
     if (trimmed.isEmpty || trimmed.length > 4000) return false;
     // The server refuses an action to one person: it is for everyone.
     if (action && directWith != null) return false;
@@ -627,7 +681,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
   /// send.
   bool retryFailed(String id) {
     final failed = state.failedSends.where((f) => f.id == id).firstOrNull;
-    if (failed == null) return false;
+    if (failed == null || state.rewinding) return false;
     discardFailed(id);
     return send(failed.text, directWith: failed.directWith, action: failed.isAction);
   }
@@ -700,7 +754,14 @@ class GroupChatCubit extends Cubit<GroupChatState> {
 
   /// The saved copy of the player's line takes the place of the one shown
   /// while it was being sent.
-  void _replaceOptimistic(String key, _Outgoing send, String eventId, String text, bool action) {
+  void _replaceOptimistic(
+    String key,
+    _Outgoing send,
+    String eventId,
+    String text,
+    bool action,
+    int? sequence,
+  ) {
     final view = state.thread(key);
     final index = view.lines.indexWhere((l) => l.key == 'c:${send.clientId}');
     final saved = GroupLine(
@@ -708,6 +769,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
       text: text,
       shownAt: index < 0 ? _clock.now() : view.lines[index].shownAt,
       eventId: eventId,
+      sequence: sequence,
       isAction: action,
     );
     _seen.add('$key#${saved.key}');
@@ -726,6 +788,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
 
   void _maybeOpenPending() {
     final key = state.selectedThread;
+    if (state.rewinding) return;
     if (key == kGroupThreadKey || !state.pendingFrom.contains(key)) return;
     if (_opened.contains(key) || !_opening.add(key)) return;
     unawaited(_openPending(key));
@@ -779,6 +842,120 @@ class GroupChatCubit extends Cubit<GroupChatState> {
   void _clearWriting(String key) {
     _writingTimers.remove(key)?.call();
     if (_writingFrom.remove(key) != null) _reveal(key);
+  }
+
+  // ------------------------------------------------------------------ rewind
+
+  /// Removes the turn at [sequence] and everything after it, in the room and
+  /// in every direct thread, then shows the server's truth in all of them.
+  /// Does nothing while a reply is being written or queued, or another rewind
+  /// runs. [GroupChatState.rewindError] says why a rewind did not go through.
+  Future<void> rewind(int sequence) async {
+    if (_closed ||
+        state.rewinding ||
+        sequence <= 1 ||
+        _active != null ||
+        _queue.isNotEmpty ||
+        _opening.isNotEmpty) {
+      return;
+    }
+    _emit(state.copyWith(rewinding: true, rewindError: null));
+    _rewindRequestOpen = true;
+    Object? failure;
+    try {
+      await _repo.rewind(instanceId, sequence);
+    } catch (e) {
+      failure = e;
+    }
+    _rewindRequestOpen = false;
+    if (_closed) return;
+
+    if (failure != null) {
+      final error = _errorOf(failure);
+      // A refusal changed nothing. Anything else (a lost reply) may have
+      // removed the turns, so it is treated as if it had.
+      final unchanged = failure is ApiException &&
+          const {400, 401, 403, 404, 409, 429}.contains(failure.statusCode);
+      _emit(state.copyWith(rewindError: error));
+      _reloadAfterRewind(replace: !unchanged, clearSends: false);
+      return;
+    }
+    _reloadAfterRewind(replace: true, clearSends: true);
+    unawaited(refreshThreads());
+    // Bonds and the action list are the server's to count: read them again if
+    // they were ever read.
+    if (state.bonds.isNotEmpty) unawaited(loadBonds());
+    if (state.actions.isNotEmpty || state.actionsNext != null) {
+      unawaited(loadActions());
+    }
+  }
+
+  /// Reads every thread held again. [replace] drops what is shown first, so a
+  /// line the server no longer has cannot stay on screen or in the reveal
+  /// buffer. The lines already seen stay in [_seen]: a late frame of a removed
+  /// turn is then taken for a repeat and ignored.
+  void _reloadAfterRewind({required bool replace, required bool clearSends}) {
+    final keys = <String>{
+      kGroupThreadKey,
+      state.selectedThread,
+      ...state.threads.keys,
+    };
+    var threads = state.threads;
+    if (replace) {
+      for (final cancel in _revealTimers.values) {
+        cancel();
+      }
+      _revealTimers.clear();
+      for (final cancel in _writingTimers.values) {
+        cancel();
+      }
+      _writingTimers.clear();
+      _writingFrom.clear();
+      _hidden.clear();
+      _maxSequence.clear();
+      _opened.clear();
+      _replacing.addAll(keys);
+      // A thread nobody is looking at is read again when it is opened, even if
+      // the socket is down now.
+      threads = {
+        for (final e in threads.entries)
+          e.key: (e.key == kGroupThreadKey || e.key == state.selectedThread)
+              ? e.value.copyWith(typingId: null)
+              : const GroupThreadView(),
+      };
+    }
+    _loadFifo.clear();
+    _rewindLoads
+      ..clear()
+      ..addAll(keys);
+    _emit(
+      state.copyWith(
+        threads: threads,
+        failedSends: clearSends ? const [] : null,
+      ),
+    );
+    _rewindTimer?.call();
+    _rewindTimer = _clock.schedule(loadTimeout, _finishRewind);
+    for (final key in keys) {
+      _requestLoad(key);
+    }
+    // Nothing could be asked (socket down), or nothing was removed: the veil
+    // must not wait for the answers.
+    if (!replace || !_gateway.isConnected) _finishRewind();
+  }
+
+  void _settleRewindLoad(String key) {
+    if (!_rewindLoads.remove(key)) return;
+    if (_rewindLoads.isEmpty) _finishRewind();
+  }
+
+  void _finishRewind() {
+    _rewindTimer?.call();
+    _rewindTimer = null;
+    _rewindLoads.clear();
+    if (!state.rewinding) return;
+    _emit(state.copyWith(rewinding: false));
+    _maybeOpenPending();
   }
 
   // ------------------------------------------------------------ bonds, actions
@@ -887,6 +1064,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
   Future<void> close() async {
     _closed = true;
     _loadTimer?.call();
+    _rewindTimer?.call();
     for (final cancel in _revealTimers.values) {
       cancel();
     }

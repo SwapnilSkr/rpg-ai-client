@@ -13,6 +13,7 @@ import '../widgets/bond_sheet.dart';
 import '../widgets/group_chat_backdrop.dart';
 import '../widgets/group_composer.dart';
 import '../widgets/group_message_list.dart';
+import '../widgets/group_rewind.dart';
 import '../widgets/member_avatar.dart';
 
 /// Direct thread screen with one character: same list and composer, no `@` and no action toggle.
@@ -64,8 +65,12 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<GroupChatCubit, GroupChatState>(
+    return BlocConsumer<GroupChatCubit, GroupChatState>(
       bloc: widget.cubit,
+      listenWhen: (prev, curr) =>
+          curr.rewindError != null && prev.rewindError != curr.rewindError,
+      listener: (context, state) =>
+          showGroupRewindError(context, state.rewindError!),
       builder: (context, state) {
         final thread = state.thread(widget.member.id);
         final typingName = thread.typingId == widget.member.id
@@ -157,6 +162,7 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
                       lines: thread.lines,
                       memberMap: memberMap,
                       composerTop: () => _composerTop,
+                      onRewindLine: canRewindGroup(state) ? _rewindTo : null,
                       onCharacterTap: (_) => BondSheet.show(
                         context,
                         cubit: widget.cubit,
@@ -180,9 +186,17 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
                 ],
               ),
             ),
+            GroupRewindVeil(active: state.rewinding),
           ],
         );
       },
     );
+  }
+
+  void _rewindTo(GroupLine line) {
+    final sequence = line.sequence;
+    if (sequence == null) return;
+    // The Chats list must not keep a removed message as its last line.
+    unawaited(widget.cubit.rewind(sequence).whenComplete(_chats.refresh));
   }
 }

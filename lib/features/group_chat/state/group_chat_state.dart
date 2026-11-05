@@ -103,6 +103,15 @@ class GroupChatState extends Equatable {
   final int queuedSends;
   final List<FailedSend> failedSends;
 
+  /// A rewind is running, from the request until every thread shows the
+  /// server's truth again. Sends are refused meanwhile.
+  final bool rewinding;
+
+  /// Why the last rewind did not go through; null when it did or none ran.
+  /// Cleared when the next rewind starts, so the same failure twice still
+  /// changes the state.
+  final GroupChatError? rewindError;
+
   /// A load that failed; sends report their own errors.
   final GroupChatError? error;
 
@@ -130,6 +139,8 @@ class GroupChatState extends Equatable {
     this.turnInFlight = false,
     this.queuedSends = 0,
     this.failedSends = const [],
+    this.rewinding = false,
+    this.rewindError,
     this.error,
     this.bonds = const [],
     this.bondsLoading = false,
@@ -165,6 +176,8 @@ class GroupChatState extends Equatable {
     bool? turnInFlight,
     int? queuedSends,
     List<FailedSend>? failedSends,
+    bool? rewinding,
+    Object? rewindError = _keep,
     Object? error = _keep,
     List<GroupBond>? bonds,
     bool? bondsLoading,
@@ -188,6 +201,10 @@ class GroupChatState extends Equatable {
     turnInFlight: turnInFlight ?? this.turnInFlight,
     queuedSends: queuedSends ?? this.queuedSends,
     failedSends: failedSends ?? this.failedSends,
+    rewinding: rewinding ?? this.rewinding,
+    rewindError: identical(rewindError, _keep)
+        ? this.rewindError
+        : rewindError as GroupChatError?,
     error: identical(error, _keep) ? this.error : error as GroupChatError?,
     bonds: bonds ?? this.bonds,
     bondsLoading: bondsLoading ?? this.bondsLoading,
@@ -220,6 +237,8 @@ class GroupChatState extends Equatable {
     turnInFlight,
     queuedSends,
     failedSends,
+    rewinding,
+    rewindError,
     error,
     bonds,
     bondsLoading,

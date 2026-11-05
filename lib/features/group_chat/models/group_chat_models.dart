@@ -49,6 +49,11 @@ class GroupLine extends Equatable {
   /// Set once the server has saved the turn that holds this line.
   final String? eventId;
 
+  /// The saved turn's place in the chat's one timeline (shared by the room and
+  /// every direct thread). Rewind needs it. Null until the turn is saved and
+  /// its number is known.
+  final int? sequence;
+
   /// The player's line was sent as an action (drawn differently).
   final bool isAction;
 
@@ -63,6 +68,7 @@ class GroupLine extends Equatable {
     required this.text,
     required this.shownAt,
     this.eventId,
+    this.sequence,
     this.isAction = false,
     this.status = GroupLineStatus.sent,
   });
@@ -77,6 +83,7 @@ class GroupLine extends Equatable {
 
   GroupLine copyWith({
     String? eventId,
+    int? sequence,
     GroupLineStatus? status,
     String? name,
   }) => GroupLine(
@@ -86,6 +93,7 @@ class GroupLine extends Equatable {
     text: text,
     shownAt: shownAt,
     eventId: eventId ?? this.eventId,
+    sequence: sequence ?? this.sequence,
     isAction: isAction,
     status: status ?? this.status,
   );
@@ -98,6 +106,7 @@ class GroupLine extends Equatable {
     text,
     shownAt,
     eventId,
+    sequence,
     isAction,
     status,
   ];
@@ -107,7 +116,11 @@ enum GroupLineStatus { queued, sending, sent }
 
 /// A line as carried by a frame or a history event. `group_lines` uses camel
 /// case and a saved event uses snake case; both are read.
-GroupLine? parseSpokenLine(Map<String, dynamic> json, {String? eventId}) {
+GroupLine? parseSpokenLine(
+  Map<String, dynamic> json, {
+  String? eventId,
+  int? sequence,
+}) {
   final characterId = _str(json['characterId'] ?? json['character_id']);
   final text = _str(json['text']);
   final shownAt = _date(json['shownAt'] ?? json['shown_at']);
@@ -119,12 +132,17 @@ GroupLine? parseSpokenLine(Map<String, dynamic> json, {String? eventId}) {
     text: text,
     shownAt: shownAt,
     eventId: eventId,
+    sequence: sequence,
   );
 }
 
-List<GroupLine> parseSpokenLines(Object? raw, {String? eventId}) => [
+List<GroupLine> parseSpokenLines(
+  Object? raw, {
+  String? eventId,
+  int? sequence,
+}) => [
   for (final json in _maps(raw))
-    ?parseSpokenLine(json, eventId: eventId),
+    ?parseSpokenLine(json, eventId: eventId, sequence: sequence),
 ];
 
 /// One saved turn from a history read.
@@ -160,7 +178,11 @@ class GroupHistoryEvent extends Equatable {
       origin: _str(data['origin'] ?? json['origin']).isEmpty
           ? 'player'
           : _str(data['origin'] ?? json['origin']),
-      lines: parseSpokenLines(data['lines'] ?? json['lines'], eventId: id),
+      lines: parseSpokenLines(
+        data['lines'] ?? json['lines'],
+        eventId: id,
+        sequence: _int(json['sequence']),
+      ),
     );
   }
 

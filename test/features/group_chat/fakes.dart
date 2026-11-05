@@ -133,6 +133,17 @@ class FakeRepository implements GroupChatRepository {
   final List<GroupActionsPage> actionPages = [];
   final List<int?> actionBefore = [];
 
+  final List<int> rewindCalls = [];
+  Object? rewindError;
+  Completer<void>? rewindGate;
+
+  @override
+  Future<void> rewind(String instanceId, int sequence) async {
+    rewindCalls.add(sequence);
+    if (rewindGate != null) await rewindGate!.future;
+    if (rewindError != null) throw rewindError!;
+  }
+
   @override
   Future<List<GroupThreadSummary>> threads(String instanceId) async => threadRows;
 
