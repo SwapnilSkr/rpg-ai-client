@@ -78,6 +78,29 @@ Future<bool> showReportLineSheet(
   return filed ?? false;
 }
 
+/// Opens the report flow for a normal chat turn.
+Future<bool> showReportChatTurnSheet(
+  BuildContext context, {
+  required String eventId,
+  required String text,
+}) async {
+  Telemetry.instance.sheet('report');
+  final filed = await showModalBottomSheet<bool>(
+    useRootNavigator: true,
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => _ReportSheet(
+      targetType: 'chat_line',
+      targetId: eventId,
+      targetTitle: '',
+      lineText: text,
+    ),
+  );
+  return filed ?? false;
+}
+
 class _ReportSheet extends StatefulWidget {
   final String targetType;
   final String targetId;
@@ -132,13 +155,16 @@ class _ReportSheetState extends State<_ReportSheet> {
         reason: _reason!,
         details: _detailsController.text,
         characterId: widget.characterId,
-        text: widget.lineText,
+        text: widget.targetType == 'group_line' ? widget.lineText : null,
       );
       // A creator report has no §3.1 target of its own, so it is `other`.
       Telemetry.instance.track('report_submitted', {
         'target': widget.targetType == 'world'
             ? 'world'
-            : (widget.targetType == 'group_line' ? 'message' : 'other'),
+            : ((widget.targetType == 'group_line' ||
+                    widget.targetType == 'chat_line')
+                ? 'message'
+                : 'other'),
       });
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -210,11 +236,13 @@ class _ReportSheetState extends State<_ReportSheet> {
   }
 
   Widget _header() {
-    final title = widget.targetType == 'group_line'
+    final title = (widget.targetType == 'group_line' ||
+            widget.targetType == 'chat_line')
         ? 'Report this message'
         : 'Report this ${widget.targetType == 'user' ? 'creator' : 'world'}';
 
-    final blurb = widget.targetType == 'group_line'
+    final blurb = (widget.targetType == 'group_line' ||
+            widget.targetType == 'chat_line')
         ? 'Reports are private, and we read every one.'
         : 'Reports are private — the creator is never told who reported them. '
             'Anything that breaks our rules is removed.';
@@ -247,17 +275,19 @@ class _ReportSheetState extends State<_ReportSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            widget.targetTitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: EverloreTheme.ui(
-              size: 13,
-              color: EverloreTheme.gold,
-              weight: FontWeight.w600,
+          if (widget.targetTitle.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              widget.targetTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: EverloreTheme.ui(
+                size: 13,
+                color: EverloreTheme.gold,
+                weight: FontWeight.w600,
+              ),
             ),
-          ),
+          ],
           if (widget.lineText != null && widget.lineText!.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(

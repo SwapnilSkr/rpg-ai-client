@@ -137,6 +137,158 @@ void main() {
       expect(sentBodies[1].containsKey('character_id'), isFalse);
       expect(sentBodies[1].containsKey('text'), isFalse);
     });
+
+    test('omits character_id and text for chat_line reports even if passed', () async {
+      Map<String, dynamic>? sentBody;
+
+      currentHandler = (request) async {
+        sentBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({'reported': true, 'report_id': 'rep_chat_1'}),
+          200,
+        );
+      };
+
+      await ModerationRepository.report(
+        targetType: 'chat_line',
+        targetId: 'ev_chat_123',
+        characterId: 'char_ignored',
+        text: 'text_ignored',
+        reason: ReportReason.harassment,
+        details: 'Chat turn problem',
+      );
+
+      expect(sentBody, {
+        'target_type': 'chat_line',
+        'target_id': 'ev_chat_123',
+        'reason': 'harassment_or_hate',
+        'details': 'Chat turn problem',
+      });
+      expect(sentBody!.containsKey('character_id'), isFalse);
+      expect(sentBody!.containsKey('text'), isFalse);
+    });
+  });
+
+  group('showReportChatTurnSheet', () {
+    testWidgets('displays title, quotes the passage capped at 3 lines, with no speaker name, and same privacy wording', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () {
+                showReportChatTurnSheet(
+                  context,
+                  eventId: 'ev_chat_100',
+                  text: 'Turn passage line 1\nLine 2\nLine 3\nLine 4 is capped',
+                );
+              },
+              child: const Text('Open Sheet'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Sheet'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Report this message'), findsOneWidget);
+      expect(find.text('Reports are private, and we read every one.'), findsOneWidget);
+      expect(find.text('Turn passage line 1\nLine 2\nLine 3\nLine 4 is capped'), findsOneWidget);
+
+      final textWidget = tester.widget<Text>(find.text('Turn passage line 1\nLine 2\nLine 3\nLine 4 is capped'));
+      expect(textWidget.maxLines, 3);
+      expect(textWidget.overflow, TextOverflow.ellipsis);
+
+      // Verify no speaker name is displayed
+      expect(find.text('Someone'), findsNothing);
+      expect(find.text('Jess'), findsNothing);
+    });
+
+    testWidgets('submitting sends request body with chat_line and event id, never character_id or text', (tester) async {
+      Map<String, dynamic>? capturedBody;
+
+      currentHandler = (request) async {
+        capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({'reported': true, 'report_id': 'rep_chat_200'}),
+          200,
+        );
+      };
+
+      await tester.pumpWidget(
+        _host(
+          Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () {
+                showReportChatTurnSheet(
+                  context,
+                  eventId: 'ev_chat_turn_1',
+                  text: 'The dragon exhaled a cloud of silver mist.',
+                );
+              },
+              child: const Text('Open Sheet'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Sheet'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Harassment or hate'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('SEND REPORT'));
+      await tester.pumpAndSettle();
+
+      expect(capturedBody, isNotNull);
+      expect(capturedBody!['target_type'], 'chat_line');
+      expect(capturedBody!['target_id'], 'ev_chat_turn_1');
+      expect(capturedBody!['reason'], 'harassment_or_hate');
+      expect(capturedBody!.containsKey('character_id'), isFalse);
+      expect(capturedBody!.containsKey('text'), isFalse);
+
+      expect(find.text('Report this message'), findsNothing);
+      expect(find.text('Report sent. Our team will review it.'), findsOneWidget);
+    });
+
+    testWidgets('error keeps sheet open with error message', (tester) async {
+      currentHandler = (request) async {
+        return http.Response(
+          jsonEncode({'error': 'Report already filed for this turn'}),
+          409,
+        );
+      };
+
+      await tester.pumpWidget(
+        _host(
+          Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () {
+                showReportChatTurnSheet(
+                  context,
+                  eventId: 'ev_chat_err',
+                  text: 'Some turn text',
+                );
+              },
+              child: const Text('Open Sheet'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Sheet'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Harassment or hate'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('SEND REPORT'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Report this message'), findsOneWidget);
+      expect(find.text('Report already filed for this turn'), findsOneWidget);
+    });
   });
 
   group('showReportLineSheet', () {

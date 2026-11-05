@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -11,6 +14,7 @@ import 'package:everlore/app/theme/nexus_theme.dart';
 import 'package:everlore/core/guide/guide_controller.dart';
 import 'package:everlore/core/guide/guide_flows.dart';
 import 'package:everlore/core/guide/guide_ids.dart';
+import 'package:everlore/core/network/api_client.dart';
 import 'package:everlore/core/network/ws_manager.dart';
 import 'package:everlore/features/media/data/media_repository.dart';
 import 'package:everlore/features/media/models/spoken_line.dart';
@@ -20,6 +24,8 @@ import 'package:everlore/features/play/presentation/widgets/anchored_menu_popup.
 import 'package:everlore/features/play/presentation/widgets/narrative_bubble.dart';
 import 'package:everlore/features/play/state/play_cubit.dart';
 import 'package:everlore/shared/models/event.dart';
+
+typedef HttpHandler = Future<http.Response> Function(http.Request request);
 
 class _MockWsManager extends Fake implements WsManager {
   final mediaReadyCtrl = StreamController<Map<String, dynamic>>.broadcast();
@@ -89,7 +95,28 @@ class _MockWsManager extends Fake implements WsManager {
 }
 
 void main() {
+  HttpHandler? currentHandler;
+
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    FlutterSecureStorage.setMockInitialValues({'auth_token': 'test_token'});
+    GoogleFonts.config.allowRuntimeFetching = false;
+    dotenv.loadFromString(envString: 'API_BASE_URL=https://api.test');
+
+    await http.runWithClient(() async {
+      try {
+        await ApiClient.get('/init_test_client');
+      } catch (_) {}
+    }, () => MockClient((request) async {
+      if (currentHandler != null) {
+        return currentHandler!(request);
+      }
+      return http.Response('{}', 200);
+    }));
+  });
+
   setUp(() async {
+    currentHandler = null;
     await guide.onSignedOut();
     GuideController.arcGap = Duration.zero;
   });
@@ -118,6 +145,15 @@ void main() {
           onTap: () {},
         ),
         AnchoredMenuItem(
+          icon: const Icon(
+            Icons.flag_outlined,
+            color: EverloreTheme.crimson,
+            size: 16,
+          ),
+          label: 'Report',
+          onTap: () {},
+        ),
+        AnchoredMenuItem(
           icon: const Icon(Icons.history_rounded),
           label: 'Rewind to here',
           onTap: () {},
@@ -141,6 +177,7 @@ void main() {
       expect(find.text('Replay response'), findsOneWidget);
       expect(find.text('Copy response'), findsOneWidget);
       expect(find.text('Edit response'), findsOneWidget);
+      expect(find.text('Report'), findsOneWidget);
       expect(find.text('Rewind to here'), findsOneWidget);
 
       // Verify separation: Picture this and Film this must NOT appear
@@ -855,6 +892,236 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
       }
       expect(find.text('This moment stays unseen.'), findsNothing);
+    });
+  });
+
+  group('PlayScreen Turn Menu Report', () {
+    testWidgets('shows Report on a turn with a response and not on one without', (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final eventWithResponse = GameEvent(
+        id: 'ev_with_resp_1',
+        instanceId: 'inst_report_test',
+        sequence: 1,
+        type: 'narration',
+        playerInput: 'I enter the ruins.',
+        aiResponse: 'Stone pillars loom overhead in the twilight.',
+        createdAt: DateTime.now(),
+      );
+
+      final eventWithoutResponse = GameEvent(
+        id: 'ev_no_resp_2',
+        instanceId: 'inst_report_test',
+        sequence: 2,
+        type: 'action',
+        playerInput: 'I light a torch.',
+        aiResponse: null,
+        createdAt: DateTime.now(),
+      );
+
+      final ws = _MockWsManager();
+      addTearDown(ws.dispose);
+
+      final mediaRepo = MediaRepository(
+        client: MockClient((request) async => http.Response('{}', 200)),
+        baseUrl: 'https://api.test',
+        tokenProvider: () async => 'token',
+      );
+
+      final cubit = PlayCubit(
+        instanceId: 'inst_report_test',
+        ws: ws,
+        mediaRepo: mediaRepo,
+      );
+      addTearDown(cubit.close);
+
+      cubit.emit(cubit.state.copyWith(
+        isLoading: false,
+        isConnected: true,
+        events: [eventWithResponse, eventWithoutResponse],
+        isMediaAvailable: false,
+      ));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: EverloreTheme.dark,
+          home: PlayScreen(
+            instanceId: 'inst_report_test',
+            cubit: cubit,
+          ),
+        ),
+      );
+      for (int i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      // 1. Verify menu item construction directly for both turn types:
+      final playContext = tester.element(find.byType(PlayScreen));
+      final itemsWithResp = PlayScreen.buildTurnMenuItems(
+        context: playContext,
+        cubit: cubit,
+        event: eventWithResponse,
+        canReplay: false,
+        onEditResponse: () {},
+        onRewind: () {},
+      );
+      final labelsWithResp = itemsWithResp.map((i) => i.label).toList();
+      expect(labelsWithResp, ['Copy response', 'Edit response', 'Report', 'Rewind to here']);
+
+      final reportItem = itemsWithResp.firstWhere((i) => i.label == 'Report');
+      final reportIcon = reportItem.icon as Icon;
+      expect(reportIcon.icon, equals(Icons.flag_outlined));
+      expect(reportIcon.color, equals(EverloreTheme.crimson));
+      expect(reportIcon.size, equals(16.0));
+
+      final itemsWithoutResp = PlayScreen.buildTurnMenuItems(
+        context: playContext,
+        cubit: cubit,
+        event: eventWithoutResponse,
+        canReplay: false,
+        onEditResponse: () {},
+        onRewind: () {},
+      );
+      final labelsWithoutResp = itemsWithoutResp.map((i) => i.label).toList();
+      expect(labelsWithoutResp, ['Rewind to here']);
+      expect(labelsWithoutResp.contains('Report'), isFalse);
+      expect(labelsWithoutResp.contains('Edit response'), isFalse);
+      expect(labelsWithoutResp.contains('Copy response'), isFalse);
+
+      // 2. Long press on turn WITH response in UI:
+      final proseFinder = find.byWidgetPredicate(
+        (w) => w is RichText && w.text.toPlainText().contains('Stone pillars loom'),
+      );
+      expect(proseFinder, findsOneWidget);
+      await tester.longPress(proseFinder);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Report is shown in the anchored menu, along with Edit response and Rewind to here
+      expect(find.text('Edit response'), findsOneWidget);
+      expect(find.text('Report'), findsOneWidget);
+      expect(find.text('Rewind to here'), findsOneWidget);
+
+      final renderedFlagIcon = tester.widget<Icon>(find.byIcon(Icons.flag_outlined));
+      expect(renderedFlagIcon.color, equals(EverloreTheme.crimson));
+      expect(renderedFlagIcon.size, equals(16.0));
+
+      // Dismiss menu
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Report'), findsNothing);
+    });
+
+    testWidgets('Report opens sheet with passage and sends exact request body', (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      Map<String, dynamic>? sentBody;
+      currentHandler = (request) async {
+        if (request.url.path == '/moderation/reports') {
+          sentBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({'reported': true, 'report_id': 'rep_chat_play'}),
+            200,
+          );
+        }
+        return http.Response('{}', 200);
+      };
+
+      const passage = 'A cold wind whispers through the shattered glass.';
+      final event = GameEvent(
+        id: 'ev_play_report_1',
+        instanceId: 'inst_report_test_2',
+        sequence: 1,
+        type: 'narration',
+        aiResponse: passage,
+        createdAt: DateTime.now(),
+      );
+
+      final ws = _MockWsManager();
+      addTearDown(ws.dispose);
+
+      final mediaRepo = MediaRepository(
+        client: MockClient((request) async => http.Response('{}', 200)),
+        baseUrl: 'https://api.test',
+        tokenProvider: () async => 'token',
+      );
+
+      final cubit = PlayCubit(
+        instanceId: 'inst_report_test_2',
+        ws: ws,
+        mediaRepo: mediaRepo,
+      );
+      addTearDown(cubit.close);
+
+      cubit.emit(cubit.state.copyWith(
+        isLoading: false,
+        isConnected: true,
+        events: [event],
+        isMediaAvailable: false,
+      ));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: EverloreTheme.dark,
+          home: PlayScreen(
+            instanceId: 'inst_report_test_2',
+            cubit: cubit,
+          ),
+        ),
+      );
+      for (int i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      // Long press prose to open menu
+      final proseFinder = find.byWidgetPredicate(
+        (w) => w is RichText && w.text.toPlainText().contains('A cold wind whispers'),
+      );
+      await tester.longPress(proseFinder);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Tap Report
+      expect(find.text('Report'), findsOneWidget);
+      await tester.tap(find.text('Report'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Verify Report sheet is open
+      expect(find.text('Report this message'), findsOneWidget);
+      expect(find.text('Reports are private, and we read every one.'), findsOneWidget);
+      // Quoted passage is present in the sheet
+      expect(find.text(passage), findsOneWidget);
+      // No speaker name in the sheet
+      expect(find.text('Someone'), findsNothing);
+
+      // Select a reason and submit
+      await tester.tap(find.text('Harassment or hate'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.tap(find.text('SEND REPORT'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Verify sent body exactly matches contract
+      expect(sentBody, isNotNull);
+      expect(sentBody!['target_type'], equals('chat_line'));
+      expect(sentBody!['target_id'], equals('ev_play_report_1'));
+      expect(sentBody!['reason'], equals('harassment_or_hate'));
+      expect(sentBody!.containsKey('character_id'), isFalse);
+      expect(sentBody!.containsKey('text'), isFalse);
+
+      // Sheet dismissed and success notice shown
+      expect(find.text('Report this message'), findsNothing);
+      expect(find.text('Report sent. Our team will review it.'), findsOneWidget);
     });
   });
 }

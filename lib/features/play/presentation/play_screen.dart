@@ -48,6 +48,7 @@ import '../../../shared/text_format.dart';
 import '../../../core/telemetry/telemetry.dart';
 import '../../media/presentation/floating_mini_player.dart';
 import '../../media/presentation/spoken_line_menu.dart';
+import '../../moderation/presentation/report_sheet.dart';
 
 /// The name a starter story adopts as the protagonist without asking again, or
 /// null when the "Who are you?" sheet should open. The player already typed
@@ -112,6 +113,85 @@ class PlayScreen extends StatelessWidget {
       },
       child: provided,
     );
+  }
+
+  @visibleForTesting
+  static List<AnchoredMenuItem> buildTurnMenuItems({
+    required BuildContext context,
+    required PlayCubit cubit,
+    required GameEvent event,
+    required bool canReplay,
+    required VoidCallback onEditResponse,
+    required VoidCallback onRewind,
+  }) {
+    final hasAiResponse = (event.aiResponse ?? '').trim().isNotEmpty;
+    return [
+      if (canReplay)
+        AnchoredMenuItem(
+          icon: const Icon(
+            Icons.refresh_rounded,
+            color: EverloreTheme.cyanBright,
+            size: 16,
+          ),
+          label: 'Replay response',
+          onTap: () => cubit.replayAiResponse(event),
+        ),
+      if (hasAiResponse)
+        AnchoredMenuItem(
+          icon: const Icon(
+            Icons.copy_rounded,
+            color: EverloreTheme.ash,
+            size: 16,
+          ),
+          label: 'Copy response',
+          onTap: () {
+            Clipboard.setData(
+              ClipboardData(text: event.aiResponse?.trim() ?? ''),
+            );
+            showEverloreNotice(
+              context,
+              'Copied',
+              tone: NoticeTone.info,
+            );
+          },
+        ),
+      if (hasAiResponse)
+        AnchoredMenuItem(
+          icon: const Icon(
+            Icons.edit_outlined,
+            color: EverloreTheme.violetBright,
+            size: 16,
+          ),
+          label: 'Edit response',
+          onTap: onEditResponse,
+        ),
+      if (hasAiResponse)
+        AnchoredMenuItem(
+          icon: const Icon(
+            Icons.flag_outlined,
+            color: EverloreTheme.crimson,
+            size: 16,
+          ),
+          label: 'Report',
+          onTap: () {
+            if (!context.mounted) return;
+            showReportChatTurnSheet(
+              context,
+              eventId: event.id,
+              text: event.aiResponse?.trim() ?? '',
+            );
+          },
+        ),
+      AnchoredMenuItem(
+        icon: const Icon(
+          Icons.history_toggle_off,
+          color: EverloreTheme.crimson,
+          size: 16,
+        ),
+        label: 'Rewind to here',
+        onTap: onRewind,
+      ),
+    ];
   }
 }
 
@@ -1360,62 +1440,19 @@ class _PlayViewState extends State<_PlayView> {
   }) {
     final cubit = context.read<PlayCubit>();
     final rect = anchorRect ?? _getEventBubbleRect(event.id, context);
-    final hasAiResponse = (event.aiResponse ?? '').trim().isNotEmpty;
 
     showAnchoredMenu<void>(
       context: context,
       anchorRect: rect,
       composerTop: _composerTop,
-      items: [
-        if (canReplay)
-          AnchoredMenuItem(
-            icon: const Icon(
-              Icons.refresh_rounded,
-              color: EverloreTheme.cyanBright,
-              size: 16,
-            ),
-            label: 'Replay response',
-            onTap: () => cubit.replayAiResponse(event),
-          ),
-        if (hasAiResponse)
-          AnchoredMenuItem(
-            icon: const Icon(
-              Icons.copy_rounded,
-              color: EverloreTheme.ash,
-              size: 16,
-            ),
-            label: 'Copy response',
-            onTap: () {
-              Clipboard.setData(
-                ClipboardData(text: event.aiResponse?.trim() ?? ''),
-              );
-              showEverloreNotice(
-                context,
-                'Copied',
-                tone: NoticeTone.info,
-              );
-            },
-          ),
-        if (hasAiResponse)
-          AnchoredMenuItem(
-            icon: const Icon(
-              Icons.edit_outlined,
-              color: EverloreTheme.violetBright,
-              size: 16,
-            ),
-            label: 'Edit response',
-            onTap: () => _showEditResponseDialog(context, cubit, event),
-          ),
-        AnchoredMenuItem(
-          icon: const Icon(
-            Icons.history_toggle_off,
-            color: EverloreTheme.crimson,
-            size: 16,
-          ),
-          label: 'Rewind to here',
-          onTap: () => _confirmRewind(context, cubit, event.sequence),
-        ),
-      ],
+      items: PlayScreen.buildTurnMenuItems(
+        context: context,
+        cubit: cubit,
+        event: event,
+        canReplay: canReplay,
+        onEditResponse: () => _showEditResponseDialog(context, cubit, event),
+        onRewind: () => _confirmRewind(context, cubit, event.sequence),
+      ),
     );
   }
 

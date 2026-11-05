@@ -137,8 +137,10 @@ class ModerationRepository {
         'target_type': targetType,
         'target_id': targetId,
         'reason': reason.wire,
-        if (characterId != null) 'character_id': characterId,
-        if (text != null) 'text': text,
+        if (characterId != null && targetType != 'chat_line')
+          'character_id': characterId,
+        if (text != null && targetType != 'chat_line')
+          'text': text,
         if (details != null && details.trim().isNotEmpty)
           'details': details.trim(),
       },
