@@ -285,13 +285,16 @@ void main() {
       expect(h.repo.selfieCalls, hasLength(1));
     });
 
-    test('a ready or unseen picture is not asked for again', () async {
+    test('a ready picture is not asked for again', () async {
       final ready = await room(selfie: {'status': 'ready', 'media_id': 'a', 'url': 'u'});
       await ready.cubit.requestSelfie(line(ready));
+      expect(ready.repo.selfieCalls, isEmpty);
+    });
+
+    test('a picture a check stopped can be asked for again', () async {
       final unseen = await room(selfie: {'status': 'unseen', 'media_id': 'a'});
       await unseen.cubit.requestSelfie(line(unseen));
-      expect(ready.repo.selfieCalls, isEmpty);
-      expect(unseen.repo.selfieCalls, isEmpty);
+      expect(unseen.repo.selfieCalls, hasLength(1));
     });
 
     test('resting before the reset does nothing; after it, asks the server', () async {

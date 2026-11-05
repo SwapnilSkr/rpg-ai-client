@@ -739,12 +739,13 @@ class GroupChatCubit extends Cubit<GroupChatState> {
       switch (held.status) {
         case SelfieStatus.queued ||
             SelfieStatus.processing ||
-            SelfieStatus.ready ||
-            SelfieStatus.unseen:
+            SelfieStatus.ready:
           return;
         case SelfieStatus.resting:
           if (held.isRestingAt(_clock.now())) return;
-        case SelfieStatus.failed:
+        // A picture a check stopped has already given its slot back, and the
+        // next try is a new picture, so it is asked for like a failed one.
+        case SelfieStatus.unseen || SelfieStatus.failed:
           break;
       }
     }
