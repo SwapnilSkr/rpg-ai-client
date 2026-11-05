@@ -17,6 +17,7 @@ import 'core/guide/guide_controller.dart';
 import 'core/guide/widgets/guide_host.dart';
 import 'core/guest/keep_story_host.dart';
 import 'core/telemetry/route_name.dart';
+import 'core/push/push_service.dart';
 import 'core/reminders/reminder_service.dart';
 import 'core/telemetry/telemetry.dart';
 import 'features/group_chat/state/chats_cubit.dart';
@@ -60,6 +61,10 @@ Future<void> main() async {
       debugPrintStack(stackTrace: stack);
     }
   }
+  // After Firebase, which it needs. Same shape as reminders: never throws, a
+  // cold-start tap on a message is held until the router has left the splash,
+  // and registering the device runs in the background.
+  final pushReady = PushService.instance.init();
   // Warm the device-cached guide record before the first frame so an arc can
   // never flash in a beat late; the account's copy folds in at splash.
   await guide.init();
@@ -72,6 +77,7 @@ Future<void> main() async {
   }
   await telemetryReady;
   await remindersReady;
+  await pushReady;
   // Cinzel and EB Garamond ship in assets/google_fonts. With fetching off, a
   // weight someone forgot to bundle fails loudly in debug instead of quietly
   // downloading (and, offline, falling back to a system font on every title).

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../network/api_client.dart';
 import '../guest/guest_session.dart';
 import '../network/ws_manager.dart';
+import '../push/push_service.dart';
 import '../guide/guide_controller.dart';
 import '../onboarding/interests_store.dart';
 import '../reminders/reminder_service.dart';
@@ -60,6 +61,9 @@ class AuthService {
     await InterestsStore.syncFromUser(user);
     await _hydrateGuide(user);
     _bumpSessionEpoch();
+    // This phone now belongs to the signed-in player. Not awaited: sign-in
+    // never waits on it, and it skips a guest on its own.
+    unawaited(PushService.instance.onSessionStarted());
   }
 
   static Future<User> register({
@@ -197,6 +201,9 @@ class AuthService {
   /// Ends the local session. For a guest that is all it does: nothing is sent,
   /// and the server drops an abandoned guest after 30 days.
   static Future<void> logout() async {
+    // First, while the session token still authorises it: the server stops
+    // sending character messages to this phone. Bounded, never throws.
+    await PushService.instance.onSigningOut();
     GuestSession.instance.clear();
     await _wsManager.disconnect(clearToken: true);
     // Pending reminders would otherwise fire into the next player's session.
