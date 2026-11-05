@@ -261,10 +261,13 @@ class _ReportSheetState extends State<_ReportSheet> {
     final title = (widget.targetType == 'group_line' ||
             widget.targetType == 'chat_line')
         ? 'Report this message'
-        : 'Report this ${widget.targetType == 'user' ? 'creator' : 'world'}';
+        : widget.targetType == 'group_selfie'
+            ? 'Report this picture'
+            : 'Report this ${widget.targetType == 'user' ? 'creator' : 'world'}';
 
     final blurb = (widget.targetType == 'group_line' ||
-            widget.targetType == 'chat_line')
+            widget.targetType == 'chat_line' ||
+            widget.targetType == 'group_selfie')
         ? 'Reports are private, and we read every one.'
         : 'Reports are private — the creator is never told who reported them. '
             'Anything that breaks our rules is removed.';
