@@ -44,6 +44,7 @@ class GroupMessageList extends StatefulWidget {
 class _GroupMessageListState extends State<GroupMessageList> {
   final _scrollController = ScrollController();
   int _lastLineCount = 0;
+  double? _lastViewportHeight;
 
   @override
   void initState() {
@@ -119,41 +120,60 @@ class _GroupMessageListState extends State<GroupMessageList> {
       );
     }
 
-    return ListView.builder(
-      controller: _scrollController,
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      itemCount: widget.lines.length,
-      itemBuilder: (context, index) {
-        final line = widget.lines[index];
-        final member = line.characterId != null
-            ? widget.memberMap[line.characterId!]
-            : null;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (_lastViewportHeight != null &&
+            _lastViewportHeight != constraints.maxHeight) {
+          final wasAtBottom = _isNearBottom();
+          _lastViewportHeight = constraints.maxHeight;
+          if (wasAtBottom) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _scrollController.hasClients) {
+                _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+              }
+            });
+          }
+        } else {
+          _lastViewportHeight = constraints.maxHeight;
+        }
 
-        final isFirstInGroup = index == 0 ||
-            widget.lines[index - 1].characterId != line.characterId ||
-            widget.lines[index - 1].isPlayer != line.isPlayer ||
-            widget.lines[index - 1].isAction != line.isAction;
+        return ListView.builder(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          itemCount: widget.lines.length,
+          itemBuilder: (context, index) {
+            final line = widget.lines[index];
+            final member = line.characterId != null
+                ? widget.memberMap[line.characterId!]
+                : null;
 
-        final isLastInGroup = index == widget.lines.length - 1 ||
-            widget.lines[index + 1].characterId != line.characterId ||
-            widget.lines[index + 1].isPlayer != line.isPlayer ||
-            widget.lines[index + 1].isAction != line.isAction;
+            final isFirstInGroup = index == 0 ||
+                widget.lines[index - 1].characterId != line.characterId ||
+                widget.lines[index - 1].isPlayer != line.isPlayer ||
+                widget.lines[index - 1].isAction != line.isAction;
 
-        return GroupMessageBubble(
-          key: ValueKey(line.key),
-          line: line,
-          member: member,
-          isFirstInGroup: isFirstInGroup,
-          isLastInGroup: isLastInGroup,
-          onCharacterTap: member != null && widget.onCharacterTap != null
-              ? () => widget.onCharacterTap!(member)
-              : null,
-          onReportLine: widget.onReportLine,
-          onRewindLine: widget.onRewindLine,
-          onRequestSelfie: widget.onRequestSelfie,
-          onReportSelfie: widget.onReportSelfie,
-          composerTop: _resolveComposerTop,
+            final isLastInGroup = index == widget.lines.length - 1 ||
+                widget.lines[index + 1].characterId != line.characterId ||
+                widget.lines[index + 1].isPlayer != line.isPlayer ||
+                widget.lines[index + 1].isAction != line.isAction;
+
+            return GroupMessageBubble(
+              key: ValueKey(line.key),
+              line: line,
+              member: member,
+              isFirstInGroup: isFirstInGroup,
+              isLastInGroup: isLastInGroup,
+              onCharacterTap: member != null && widget.onCharacterTap != null
+                  ? () => widget.onCharacterTap!(member)
+                  : null,
+              onReportLine: widget.onReportLine,
+              onRewindLine: widget.onRewindLine,
+              onRequestSelfie: widget.onRequestSelfie,
+              onReportSelfie: widget.onReportSelfie,
+              composerTop: _resolveComposerTop,
+            );
+          },
         );
       },
     );

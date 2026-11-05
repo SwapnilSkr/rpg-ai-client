@@ -4,6 +4,7 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../models/group_chat_models.dart';
 import '../../state/group_chat_state.dart';
 import 'group_chat_backdrop.dart';
+import 'group_reply_ideas.dart';
 import 'member_avatar.dart';
 
 /// Bottom composer for group and direct threads with actions toggle, `@` member suggestions,
@@ -12,6 +13,8 @@ class GroupComposer extends StatefulWidget {
   final List<GroupMember> members;
   final String? typingName;
   final List<FailedSend> failedSends;
+  final List<String> replyIdeas;
+  final ValueChanged<String>? onSendIdea;
   final void Function(String text, bool isAction) onSend;
   final ValueChanged<String> onRetryFailed;
   final ValueChanged<String> onDiscardFailed;
@@ -23,6 +26,8 @@ class GroupComposer extends StatefulWidget {
     this.members = const [],
     this.typingName,
     this.failedSends = const [],
+    this.replyIdeas = const [],
+    this.onSendIdea,
     required this.onSend,
     required this.onRetryFailed,
     required this.onDiscardFailed,
@@ -38,6 +43,7 @@ class _GroupComposerState extends State<GroupComposer> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   bool _isAction = false;
+  bool _hadText = false;
   List<GroupMember> _mentionSuggestions = [];
   int _mentionStartIndex = -1;
 
@@ -56,14 +62,19 @@ class _GroupComposerState extends State<GroupComposer> {
   }
 
   void _onTextChanged() {
+    final text = _controller.text;
+    final hasText = text.trim().isNotEmpty;
+    if (hasText != _hadText) {
+      _hadText = hasText;
+      setState(() {});
+    }
+
     if (!widget.enableMentions) {
       if (_mentionSuggestions.isNotEmpty) {
         setState(() => _mentionSuggestions = []);
       }
       return;
     }
-
-    final text = _controller.text;
     final selection = _controller.selection;
     if (selection.baseOffset < 0) {
       if (_mentionSuggestions.isNotEmpty) {
@@ -142,121 +153,145 @@ class _GroupComposerState extends State<GroupComposer> {
         ? "Say what you do. They'll react."
         : 'Type a message…';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: EverloreTheme.void0.withValues(alpha: kGroupChromeAlpha),
-        border: const Border(
-          top: BorderSide(color: EverloreTheme.white10, width: 0.9),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Typing line
-            if (widget.typingName != null) _buildTypingBar(widget.typingName!),
-            // Failed send bar
-            if (widget.failedSends.isNotEmpty) ...[
-              for (final failed in widget.failedSends) _buildFailedBar(failed),
-            ],
-            // Mention suggestions
-            if (_mentionSuggestions.isNotEmpty) _buildMentionSuggestions(),
-            // Input row
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  // Action toggle button (Group only)
-                  if (widget.enableActionToggle)
-                    IconButton(
-                      icon: Icon(
-                        _isAction
-                            ? Icons.auto_awesome
-                            : Icons.auto_awesome_outlined,
-                        color: _isAction
-                            ? EverloreTheme.goldGlow
-                            : EverloreTheme.ash,
-                        size: 22,
-                      ),
-                      tooltip: _isAction ? 'Action mode on' : 'Write an action',
-                      onPressed: () => setState(() => _isAction = !_isAction),
-                    ),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: EverloreTheme.void2,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: _isAction
-                              ? EverloreTheme.goldDim
-                              : EverloreTheme.white10,
-                          width: 1,
-                        ),
-                      ),
-                      child: TextField(
-                        controller: _controller,
-                        focusNode: _focusNode,
-                        maxLines: 4,
-                        minLines: 1,
-                        style: EverloreTheme.body.copyWith(
-                          fontSize: 15,
-                          fontStyle: _isAction
-                              ? FontStyle.italic
-                              : FontStyle.normal,
-                          color: EverloreTheme.parchment,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: hint,
-                          hintStyle: EverloreTheme.caption.copyWith(
-                            color: EverloreTheme.ash.withValues(alpha: 0.7),
-                            fontStyle: _isAction
-                                ? FontStyle.italic
-                                : FontStyle.normal,
-                            fontSize: 14,
-                          ),
-                          // The app theme fills and outlines inputs; here the
-                          // surrounding pill is the only box.
-                          filled: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 10,
-                          ),
-                        ),
-                        onSubmitted: (_) => _handleSend(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Send button (always usable)
-                  IconButton(
-                    icon: const Icon(
-                      Icons.arrow_upward_rounded,
-                      color: EverloreTheme.gold,
-                      size: 24,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: EverloreTheme.void3,
-                      padding: const EdgeInsets.all(8),
-                      shape: const CircleBorder(
-                        side: BorderSide(
-                          color: EverloreTheme.goldDim,
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                    onPressed: _handleSend,
-                  ),
-                ],
-              ),
+    final isKeyboardUp =
+        MediaQuery.of(context).viewInsets.bottom > 0 ||
+        View.of(context).viewInsets.bottom > 0;
+    final hasText = _controller.text.trim().isNotEmpty;
+    final hideIdeas = isKeyboardUp && hasText;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.replyIdeas.isNotEmpty &&
+            widget.onSendIdea != null &&
+            !hideIdeas)
+          GroupReplyIdeas(
+            ideas: widget.replyIdeas,
+            onSendIdea: widget.onSendIdea!,
+            hidden: hideIdeas,
+          ),
+        Container(
+          decoration: BoxDecoration(
+            color: EverloreTheme.void0.withValues(alpha: kGroupChromeAlpha),
+            border: const Border(
+              top: BorderSide(color: EverloreTheme.white10, width: 0.9),
             ),
-          ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Typing line
+                if (widget.typingName != null)
+                  _buildTypingBar(widget.typingName!),
+                // Failed send bar
+                if (widget.failedSends.isNotEmpty) ...[
+                  for (final failed in widget.failedSends)
+                    _buildFailedBar(failed),
+                ],
+                // Mention suggestions
+                if (_mentionSuggestions.isNotEmpty) _buildMentionSuggestions(),
+                // Input row
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Action toggle button (Group only)
+                      if (widget.enableActionToggle)
+                        IconButton(
+                          icon: Icon(
+                            _isAction
+                                ? Icons.auto_awesome
+                                : Icons.auto_awesome_outlined,
+                            color: _isAction
+                                ? EverloreTheme.goldGlow
+                                : EverloreTheme.ash,
+                            size: 22,
+                          ),
+                          tooltip: _isAction
+                              ? 'Action mode on'
+                              : 'Write an action',
+                          onPressed: () =>
+                              setState(() => _isAction = !_isAction),
+                        ),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          decoration: BoxDecoration(
+                            color: EverloreTheme.void2,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _isAction
+                                  ? EverloreTheme.goldDim
+                                  : EverloreTheme.white10,
+                              width: 1,
+                            ),
+                          ),
+                          child: TextField(
+                            controller: _controller,
+                            focusNode: _focusNode,
+                            maxLines: 4,
+                            minLines: 1,
+                            style: EverloreTheme.body.copyWith(
+                              fontSize: 15,
+                              fontStyle: _isAction
+                                  ? FontStyle.italic
+                                  : FontStyle.normal,
+                              color: EverloreTheme.parchment,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: hint,
+                              hintStyle: EverloreTheme.caption.copyWith(
+                                color: EverloreTheme.ash.withValues(alpha: 0.7),
+                                fontStyle: _isAction
+                                    ? FontStyle.italic
+                                    : FontStyle.normal,
+                                fontSize: 14,
+                              ),
+                              // The app theme fills and outlines inputs; here the
+                              // surrounding pill is the only box.
+                              filled: false,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 10,
+                              ),
+                            ),
+                            onSubmitted: (_) => _handleSend(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Send button (always usable)
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_upward_rounded,
+                          color: EverloreTheme.gold,
+                          size: 24,
+                        ),
+                        style: IconButton.styleFrom(
+                          backgroundColor: EverloreTheme.void3,
+                          padding: const EdgeInsets.all(8),
+                          shape: const CircleBorder(
+                            side: BorderSide(
+                              color: EverloreTheme.goldDim,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        onPressed: _handleSend,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 

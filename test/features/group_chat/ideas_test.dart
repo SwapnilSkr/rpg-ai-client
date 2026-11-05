@@ -1,4 +1,3 @@
-import 'package:everlore/features/group_chat/models/group_chat_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';

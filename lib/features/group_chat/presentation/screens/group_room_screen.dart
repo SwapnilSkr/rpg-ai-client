@@ -499,6 +499,8 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                           members: state.members,
                           typingName: typingName,
                           failedSends: failedSends,
+                          replyIdeas: state.replyIdeasFor(),
+                          onSendIdea: (idea) => _cubit.sendIdea(idea),
                           enableMentions: true,
                           enableActionToggle: true,
                           onSend: (text, isAction) {
