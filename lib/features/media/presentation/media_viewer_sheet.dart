@@ -75,6 +75,7 @@ class _PictureView extends StatelessWidget {
         child: EverloreNetworkImage(
           imageUrl: url,
           fit: BoxFit.contain,
+          fullResolution: true,
         ),
       ),
     );

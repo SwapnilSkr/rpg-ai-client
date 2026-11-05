@@ -79,6 +79,8 @@ class _KeepsakesViewerScreenState extends State<KeepsakesViewerScreen> {
       final target = index + i;
       if (target < widget.items.length) {
         final item = widget.items[target];
+        // Both page kinds decode unsized, so this warms the very copy the
+        // next page will show.
         final url = item.isVideo ? (item.posterUrl ?? item.url) : item.url;
         if (url.isNotEmpty) {
           precacheImage(CachedNetworkImageProvider(url), context).catchError((_) {});
@@ -351,6 +353,7 @@ class _ViewerPieceState extends State<_ViewerPiece>
           ? EverloreNetworkImage(
               imageUrl: poster,
               fit: BoxFit.cover,
+              fullResolution: true,
               placeholder: const DecoratedBox(
                 decoration: BoxDecoration(color: EverloreTheme.void1),
               ),
@@ -362,6 +365,7 @@ class _ViewerPieceState extends State<_ViewerPiece>
     final picture = EverloreNetworkImage(
       imageUrl: widget.item.url,
       fit: BoxFit.cover,
+      fullResolution: true,
       placeholder: const DecoratedBox(
         decoration: BoxDecoration(color: EverloreTheme.void1),
       ),
@@ -551,6 +555,8 @@ class _ViewerPieceState extends State<_ViewerPiece>
                     ? EverloreNetworkImage(
                         imageUrl: widget.item.url,
                         fit: BoxFit.cover,
+                        // Blur 25 at 0.35 opacity hides any detail beyond this.
+                        memCacheWidth: 240,
                         placeholder: const DecoratedBox(
                           decoration: BoxDecoration(color: EverloreTheme.void1),
                         ),
