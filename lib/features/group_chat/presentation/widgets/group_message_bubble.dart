@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../shared/widgets/everlore_notice.dart';
 import '../../../moderation/presentation/report_sheet.dart';
+import '../../../play/presentation/widgets/anchored_menu_popup.dart';
 import '../../models/group_chat_models.dart';
 import 'member_avatar.dart';
 
@@ -14,6 +16,7 @@ class GroupMessageBubble extends StatelessWidget {
   final bool isLastInGroup;
   final VoidCallback? onCharacterTap;
   final void Function(GroupLine line, String speakerName)? onReportLine;
+  final double? Function()? composerTop;
 
   const GroupMessageBubble({
     super.key,
@@ -23,6 +26,7 @@ class GroupMessageBubble extends StatelessWidget {
     this.isLastInGroup = true,
     this.onCharacterTap,
     this.onReportLine,
+    this.composerTop,
   });
 
   @override
@@ -36,28 +40,100 @@ class GroupMessageBubble extends StatelessWidget {
     return _buildCharacterBubble(context);
   }
 
+  void _openMenu(BuildContext bubbleContext) {
+    HapticFeedback.lightImpact();
+
+    final displayName = line.name.isNotEmpty
+        ? line.name
+        : (member?.name ?? 'Someone');
+
+    final canReport = !line.isPlayer &&
+        !line.isAction &&
+        line.eventId != null &&
+        line.characterId != null &&
+        line.characterId!.isNotEmpty;
+
+    final rect = globalRectOf(bubbleContext);
+
+    showAnchoredMenu<void>(
+      context: bubbleContext,
+      anchorRect: rect,
+      composerTop: composerTop?.call(),
+      items: [
+        AnchoredMenuItem(
+          icon: const Icon(
+            Icons.copy_rounded,
+            color: EverloreTheme.ash,
+            size: 16,
+          ),
+          label: 'Copy',
+          onTap: () {
+            Clipboard.setData(
+              ClipboardData(text: line.text.trim()),
+            );
+            if (!bubbleContext.mounted) return;
+            showEverloreNotice(
+              bubbleContext,
+              'Copied',
+              tone: NoticeTone.info,
+            );
+          },
+        ),
+        if (canReport)
+          AnchoredMenuItem(
+            icon: const Icon(
+              Icons.flag_outlined,
+              color: EverloreTheme.crimson,
+              size: 16,
+            ),
+            label: 'Report',
+            onTap: () {
+              if (!bubbleContext.mounted) return;
+              if (onReportLine != null) {
+                onReportLine!(line, displayName);
+              } else {
+                showReportLineSheet(
+                  bubbleContext,
+                  eventId: line.eventId!,
+                  characterId: line.characterId!,
+                  text: line.text,
+                  speakerName: displayName,
+                );
+              }
+            },
+          ),
+      ],
+    );
+  }
+
   Widget _buildActionLine() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            color: EverloreTheme.void2.withValues(alpha: 0.8),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: EverloreTheme.goldDim.withValues(alpha: 0.3),
-              width: 0.8,
-            ),
-          ),
-          child: Text(
-            line.text,
-            textAlign: TextAlign.center,
-            style: EverloreTheme.aiText.copyWith(
-              fontSize: 15,
-              height: 1.4,
-              fontStyle: FontStyle.italic,
-              color: EverloreTheme.goldGlow,
+        child: Builder(
+          builder: (bubbleContext) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPress: () => _openMenu(bubbleContext),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: EverloreTheme.void2.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.3),
+                  width: 0.8,
+                ),
+              ),
+              child: Text(
+                line.text,
+                textAlign: TextAlign.center,
+                style: EverloreTheme.aiText.copyWith(
+                  fontSize: 15,
+                  height: 1.4,
+                  fontStyle: FontStyle.italic,
+                  color: EverloreTheme.goldGlow,
+                ),
+              ),
             ),
           ),
         ),
@@ -81,27 +157,33 @@ class GroupMessageBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: EverloreTheme.void3,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: Radius.circular(isFirstInGroup ? 16 : 4),
-                bottomLeft: const Radius.circular(16),
-                bottomRight: Radius.circular(isLastInGroup ? 16 : 4),
-              ),
-              border: Border.all(
-                color: EverloreTheme.goldDim.withValues(alpha: 0.28),
-                width: 0.9,
-              ),
-            ),
-            child: Text(
-              line.text,
-              style: EverloreTheme.aiText.copyWith(
-                fontSize: 16,
-                height: 1.45,
-                color: EverloreTheme.parchment,
+          Builder(
+            builder: (bubbleContext) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onLongPress: () => _openMenu(bubbleContext),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: EverloreTheme.void3,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(16),
+                    topRight: Radius.circular(isFirstInGroup ? 16 : 4),
+                    bottomLeft: const Radius.circular(16),
+                    bottomRight: Radius.circular(isLastInGroup ? 16 : 4),
+                  ),
+                  border: Border.all(
+                    color: EverloreTheme.goldDim.withValues(alpha: 0.28),
+                    width: 0.9,
+                  ),
+                ),
+                child: Text(
+                  line.text,
+                  style: EverloreTheme.aiText.copyWith(
+                    fontSize: 16,
+                    height: 1.45,
+                    color: EverloreTheme.parchment,
+                  ),
+                ),
               ),
             ),
           ),
@@ -128,9 +210,6 @@ class GroupMessageBubble extends StatelessWidget {
     final displayName = line.name.isNotEmpty
         ? line.name
         : (member?.name ?? 'Someone');
-    final canReport = line.eventId != null &&
-        line.characterId != null &&
-        line.characterId!.isNotEmpty;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(16, topPadding, 54, bottomPadding),
@@ -170,48 +249,35 @@ class GroupMessageBubble extends StatelessWidget {
                       ),
                     ),
                   ),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onLongPress: canReport
-                      ? () {
-                          HapticFeedback.lightImpact();
-                          if (onReportLine != null) {
-                            onReportLine!(line, displayName);
-                          } else {
-                            showReportLineSheet(
-                              context,
-                              eventId: line.eventId!,
-                              characterId: line.characterId!,
-                              text: line.text,
-                              speakerName: displayName,
-                            );
-                          }
-                        }
-                      : null,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: EverloreTheme.void2,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(isFirstInGroup ? 16 : 4),
-                        topRight: const Radius.circular(16),
-                        bottomLeft: Radius.circular(isLastInGroup ? 16 : 4),
-                        bottomRight: const Radius.circular(16),
+                Builder(
+                  builder: (bubbleContext) => GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onLongPress: () => _openMenu(bubbleContext),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
                       ),
-                      border: Border.all(
-                        color: EverloreTheme.white10,
-                        width: 0.9,
+                      decoration: BoxDecoration(
+                        color: EverloreTheme.void2,
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(isFirstInGroup ? 16 : 4),
+                          topRight: const Radius.circular(16),
+                          bottomLeft: Radius.circular(isLastInGroup ? 16 : 4),
+                          bottomRight: const Radius.circular(16),
+                        ),
+                        border: Border.all(
+                          color: EverloreTheme.white10,
+                          width: 0.9,
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      line.text,
-                      style: EverloreTheme.aiText.copyWith(
-                        fontSize: 16,
-                        height: 1.45,
-                        color: EverloreTheme.parchment,
+                      child: Text(
+                        line.text,
+                        style: EverloreTheme.aiText.copyWith(
+                          fontSize: 16,
+                          height: 1.45,
+                          color: EverloreTheme.parchment,
+                        ),
                       ),
                     ),
                   ),

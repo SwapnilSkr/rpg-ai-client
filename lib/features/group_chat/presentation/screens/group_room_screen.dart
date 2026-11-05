@@ -8,6 +8,7 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../../../core/network/ws_manager.dart';
 import '../../../../shared/widgets/everlore_notice.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
+import '../../../play/presentation/widgets/anchored_menu_popup.dart';
 import '../../data/group_chat_gateway.dart';
 import '../../models/group_chat_models.dart';
 import '../../state/chats_cubit.dart';
@@ -44,10 +45,13 @@ class GroupRoomScreen extends StatefulWidget {
 
 class _GroupRoomScreenState extends State<GroupRoomScreen>
     with SingleTickerProviderStateMixin {
+  final GlobalKey _composerKey = GlobalKey();
   late final GroupChatCubit _cubit;
   late final TabController _tabController;
   late final ChatsCubit _chats;
   bool _openedDirectThreadOnce = false;
+
+  double? get _composerTop => globalRectOf(_composerKey.currentContext)?.top;
 
   @override
   void initState() {
@@ -469,9 +473,11 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                             memberMap: memberMap,
                             onCharacterTap: _openCharacterSheet,
                             someoneTyping: typingName != null,
+                            composerTop: () => _composerTop,
                           ),
                         ),
                         GroupComposer(
+                          key: _composerKey,
                           members: state.members,
                           typingName: typingName,
                           failedSends: failedSends,

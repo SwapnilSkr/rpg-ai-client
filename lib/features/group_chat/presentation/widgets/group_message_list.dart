@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../play/presentation/widgets/anchored_menu_popup.dart';
 import '../../models/group_chat_models.dart';
 import 'group_message_bubble.dart';
 
@@ -13,6 +14,7 @@ class GroupMessageList extends StatefulWidget {
 
   /// Someone is about to speak, so an empty room isn't waiting on the player.
   final bool someoneTyping;
+  final double? Function()? composerTop;
 
   const GroupMessageList({
     super.key,
@@ -21,6 +23,7 @@ class GroupMessageList extends StatefulWidget {
     this.onCharacterTap,
     this.onReportLine,
     this.someoneTyping = false,
+    this.composerTop,
   });
 
   @override
@@ -77,6 +80,14 @@ class _GroupMessageListState extends State<GroupMessageList> {
     }
   }
 
+  double? _resolveComposerTop() {
+    if (widget.composerTop != null) {
+      final explicit = widget.composerTop!();
+      if (explicit != null) return explicit;
+    }
+    return globalRectOf(context)?.bottom;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.lines.isEmpty) {
@@ -128,6 +139,7 @@ class _GroupMessageListState extends State<GroupMessageList> {
               ? () => widget.onCharacterTap!(member)
               : null,
           onReportLine: widget.onReportLine,
+          composerTop: _resolveComposerTop,
         );
       },
     );

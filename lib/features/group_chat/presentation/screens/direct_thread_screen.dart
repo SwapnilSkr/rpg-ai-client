@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../play/presentation/widgets/anchored_menu_popup.dart';
 import '../../models/group_chat_models.dart';
 import '../../state/chats_cubit.dart';
 import '../../state/group_chat_cubit.dart';
@@ -30,7 +31,10 @@ class DirectThreadScreen extends StatefulWidget {
 }
 
 class _DirectThreadScreenState extends State<DirectThreadScreen> {
+  final GlobalKey _composerKey = GlobalKey();
   late final ChatsCubit _chats;
+
+  double? get _composerTop => globalRectOf(_composerKey.currentContext)?.top;
 
   @override
   void initState() {
@@ -152,6 +156,7 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
                     child: GroupMessageList(
                       lines: thread.lines,
                       memberMap: memberMap,
+                      composerTop: () => _composerTop,
                       onCharacterTap: (_) => BondSheet.show(
                         context,
                         cubit: widget.cubit,
@@ -160,6 +165,7 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
                     ),
                   ),
                   GroupComposer(
+                    key: _composerKey,
                     members: [widget.member],
                     typingName: typingName,
                     failedSends: failedSends,

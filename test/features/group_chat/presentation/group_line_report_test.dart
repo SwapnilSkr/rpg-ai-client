@@ -14,6 +14,7 @@ import 'package:everlore/features/group_chat/models/group_chat_models.dart';
 import 'package:everlore/features/group_chat/presentation/widgets/group_message_bubble.dart';
 import 'package:everlore/features/group_chat/presentation/widgets/group_message_list.dart';
 import 'package:everlore/features/group_chat/presentation/widgets/member_avatar.dart';
+import 'package:everlore/features/play/presentation/widgets/anchored_menu_popup.dart';
 
 Widget _host(Widget child) => MaterialApp(
   home: Scaffold(body: child),
@@ -24,6 +25,7 @@ typedef HttpHandler = Future<http.Response> Function(http.Request request);
 void main() {
   final List<MethodCall> platformCalls = [];
   HttpHandler? currentHandler;
+  Map<String, dynamic>? clipboardData;
 
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -49,6 +51,13 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
       platformCalls.add(call);
+      if (call.method == 'Clipboard.setData') {
+        clipboardData = call.arguments as Map<String, dynamic>?;
+        return null;
+      }
+      if (call.method == 'Clipboard.getData') {
+        return clipboardData;
+      }
       return null;
     });
 
@@ -68,10 +77,11 @@ void main() {
   setUp(() {
     platformCalls.clear();
     currentHandler = null;
+    clipboardData = null;
   });
 
   group('GroupMessageBubble - reporting lines', () {
-    testWidgets('long press on a saved character line opens sheet with line and light haptic', (tester) async {
+    testWidgets('long press on a saved character line shows Copy and Report, and Report opens sheet with line', (tester) async {
       Map<String, dynamic>? sentBody;
 
       currentHandler = (request) async {
@@ -121,6 +131,14 @@ void main() {
         isTrue,
       );
 
+      // Check anchored menu opened showing Copy and Report
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Report'), findsOneWidget);
+
+      // Tap on Report
+      await tester.tap(find.text('Report'));
+      await tester.pumpAndSettle();
+
       // Check report sheet opened with line and speaker name
       expect(find.text('Report this message'), findsOneWidget);
       expect(find.text('Jess'), findsNWidgets(2)); // bubble name + sheet header
@@ -143,7 +161,46 @@ void main() {
       expect(sentBody!['reason'], 'harassment_or_hate');
     });
 
-    testWidgets('long press on a player line does not open the sheet', (tester) async {
+    testWidgets('Copy writes trimmed text to clipboard and shows notice', (tester) async {
+      final line = GroupLine(
+        key: 'line-copy',
+        characterId: 'char-jess',
+        name: 'Jess',
+        text: '   See you at the gates.   ',
+        shownAt: DateTime.utc(2026, 11, 4, 12),
+        eventId: 'event-999',
+      );
+
+      await tester.pumpWidget(
+        _host(GroupMessageBubble(line: line)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text('   See you at the gates.   '));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Copy'), findsOneWidget);
+      await tester.tap(find.text('Copy'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Copied'), findsOneWidget);
+
+      final clip = await Clipboard.getData(Clipboard.kTextPlain);
+      expect(clip?.text, 'See you at the gates.');
+      expect(
+        platformCalls.any((call) =>
+            call.method == 'Clipboard.setData' &&
+            call.arguments is Map &&
+            (call.arguments as Map)['text'] == 'See you at the gates.'),
+        isTrue,
+      );
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('long press on a player line shows Copy only', (tester) async {
       final playerLine = GroupLine(
         key: 'player-1',
         text: 'I am on my way now.',
@@ -160,14 +217,59 @@ void main() {
       await tester.longPress(find.text('I am on my way now.'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Report this message'), findsNothing);
       expect(
-        platformCalls.any((call) => call.method == 'HapticFeedback.vibrate'),
-        isFalse,
+        platformCalls.any((call) =>
+            call.method == 'HapticFeedback.vibrate' &&
+            call.arguments == 'HapticFeedbackType.lightImpact'),
+        isTrue,
       );
+
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Report'), findsNothing);
+      expect(find.text('Report this message'), findsNothing);
+
+      await tester.tap(find.text('Copy'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Copied'), findsOneWidget);
+
+      final clip = await Clipboard.getData(Clipboard.kTextPlain);
+      expect(clip?.text, 'I am on my way now.');
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
     });
 
-    testWidgets('long press on an unsaved character line does not open the sheet', (tester) async {
+    testWidgets('long press on a sending player line shows Copy only', (tester) async {
+      final sendingLine = GroupLine(
+        key: 'player-sending',
+        text: 'Hold the door!',
+        shownAt: DateTime.utc(2026, 11, 4, 12, 1),
+        status: GroupLineStatus.sending,
+      );
+
+      await tester.pumpWidget(
+        _host(GroupMessageBubble(line: sendingLine)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text('Hold the door!'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Report'), findsNothing);
+      expect(find.text('Report this message'), findsNothing);
+
+      await tester.tap(find.text('Copy'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Copied'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('long press on an unsaved character line shows Copy only', (tester) async {
       final unsavedLine = GroupLine(
         key: 'unsaved-1',
         characterId: 'char-jess',
@@ -185,14 +287,19 @@ void main() {
       await tester.longPress(find.text('This line is not yet saved to an event.'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Report this message'), findsNothing);
       expect(
-        platformCalls.any((call) => call.method == 'HapticFeedback.vibrate'),
-        isFalse,
+        platformCalls.any((call) =>
+            call.method == 'HapticFeedback.vibrate' &&
+            call.arguments == 'HapticFeedbackType.lightImpact'),
+        isTrue,
       );
+
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Report'), findsNothing);
+      expect(find.text('Report this message'), findsNothing);
     });
 
-    testWidgets('long press on an action line does not open the sheet', (tester) async {
+    testWidgets('long press on an action line shows Copy only', (tester) async {
       final actionLine = GroupLine(
         key: 'action-1',
         text: 'Sam poured a cup of tea.',
@@ -209,6 +316,15 @@ void main() {
       await tester.longPress(find.text('Sam poured a cup of tea.'));
       await tester.pumpAndSettle();
 
+      expect(
+        platformCalls.any((call) =>
+            call.method == 'HapticFeedback.vibrate' &&
+            call.arguments == 'HapticFeedbackType.lightImpact'),
+        isTrue,
+      );
+
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Report'), findsNothing);
       expect(find.text('Report this message'), findsNothing);
     });
 
@@ -251,10 +367,44 @@ void main() {
       await tester.pumpAndSettle();
       expect(avatarTaps, 2);
     });
+
+    testWidgets('menu does not sit below composerTop when room is limited', (tester) async {
+      tester.view.physicalSize = const Size(800, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final line = GroupLine(
+        key: 'line-composer',
+        text: 'Near the composer',
+        shownAt: DateTime.utc(2026, 11, 4, 12),
+      );
+
+      await tester.pumpWidget(
+        _host(
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: GroupMessageBubble(
+              line: line,
+              composerTop: () => 900.0,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text('Near the composer'));
+      await tester.pumpAndSettle();
+
+      final menuFinder = find.byType(AnchoredMenuPopup);
+      expect(menuFinder, findsOneWidget);
+      final menuRect = tester.getRect(menuFinder);
+      expect(menuRect.bottom, lessThanOrEqualTo(900.0));
+    });
   });
 
   group('GroupMessageList - scrolling and reporting in list', () {
-    testWidgets('long press inside GroupMessageList opens report sheet with the line', (tester) async {
+    testWidgets('long press inside GroupMessageList opens menu and Report opens report sheet with the line', (tester) async {
       final jess = const GroupMember(id: 'jess', name: 'Jess', role: 'Friend');
       final lines = [
         GroupLine(
@@ -287,6 +437,13 @@ void main() {
       await tester.longPress(find.text('First saved message in group'));
       await tester.pumpAndSettle();
 
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Report'), findsOneWidget);
+
+      // Tap Report to open sheet
+      await tester.tap(find.text('Report'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Report this message'), findsOneWidget);
       expect(find.text('First saved message in group'), findsNWidgets(2));
 
@@ -296,11 +453,12 @@ void main() {
 
       expect(find.text('Report this message'), findsNothing);
 
-      // Long press player line does nothing
+      // Long press player line opens menu with Copy only
       await tester.longPress(find.text('My reply as a player'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Report this message'), findsNothing);
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Report'), findsNothing);
     });
 
     testWidgets('scrolling is not disturbed by long press detector', (tester) async {
