@@ -10,6 +10,10 @@ abstract class GroupChatGateway {
   Stream<bool> get connectionState;
   Stream<Map<String, dynamic>> get instanceLoaded;
   Stream<Map<String, dynamic>> get groupLines;
+
+  /// `group_ideas`: what the player could say next, for the newest event of a
+  /// thread.
+  Stream<Map<String, dynamic>> get groupIdeas;
   Stream<Map<String, dynamic>> get ack;
   Stream<Map<String, dynamic>> get generationComplete;
 
@@ -74,6 +78,9 @@ class WsGroupChatGateway implements GroupChatGateway {
 
   @override
   Stream<Map<String, dynamic>> get groupLines => _ws.onGroupLines;
+
+  @override
+  Stream<Map<String, dynamic>> get groupIdeas => _ws.onGroupIdeas;
 
   @override
   bool get isConnected => _ws.isConnected;

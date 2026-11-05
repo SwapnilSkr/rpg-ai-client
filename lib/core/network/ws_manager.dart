@@ -89,6 +89,10 @@ class WsManager {
   final _groupLinesController =
       StreamController<Map<String, dynamic>>.broadcast();
 
+  /// What the player could say next, after a saved reply. Group chat only.
+  final _groupIdeasController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
   /// Fired when the server reports this account was deleted (e.g. from another
   /// device). A live session must drop to the auth screen rather than keep
   /// running against a dead account until the next request 401s.
@@ -137,6 +141,7 @@ class WsManager {
   Stream<Map<String, dynamic>> get onMediaFailed =>
       _mediaFailedController.stream;
   Stream<Map<String, dynamic>> get onGroupLines => _groupLinesController.stream;
+  Stream<Map<String, dynamic>> get onGroupIdeas => _groupIdeasController.stream;
 
   bool get isConnected => _isConnected;
 
@@ -333,6 +338,9 @@ class WsManager {
       case 'group_lines':
         _groupLinesController.add(msg);
         break;
+      case 'group_ideas':
+        _groupIdeasController.add(msg);
+        break;
       case 'account_deleted':
         _accountDeletedController.add(null);
         break;
@@ -491,5 +499,6 @@ class WsManager {
     _mediaUnseenController.close();
     _mediaFailedController.close();
     _groupLinesController.close();
+    _groupIdeasController.close();
   }
 }

@@ -48,6 +48,7 @@ class FakeGateway implements GroupChatGateway {
   final _connection = StreamController<bool>.broadcast(sync: true);
   final _loaded = StreamController<Map<String, dynamic>>.broadcast(sync: true);
   final _lines = StreamController<Map<String, dynamic>>.broadcast(sync: true);
+  final _ideas = StreamController<Map<String, dynamic>>.broadcast(sync: true);
   final _ack = StreamController<Map<String, dynamic>>.broadcast(sync: true);
   final _complete = StreamController<Map<String, dynamic>>.broadcast(sync: true);
   final _errors = StreamController<Map<String, dynamic>>.broadcast(sync: true);
@@ -66,6 +67,8 @@ class FakeGateway implements GroupChatGateway {
   Stream<Map<String, dynamic>> get instanceLoaded => _loaded.stream;
   @override
   Stream<Map<String, dynamic>> get groupLines => _lines.stream;
+  @override
+  Stream<Map<String, dynamic>> get groupIdeas => _ideas.stream;
   @override
   Stream<Map<String, dynamic>> get ack => _ack.stream;
   @override
@@ -115,6 +118,7 @@ class FakeGateway implements GroupChatGateway {
 
   void pushLoaded(Map<String, dynamic> msg) => _loaded.add(msg);
   void pushLines(Map<String, dynamic> msg) => _lines.add(msg);
+  void pushIdeas(Map<String, dynamic> msg) => _ideas.add(msg);
   void pushAck(String jobId) => _ack.add({'type': 'ack', 'jobId': jobId});
   void pushComplete(Map<String, dynamic> msg) => _complete.add(msg);
   void pushError(Map<String, dynamic> msg) => _errors.add(msg);
@@ -221,6 +225,7 @@ Map<String, dynamic> loadedFrame({
   bool matureCapable = false,
   String id = instanceId,
   String? directWith,
+  List<Map<String, dynamic>>? characters,
 }) => {
   'type': 'instance_loaded',
   if (directWith != null) 'directWith': directWith,
@@ -234,7 +239,7 @@ Map<String, dynamic> loadedFrame({
       if (pendingFrom != null) 'pending_from': pendingFrom,
     },
     'template': {'is_nsfw_capable': matureCapable},
-    'characters': [
+    'characters': characters ?? [
       {'_id': jess, 'canonical_name': 'Jess', 'role': 'friend'},
       {'_id': tom, 'canonical_name': 'Tom'},
     ],
@@ -251,6 +256,7 @@ Map<String, dynamic> eventRow({
   bool action = false,
   String? origin,
   List<Map<String, dynamic>> lines = const [],
+  List<String>? replyIdeas,
   DateTime? at,
 }) => {
   '_id': id,
@@ -261,6 +267,7 @@ Map<String, dynamic> eventRow({
     if (action) 'player_action': true,
     if (origin != null) 'origin': origin,
     'lines': lines,
+    if (replyIdeas != null) 'reply_ideas': replyIdeas,
   },
 };
 

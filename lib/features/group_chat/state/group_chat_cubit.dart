@@ -52,6 +52,10 @@ class GroupChatCubit extends Cubit<GroupChatState> {
   final Map<String, void Function()> _revealTimers = {};
   final Set<String> _seen = {};
   final Map<String, int> _maxSequence = {};
+
+  /// The newest saved event of each thread; reply ideas apply to it alone. A
+  /// send clears it until the reply's event is known.
+  final Map<String, String> _newestEvent = {};
   final List<_Outgoing> _queue = [];
 
   /// Thread keys of load requests still unanswered. Only a refused load needs
@@ -100,6 +104,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
       ..add(_gateway.connectionState.listen(_setConnected))
       ..add(_gateway.instanceLoaded.listen(_onInstanceLoaded))
       ..add(_gateway.groupLines.listen(_onGroupLines))
+      ..add(_gateway.groupIdeas.listen(_onGroupIdeas))
       ..add(_gateway.ack.listen(_onAck))
       ..add(_gateway.generationComplete.listen(_onComplete))
       ..add(_gateway.errors.listen(_onErrorFrame))
@@ -297,8 +302,24 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     }
 
     final view = state.thread(key);
+    // Ideas come from the newest event only, and not while a send of the
+    // player's own is on its way: that send already answered them.
+    final newest = snapshot.events.lastOrNull;
+    final sending =
+        (_active?.thread == key) ||
+        _queue.any((o) => (o.directWith ?? kGroupThreadKey) == key);
+    if (newest != null && !sending) {
+      _newestEvent[key] = newest.id;
+    } else if (newest == null) {
+      _newestEvent.remove(key);
+    }
+    final ideas = {...state.replyIdeas}..remove(key);
+    if (newest != null && !sending && newest.replyIdeas.isNotEmpty) {
+      ideas[key] = ReplyIdeas(eventId: newest.id, ideas: newest.replyIdeas);
+    }
     _emit(
       state.copyWith(
+        replyIdeas: ideas,
         load: GroupChatLoad.ready,
         error: null,
         members: members,
@@ -476,6 +497,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     // An eventId means the turn is saved.
     final eventId = msg['eventId']?.toString();
     if (eventId != null && eventId.isNotEmpty) {
+      _newestEvent[key] = eventId;
       final sequence = msg['sequence'];
       _attachEvent(
         key,
@@ -484,6 +506,21 @@ class GroupChatCubit extends Cubit<GroupChatState> {
         sequence: sequence is num ? sequence.toInt() : null,
       );
     }
+  }
+
+  void _onGroupIdeas(Map<String, dynamic> msg) {
+    if (msg['instanceId']?.toString() != instanceId || state.rewinding) return;
+    final key = msg['directWith']?.toString() ?? kGroupThreadKey;
+    final eventId = msg['eventId']?.toString() ?? '';
+    // Only the thread's newest event: after a rewind, a newer reply or a send
+    // that is waiting, the ideas are for something that is no longer last.
+    if (eventId.isEmpty || _newestEvent[key] != eventId) return;
+    final ideas = parseIdeas(msg['ideas']);
+    final next = {...state.replyIdeas}..remove(key);
+    if (ideas.isNotEmpty) {
+      next[key] = ReplyIdeas(eventId: eventId, ideas: ideas);
+    }
+    _emit(state.copyWith(replyIdeas: next));
   }
 
   void _onAck(Map<String, dynamic> msg) {
@@ -542,6 +579,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
       if (!isNew) _enrich(key, line);
     }
     if (eventId.isNotEmpty) {
+      _newestEvent[key] = eventId;
       _attachEvent(key, eventId, {for (final l in lines) l.key}, sequence: sequence);
     }
     _reveal(key);
@@ -791,6 +829,18 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     );
     final key = directWith ?? kGroupThreadKey;
     _flushHidden(key);
+    // The ideas were for what came before this line, and stay gone whether or
+    // not the send goes through.
+    _newestEvent.remove(key);
+    if (state.replyIdeas.containsKey(key) ||
+        (directWith != null && !state.sentTo.contains(directWith))) {
+      _emit(
+        state.copyWith(
+          replyIdeas: {...state.replyIdeas}..remove(key),
+          sentTo: directWith == null ? null : {...state.sentTo, directWith},
+        ),
+      );
+    }
     _appendLine(
       key,
       GroupLine(
@@ -805,6 +855,10 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     _pump();
     return true;
   }
+
+  /// Sends one of the offered ideas: the same as typing it and sending.
+  bool sendIdea(String text, {String? directWith}) =>
+      send(text, directWith: directWith);
 
   void _pump() {
     if (_closed) return;
@@ -1118,6 +1172,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
       _hidden.clear();
       _epoch++;
       _maxSequence.clear();
+      _newestEvent.clear();
       _opened.clear();
       _replacing.addAll(keys);
       // A thread nobody is looking at is read again when it is opened, even if
@@ -1136,6 +1191,8 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     _emit(
       state.copyWith(
         threads: threads,
+        replyIdeas: replace ? const {} : null,
+        sentTo: replace ? const {} : null,
         failedSends: clearSends ? const [] : null,
       ),
     );

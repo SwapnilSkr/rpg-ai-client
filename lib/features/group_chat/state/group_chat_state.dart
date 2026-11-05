@@ -72,6 +72,17 @@ class FailedSend extends Equatable {
   List<Object?> get props => [id, text, directWith, isAction, error];
 }
 
+/// What the player could say next in one thread, and the event it belongs to.
+class ReplyIdeas extends Equatable {
+  final String eventId;
+  final List<String> ideas;
+
+  const ReplyIdeas({required this.eventId, required this.ideas});
+
+  @override
+  List<Object?> get props => [eventId, ideas];
+}
+
 class GroupChatState extends Equatable {
   final String instanceId;
   final GroupChatLoad load;
@@ -92,6 +103,12 @@ class GroupChatState extends Equatable {
   /// Thread keys are [kGroupThreadKey] or a member id.
   final Map<String, GroupThreadView> threads;
   final List<GroupThreadSummary> threadSummaries;
+
+  /// Reply ideas by thread key; a thread with none has no entry.
+  final Map<String, ReplyIdeas> replyIdeas;
+
+  /// Direct threads the player has sent to since this chat opened.
+  final Set<String> sentTo;
 
   /// The thread on screen, as last told by `selectThread`.
   final String selectedThread;
@@ -135,6 +152,8 @@ class GroupChatState extends Equatable {
     this.pendingFrom = const [],
     this.threads = const {},
     this.threadSummaries = const [],
+    this.replyIdeas = const {},
+    this.sentTo = const {},
     this.selectedThread = kGroupThreadKey,
     this.turnInFlight = false,
     this.queuedSends = 0,
@@ -155,6 +174,24 @@ class GroupChatState extends Equatable {
   GroupThreadView thread([String? directWith]) =>
       threads[directWith ?? kGroupThreadKey] ?? const GroupThreadView();
 
+  /// What the player could say next in the thread, or nothing.
+  List<String> replyIdeasFor([String? directWith]) =>
+      replyIdeas[directWith ?? kGroupThreadKey]?.ideas ?? const [];
+
+  /// Three first messages for a direct thread that is read, empty, has nothing
+  /// waiting and has not been sent to. Never for a room.
+  List<String> firstTextIdeas(String memberId) {
+    final m = member(memberId);
+    if (m == null || m.firstTexts.isEmpty) return const [];
+    final view = threads[memberId];
+    if (view == null || !view.loaded || view.lines.isNotEmpty) return const [];
+    if (pendingFrom.contains(memberId) || sentTo.contains(memberId)) {
+      return const [];
+    }
+    if (failedSends.any((f) => f.directWith == memberId)) return const [];
+    return m.firstTexts;
+  }
+
   GroupMember? member(String id) {
     for (final m in members) {
       if (m.id == id) return m;
@@ -172,6 +209,8 @@ class GroupChatState extends Equatable {
     List<String>? pendingFrom,
     Map<String, GroupThreadView>? threads,
     List<GroupThreadSummary>? threadSummaries,
+    Map<String, ReplyIdeas>? replyIdeas,
+    Set<String>? sentTo,
     String? selectedThread,
     bool? turnInFlight,
     int? queuedSends,
@@ -197,6 +236,8 @@ class GroupChatState extends Equatable {
     pendingFrom: pendingFrom ?? this.pendingFrom,
     threads: threads ?? this.threads,
     threadSummaries: threadSummaries ?? this.threadSummaries,
+    replyIdeas: replyIdeas ?? this.replyIdeas,
+    sentTo: sentTo ?? this.sentTo,
     selectedThread: selectedThread ?? this.selectedThread,
     turnInFlight: turnInFlight ?? this.turnInFlight,
     queuedSends: queuedSends ?? this.queuedSends,
@@ -233,6 +274,8 @@ class GroupChatState extends Equatable {
     pendingFrom,
     threads,
     threadSummaries,
+    replyIdeas,
+    sentTo,
     selectedThread,
     turnInFlight,
     queuedSends,

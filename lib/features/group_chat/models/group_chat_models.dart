@@ -25,16 +25,34 @@ class GroupMember extends Equatable {
   final String role;
   final String? portraitUrl;
 
+  /// The line under the name, picked by the server for the player's hour;
+  /// null when there is none.
+  final String? status;
+
+  /// Three things the player could say first in a direct thread; empty when
+  /// the card carries none.
+  final List<String> firstTexts;
+
   const GroupMember({
     required this.id,
     required this.name,
     this.role = '',
     this.portraitUrl,
+    this.status,
+    this.firstTexts = const [],
   });
 
   @override
-  List<Object?> get props => [id, name, role, portraitUrl];
+  List<Object?> get props => [id, name, role, portraitUrl, status, firstTexts];
 }
+
+/// Non-empty strings of a JSON list; anything else is no list.
+List<String> parseIdeas(Object? raw) => raw is List
+    ? [
+        for (final v in raw)
+          if (v is String && v.trim().isNotEmpty) v.trim(),
+      ]
+    : const [];
 
 /// Where a character's picture of themselves stands. Only these six words come
 /// from the server; any other is no selfie at all, so a newer server cannot
@@ -235,6 +253,9 @@ class GroupHistoryEvent extends Equatable {
   final String origin;
   final List<GroupLine> lines;
 
+  /// What the player could say next; only the newest event of a thread has any.
+  final List<String> replyIdeas;
+
   const GroupHistoryEvent({
     required this.id,
     required this.sequence,
@@ -243,6 +264,7 @@ class GroupHistoryEvent extends Equatable {
     this.playerAction = false,
     this.origin = 'player',
     this.lines = const [],
+    this.replyIdeas = const [],
   });
 
   static GroupHistoryEvent? parse(Map<String, dynamic> json) {
@@ -263,6 +285,7 @@ class GroupHistoryEvent extends Equatable {
         eventId: id,
         sequence: _int(json['sequence']),
       ),
+      replyIdeas: parseIdeas(data['reply_ideas'] ?? json['reply_ideas']),
     );
   }
 
@@ -275,6 +298,7 @@ class GroupHistoryEvent extends Equatable {
     playerAction,
     origin,
     lines,
+    replyIdeas,
   ];
 }
 
@@ -331,6 +355,10 @@ class GroupSnapshot extends Equatable {
         name: name,
         role: _str(card['role']),
         portraitUrl: portrait == null ? null : _str(portrait),
+        status: _str(card['status']).trim().isEmpty
+            ? null
+            : _str(card['status']).trim(),
+        firstTexts: parseIdeas(card['first_texts']),
       );
     }
 
