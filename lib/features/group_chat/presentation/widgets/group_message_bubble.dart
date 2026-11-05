@@ -6,6 +6,7 @@ import '../../../../shared/widgets/everlore_notice.dart';
 import '../../../moderation/presentation/report_sheet.dart';
 import '../../../play/presentation/widgets/anchored_menu_popup.dart';
 import '../../models/group_chat_models.dart';
+import 'group_selfie_frame.dart';
 import 'member_avatar.dart';
 
 /// Asks whether to rewind the chat. True only when the player confirms.
@@ -68,6 +69,13 @@ class GroupMessageBubble extends StatelessWidget {
   /// queued, no rewind running); the bubble adds the line-level checks.
   final void Function(GroupLine line)? onRewindLine;
 
+  /// Offered when a character can send a picture of themselves. Null while a
+  /// rewind is in progress.
+  final void Function(GroupLine line)? onRequestSelfie;
+  final void Function(GroupLine line, String mediaId, String speakerName)?
+      onReportSelfie;
+  final DateTime? now;
+
   const GroupMessageBubble({
     super.key,
     required this.line,
@@ -78,6 +86,9 @@ class GroupMessageBubble extends StatelessWidget {
     this.onReportLine,
     this.composerTop,
     this.onRewindLine,
+    this.onRequestSelfie,
+    this.onReportSelfie,
+    this.now,
   });
 
   @override
@@ -110,6 +121,24 @@ class GroupMessageBubble extends StatelessWidget {
         line.eventId != null &&
         (line.sequence ?? 0) > 1;
 
+    final currentTime = now ?? DateTime.now();
+    final selfie = line.selfie;
+    final canSelfieState = selfie == null ||
+        selfie.status == SelfieStatus.failed ||
+        selfie.status == SelfieStatus.unseen ||
+        (selfie.status == SelfieStatus.resting &&
+            !selfie.isRestingAt(currentTime));
+
+    final canAskForSelfie = onRequestSelfie != null &&
+        !line.isPlayer &&
+        !line.isAction &&
+        line.lineId != null &&
+        line.lineId!.isNotEmpty &&
+        line.eventId != null &&
+        line.characterId != null &&
+        line.characterId!.isNotEmpty &&
+        canSelfieState;
+
     final rect = globalRectOf(bubbleContext);
 
     showAnchoredMenu<void>(
@@ -136,6 +165,19 @@ class GroupMessageBubble extends StatelessWidget {
             );
           },
         ),
+        if (canAskForSelfie)
+          AnchoredMenuItem(
+            icon: const Icon(
+              Icons.camera_alt_outlined,
+              color: EverloreTheme.ash,
+              size: 16,
+            ),
+            label: 'Ask for a selfie',
+            onTap: () {
+              if (!bubbleContext.mounted) return;
+              onRequestSelfie?.call(line);
+            },
+          ),
         if (canReport)
           AnchoredMenuItem(
             icon: const Icon(
@@ -354,6 +396,19 @@ class GroupMessageBubble extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (line.selfie != null) ...[
+                  const SizedBox(height: 6),
+                  GroupSelfieFrame(
+                    line: line,
+                    member: member,
+                    onRequestSelfie: onRequestSelfie != null
+                        ? () => onRequestSelfie!(line)
+                        : null,
+                    onReportSelfie: onReportSelfie,
+                    composerTop: composerTop,
+                    now: now,
+                  ),
+                ],
               ],
             ),
           ),

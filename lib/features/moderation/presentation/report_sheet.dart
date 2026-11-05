@@ -78,6 +78,28 @@ Future<bool> showReportLineSheet(
   return filed ?? false;
 }
 
+/// Opens the report flow for a character's picture in a group or direct thread.
+Future<bool> showReportSelfieSheet(
+  BuildContext context, {
+  required String mediaId,
+  required String speakerName,
+}) async {
+  Telemetry.instance.sheet('report');
+  final filed = await showModalBottomSheet<bool>(
+    useRootNavigator: true,
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => _ReportSheet(
+      targetType: 'group_selfie',
+      targetId: mediaId,
+      targetTitle: speakerName.isNotEmpty ? speakerName : 'Someone',
+    ),
+  );
+  return filed ?? false;
+}
+
 /// Opens the report flow for a normal chat turn.
 Future<bool> showReportChatTurnSheet(
   BuildContext context, {

@@ -249,6 +249,10 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
     unawaited(_cubit.rewind(sequence).whenComplete(_chats.refresh));
   }
 
+  void _requestSelfie(GroupLine line) {
+    unawaited(_cubit.requestSelfie(line));
+  }
+
   void _openCharacterSheet(GroupMember member) {
     CharacterSheet.show(
       context,
@@ -487,6 +491,7 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                             someoneTyping: typingName != null,
                             composerTop: () => _composerTop,
                             onRewindLine: canRewindGroup(state) ? _rewindTo : null,
+                            onRequestSelfie: !state.rewinding ? _requestSelfie : null,
                           ),
                         ),
                         GroupComposer(

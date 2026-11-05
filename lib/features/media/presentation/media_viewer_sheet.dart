@@ -69,9 +69,13 @@ class _PictureView extends StatelessWidget {
     return InteractiveViewer(
       minScale: 0.8,
       maxScale: 3.5,
-      child: EverloreNetworkImage(
-        imageUrl: url,
-        fit: BoxFit.contain,
+      // The image paints on a childless box, which collapses to nothing without
+      // a size to fill.
+      child: SizedBox.expand(
+        child: EverloreNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.contain,
+        ),
       ),
     );
   }

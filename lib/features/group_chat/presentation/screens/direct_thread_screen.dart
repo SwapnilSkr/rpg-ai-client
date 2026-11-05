@@ -163,6 +163,7 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
                       memberMap: memberMap,
                       composerTop: () => _composerTop,
                       onRewindLine: canRewindGroup(state) ? _rewindTo : null,
+                      onRequestSelfie: !state.rewinding ? _requestSelfie : null,
                       onCharacterTap: (_) => BondSheet.show(
                         context,
                         cubit: widget.cubit,
@@ -198,5 +199,9 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
     if (sequence == null) return;
     // The Chats list must not keep a removed message as its last line.
     unawaited(widget.cubit.rewind(sequence).whenComplete(_chats.refresh));
+  }
+
+  void _requestSelfie(GroupLine line) {
+    unawaited(widget.cubit.requestSelfie(line));
   }
 }

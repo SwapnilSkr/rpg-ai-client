@@ -15,6 +15,11 @@ class GroupMessageList extends StatefulWidget {
   /// Null while rewinding is not possible; see [GroupMessageBubble.onRewindLine].
   final void Function(GroupLine line)? onRewindLine;
 
+  /// Offered when a character can send a selfie. Null during rewind.
+  final void Function(GroupLine line)? onRequestSelfie;
+  final void Function(GroupLine line, String mediaId, String speakerName)?
+      onReportSelfie;
+
   /// Someone is about to speak, so an empty room isn't waiting on the player.
   final bool someoneTyping;
   final double? Function()? composerTop;
@@ -26,6 +31,8 @@ class GroupMessageList extends StatefulWidget {
     this.onCharacterTap,
     this.onReportLine,
     this.onRewindLine,
+    this.onRequestSelfie,
+    this.onReportSelfie,
     this.someoneTyping = false,
     this.composerTop,
   });
@@ -144,6 +151,8 @@ class _GroupMessageListState extends State<GroupMessageList> {
               : null,
           onReportLine: widget.onReportLine,
           onRewindLine: widget.onRewindLine,
+          onRequestSelfie: widget.onRequestSelfie,
+          onReportSelfie: widget.onReportSelfie,
           composerTop: _resolveComposerTop,
         );
       },
