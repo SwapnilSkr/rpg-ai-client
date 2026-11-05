@@ -36,6 +36,67 @@ class GroupMember extends Equatable {
   List<Object?> get props => [id, name, role, portraitUrl];
 }
 
+/// Where a character's picture of themselves stands. Only these six words come
+/// from the server; any other is no selfie at all, so a newer server cannot
+/// show an older app a state it has no words for.
+enum SelfieStatus { queued, processing, ready, unseen, failed, resting }
+
+/// A selfie attached to one saved line.
+class GroupSelfie extends Equatable {
+  final SelfieStatus status;
+  final String? mediaId;
+
+  /// Set once [status] is ready.
+  final String? url;
+
+  /// When a resting allowance comes back (UTC, as the server sent it).
+  final DateTime? resetsAt;
+
+  const GroupSelfie({
+    required this.status,
+    this.mediaId,
+    this.url,
+    this.resetsAt,
+  });
+
+  /// [resetsAt] in the player's own time zone, for the screen to word.
+  DateTime? get resetsAtLocal => resetsAt?.toLocal();
+
+  bool get isPending =>
+      status == SelfieStatus.queued || status == SelfieStatus.processing;
+
+  /// Resting and the allowance has not come back yet at [now]. Without a time
+  /// the server is asked, since it knows.
+  bool isRestingAt(DateTime now) =>
+      status == SelfieStatus.resting &&
+      resetsAt != null &&
+      now.isBefore(resetsAt!);
+
+  static GroupSelfie? parse(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    final status = SelfieStatus.values
+        .where((s) => s.name == _str(json['status']))
+        .firstOrNull;
+    if (status == null) return null;
+    final media = _str(json['media_id'] ?? json['mediaId']);
+    final url = _str(json['url']);
+    return GroupSelfie(
+      status: status,
+      mediaId: media.isEmpty ? null : media,
+      url: status == SelfieStatus.ready && url.isNotEmpty ? url : null,
+      resetsAt: status == SelfieStatus.resting
+          ? _date(json['resets_at'] ?? json['resetsAt'])?.toUtc()
+          : null,
+    );
+  }
+
+  @override
+  List<Object?> get props => [status, mediaId, url, resetsAt];
+}
+
+const Object _keepSelfie = Object();
+
 /// One message in a thread. A player's line has no [characterId].
 class GroupLine extends Equatable {
   /// Stable identity used to show a line exactly once, however many frames
@@ -61,6 +122,13 @@ class GroupLine extends Equatable {
   /// send queue, or sent and being answered.
   final GroupLineStatus status;
 
+  /// The server's stable id for a saved character line. Selfie frames name a
+  /// line by it. Null until a frame that carries it arrives.
+  final String? lineId;
+
+  /// The picture this character sent with the line, if any.
+  final GroupSelfie? selfie;
+
   const GroupLine({
     required this.key,
     this.characterId,
@@ -71,6 +139,8 @@ class GroupLine extends Equatable {
     this.sequence,
     this.isAction = false,
     this.status = GroupLineStatus.sent,
+    this.lineId,
+    this.selfie,
   });
 
   bool get isPlayer => characterId == null;
@@ -86,6 +156,8 @@ class GroupLine extends Equatable {
     int? sequence,
     GroupLineStatus? status,
     String? name,
+    String? lineId,
+    Object? selfie = _keepSelfie,
   }) => GroupLine(
     key: key,
     characterId: characterId,
@@ -96,6 +168,8 @@ class GroupLine extends Equatable {
     sequence: sequence ?? this.sequence,
     isAction: isAction,
     status: status ?? this.status,
+    lineId: lineId ?? this.lineId,
+    selfie: identical(selfie, _keepSelfie) ? this.selfie : selfie as GroupSelfie?,
   );
 
   @override
@@ -109,6 +183,8 @@ class GroupLine extends Equatable {
     sequence,
     isAction,
     status,
+    lineId,
+    selfie,
   ];
 }
 
@@ -133,6 +209,10 @@ GroupLine? parseSpokenLine(
     shownAt: shownAt,
     eventId: eventId,
     sequence: sequence,
+    lineId: _str(json['line_id'] ?? json['lineId']).isEmpty
+        ? null
+        : _str(json['line_id'] ?? json['lineId']),
+    selfie: GroupSelfie.parse(json['selfie']),
   );
 }
 

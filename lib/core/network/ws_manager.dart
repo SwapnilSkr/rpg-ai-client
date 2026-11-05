@@ -75,6 +75,8 @@ class WsManager {
       StreamController<Map<String, dynamic>>.broadcast();
   final _spokenLinesController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _selfieStartedController =
+      StreamController<Map<String, dynamic>>.broadcast();
   final _mediaReadyController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _mediaUnseenController =
@@ -126,6 +128,8 @@ class WsManager {
       _milestoneUnlockedController.stream;
   Stream<Map<String, dynamic>> get onSpokenLines =>
       _spokenLinesController.stream;
+  Stream<Map<String, dynamic>> get onSelfieStarted =>
+      _selfieStartedController.stream;
   Stream<Map<String, dynamic>> get onMediaReady =>
       _mediaReadyController.stream;
   Stream<Map<String, dynamic>> get onMediaUnseen =>
@@ -314,6 +318,9 @@ class WsManager {
       case 'spoken_lines':
         _spokenLinesController.add(msg);
         break;
+      case 'selfie_started':
+        _selfieStartedController.add(msg);
+        break;
       case 'media_ready':
         _mediaReadyController.add(msg);
         break;
@@ -479,6 +486,7 @@ class WsManager {
     _worldProjectionUpdatedController.close();
     _milestoneUnlockedController.close();
     _spokenLinesController.close();
+    _selfieStartedController.close();
     _mediaReadyController.close();
     _mediaUnseenController.close();
     _mediaFailedController.close();

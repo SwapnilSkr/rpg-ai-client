@@ -51,6 +51,7 @@ class FakeGateway implements GroupChatGateway {
   final _ack = StreamController<Map<String, dynamic>>.broadcast(sync: true);
   final _complete = StreamController<Map<String, dynamic>>.broadcast(sync: true);
   final _errors = StreamController<Map<String, dynamic>>.broadcast(sync: true);
+  final _selfie = StreamController<Map<String, dynamic>>.broadcast(sync: true);
 
   bool connected = true;
 
@@ -71,6 +72,8 @@ class FakeGateway implements GroupChatGateway {
   Stream<Map<String, dynamic>> get generationComplete => _complete.stream;
   @override
   Stream<Map<String, dynamic>> get errors => _errors.stream;
+  @override
+  Stream<Map<String, dynamic>> get selfieFrames => _selfie.stream;
 
   @override
   Future<void> connect() async {}
@@ -115,6 +118,7 @@ class FakeGateway implements GroupChatGateway {
   void pushAck(String jobId) => _ack.add({'type': 'ack', 'jobId': jobId});
   void pushComplete(Map<String, dynamic> msg) => _complete.add(msg);
   void pushError(Map<String, dynamic> msg) => _errors.add(msg);
+  void pushSelfie(Map<String, dynamic> msg) => _selfie.add(msg);
 }
 
 class FakeRepository implements GroupChatRepository {
@@ -136,6 +140,24 @@ class FakeRepository implements GroupChatRepository {
   final List<int> rewindCalls = [];
   Object? rewindError;
   Completer<void>? rewindGate;
+
+  /// Answers to selfie requests, in order; a [Completer] holds one open.
+  final List<Object> selfieAnswers = [];
+  final List<Map<String, String>> selfieCalls = [];
+
+  @override
+  Future<GroupSelfie> requestSelfie(
+    String instanceId,
+    String eventId,
+    String characterId,
+    String text,
+  ) async {
+    selfieCalls.add({'event': eventId, 'who': characterId, 'text': text});
+    final next = selfieAnswers.removeAt(0);
+    if (next is Completer<GroupSelfie>) return next.future;
+    if (next is GroupSelfie) return next;
+    throw next;
+  }
 
   @override
   Future<void> rewind(String instanceId, int sequence) async {

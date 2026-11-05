@@ -13,6 +13,12 @@ abstract class GroupChatGateway {
   Stream<Map<String, dynamic>> get ack;
   Stream<Map<String, dynamic>> get generationComplete;
 
+  /// Every frame about a picture a character sent of themselves, each with a
+  /// `type`: `selfie_started`, `media_ready`, `media_unseen` or `media_failed`.
+  /// The media frames also carry other kinds of picture; the cubit keeps the
+  /// ones that name a line.
+  Stream<Map<String, dynamic>> get selfieFrames;
+
   /// Failure frames: a rejected send and a turn that could not be written.
   Stream<Map<String, dynamic>> get errors;
 
@@ -34,6 +40,37 @@ class WsGroupChatGateway implements GroupChatGateway {
   final WsManager _ws;
 
   WsGroupChatGateway(this._ws);
+
+  late final Stream<Map<String, dynamic>> _selfieFrames = _mergeSelfie();
+
+  Stream<Map<String, dynamic>> _mergeSelfie() {
+    final subs = <StreamSubscription<Map<String, dynamic>>>[];
+    late final StreamController<Map<String, dynamic>> out;
+    void tag(Stream<Map<String, dynamic>> from, String type) {
+      // The manager passes frames as received, which already name their type;
+      // naming it again keeps the cubit independent of that.
+      subs.add(from.listen((m) => out.add({...m, 'type': type})));
+    }
+
+    out = StreamController<Map<String, dynamic>>.broadcast(
+      onListen: () {
+        tag(_ws.onSelfieStarted, 'selfie_started');
+        tag(_ws.onMediaReady, 'media_ready');
+        tag(_ws.onMediaUnseen, 'media_unseen');
+        tag(_ws.onMediaFailed, 'media_failed');
+      },
+      onCancel: () {
+        for (final s in subs) {
+          s.cancel();
+        }
+        subs.clear();
+      },
+    );
+    return out.stream;
+  }
+
+  @override
+  Stream<Map<String, dynamic>> get selfieFrames => _selfieFrames;
 
   @override
   Stream<Map<String, dynamic>> get groupLines => _ws.onGroupLines;

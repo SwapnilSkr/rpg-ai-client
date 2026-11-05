@@ -72,6 +72,10 @@ class GroupChatCubit extends Cubit<GroupChatState> {
   final Map<String, String> _writingFrom = {};
   final Map<String, void Function()> _writingTimers = {};
 
+  /// Bumped when a rewind drops what is shown, so an answer to a selfie asked
+  /// before it is not applied to the lines read afterwards.
+  int _epoch = 0;
+
   _Turn? _active;
   int _nextId = 0;
   bool _closed = false;
@@ -98,7 +102,8 @@ class GroupChatCubit extends Cubit<GroupChatState> {
       ..add(_gateway.groupLines.listen(_onGroupLines))
       ..add(_gateway.ack.listen(_onAck))
       ..add(_gateway.generationComplete.listen(_onComplete))
-      ..add(_gateway.errors.listen(_onErrorFrame));
+      ..add(_gateway.errors.listen(_onErrorFrame))
+      ..add(_gateway.selfieFrames.listen(_onSelfieFrame));
   }
 
   // ---------------------------------------------------------------- loading
@@ -172,6 +177,9 @@ class GroupChatCubit extends Cubit<GroupChatState> {
       kGroupThreadKey,
       state.selectedThread,
       ?_active?.thread,
+      // A selfie frame sent while the socket was down is gone; the history
+      // knows how it ended.
+      ..._threadsWithPendingSelfie(),
     };
     for (final key in keys) {
       _requestLoad(key);
@@ -253,6 +261,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
 
     final before = replace ? const <GroupLine>[] : state.thread(key).lines;
     final beforeKeys = {for (final l in before) l.key};
+    final beforeByKey = {for (final l in before) l.key: l};
     final hidden = _hidden.putIfAbsent(key, () => []);
     final hiddenKeys = {for (final l in hidden) l.key};
     final historyKeys = {for (final l in history) l.key};
@@ -261,12 +270,14 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     for (final line in history) {
       if (hiddenKeys.contains(line.key)) {
         final i = hidden.indexWhere((h) => h.key == line.key);
-        hidden[i] = hidden[i].copyWith(
-          eventId: line.eventId,
-          sequence: line.sequence,
+        hidden[i] = _knowing(
+          hidden[i].copyWith(eventId: line.eventId, sequence: line.sequence),
+          line,
         );
       } else if (beforeKeys.contains(line.key)) {
-        visible.add(line);
+        // The read is the truth, but a picture already known is not lost to a
+        // read that began before it was asked for.
+        visible.add(_knowing(line, beforeByKey[line.key]));
       } else if (_seen.add('$key#${line.key}') &&
           line.characterId != null &&
           line.shownAt.isAfter(now)) {
@@ -451,12 +462,13 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     final key = msg['directWith']?.toString() ?? kGroupThreadKey;
     final lines = parseSpokenLines(msg['lines']);
     for (final line in lines) {
-      _ingest(
+      final isNew = _ingest(
         key,
         line.name.isEmpty
             ? line.copyWith(name: state.member(line.characterId!)?.name ?? '')
             : line,
       );
+      if (!isNew) _enrich(key, line);
     }
     if (lines.isNotEmpty) _reveal(key);
     final active = _active;
@@ -524,9 +536,10 @@ class GroupChatCubit extends Cubit<GroupChatState> {
       sequence: sequence,
     );
     for (final line in lines) {
-      _ingest(key, line.name.isEmpty
+      final isNew = _ingest(key, line.name.isEmpty
           ? line.copyWith(name: state.member(line.characterId!)?.name ?? '')
           : line);
+      if (!isNew) _enrich(key, line);
     }
     if (eventId.isNotEmpty) {
       _attachEvent(key, eventId, {for (final l in lines) l.key}, sequence: sequence);
@@ -566,6 +579,196 @@ class GroupChatCubit extends Cubit<GroupChatState> {
         _emit(state.copyWith(load: GroupChatLoad.failed, error: error));
       }
     }
+  }
+
+  // ----------------------------------------------------------------- selfies
+
+  /// A selfie in flight is not undone by an older word about it: a finished
+  /// picture stays finished, and a started one is not queued again.
+  static GroupSelfie? _mergeSelfie(GroupSelfie? old, GroupSelfie? next) {
+    if (next == null) return old;
+    if (old == null) return next;
+    if (old.status == SelfieStatus.ready && next.isPending) return old;
+    if (old.status == SelfieStatus.processing &&
+        next.status == SelfieStatus.queued) {
+      return old;
+    }
+    return next;
+  }
+
+  /// [fresh] with what [old] already knew and [fresh] lacks.
+  GroupLine _knowing(GroupLine fresh, GroupLine? old) => old == null
+      ? fresh
+      : fresh.copyWith(
+          lineId: fresh.lineId ?? old.lineId,
+          selfie: _mergeSelfie(old.selfie, fresh.selfie),
+        );
+
+  /// A later frame of a line already taken in (its saved form follows the
+  /// partial one) may bring the id and picture the first one lacked.
+  void _enrich(String key, GroupLine incoming) {
+    if (incoming.lineId == null && incoming.selfie == null) return;
+    _patchLines(
+      key,
+      (l) => l.key == incoming.key,
+      (l) => l.copyWith(
+        lineId: l.lineId ?? incoming.lineId,
+        selfie: _mergeSelfie(l.selfie, incoming.selfie),
+      ),
+    );
+  }
+
+  /// Changes every line of [key] that [match]es, shown or still held back, so
+  /// a picture is there when a held line is revealed. Returns whether any
+  /// line matched.
+  bool _patchLines(
+    String key,
+    bool Function(GroupLine) match,
+    GroupLine Function(GroupLine) change,
+  ) {
+    var found = false;
+    final hidden = _hidden[key];
+    if (hidden != null) {
+      for (var i = 0; i < hidden.length; i++) {
+        if (match(hidden[i])) {
+          found = true;
+          hidden[i] = change(hidden[i]);
+        }
+      }
+    }
+    final view = state.thread(key);
+    var changed = false;
+    final lines = [
+      for (final l in view.lines)
+        if (match(l))
+          () {
+            found = true;
+            final next = change(l);
+            if (next != l) changed = true;
+            return next;
+          }()
+        else
+          l,
+    ];
+    if (changed) {
+      _emit(
+        state.copyWith(
+          threads: {...state.threads, key: view.copyWith(lines: lines)},
+        ),
+      );
+    }
+    return found;
+  }
+
+  bool _isLine(GroupLine l, String lineId, String eventId) =>
+      l.lineId == lineId &&
+      (eventId.isEmpty || l.eventId == null || l.eventId == eventId);
+
+  Iterable<String> _threadsWithPendingSelfie() sync* {
+    for (final key in {...state.threads.keys, ..._hidden.keys}) {
+      final lines = [...state.thread(key).lines, ...?_hidden[key]];
+      if (lines.any((l) => l.selfie?.isPending ?? false)) yield key;
+    }
+  }
+
+  void _onSelfieFrame(Map<String, dynamic> msg) {
+    if (msg['instanceId']?.toString() != instanceId) return;
+    // A frame in flight when a rewind began belongs to a removed turn.
+    if (state.rewinding) return;
+    final lineId = (msg['line_id'] ?? msg['lineId'])?.toString() ?? '';
+    // The media frames also carry every other picture, which have no line.
+    if (lineId.isEmpty) return;
+    final type = msg['type']?.toString();
+    final GroupSelfie? next;
+    if (type == 'selfie_started') {
+      next = GroupSelfie.parse(msg['selfie']);
+    } else if (msg['kind']?.toString() != 'picture') {
+      return;
+    } else {
+      final mediaId = (msg['media_id'] ?? msg['mediaId'])?.toString();
+      final id = mediaId == null || mediaId.isEmpty ? null : mediaId;
+      next = switch (type) {
+        'media_ready' => GroupSelfie.parse({
+          'status': 'ready',
+          'media_id': id,
+          'url': msg['url'],
+        }),
+        'media_unseen' => GroupSelfie(status: SelfieStatus.unseen, mediaId: id),
+        'media_failed' => GroupSelfie(status: SelfieStatus.failed, mediaId: id),
+        _ => null,
+      };
+    }
+    if (next == null) return;
+    final key = msg['directWith']?.toString() ?? kGroupThreadKey;
+    final eventId = msg['eventId']?.toString() ?? '';
+    final selfie = next;
+    // A line this app has not loaded is not made up from a frame: the thread's
+    // next read shows it.
+    _patchLines(
+      key,
+      (l) => _isLine(l, lineId, eventId),
+      (l) => l.copyWith(selfie: _mergeSelfie(l.selfie, selfie)),
+    );
+  }
+
+  /// Asks [line]'s character for a picture of themselves. The frame shows as
+  /// queued at once; the answer, or a failure that leaves it retryable,
+  /// follows. A picture already asked for or finished, a line not yet saved,
+  /// and a rewind in progress do nothing, and neither does a resting
+  /// allowance before its reset time (the screen words that time from
+  /// [GroupSelfie.resetsAtLocal]).
+  Future<void> requestSelfie(GroupLine line) async {
+    if (_closed || state.rewinding) return;
+    GroupLine? current;
+    String? key;
+    for (final entry in state.threads.entries) {
+      final hit = entry.value.lines.where((l) => l.key == line.key).firstOrNull;
+      if (hit != null) {
+        current = hit;
+        key = entry.key;
+        break;
+      }
+    }
+    final eventId = current?.eventId;
+    final lineId = current?.lineId;
+    final who = current?.characterId;
+    if (current == null || key == null) return;
+    if (eventId == null || lineId == null || who == null) return;
+    final held = current.selfie;
+    if (held != null) {
+      switch (held.status) {
+        case SelfieStatus.queued ||
+            SelfieStatus.processing ||
+            SelfieStatus.ready ||
+            SelfieStatus.unseen:
+          return;
+        case SelfieStatus.resting:
+          if (held.isRestingAt(_clock.now())) return;
+        case SelfieStatus.failed:
+          break;
+      }
+    }
+    final thread = key;
+    final epoch = _epoch;
+    const asked = GroupSelfie(status: SelfieStatus.queued);
+    GroupLine put(GroupLine l, GroupSelfie? s) => l.copyWith(selfie: s);
+    _patchLines(thread, (l) => _isLine(l, lineId, eventId), (l) => put(l, asked));
+
+    GroupSelfie? answer;
+    try {
+      answer = await _repo.requestSelfie(instanceId, eventId, who, current.text);
+    } catch (_) {
+      answer = null;
+    }
+    // A rewind that dropped the lines this answer is about has read them
+    // again since; the answer is not theirs. One still running is not
+    // waited for: if it removes the turn, the reload clears the line.
+    if (_closed || epoch != _epoch) return;
+    _patchLines(thread, (l) => _isLine(l, lineId, eventId), (l) {
+      if (answer != null) return put(l, _mergeSelfie(l.selfie, answer));
+      // Only our own tap is undone; a frame may have moved it on.
+      return l.selfie == asked ? put(l, const GroupSelfie(status: SelfieStatus.failed)) : l;
+    });
   }
 
   // ----------------------------------------------------------------- sending
@@ -912,6 +1115,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
       _writingTimers.clear();
       _writingFrom.clear();
       _hidden.clear();
+      _epoch++;
       _maxSequence.clear();
       _opened.clear();
       _replacing.addAll(keys);
