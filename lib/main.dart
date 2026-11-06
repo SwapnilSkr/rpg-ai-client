@@ -22,6 +22,7 @@ import 'core/reminders/reminder_service.dart';
 import 'core/telemetry/telemetry.dart';
 import 'core/notifications/notification_opener.dart';
 import 'features/group_chat/state/chats_cubit.dart';
+import 'features/notifications/presentation/widgets/notification_banner.dart';
 import 'features/notifications/state/notifications_cubit.dart';
 
 Future<void> main() async {
@@ -120,9 +121,17 @@ class _EverloreAppState extends State<EverloreApp> {
   /// Lets the guide answer system back before the router does.
   ChildBackButtonDispatcher? _guideBack;
 
+  /// Tells the server whether the player is looking, so a reply that finishes
+  /// while the app is in the background is announced.
+  late final AppLifecycleListener _lifecycle = AppLifecycleListener(
+    onStateChange: (state) =>
+        WsManager().setForeground(state == AppLifecycleState.resumed),
+  );
+
   @override
   void initState() {
     super.initState();
+    _lifecycle;
     // If the server reports this account was deleted (e.g. from another device),
     // drop the live session and bounce to auth instead of running on against a
     // dead account until the next request 401s.
@@ -195,6 +204,7 @@ class _EverloreAppState extends State<EverloreApp> {
     _chats.close();
     NotificationOpener.instance.onGone = null;
     _notifications.close();
+    _lifecycle.dispose();
     _guideBack?.removeCallback(guide.handleSystemBack);
     router.routerDelegate.removeListener(_onRouteChanged);
     super.dispose();
@@ -217,9 +227,11 @@ class _EverloreAppState extends State<EverloreApp> {
             BlocProvider<ChatsCubit>.value(value: _chats),
             BlocProvider<NotificationsCubit>.value(value: _notifications),
           ],
-          child: GuideHost(
-            child: KeepStoryHost(
-              child: DismissKeyboard(child: child ?? const SizedBox.shrink()),
+          child: NotificationBannerHost(
+            child: GuideHost(
+              child: KeepStoryHost(
+                child: DismissKeyboard(child: child ?? const SizedBox.shrink()),
+              ),
             ),
           ),
         ),

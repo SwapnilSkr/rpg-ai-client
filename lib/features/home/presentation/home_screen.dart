@@ -133,6 +133,7 @@ class _HomeViewState extends State<_HomeView> {
                                   : 'No realms yet')
                             : '${state.total} ${state.total == 1 ? 'realm' : 'realms'}',
                         backgroundOpacity: 0.68,
+                        showNotifications: true,
                         actions: [
                           EverloreTopBarIcon(
                             icon: _searchOpen
@@ -182,9 +183,11 @@ class _HomeViewState extends State<_HomeView> {
                             slivers: [
                               if (state.isLoading && state.realms.isEmpty)
                                 const SliverFillRemaining(child: _LoadingView())
-                              else if (state.needsSignIn && state.realms.isEmpty)
+                              else if (state.needsSignIn &&
+                                  state.realms.isEmpty)
                                 const SliverFillRemaining(child: _UnauthView())
-                              else if (state.error != null && state.realms.isEmpty)
+                              else if (state.error != null &&
+                                  state.realms.isEmpty)
                                 SliverFillRemaining(
                                   child: _ErrorView(message: state.error!),
                                 )

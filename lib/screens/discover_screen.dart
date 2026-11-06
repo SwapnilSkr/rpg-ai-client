@@ -466,41 +466,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     title: 'Explore',
                     subtitle: 'Find worlds and characters',
                     backgroundOpacity: 0.68,
+                    showNotifications: true,
                     actions: [
-                      GuideAnchor(
-                        id: GuideIds.discoverFilter,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            EverloreTopBarIcon(
-                              icon: Icons.tune_rounded,
-                              tooltip: 'Filter Explore',
-                              onTap: _openFilterSheet,
-                            ),
-                            if (_currentFilter.hasActiveFilter)
-                              Positioned(
-                                top: 2,
-                                right: 2,
-                                child: IgnorePointer(
-                                  child: Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: const BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: EverloreTheme.gold,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: EverloreTheme.goldGlow,
-                                          blurRadius: 4,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
                       GuideAnchor(
                         id: GuideIds.discoverSearch,
                         child: EverloreTopBarIcon(
@@ -537,7 +504,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   ),
                   ContinueStoryCard(key: _continueCardKey),
                   const SizedBox(height: 14),
-                  GuideAnchor(id: GuideIds.discoverTabs, child: _buildTabs()),
+                  _buildTabs(),
                   if (_currentFilter.hasActiveFilter) ...[
                     const SizedBox(height: 8),
                     _buildFilterSummaryLine(),
@@ -593,21 +560,121 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     // size or the labels are trimmed top and bottom.
     final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
     final totalTabs = 2 + _genres.length;
+    final pillHeight = 44 * textScale.clamp(1.0, 1.4);
+
     return SizedBox(
-      height: 44 * textScale.clamp(1.0, 1.4),
-      child: ListView.separated(
-        controller: _tabScrollController,
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: totalTabs,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (context, i) {
-          final label = i == 0
-              ? 'For You'
-              : (i == 1 ? 'Group chats' : _genres[i - 2].label);
-          final key = _tabKeys.putIfAbsent(i, GlobalKey.new);
-          return _tabPill(i, label, key);
-        },
+      height: pillHeight,
+      child: Row(
+        children: [
+          Expanded(
+            child: GuideAnchor(
+              id: GuideIds.discoverTabs,
+              child: ShaderMask(
+                shaderCallback: (rect) {
+                  const fadeWidth = 24.0;
+                  final fadeStart = (rect.width - fadeWidth).clamp(0.0, rect.width) /
+                      (rect.width == 0 ? 1 : rect.width);
+                  return LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: const [
+                      Colors.white,
+                      Colors.white,
+                      Colors.transparent,
+                    ],
+                    stops: [0.0, fadeStart, 1.0],
+                  ).createShader(rect);
+                },
+                blendMode: BlendMode.dstIn,
+                child: ListView.separated(
+                  controller: _tabScrollController,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.only(left: 20, right: 24),
+                  itemCount: totalTabs,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, i) {
+                    final label = i == 0
+                        ? 'For You'
+                        : (i == 1 ? 'Group chats' : _genres[i - 2].label);
+                    final key = _tabKeys.putIfAbsent(i, GlobalKey.new);
+                    return _tabPill(i, label, key);
+                  },
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Padding(
+            padding: const EdgeInsets.only(right: 20),
+            child: GuideAnchor(
+              id: GuideIds.discoverFilter,
+              child: _buildFilterButton(pillHeight),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterButton(double size) {
+    return Tooltip(
+      message: 'Filter Explore',
+      child: GestureDetector(
+        onTap: _openFilterSheet,
+        behavior: HitTestBehavior.opaque,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [EverloreTheme.void3, EverloreTheme.void1],
+                ),
+                border: Border.all(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.25),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 6,
+                    offset: const Offset(1, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.tune_rounded,
+                color: EverloreTheme.gold,
+                size: 20,
+              ),
+            ),
+            if (_currentFilter.hasActiveFilter)
+              Positioned(
+                top: 2,
+                right: 2,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: EverloreTheme.gold,
+                      boxShadow: [
+                        BoxShadow(
+                          color: EverloreTheme.goldGlow,
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

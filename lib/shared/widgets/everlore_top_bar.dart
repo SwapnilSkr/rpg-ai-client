@@ -7,6 +7,7 @@ import '../../app/theme/nexus_theme.dart';
 import '../../features/billing/data/billing_repository.dart';
 import 'ink_mark.dart';
 import '../../app/layout/responsive.dart';
+import '../../features/notifications/presentation/widgets/notifications_bell_button.dart';
 
 class EverloreTopBar extends StatelessWidget {
   final String title;
@@ -15,6 +16,7 @@ class EverloreTopBar extends StatelessWidget {
   final bool showProfile;
   final double backgroundOpacity;
   final bool showBack;
+  final bool showNotifications;
 
   const EverloreTopBar({
     super.key,
@@ -24,6 +26,7 @@ class EverloreTopBar extends StatelessWidget {
     this.showProfile = true,
     this.backgroundOpacity = 0.98,
     this.showBack = false,
+    this.showNotifications = false,
   });
 
   @override
@@ -113,6 +116,10 @@ class EverloreTopBar extends StatelessWidget {
           const EverloreInkBalanceChip(),
           const SizedBox(width: 14),
           for (final action in actions) ...[action, const SizedBox(width: 8)],
+          if (showNotifications) ...[
+            const NotificationsBellButton(),
+            if (showProfile) const SizedBox(width: 8),
+          ],
           if (showProfile)
             EverloreTopBarIcon(
               icon: Icons.person_outline_rounded,

@@ -139,8 +139,7 @@ class WsManager {
       _spokenLinesController.stream;
   Stream<Map<String, dynamic>> get onSelfieStarted =>
       _selfieStartedController.stream;
-  Stream<Map<String, dynamic>> get onMediaReady =>
-      _mediaReadyController.stream;
+  Stream<Map<String, dynamic>> get onMediaReady => _mediaReadyController.stream;
   Stream<Map<String, dynamic>> get onMediaUnseen =>
       _mediaUnseenController.stream;
   Stream<Map<String, dynamic>> get onMediaFailed =>
@@ -271,6 +270,9 @@ class WsManager {
             if (_isConnected) send({'action': 'ping'});
           });
           _flushOfflineQueue();
+          // A fresh socket counts as in front; one opened while the app is
+          // in the background must say so, or replies land unannounced.
+          if (!_foreground) _sendPresence();
         }
         break;
       case 'generation_delta':
@@ -396,6 +398,28 @@ class WsManager {
       _reconnectAttempts++;
       unawaited(_openChannel());
     });
+  }
+
+  bool _foreground = true;
+
+  /// The app moved to the background or back. A backgrounded socket is not
+  /// watching its story, so a reply that finishes meanwhile is announced.
+  /// Never queued and never an error: offline, the next handshake carries it.
+  void setForeground(bool foreground) {
+    if (_foreground == foreground) return;
+    _foreground = foreground;
+    _sendPresence();
+  }
+
+  void _sendPresence() {
+    if (!_isConnected || _channel == null) return;
+    try {
+      _channel!.sink.add(
+        jsonEncode({'type': 'presence', 'foreground': _foreground}),
+      );
+    } catch (_) {
+      _onDisconnected();
+    }
   }
 
   void send(Map<String, dynamic> message) {

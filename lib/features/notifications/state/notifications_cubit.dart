@@ -203,15 +203,23 @@ class NotificationsCubit extends Cubit<NotificationsState> {
     emit(state.copyWith(clearBanner: true));
   }
 
-  /// Newest first. A row whose id is held is replaced (a newer reply to the
-  /// same story takes the old one's place).
+  /// Newest first. A row whose id is held is replaced. A story's newer reply
+  /// arrives with a new id and the server deletes the older unread one, so
+  /// that one goes here too.
   List<AppNotification> _inserted(
     List<AppNotification> items,
     AppNotification item,
   ) {
+    final supersedes =
+        item.kind == NotificationKind.storyReply && item.isUnread;
     final rest = [
       for (final i in items)
-        if (i.id != item.id) i,
+        if (i.id != item.id &&
+            !(supersedes &&
+                i.kind == NotificationKind.storyReply &&
+                i.isUnread &&
+                i.instanceId == item.instanceId))
+          i,
     ];
     var at = rest.indexWhere((i) => i.createdAt.isBefore(item.createdAt));
     if (at < 0) at = rest.length;

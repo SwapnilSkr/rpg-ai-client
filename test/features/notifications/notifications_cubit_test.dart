@@ -206,6 +206,24 @@ void main() {
       );
     });
 
+    test(
+      "a story's newer reply drops its older unread row, not other saves'",
+      () async {
+        final rig = _Rig();
+        rig.repo.pages[null] = _page([
+          _raw('old', minutes: 3, type: 'story_reply', instance: 's1'),
+          _raw('other', minutes: 2, type: 'story_reply', instance: 's2'),
+          _raw('dm', minutes: 1, instance: 's1'),
+        ], 3);
+        await rig.cubit.load();
+        await rig.frame(
+          _raw('new', minutes: 9, type: 'story_reply', instance: 's1'),
+          3,
+        );
+        expect(rig.ids, ['new', 'other', 'dm']);
+      },
+    );
+
     test('a bad frame is ignored', () async {
       final rig = _Rig();
       rig.repo.pages[null] = _page([_raw('a')], 1);

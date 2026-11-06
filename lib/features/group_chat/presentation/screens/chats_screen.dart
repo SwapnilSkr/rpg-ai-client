@@ -10,6 +10,7 @@ import '../../../../core/guide/guide_flows.dart';
 import '../../../../core/guide/guide_ids.dart';
 import '../../../../core/guide/guide_trigger.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
+import '../../../../shared/widgets/everlore_top_bar.dart';
 import '../../../../shared/widgets/loading_shimmer.dart';
 import '../../state/chats_cubit.dart';
 import '../../state/chats_state.dart';
@@ -74,158 +75,175 @@ class _ChatsScreenState extends State<ChatsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: EverloreTheme.void0,
-      body: BlocBuilder<ChatsCubit, ChatsState>(
-        builder: (context, state) {
-          // Show shimmer only while not yet loaded
-          if (state.isLoading && !state.hasLoaded) {
-            return SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 110),
-                child: Column(
-                  children: [
-                    for (var i = 0; i < 5; i++)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: _buildShimmerRow(),
-                      ),
-                  ],
-                ),
-              ),
-            );
-          }
+      body: Column(
+        children: [
+          const EverloreTopBar(
+            title: 'Chats',
+            backgroundOpacity: 0.68,
+            showNotifications: true,
+          ),
+          Expanded(
+            child: BlocBuilder<ChatsCubit, ChatsState>(
+              builder: (context, state) {
+                // Show shimmer only while not yet loaded
+                if (state.isLoading && !state.hasLoaded) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 110),
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < 5; i++)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: _buildShimmerRow(),
+                          ),
+                      ],
+                    ),
+                  );
+                }
 
-          final conversations = state.conversations;
-          final joinable = state.joinable;
+                final conversations = state.conversations;
+                final joinable = state.joinable;
 
-          return GuideOnEnter(
-            flow: GuideFlows.chats,
-            enabled: state.hasLoaded,
-            child: RefreshIndicator(
-              color: EverloreTheme.gold,
-              backgroundColor: EverloreTheme.void2,
-              onRefresh: () => context.read<ChatsCubit>().refresh(),
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverSafeArea(
-                    bottom: false,
-                    sliver: SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
-                      sliver: SliverList(
-                        delegate: SliverChildListDelegate([
-                          if (conversations.isEmpty) ...[
-                            // Empty state: cover cards are main content
-                            if (joinable.isEmpty)
-                              GuideAnchor(
-                                id: GuideIds.chatsFirst,
-                                child: Padding(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(4, 16, 4, 24),
-                                  child: Text(
-                                    'Group chats are always going. Walk in and say something.',
-                                    style: EverloreTheme.aiText.copyWith(
-                                      fontSize: 16,
-                                      color: EverloreTheme.parchment
-                                          .withValues(alpha: 0.88),
-                                      height: 1.45,
+                return GuideOnEnter(
+                  flow: GuideFlows.chats,
+                  enabled: state.hasLoaded,
+                  child: RefreshIndicator(
+                    color: EverloreTheme.gold,
+                    backgroundColor: EverloreTheme.void2,
+                    onRefresh: () => context.read<ChatsCubit>().refresh(),
+                    child: CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+                          sliver: SliverList(
+                            delegate: SliverChildListDelegate([
+                              if (conversations.isEmpty) ...[
+                                // Empty state: cover cards are main content
+                                if (joinable.isEmpty)
+                                  GuideAnchor(
+                                    id: GuideIds.chatsFirst,
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        4,
+                                        16,
+                                        4,
+                                        24,
+                                      ),
+                                      child: Text(
+                                        'Group chats are always going. Walk in and say something.',
+                                        style: EverloreTheme.aiText.copyWith(
+                                          fontSize: 16,
+                                          color: EverloreTheme.parchment
+                                              .withValues(alpha: 0.88),
+                                          height: 1.45,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                else ...[
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      4,
+                                      16,
+                                      4,
+                                      24,
+                                    ),
+                                    child: Text(
+                                      'Group chats are always going. Walk in and say something.',
+                                      style: EverloreTheme.aiText.copyWith(
+                                        fontSize: 16,
+                                        color: EverloreTheme.parchment
+                                            .withValues(alpha: 0.88),
+                                        height: 1.45,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              )
-                            else ...[
-                              Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(4, 16, 4, 24),
-                                child: Text(
-                                  'Group chats are always going. Walk in and say something.',
-                                  style: EverloreTheme.aiText.copyWith(
-                                    fontSize: 16,
-                                    color: EverloreTheme.parchment
-                                        .withValues(alpha: 0.88),
-                                    height: 1.45,
+                                  SizedBox(
+                                    height: 210,
+                                    child: ListView.separated(
+                                      scrollDirection: Axis.horizontal,
+                                      itemCount: joinable.length,
+                                      separatorBuilder: (_, __) =>
+                                          const SizedBox(width: 14),
+                                      itemBuilder: (context, index) {
+                                        final card = GroupCoverCard(
+                                          template: joinable[index],
+                                          width: 132,
+                                          height: 198,
+                                        );
+                                        if (index == 0) {
+                                          return GuideAnchor(
+                                            id: GuideIds.chatsFirst,
+                                            child: card,
+                                          );
+                                        }
+                                        return card;
+                                      },
+                                    ),
                                   ),
-                                ),
-                              ),
-                              SizedBox(
-                                height: 210,
-                                child: ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: joinable.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(width: 14),
-                                  itemBuilder: (context, index) {
-                                    final card = GroupCoverCard(
-                                      template: joinable[index],
-                                      width: 132,
-                                      height: 198,
-                                    );
-                                    if (index == 0) {
-                                      return GuideAnchor(
-                                        id: GuideIds.chatsFirst,
-                                        child: card,
-                                      );
-                                    }
-                                    return card;
-                                  },
-                                ),
-                              ),
-                            ],
-                          ] else ...[
-                            // Conversations list
-                            for (var i = 0; i < conversations.length; i++) ...[
-                              _buildConversationRow(
-                                conversations[i],
-                                isFirst: i == 0,
-                              ),
-                              if (i < conversations.length - 1)
-                                const Divider(
-                                  color: EverloreTheme.white10,
-                                  height: 16,
-                                  indent: 72,
-                                ),
-                            ],
+                                ],
+                              ] else ...[
+                                // Conversations list
+                                for (
+                                  var i = 0;
+                                  i < conversations.length;
+                                  i++
+                                ) ...[
+                                  _buildConversationRow(
+                                    conversations[i],
+                                    isFirst: i == 0,
+                                  ),
+                                  if (i < conversations.length - 1)
+                                    const Divider(
+                                      color: EverloreTheme.white10,
+                                      height: 16,
+                                      indent: 72,
+                                    ),
+                                ],
 
-                            // Join a group section below conversations
-                            if (joinable.isNotEmpty) ...[
-                              const SizedBox(height: 32),
-                              Text(
-                                'JOIN A GROUP',
-                                style: EverloreTheme.ui(
-                                  size: 11,
-                                  weight: FontWeight.w700,
-                                  color: EverloreTheme.goldDim,
-                                  spacing: 1.4,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              SizedBox(
-                                height: 210,
-                                child: ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: joinable.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(width: 14),
-                                  itemBuilder: (context, index) {
-                                    return GroupCoverCard(
-                                      template: joinable[index],
-                                      width: 132,
-                                      height: 198,
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ],
-                        ]),
-                      ),
+                                // Join a group section below conversations
+                                if (joinable.isNotEmpty) ...[
+                                  const SizedBox(height: 32),
+                                  Text(
+                                    'JOIN A GROUP',
+                                    style: EverloreTheme.ui(
+                                      size: 11,
+                                      weight: FontWeight.w700,
+                                      color: EverloreTheme.goldDim,
+                                      spacing: 1.4,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  SizedBox(
+                                    height: 210,
+                                    child: ListView.separated(
+                                      scrollDirection: Axis.horizontal,
+                                      itemCount: joinable.length,
+                                      separatorBuilder: (_, __) =>
+                                          const SizedBox(width: 14),
+                                      itemBuilder: (context, index) {
+                                        return GroupCoverCard(
+                                          template: joinable[index],
+                                          width: 132,
+                                          height: 198,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ]),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
@@ -236,10 +254,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }) {
     final previewText = conversation.last != null
         ? (conversation.last!.isPlayer
-            ? 'You: ${conversation.last!.text}'
-            : (conversation.last!.name.isNotEmpty
-                ? '${conversation.last!.name}: ${conversation.last!.text}'
-                : conversation.last!.text))
+              ? 'You: ${conversation.last!.text}'
+              : (conversation.last!.name.isNotEmpty
+                    ? '${conversation.last!.name}: ${conversation.last!.text}'
+                    : conversation.last!.text))
         : null;
 
     final avatarWidget = conversation.isDirect
@@ -266,7 +284,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
                         color: EverloreTheme.goldDim.withValues(alpha: 0.3),
                       ),
                     ),
-                    child: conversation.imageUrl != null &&
+                    child:
+                        conversation.imageUrl != null &&
                             conversation.imageUrl!.isNotEmpty
                         ? EverloreNetworkImage(
                             imageUrl: conversation.imageUrl!,
@@ -282,9 +301,11 @@ class _ChatsScreenState extends State<ChatsScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        for (var f = 0;
-                            f < conversation.faces.length && f < 3;
-                            f++)
+                        for (
+                          var f = 0;
+                          f < conversation.faces.length && f < 3;
+                          f++
+                        )
                           Align(
                             widthFactor: 0.72,
                             child: Container(

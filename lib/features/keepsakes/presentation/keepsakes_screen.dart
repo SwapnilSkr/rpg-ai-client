@@ -488,6 +488,7 @@ class _KeepsakesViewState extends State<_KeepsakesView> {
                     title: 'Keepsakes',
                     backgroundOpacity: 0.68,
                     showProfile: true,
+                    showNotifications: true,
                   ),
                   // Filter row stays visible whenever player has any keepsakes (§3.5)
                   if (state.hasAnyKeepsakesOverall || state.items.isNotEmpty || state.filter != KeepsakesFilter.all)
