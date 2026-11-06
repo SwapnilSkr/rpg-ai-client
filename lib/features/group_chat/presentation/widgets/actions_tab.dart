@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../core/guide/guide_anchor.dart';
+import '../../../../core/guide/guide_flows.dart';
+import '../../../../core/guide/guide_ids.dart';
+import '../../../../core/guide/guide_trigger.dart';
 import '../../models/group_chat_models.dart';
 import '../../state/group_chat_cubit.dart';
 import '../../state/group_chat_state.dart';
@@ -89,36 +93,44 @@ class _ActionsTabState extends State<ActionsTab> {
           );
         }
 
-        return RefreshIndicator(
-          color: EverloreTheme.gold,
-          backgroundColor: EverloreTheme.void2,
-          onRefresh: () => widget.cubit.loadActions(),
-          child: ListView.separated(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-            itemCount: state.actions.length + (state.actionsLoading ? 1 : 0),
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              if (index >= state.actions.length) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        color: EverloreTheme.gold,
-                        strokeWidth: 2,
+        return GuideOnEnter(
+          flow: GuideFlows.groupActions,
+          enabled: !state.actionsLoading && state.actions.isNotEmpty,
+          child: RefreshIndicator(
+            color: EverloreTheme.gold,
+            backgroundColor: EverloreTheme.void2,
+            onRefresh: () => widget.cubit.loadActions(),
+            child: ListView.separated(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+              itemCount: state.actions.length + (state.actionsLoading ? 1 : 0),
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                if (index >= state.actions.length) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: EverloreTheme.gold,
+                          strokeWidth: 2,
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }
+                  );
+                }
 
-              final action = state.actions[index];
-              return _ActionCard(action: action);
-            },
+                final action = state.actions[index];
+                return guideAnchorIf(
+                  index == 0,
+                  GuideIds.groupFirstAction,
+                  _ActionCard(action: action),
+                );
+              },
+            ),
           ),
         );
       },

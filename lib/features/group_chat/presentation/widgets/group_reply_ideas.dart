@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../core/guide/guide_anchor.dart';
+import '../../../../core/guide/guide_controller.dart';
+import '../../../../core/guide/guide_flows.dart';
+import '../../../../core/guide/guide_ids.dart';
 
 /// Row of up to three reply idea chips above the composer.
 ///
@@ -47,6 +51,21 @@ class _GroupReplyIdeasState extends State<GroupReplyIdeas>
 
     if (widget.ideas.isNotEmpty && !widget.hidden) {
       _controller.forward();
+      _maybeGuide();
+    }
+  }
+
+  void _maybeGuide() {
+    if (widget.ideas.isNotEmpty && !widget.hidden) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || widget.ideas.isEmpty || widget.hidden) return;
+        if (guide.canAutoStart(GuideFlows.groupIdeas)) {
+          guide.maybeStart(
+            GuideFlows.groupIdeas,
+            delay: const Duration(milliseconds: 400),
+          );
+        }
+      });
     }
   }
 
@@ -58,11 +77,13 @@ class _GroupReplyIdeasState extends State<GroupReplyIdeas>
 
     if (!wasVisible && isVisible) {
       _controller.forward(from: 0.0);
+      _maybeGuide();
     } else if (wasVisible && !isVisible) {
       // Vanish immediately on send or when hidden.
       _controller.reset();
     } else if (isVisible && oldWidget.ideas != widget.ideas) {
       _controller.forward(from: 0.0);
+      _maybeGuide();
     }
   }
 
@@ -91,20 +112,23 @@ class _GroupReplyIdeasState extends State<GroupReplyIdeas>
           ),
         );
       },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < displayIdeas.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
-                _buildChip(context, displayIdeas[i]),
+      child: GuideAnchor(
+        id: GuideIds.groupIdeas,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < displayIdeas.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  _buildChip(context, displayIdeas[i]),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

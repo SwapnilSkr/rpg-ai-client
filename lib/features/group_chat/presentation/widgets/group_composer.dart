@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../core/guide/guide_anchor.dart';
+import '../../../../core/guide/guide_ids.dart';
 import '../../models/group_chat_models.dart';
 import '../../state/group_chat_state.dart';
 import 'group_chat_backdrop.dart';
@@ -217,50 +219,55 @@ class _GroupComposerState extends State<GroupComposer> {
                               setState(() => _isAction = !_isAction),
                         ),
                       Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: BoxDecoration(
-                            color: EverloreTheme.void2,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: _isAction
-                                  ? EverloreTheme.goldDim
-                                  : EverloreTheme.white10,
-                              width: 1,
+                        child: GuideAnchor(
+                          id: GuideIds.groupRoomComposer,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            decoration: BoxDecoration(
+                              color: EverloreTheme.void2,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: _isAction
+                                    ? EverloreTheme.goldDim
+                                    : EverloreTheme.white10,
+                                width: 1,
+                              ),
                             ),
-                          ),
-                          child: TextField(
-                            controller: _controller,
-                            focusNode: _focusNode,
-                            maxLines: 4,
-                            minLines: 1,
-                            style: EverloreTheme.body.copyWith(
-                              fontSize: 15,
-                              fontStyle: _isAction
-                                  ? FontStyle.italic
-                                  : FontStyle.normal,
-                              color: EverloreTheme.parchment,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: hint,
-                              hintStyle: EverloreTheme.caption.copyWith(
-                                color: EverloreTheme.ash.withValues(alpha: 0.7),
+                            child: TextField(
+                              controller: _controller,
+                              focusNode: _focusNode,
+                              maxLines: 4,
+                              minLines: 1,
+                              style: EverloreTheme.body.copyWith(
+                                fontSize: 15,
                                 fontStyle: _isAction
                                     ? FontStyle.italic
                                     : FontStyle.normal,
-                                fontSize: 14,
+                                color: EverloreTheme.parchment,
                               ),
-                              // The app theme fills and outlines inputs; here the
-                              // surrounding pill is the only box.
-                              filled: false,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 10,
+                              decoration: InputDecoration(
+                                hintText: hint,
+                                hintStyle: EverloreTheme.caption.copyWith(
+                                  color: EverloreTheme.ash.withValues(
+                                    alpha: 0.7,
+                                  ),
+                                  fontStyle: _isAction
+                                      ? FontStyle.italic
+                                      : FontStyle.normal,
+                                  fontSize: 14,
+                                ),
+                                // The app theme fills and outlines inputs; here the
+                                // surrounding pill is the only box.
+                                filled: false,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
                               ),
+                              onSubmitted: (_) => _handleSend(),
                             ),
-                            onSubmitted: (_) => _handleSend(),
                           ),
                         ),
                       ),

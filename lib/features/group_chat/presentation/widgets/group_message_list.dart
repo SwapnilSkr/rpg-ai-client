@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../core/guide/guide_anchor.dart';
+import '../../../../core/guide/guide_ids.dart';
 import '../../../play/presentation/widgets/anchored_menu_popup.dart';
 import '../../models/group_chat_models.dart';
 import 'group_message_bubble.dart';
@@ -18,7 +20,7 @@ class GroupMessageList extends StatefulWidget {
   /// Offered when a character can send a selfie. Null during rewind.
   final void Function(GroupLine line)? onRequestSelfie;
   final void Function(GroupLine line, String mediaId, String speakerName)?
-      onReportSelfie;
+  onReportSelfie;
 
   /// Someone is about to speak, so an empty room isn't waiting on the player.
   final bool someoneTyping;
@@ -50,7 +52,9 @@ class _GroupMessageListState extends State<GroupMessageList> {
   void initState() {
     super.initState();
     _lastLineCount = widget.lines.length;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom(force: true));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _scrollToBottom(force: true),
+    );
   }
 
   @override
@@ -129,7 +133,9 @@ class _GroupMessageListState extends State<GroupMessageList> {
           if (wasAtBottom) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted && _scrollController.hasClients) {
-                _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+                _scrollController.jumpTo(
+                  _scrollController.position.maxScrollExtent,
+                );
               }
             });
           }
@@ -137,43 +143,58 @@ class _GroupMessageListState extends State<GroupMessageList> {
           _lastViewportHeight = constraints.maxHeight;
         }
 
-        return ListView.builder(
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          itemCount: widget.lines.length,
-          itemBuilder: (context, index) {
-            final line = widget.lines[index];
-            final member = line.characterId != null
-                ? widget.memberMap[line.characterId!]
-                : null;
+        final newestCharacterIndex = widget.lines.lastIndexWhere(
+          (l) => !l.isPlayer,
+        );
 
-            final isFirstInGroup = index == 0 ||
-                widget.lines[index - 1].characterId != line.characterId ||
-                widget.lines[index - 1].isPlayer != line.isPlayer ||
-                widget.lines[index - 1].isAction != line.isAction;
+        return GuideAnchor(
+          id: GuideIds.groupHoldList,
+          child: ListView.builder(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            itemCount: widget.lines.length,
+            itemBuilder: (context, index) {
+              final line = widget.lines[index];
+              final member = line.characterId != null
+                  ? widget.memberMap[line.characterId!]
+                  : null;
 
-            final isLastInGroup = index == widget.lines.length - 1 ||
-                widget.lines[index + 1].characterId != line.characterId ||
-                widget.lines[index + 1].isPlayer != line.isPlayer ||
-                widget.lines[index + 1].isAction != line.isAction;
+              final isFirstInGroup =
+                  index == 0 ||
+                  widget.lines[index - 1].characterId != line.characterId ||
+                  widget.lines[index - 1].isPlayer != line.isPlayer ||
+                  widget.lines[index - 1].isAction != line.isAction;
 
-            return GroupMessageBubble(
-              key: ValueKey(line.key),
-              line: line,
-              member: member,
-              isFirstInGroup: isFirstInGroup,
-              isLastInGroup: isLastInGroup,
-              onCharacterTap: member != null && widget.onCharacterTap != null
-                  ? () => widget.onCharacterTap!(member)
-                  : null,
-              onReportLine: widget.onReportLine,
-              onRewindLine: widget.onRewindLine,
-              onRequestSelfie: widget.onRequestSelfie,
-              onReportSelfie: widget.onReportSelfie,
-              composerTop: _resolveComposerTop,
-            );
-          },
+              final isLastInGroup =
+                  index == widget.lines.length - 1 ||
+                  widget.lines[index + 1].characterId != line.characterId ||
+                  widget.lines[index + 1].isPlayer != line.isPlayer ||
+                  widget.lines[index + 1].isAction != line.isAction;
+
+              final bubble = GroupMessageBubble(
+                key: ValueKey(line.key),
+                line: line,
+                member: member,
+                isFirstInGroup: isFirstInGroup,
+                isLastInGroup: isLastInGroup,
+                onCharacterTap: member != null && widget.onCharacterTap != null
+                    ? () => widget.onCharacterTap!(member)
+                    : null,
+                onReportLine: widget.onReportLine,
+                onRewindLine: widget.onRewindLine,
+                onRequestSelfie: widget.onRequestSelfie,
+                onReportSelfie: widget.onReportSelfie,
+                composerTop: _resolveComposerTop,
+              );
+
+              return guideAnchorIf(
+                index == newestCharacterIndex,
+                GuideIds.groupHoldLine,
+                bubble,
+              );
+            },
+          ),
         );
       },
     );

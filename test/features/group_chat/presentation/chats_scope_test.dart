@@ -8,6 +8,7 @@ import 'package:everlore/features/group_chat/state/chats_cubit.dart';
 import 'package:everlore/features/group_chat/state/group_chat_cubit.dart';
 import 'package:everlore/shared/models/world_instance.dart';
 import 'package:everlore/shared/models/world_template.dart';
+import 'package:everlore/core/guide/guide_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -32,6 +33,16 @@ GroupChatRow _row() => GroupChatRow.parse({
 })!;
 
 void main() {
+  // The guide's first-visit arcs are not what these tests are about.
+  setUp(() async {
+    FlutterSecureStorage.setMockInitialValues({});
+    await guide.onSignedOut();
+    await guide.setOptOut(true);
+  });
+  tearDown(() async {
+    await guide.setOptOut(false);
+    await guide.onSignedOut();
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
 
@@ -274,24 +285,30 @@ void main() {
     });
   });
 
-  test('a room frame names its group, and a frame without one keeps it', () async {
-    final gateway = FakeGateway();
-    final room = GroupChatCubit(
-      instanceId: instanceId,
-      gateway: gateway,
-      repository: FakeRepository(),
-      clock: FakeClock(),
-    );
-    addTearDown(room.close);
-    await room.start();
-    final frame = loadedFrame();
-    (frame['data'] as Map)['template'] = {'title': 'Guild', 'image_url': 'https://cdn/cover.png'};
-    gateway.pushLoaded(frame);
-    await Future<void>.delayed(Duration.zero);
-    expect(room.state.title, 'Guild');
-    expect(room.state.imageUrl, 'https://cdn/cover.png');
-    gateway.pushLoaded(loadedFrame());
-    await Future<void>.delayed(Duration.zero);
-    expect(room.state.title, 'Guild');
-  });
+  test(
+    'a room frame names its group, and a frame without one keeps it',
+    () async {
+      final gateway = FakeGateway();
+      final room = GroupChatCubit(
+        instanceId: instanceId,
+        gateway: gateway,
+        repository: FakeRepository(),
+        clock: FakeClock(),
+      );
+      addTearDown(room.close);
+      await room.start();
+      final frame = loadedFrame();
+      (frame['data'] as Map)['template'] = {
+        'title': 'Guild',
+        'image_url': 'https://cdn/cover.png',
+      };
+      gateway.pushLoaded(frame);
+      await Future<void>.delayed(Duration.zero);
+      expect(room.state.title, 'Guild');
+      expect(room.state.imageUrl, 'https://cdn/cover.png');
+      gateway.pushLoaded(loadedFrame());
+      await Future<void>.delayed(Duration.zero);
+      expect(room.state.title, 'Guild');
+    },
+  );
 }

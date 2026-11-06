@@ -1,7 +1,10 @@
 import 'dart:async';
+import '../../../core/guest/guest_session.dart';
 import '../../../core/guide/guide_anchor.dart';
+import '../../../core/guide/guide_controller.dart';
 import '../../../core/guide/guide_flows.dart';
 import '../../../core/guide/guide_ids.dart';
+import '../../../core/guide/guide_progress.dart';
 import '../../../core/guide/guide_trigger.dart';
 
 import 'package:flutter/material.dart';
@@ -18,10 +21,17 @@ import '../../../../shared/widgets/everlore_empty_state.dart';
 import '../../../../shared/widgets/realm_backdrop.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  final HomeCubit? cubit;
+  const HomeScreen({super.key, this.cubit});
 
   @override
   Widget build(BuildContext context) {
+    if (cubit != null) {
+      return BlocProvider<HomeCubit>.value(
+        value: cubit!,
+        child: const _HomeView(),
+      );
+    }
     return BlocProvider(
       create: (_) => HomeCubit()..loadInstances(),
       child: const _HomeView(),
@@ -46,6 +56,26 @@ class _HomeViewState extends State<_HomeView> {
   void initState() {
     super.initState();
     _scrollController.addListener(_maybeLoadMore);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _maybeGuide(context.read<HomeCubit>().state);
+    });
+  }
+
+  void _maybeGuide(HomeState state) {
+    if (state.isLoading) return;
+    if (state.realms.isEmpty) return;
+    if (GuestSession.instance.isGuest && GuestSession.instance.turnsUsed == 0) {
+      return;
+    }
+    final playFirst = guide.progress[GuideFlows.playFirst.id];
+    if (playFirst == null || playFirst.status != GuideStatus.done) return;
+    if (guide.activeFlow != null) return;
+    if (guide.canAutoStart(GuideFlows.navChats)) {
+      guide.maybeStart(
+        GuideFlows.navChats,
+        delay: const Duration(milliseconds: 600),
+      );
+    }
   }
 
   @override
@@ -104,112 +134,119 @@ class _HomeViewState extends State<_HomeView> {
               ),
             ),
           ),
-          BlocBuilder<HomeCubit, HomeState>(
-            buildWhen: (previous, current) =>
-                previous.realms.isEmpty != current.realms.isEmpty ||
-                previous.isLoading != current.isLoading,
-            // Two arcs, one surface. A shelf with stories on it explains the
-            // stories; a shelf with none explains the shelf. Which one is
-            // owed is not knowable until the first load has answered, so
-            // neither runs before it has.
-            builder: (context, state) => GuideOnEnter(
-              flow: state.realms.isEmpty
-                  ? GuideFlows.homeEmpty
-                  : GuideFlows.home,
-              enabled: !state.isLoading,
-              child: Column(
-                children: [
-                  BlocBuilder<HomeCubit, HomeState>(
-                    buildWhen: (previous, current) =>
-                        previous.isLoading != current.isLoading ||
-                        previous.realms.length != current.realms.length ||
-                        previous.total != current.total,
-                    builder: (context, state) {
-                      return EverloreTopBar(
-                        title: 'Your Realms',
-                        subtitle: state.realms.isEmpty
-                            ? (_searchController.text.isNotEmpty
-                                  ? 'No matching realms'
-                                  : 'No realms yet')
-                            : '${state.total} ${state.total == 1 ? 'realm' : 'realms'}',
-                        backgroundOpacity: 0.68,
-                        showNotifications: true,
-                        actions: [
-                          EverloreTopBarIcon(
-                            icon: _searchOpen
-                                ? Icons.close_rounded
-                                : Icons.search_rounded,
-                            tooltip: _searchOpen
-                                ? 'Close search'
-                                : 'Search realms',
-                            onTap: _toggleSearch,
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOutCubic,
-                    child: _searchOpen
-                        ? Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
-                            child: TextField(
-                              controller: _searchController,
-                              autofocus: true,
-                              onChanged: _onSearchChanged,
-                              textInputAction: TextInputAction.search,
-                              style: EverloreTheme.ui(
-                                size: 14,
-                                color: EverloreTheme.parchment,
-                              ),
-                              decoration: _realmSearchDecoration(),
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                  Expanded(
-                    child: BlocBuilder<HomeCubit, HomeState>(
+          BlocListener<HomeCubit, HomeState>(
+            listener: (context, state) => _maybeGuide(state),
+            child: BlocBuilder<HomeCubit, HomeState>(
+              buildWhen: (previous, current) =>
+                  previous.realms.isEmpty != current.realms.isEmpty ||
+                  previous.isLoading != current.isLoading,
+              // Two arcs, one surface. A shelf with stories on it explains the
+              // stories; a shelf with none explains the shelf. Which one is
+              // owed is not knowable until the first load has answered, so
+              // neither runs before it has.
+              builder: (context, state) => GuideOnEnter(
+                flow: state.realms.isEmpty
+                    ? GuideFlows.homeEmpty
+                    : GuideFlows.home,
+                enabled: !state.isLoading,
+                child: Column(
+                  children: [
+                    BlocBuilder<HomeCubit, HomeState>(
+                      buildWhen: (previous, current) =>
+                          previous.isLoading != current.isLoading ||
+                          previous.realms.length != current.realms.length ||
+                          previous.total != current.total,
                       builder: (context, state) {
-                        return RefreshIndicator(
-                          color: EverloreTheme.gold,
-                          backgroundColor: EverloreTheme.void2,
-                          onRefresh: () => context
-                              .read<HomeCubit>()
-                              .loadInstances(forceRefresh: true),
-                          child: CustomScrollView(
-                            controller: _scrollController,
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            slivers: [
-                              if (state.isLoading && state.realms.isEmpty)
-                                const SliverFillRemaining(child: _LoadingView())
-                              else if (state.needsSignIn &&
-                                  state.realms.isEmpty)
-                                const SliverFillRemaining(child: _UnauthView())
-                              else if (state.error != null &&
-                                  state.realms.isEmpty)
-                                SliverFillRemaining(
-                                  child: _ErrorView(message: state.error!),
-                                )
-                              else ...[
-                                if (state.realms.isEmpty)
-                                  SliverFillRemaining(
-                                    hasScrollBody: false,
-                                    child: _EmptyView(
-                                      isSearchEmpty:
-                                          _searchController.text.isNotEmpty,
-                                    ),
-                                  )
-                                else
-                                  _buildRealmList(context, state),
-                              ],
-                            ],
-                          ),
+                        return EverloreTopBar(
+                          title: 'Your Realms',
+                          subtitle: state.realms.isEmpty
+                              ? (_searchController.text.isNotEmpty
+                                    ? 'No matching realms'
+                                    : 'No realms yet')
+                              : '${state.total} ${state.total == 1 ? 'realm' : 'realms'}',
+                          backgroundOpacity: 0.68,
+                          showNotifications: true,
+                          actions: [
+                            EverloreTopBarIcon(
+                              icon: _searchOpen
+                                  ? Icons.close_rounded
+                                  : Icons.search_rounded,
+                              tooltip: _searchOpen
+                                  ? 'Close search'
+                                  : 'Search realms',
+                              onTap: _toggleSearch,
+                            ),
+                          ],
                         );
                       },
                     ),
-                  ),
-                ],
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOutCubic,
+                      child: _searchOpen
+                          ? Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+                              child: TextField(
+                                controller: _searchController,
+                                autofocus: true,
+                                onChanged: _onSearchChanged,
+                                textInputAction: TextInputAction.search,
+                                style: EverloreTheme.ui(
+                                  size: 14,
+                                  color: EverloreTheme.parchment,
+                                ),
+                                decoration: _realmSearchDecoration(),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                    Expanded(
+                      child: BlocBuilder<HomeCubit, HomeState>(
+                        builder: (context, state) {
+                          return RefreshIndicator(
+                            color: EverloreTheme.gold,
+                            backgroundColor: EverloreTheme.void2,
+                            onRefresh: () => context
+                                .read<HomeCubit>()
+                                .loadInstances(forceRefresh: true),
+                            child: CustomScrollView(
+                              controller: _scrollController,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              slivers: [
+                                if (state.isLoading && state.realms.isEmpty)
+                                  const SliverFillRemaining(
+                                    child: _LoadingView(),
+                                  )
+                                else if (state.needsSignIn &&
+                                    state.realms.isEmpty)
+                                  const SliverFillRemaining(
+                                    child: _UnauthView(),
+                                  )
+                                else if (state.error != null &&
+                                    state.realms.isEmpty)
+                                  SliverFillRemaining(
+                                    child: _ErrorView(message: state.error!),
+                                  )
+                                else ...[
+                                  if (state.realms.isEmpty)
+                                    SliverFillRemaining(
+                                      hasScrollBody: false,
+                                      child: _EmptyView(
+                                        isSearchEmpty:
+                                            _searchController.text.isNotEmpty,
+                                      ),
+                                    )
+                                  else
+                                    _buildRealmList(context, state),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

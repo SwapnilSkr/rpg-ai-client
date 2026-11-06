@@ -35,8 +35,7 @@ abstract final class GuideFlows {
       GuideBeat(
         anchor: GuideIds.discoverFilter,
         title: 'Narrowing the Search',
-        body:
-            'Seek only worlds or only souls, or only the voices you love.',
+        body: 'Seek only worlds or only souls, or only the voices you love.',
       ),
       GuideBeat(
         anchor: GuideIds.discoverCard,
@@ -513,6 +512,134 @@ abstract final class GuideFlows {
     ],
   );
 
+  /// Fired on the Realms tab once the player holds at least one realm and
+  /// `playFirst` is already finished.
+  static const navChats = GuideFlow(
+    id: 'nav.chats',
+    label: 'Rooms That Talk Back',
+    route: '/',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.navChats,
+        title: 'Rooms That Talk Back',
+        body:
+            'Beyond your worlds are rooms full of people who talk among '
+            'themselves, and to you.',
+      ),
+    ],
+  );
+
+  /// Fired on the first group preview.
+  static const groupPreview = GuideFlow(
+    id: 'group.preview',
+    label: "Who You'll Find",
+    route: '/group-preview',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.groupPreviewFaces,
+        title: "Who You'll Find",
+        body:
+            'Each has their own temper and their own reasons to speak. Not all '
+            'of them will answer at once.',
+      ),
+    ],
+  );
+
+  /// Fired on the first entry to a room, once the room has loaded.
+  static const groupRoom = GuideFlow(
+    id: 'group.room',
+    label: 'Speak to the Room',
+    route: '/group',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.groupRoomComposer,
+        title: 'Speak to the Room',
+        body:
+            'Say something and someone will answer. Name one of them with @ '
+            'and that one will.',
+      ),
+      GuideBeat(
+        anchor: GuideIds.groupRoomFaces,
+        title: 'Faces at the Table',
+        body:
+            'Open any face to see how they feel about you, or to speak with '
+            'them alone.',
+      ),
+    ],
+  );
+
+  /// Fired the first time reply ideas are on screen (room or direct thread).
+  static const groupIdeas = GuideFlow(
+    id: 'group.ideas',
+    label: 'A Word Ready',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.groupIdeas,
+        title: 'A Word Ready',
+        body:
+            'When nothing comes to mind, a few openings wait above your line.',
+      ),
+    ],
+  );
+
+  /// Fired once the room shows its third character line or more.
+  static const groupHold = GuideFlow(
+    id: 'group.hold',
+    label: 'Keeping the Moment',
+    route: '/group',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.groupHoldLine,
+        fallbackAnchor: GuideIds.groupHoldList,
+        title: 'Keeping the Moment',
+        body:
+            'Hold any line to keep its words, report it, or return the room '
+            'to that moment.',
+      ),
+    ],
+  );
+
+  /// Fired on the first direct thread.
+  static const groupDirect = GuideFlow(
+    id: 'group.direct',
+    label: 'Between the Two of You',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.groupDirectHeader,
+        title: 'Between the Two of You',
+        body: "What is said here stays here. The others won't hear it.",
+      ),
+    ],
+  );
+
+  /// Fired on the first visit to the room's actions tab.
+  static const groupActions = GuideFlow(
+    id: 'group.actions',
+    label: 'Doing, Not Saying',
+    route: '/group',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.groupFirstAction,
+        requiresAnchor: true,
+        title: 'Doing, Not Saying',
+        body: 'Some moments ask for something done rather than said.',
+      ),
+    ],
+  );
+
+  /// Fired the first time the bell shows an unread mark, on whichever tab is showing.
+  static const notifications = GuideFlow(
+    id: 'notifications',
+    label: 'Word From Elsewhere',
+    beats: [
+      GuideBeat(
+        anchor: GuideIds.notificationsBell,
+        title: 'Word From Elsewhere',
+        body: 'When someone writes while you are away, it waits here.',
+      ),
+    ],
+  );
+
   /// Registry for lookup, replay, and the settings list. Order is the order
   /// a player would meet them.
   static const all = <GuideFlow>[
@@ -535,6 +662,14 @@ abstract final class GuideFlows {
     myWorlds,
     personas,
     chats,
+    navChats,
+    groupPreview,
+    groupRoom,
+    groupIdeas,
+    groupHold,
+    groupDirect,
+    groupActions,
+    notifications,
   ];
 
   static GuideFlow? byId(String id) {

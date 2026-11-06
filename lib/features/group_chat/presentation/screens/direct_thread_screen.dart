@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../core/guide/guide_anchor.dart';
+import '../../../../core/guide/guide_flows.dart';
+import '../../../../core/guide/guide_ids.dart';
+import '../../../../core/guide/guide_trigger.dart';
 import '../../../../core/notifications/on_screen.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../play/presentation/widgets/anchored_menu_popup.dart';
@@ -57,9 +61,10 @@ class _DriftingPortraitBackdropState extends State<DriftingPortraitBackdrop>
         vsync: this,
         duration: const Duration(seconds: 24),
       )..repeat(reverse: true);
-      _scaleAnimation = Tween<double>(begin: 1.0, end: 1.06).animate(
-        CurvedAnimation(parent: _controller!, curve: Curves.easeInOut),
-      );
+      _scaleAnimation = Tween<double>(
+        begin: 1.0,
+        end: 1.06,
+      ).animate(CurvedAnimation(parent: _controller!, curve: Curves.easeInOut));
     } else {
       _scaleAnimation = const AlwaysStoppedAnimation<double>(1.0);
     }
@@ -171,10 +176,7 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(
-        _chats.markOpened(
-          widget.cubit.instanceId,
-          memberId: widget.member.id,
-        ),
+        _chats.markOpened(widget.cubit.instanceId, memberId: widget.member.id),
       );
     });
   }
@@ -215,10 +217,11 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
 
         final memberMap = {currentMember.id: currentMember};
 
-        final rawPortrait = (currentMember.portraitUrl?.trim().isNotEmpty == true
-                ? currentMember.portraitUrl
-                : widget.member.portraitUrl)
-            ?.trim();
+        final rawPortrait =
+            (currentMember.portraitUrl?.trim().isNotEmpty == true
+                    ? currentMember.portraitUrl
+                    : widget.member.portraitUrl)
+                ?.trim();
         final portrait = rawPortrait?.isNotEmpty == true ? rawPortrait : null;
         final hasPortrait = portrait != null && portrait.isNotEmpty;
         final backdropUrl = hasPortrait ? portrait : state.imageUrl;
@@ -245,102 +248,122 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
                   imageUrl: backdropUrl,
                   alignment: backdropAlignment,
                 ),
-                layoutBuilder: (topChild, topChildKey, bottomChild, bottomChildKey) {
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Positioned.fill(key: bottomChildKey, child: bottomChild),
-                      Positioned.fill(key: topChildKey, child: topChild),
-                    ],
-                  );
-                },
+                layoutBuilder:
+                    (topChild, topChildKey, bottomChild, bottomChildKey) {
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Positioned.fill(
+                            key: bottomChildKey,
+                            child: bottomChild,
+                          ),
+                          Positioned.fill(key: topChildKey, child: topChild),
+                        ],
+                      );
+                    },
               ),
             ),
             Scaffold(
               backgroundColor: Colors.transparent,
-              appBar: AppBar(
-                backgroundColor: isEmpty
-                    ? Colors.transparent
-                    : EverloreTheme.void0.withValues(alpha: kGroupChromeAlpha),
-                elevation: 0,
-                scrolledUnderElevation: 0,
-                leading: IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new,
-                    color: EverloreTheme.ash,
-                    size: 18,
-                  ),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                title: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 400),
-                  child: isEmpty
-                      ? const SizedBox.shrink(key: ValueKey('empty_header'))
-                      : _buildHeaderTitle(
-                          currentMember,
-                          key: const ValueKey('normal_header'),
-                        ),
-                ),
-                actions: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.favorite_outline_rounded,
-                      color: EverloreTheme.gold,
+              appBar: PreferredSize(
+                preferredSize: const Size.fromHeight(kToolbarHeight),
+                child: GuideAnchor(
+                  id: GuideIds.groupDirectHeader,
+                  child: AppBar(
+                    backgroundColor: isEmpty
+                        ? Colors.transparent
+                        : EverloreTheme.void0.withValues(
+                            alpha: kGroupChromeAlpha,
+                          ),
+                    elevation: 0,
+                    scrolledUnderElevation: 0,
+                    leading: IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: EverloreTheme.ash,
+                        size: 18,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
                     ),
-                    tooltip: 'Bond',
-                    onPressed: () => BondSheet.show(
-                      context,
-                      cubit: widget.cubit,
-                      member: currentMember,
-                    ),
-                  ),
-                ],
-              ),
-              body: Column(
-                children: [
-                  Expanded(
-                    child: AnimatedSwitcher(
+                    title: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 400),
                       child: isEmpty
-                          ? _buildEmptyThreadBody(
+                          ? const SizedBox.shrink(key: ValueKey('empty_header'))
+                          : _buildHeaderTitle(
                               currentMember,
-                              firstTexts,
-                              key: const ValueKey('empty_body'),
-                            )
-                          : GroupMessageList(
-                              key: const ValueKey('normal_body'),
-                              lines: thread.lines,
-                              memberMap: memberMap,
-                              composerTop: () => _composerTop,
-                              onRewindLine: canRewindGroup(state) ? _rewindTo : null,
-                              onRequestSelfie: !state.rewinding ? _requestSelfie : null,
-                              onCharacterTap: (_) => BondSheet.show(
-                                context,
-                                cubit: widget.cubit,
-                                member: currentMember,
-                              ),
+                              key: const ValueKey('normal_header'),
                             ),
                     ),
+                    actions: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.favorite_outline_rounded,
+                          color: EverloreTheme.gold,
+                        ),
+                        tooltip: 'Bond',
+                        onPressed: () => BondSheet.show(
+                          context,
+                          cubit: widget.cubit,
+                          member: currentMember,
+                        ),
+                      ),
+                    ],
                   ),
-                  GroupComposer(
-                    key: _composerKey,
-                    members: [currentMember],
-                    typingName: typingName,
-                    failedSends: failedSends,
-                    replyIdeas: state.replyIdeasFor(widget.member.id),
-                    onSendIdea: (idea) => widget.cubit.sendIdea(
-                      idea,
-                      directWith: widget.member.id,
+                ),
+              ),
+              body: GuideOnEnter(
+                flow: GuideFlows.groupDirect,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 400),
+                        child: isEmpty
+                            ? _buildEmptyThreadBody(
+                                currentMember,
+                                firstTexts,
+                                key: const ValueKey('empty_body'),
+                              )
+                            : GroupMessageList(
+                                key: const ValueKey('normal_body'),
+                                lines: thread.lines,
+                                memberMap: memberMap,
+                                composerTop: () => _composerTop,
+                                onRewindLine: canRewindGroup(state)
+                                    ? _rewindTo
+                                    : null,
+                                onRequestSelfie: !state.rewinding
+                                    ? _requestSelfie
+                                    : null,
+                                onCharacterTap: (_) => BondSheet.show(
+                                  context,
+                                  cubit: widget.cubit,
+                                  member: currentMember,
+                                ),
+                              ),
+                      ),
                     ),
-                    enableMentions: false, // No @ in direct threads
-                    enableActionToggle: false, // No action toggle in direct threads
-                    onSend: (text, _) {
-                      widget.cubit.send(text, directWith: widget.member.id);
-                    },
-                    onRetryFailed: widget.cubit.retryFailed,
-                    onDiscardFailed: widget.cubit.discardFailed,
-                  ),
-                ],
+                    GroupComposer(
+                      key: _composerKey,
+                      members: [currentMember],
+                      typingName: typingName,
+                      failedSends: failedSends,
+                      replyIdeas: state.replyIdeasFor(widget.member.id),
+                      onSendIdea: (idea) => widget.cubit.sendIdea(
+                        idea,
+                        directWith: widget.member.id,
+                      ),
+                      enableMentions: false, // No @ in direct threads
+                      enableActionToggle:
+                          false, // No action toggle in direct threads
+                      onSend: (text, _) {
+                        widget.cubit.send(text, directWith: widget.member.id);
+                      },
+                      onRetryFailed: widget.cubit.retryFailed,
+                      onDiscardFailed: widget.cubit.discardFailed,
+                    ),
+                  ],
+                ),
               ),
             ),
             GroupRewindVeil(active: state.rewinding),
@@ -471,10 +494,14 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
                                   vertical: 12,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: EverloreTheme.void2.withValues(alpha: 0.82),
+                                  color: EverloreTheme.void2.withValues(
+                                    alpha: 0.82,
+                                  ),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: EverloreTheme.goldDim.withValues(alpha: 0.35),
+                                    color: EverloreTheme.goldDim.withValues(
+                                      alpha: 0.35,
+                                    ),
                                     width: 0.8,
                                   ),
                                 ),

@@ -70,4 +70,16 @@ abstract final class GuideIds {
 
   // ── Chats ──
   static const chatsFirst = 'chats.first';
+
+  // ── Group chats ──
+  static const navChats = 'nav.chats';
+  static const groupPreviewFaces = 'group.preview.faces';
+  static const groupRoomComposer = 'group.room.composer';
+  static const groupRoomFaces = 'group.room.faces';
+  static const groupIdeas = 'group.ideas';
+  static const groupHoldLine = 'group.hold.line';
+  static const groupHoldList = 'group.hold.list';
+  static const groupDirectHeader = 'group.direct.header';
+  static const groupFirstAction = 'group.first_action';
+  static const notificationsBell = 'notifications.bell';
 }

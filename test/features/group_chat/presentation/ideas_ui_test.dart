@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:everlore/core/guide/guide_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -24,9 +25,7 @@ Widget _host(Widget child, {EdgeInsets viewInsets = EdgeInsets.zero}) =>
         loadTemplates: () async => const [],
       ),
       child: MaterialApp(
-        theme: ThemeData(
-          splashFactory: InkRipple.splashFactory,
-        ),
+        theme: ThemeData(splashFactory: InkRipple.splashFactory),
         home: MediaQuery(
           data: MediaQueryData(viewInsets: viewInsets),
           child: Scaffold(body: child),
@@ -61,6 +60,16 @@ Map<String, dynamic> withIdeas(
 );
 
 void main() {
+  // The guide's first-visit arcs are not what these tests are about.
+  setUp(() async {
+    FlutterSecureStorage.setMockInitialValues({});
+    await guide.onSignedOut();
+    await guide.setOptOut(true);
+  });
+  tearDown(() async {
+    await guide.setOptOut(false);
+    await guide.onSignedOut();
+  });
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
     FlutterSecureStorage.setMockInitialValues({});
@@ -68,18 +77,23 @@ void main() {
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMessageHandler('flutter/assets', (ByteData? message) async {
-      if (message == null) return null;
-      final key = utf8.decode(
-        message.buffer.asUint8List(message.offsetInBytes, message.lengthInBytes),
-      );
-      if (key == 'AssetManifest.bin') {
-        return const StandardMessageCodec().encodeMessage(<String, Object?>{});
-      }
-      if (key == 'AssetManifest.json') {
-        return ByteData.view(Uint8List.fromList(utf8.encode('{}')).buffer);
-      }
-      return null;
-    });
+          if (message == null) return null;
+          final key = utf8.decode(
+            message.buffer.asUint8List(
+              message.offsetInBytes,
+              message.lengthInBytes,
+            ),
+          );
+          if (key == 'AssetManifest.bin') {
+            return const StandardMessageCodec().encodeMessage(
+              <String, Object?>{},
+            );
+          }
+          if (key == 'AssetManifest.json') {
+            return ByteData.view(Uint8List.fromList(utf8.encode('{}')).buffer);
+          }
+          return null;
+        });
   });
 
   late FakeGateway gateway;
@@ -105,8 +119,9 @@ void main() {
   });
 
   group('Reply ideas chips UI', () {
-    testWidgets('chips render for ideas, tap calls send and they vanish',
-        (tester) async {
+    testWidgets('chips render for ideas, tap calls send and they vanish', (
+      tester,
+    ) async {
       createRig();
       await cubit.start();
 
@@ -119,11 +134,13 @@ void main() {
       );
 
       await tester.pumpWidget(
-        _host(GroupRoomScreen(
-          instanceId: instanceId,
-          title: 'Everlore Guild',
-          cubit: cubit,
-        )),
+        _host(
+          GroupRoomScreen(
+            instanceId: instanceId,
+            title: 'Everlore Guild',
+            cubit: cubit,
+          ),
+        ),
       );
       // Pump past entrance animation (250ms)
       await tester.pump(const Duration(milliseconds: 300));
@@ -132,14 +149,8 @@ void main() {
         find.text('I shall investigate the archives at dawn.'),
         findsOneWidget,
       );
-      expect(
-        find.text('Tell me more of what you saw.'),
-        findsOneWidget,
-      );
-      expect(
-        find.text('We must prepare for the council.'),
-        findsOneWidget,
-      );
+      expect(find.text('Tell me more of what you saw.'), findsOneWidget);
+      expect(find.text('We must prepare for the council.'), findsOneWidget);
       expect(find.byType(GroupReplyIdeas), findsOneWidget);
 
       // Verify no icons inside chips
@@ -171,45 +182,43 @@ void main() {
       expect(editable.controller.text, isEmpty);
     });
 
-    testWidgets('chips are hidden while keyboard is up with text typed in composer',
-        (tester) async {
-      createRig();
-      await cubit.start();
+    testWidgets(
+      'chips are hidden while keyboard is up with text typed in composer',
+      (tester) async {
+        createRig();
+        await cubit.start();
 
-      gateway.pushLoaded(withIdeas('e2', ['Idea one', 'Idea two']));
+        gateway.pushLoaded(withIdeas('e2', ['Idea one', 'Idea two']));
 
-      // 1. Keyboard down, no text: visible
-      await tester.pumpWidget(
-        _host(
-          GroupRoomScreen(
-            instanceId: instanceId,
-            cubit: cubit,
-          ),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Idea one'), findsOneWidget);
+        // 1. Keyboard down, no text: visible
+        await tester.pumpWidget(
+          _host(GroupRoomScreen(instanceId: instanceId, cubit: cubit)),
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Idea one'), findsOneWidget);
 
-      // 2. Keyboard up but text is empty: still visible
-      tester.view.viewInsets = const FakeViewPadding(bottom: 250);
-      addTearDown(tester.view.resetViewInsets);
-      await tester.pump();
-      expect(find.text('Idea one'), findsOneWidget);
+        // 2. Keyboard up but text is empty: still visible
+        tester.view.viewInsets = const FakeViewPadding(bottom: 250);
+        addTearDown(tester.view.resetViewInsets);
+        await tester.pump();
+        expect(find.text('Idea one'), findsOneWidget);
 
-      // 3. User types in composer with keyboard up: hidden
-      await tester.enterText(find.byType(TextField), 'Custom message');
-      await tester.pump();
-      expect(find.byType(GroupReplyIdeas), findsNothing);
+        // 3. User types in composer with keyboard up: hidden
+        await tester.enterText(find.byType(TextField), 'Custom message');
+        await tester.pump();
+        expect(find.byType(GroupReplyIdeas), findsNothing);
 
-      // 4. User clears composer text while keyboard is up: chips reappear
-      await tester.enterText(find.byType(TextField), '');
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Idea one'), findsOneWidget);
-    });
+        // 4. User clears composer text while keyboard is up: chips reappear
+        await tester.enterText(find.byType(TextField), '');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Idea one'), findsOneWidget);
+      },
+    );
 
-    testWidgets('reply ideas render and send in direct thread screen',
-        (tester) async {
+    testWidgets('reply ideas render and send in direct thread screen', (
+      tester,
+    ) async {
       createRig();
       await cubit.start();
 
@@ -222,7 +231,12 @@ void main() {
       ];
 
       gateway.pushLoaded(
-        withIdeas('d2', ['Direct idea 1', 'Direct idea 2'], who: jess, characters: cards),
+        withIdeas(
+          'd2',
+          ['Direct idea 1', 'Direct idea 2'],
+          who: jess,
+          characters: cards,
+        ),
       );
 
       final jessMember = GroupMember(
@@ -232,10 +246,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        _host(DirectThreadScreen(
-          cubit: cubit,
-          member: jessMember,
-        )),
+        _host(DirectThreadScreen(cubit: cubit, member: jessMember)),
       );
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -269,160 +280,161 @@ void main() {
       },
     ];
 
-    testWidgets('empty thread shows large name, status, and three first text lines',
-        (tester) async {
-      createRig();
-      await cubit.start();
+    testWidgets(
+      'empty thread shows large name, status, and three first text lines',
+      (tester) async {
+        createRig();
+        await cubit.start();
 
-      gateway.pushLoaded(loadedFrame(characters: cardsWithFirstTexts, directWith: jess));
+        gateway.pushLoaded(
+          loadedFrame(characters: cardsWithFirstTexts, directWith: jess),
+        );
 
-      const jessMember = GroupMember(
-        id: jess,
-        name: 'Jess',
-        portraitUrl: 'https://example.com/jess-full.jpg',
-        status: 'waiting by the gate',
-        firstTexts: [
-          'Are you ready for the journey?',
-          'The road ahead is perilous.',
-          'May the light guide our steps.',
-        ],
-      );
+        const jessMember = GroupMember(
+          id: jess,
+          name: 'Jess',
+          portraitUrl: 'https://example.com/jess-full.jpg',
+          status: 'waiting by the gate',
+          firstTexts: [
+            'Are you ready for the journey?',
+            'The road ahead is perilous.',
+            'May the light guide our steps.',
+          ],
+        );
 
-      await tester.pumpWidget(
-        _host(DirectThreadScreen(
-          cubit: cubit,
-          member: jessMember,
-        )),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpWidget(
+          _host(DirectThreadScreen(cubit: cubit, member: jessMember)),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
 
-      // Drifting backdrop is present
-      expect(find.byType(DriftingPortraitBackdrop), findsOneWidget);
+        // Drifting backdrop is present
+        expect(find.byType(DriftingPortraitBackdrop), findsOneWidget);
 
-      // Character's name and status large over the fade
-      expect(find.text('Jess'), findsOneWidget);
-      expect(find.text('waiting by the gate'), findsOneWidget);
+        // Character's name and status large over the fade
+        expect(find.text('Jess'), findsOneWidget);
+        expect(find.text('waiting by the gate'), findsOneWidget);
 
-      // Three stacked first text lines
-      expect(find.text('Are you ready for the journey?'), findsOneWidget);
-      expect(find.text('The road ahead is perilous.'), findsOneWidget);
-      expect(find.text('May the light guide our steps.'), findsOneWidget);
+        // Three stacked first text lines
+        expect(find.text('Are you ready for the journey?'), findsOneWidget);
+        expect(find.text('The road ahead is perilous.'), findsOneWidget);
+        expect(find.text('May the light guide our steps.'), findsOneWidget);
 
-      // Tapping a first text line calls sendIdea immediately
-      await tester.tap(find.text('The road ahead is perilous.'));
-      await tester.pump();
+        // Tapping a first text line calls sendIdea immediately
+        await tester.tap(find.text('The road ahead is perilous.'));
+        await tester.pump();
 
-      expect(gateway.chats.single['text'], 'The road ahead is perilous.');
-      expect(gateway.chats.single['direct_with'], jess);
+        expect(gateway.chats.single['text'], 'The road ahead is perilous.');
+        expect(gateway.chats.single['direct_with'], jess);
 
-      // Transition to normal thread over 400ms
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 50));
-      // First texts are now gone
-      expect(find.text('The road ahead is perilous.'), findsOneWidget); // Now in the message bubble!
-      expect(find.text('Are you ready for the journey?'), findsNothing);
-    });
+        // Transition to normal thread over 400ms
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump(const Duration(milliseconds: 50));
+        // First texts are now gone
+        expect(
+          find.text('The road ahead is perilous.'),
+          findsOneWidget,
+        ); // Now in the message bubble!
+        expect(find.text('Are you ready for the journey?'), findsNothing);
+      },
+    );
 
-    testWidgets('empty thread without first_texts shows large name and status without lines',
-        (tester) async {
-      createRig();
-      await cubit.start();
+    testWidgets(
+      'empty thread without first_texts shows large name and status without lines',
+      (tester) async {
+        createRig();
+        await cubit.start();
 
-      final cardsNoTexts = [
-        {
-          '_id': jess,
-          'canonical_name': 'Jess',
-          'status': 'resting by the fire',
-        },
-      ];
+        final cardsNoTexts = [
+          {
+            '_id': jess,
+            'canonical_name': 'Jess',
+            'status': 'resting by the fire',
+          },
+        ];
 
-      gateway.pushLoaded(loadedFrame(characters: cardsNoTexts, directWith: jess));
+        gateway.pushLoaded(
+          loadedFrame(characters: cardsNoTexts, directWith: jess),
+        );
 
-      const jessMember = GroupMember(
-        id: jess,
-        name: 'Jess',
-        status: 'resting by the fire',
-      );
+        const jessMember = GroupMember(
+          id: jess,
+          name: 'Jess',
+          status: 'resting by the fire',
+        );
 
-      await tester.pumpWidget(
-        _host(DirectThreadScreen(
-          cubit: cubit,
-          member: jessMember,
-        )),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpWidget(
+          _host(DirectThreadScreen(cubit: cubit, member: jessMember)),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.byType(DriftingPortraitBackdrop), findsOneWidget);
-      expect(find.text('Jess'), findsOneWidget);
-      expect(find.text('resting by the fire'), findsOneWidget);
+        expect(find.byType(DriftingPortraitBackdrop), findsOneWidget);
+        expect(find.text('Jess'), findsOneWidget);
+        expect(find.text('resting by the fire'), findsOneWidget);
 
-      // Composer is visible at the bottom
-      expect(find.byType(TextField), findsOneWidget);
-    });
+        // Composer is visible at the bottom
+        expect(find.byType(TextField), findsOneWidget);
+      },
+    );
 
-    testWidgets('empty thread without portrait falls back to backdrop without crashing',
-        (tester) async {
-      createRig();
-      await cubit.start();
+    testWidgets(
+      'empty thread without portrait falls back to backdrop without crashing',
+      (tester) async {
+        createRig();
+        await cubit.start();
 
-      final cardsNoPortrait = [
-        {
-          '_id': jess,
-          'canonical_name': 'Jess',
-          'portrait_url': '',
-        },
-      ];
+        final cardsNoPortrait = [
+          {'_id': jess, 'canonical_name': 'Jess', 'portrait_url': ''},
+        ];
 
-      gateway.pushLoaded(loadedFrame(characters: cardsNoPortrait, directWith: jess));
+        gateway.pushLoaded(
+          loadedFrame(characters: cardsNoPortrait, directWith: jess),
+        );
 
-      const jessMember = GroupMember(
-        id: jess,
-        name: 'Jess',
-        portraitUrl: null,
-      );
+        const jessMember = GroupMember(
+          id: jess,
+          name: 'Jess',
+          portraitUrl: null,
+        );
 
-      await tester.pumpWidget(
-        _host(DirectThreadScreen(
-          cubit: cubit,
-          member: jessMember,
-        )),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpWidget(
+          _host(DirectThreadScreen(cubit: cubit, member: jessMember)),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.byType(DriftingPortraitBackdrop), findsOneWidget);
-      expect(find.text('Jess'), findsOneWidget);
-    });
+        expect(find.byType(DriftingPortraitBackdrop), findsOneWidget);
+        expect(find.text('Jess'), findsOneWidget);
+      },
+    );
 
-    testWidgets('drift animation controller has 24s duration and repeat reversing',
-        (tester) async {
-      DriftingPortraitBackdrop.animateDrift = true;
-      createRig();
-      await cubit.start();
+    testWidgets(
+      'drift animation controller has 24s duration and repeat reversing',
+      (tester) async {
+        DriftingPortraitBackdrop.animateDrift = true;
+        createRig();
+        await cubit.start();
 
-      const jessMember = GroupMember(
-        id: jess,
-        name: 'Jess',
-        portraitUrl: 'https://example.com/jess-full.jpg',
-      );
+        const jessMember = GroupMember(
+          id: jess,
+          name: 'Jess',
+          portraitUrl: 'https://example.com/jess-full.jpg',
+        );
 
-      await tester.pumpWidget(
-        _host(DirectThreadScreen(
-          cubit: cubit,
-          member: jessMember,
-        )),
-      );
-      await tester.pump(const Duration(milliseconds: 50));
+        await tester.pumpWidget(
+          _host(DirectThreadScreen(cubit: cubit, member: jessMember)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
 
-      final state = tester.state(find.byType(DriftingPortraitBackdrop));
-      expect(state, isNotNull);
+        final state = tester.state(find.byType(DriftingPortraitBackdrop));
+        expect(state, isNotNull);
 
-      // Pump 1 second of drift
-      await tester.pump(const Duration(seconds: 1));
-      expect(find.byType(Transform), findsWidgets);
-    });
+        // Pump 1 second of drift
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.byType(Transform), findsWidgets);
+      },
+    );
   });
 
   group('Status in direct thread header UI', () {
@@ -442,17 +454,19 @@ void main() {
         id: 'e1',
         sequence: 1,
         lines: [
-          storedLine(jess, 'All quiet on the ramparts.', DateTime.utc(2026, 11, 4, 11)),
+          storedLine(
+            jess,
+            'All quiet on the ramparts.',
+            DateTime.utc(2026, 11, 4, 11),
+          ),
         ],
       );
 
       gateway.pushLoaded(loadedFrame(characters: cards));
       cubit.selectThread(jess);
-      gateway.pushLoaded(loadedFrame(
-        characters: cards,
-        directWith: jess,
-        events: [directEvent],
-      ));
+      gateway.pushLoaded(
+        loadedFrame(characters: cards, directWith: jess, events: [directEvent]),
+      );
 
       const jessMember = GroupMember(
         id: jess,
@@ -461,10 +475,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        _host(DirectThreadScreen(
-          cubit: cubit,
-          member: jessMember,
-        )),
+        _host(DirectThreadScreen(cubit: cubit, member: jessMember)),
       );
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 50));
@@ -489,45 +500,38 @@ void main() {
       expect(statusText.style?.fontSize, 11);
     });
 
-    testWidgets('no status means the name sits alone in header', (tester) async {
+    testWidgets('no status means the name sits alone in header', (
+      tester,
+    ) async {
       createRig();
       await cubit.start();
 
       final cards = [
-        {
-          '_id': jess,
-          'canonical_name': 'Jess',
-          'status': null,
-        },
+        {'_id': jess, 'canonical_name': 'Jess', 'status': null},
       ];
 
       final directEvent = eventRow(
         id: 'e1',
         sequence: 1,
         lines: [
-          storedLine(jess, 'Greetings traveler.', DateTime.utc(2026, 11, 4, 11)),
+          storedLine(
+            jess,
+            'Greetings traveler.',
+            DateTime.utc(2026, 11, 4, 11),
+          ),
         ],
       );
 
       gateway.pushLoaded(loadedFrame(characters: cards));
       cubit.selectThread(jess);
-      gateway.pushLoaded(loadedFrame(
-        characters: cards,
-        directWith: jess,
-        events: [directEvent],
-      ));
-
-      const jessMember = GroupMember(
-        id: jess,
-        name: 'Jess',
-        status: null,
+      gateway.pushLoaded(
+        loadedFrame(characters: cards, directWith: jess, events: [directEvent]),
       );
 
+      const jessMember = GroupMember(id: jess, name: 'Jess', status: null);
+
       await tester.pumpWidget(
-        _host(DirectThreadScreen(
-          cubit: cubit,
-          member: jessMember,
-        )),
+        _host(DirectThreadScreen(cubit: cubit, member: jessMember)),
       );
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 50));

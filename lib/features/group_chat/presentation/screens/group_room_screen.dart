@@ -5,6 +5,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../core/guide/guide_anchor.dart';
+import '../../../../core/guide/guide_controller.dart';
+import '../../../../core/guide/guide_flows.dart';
+import '../../../../core/guide/guide_ids.dart';
 import '../../../../core/notifications/on_screen.dart';
 import '../../../../core/network/ws_manager.dart';
 import '../../../../shared/widgets/everlore_notice.dart';
@@ -64,6 +68,11 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
     _chats = context.read<ChatsCubit>();
     OnScreen.instance.enter(this, Place.room(widget.instanceId));
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging && mounted) {
+        _maybeGuide(_cubit.state);
+      }
+    });
     if (widget.cubit != null) {
       _cubit = widget.cubit!;
     } else {
@@ -79,8 +88,52 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _callMarkOpened();
       // A cubit that already holds the cast raises no state change to listen to.
-      if (mounted) _openInitialThread(_cubit.state);
+      if (mounted) {
+        _openInitialThread(_cubit.state);
+        _maybeGuide(_cubit.state);
+      }
     });
+  }
+
+  void _maybeGuide(GroupChatState state) {
+    if (state.load == GroupChatLoad.loading || state.rewinding) return;
+    if (guide.activeFlow != null) return;
+    if (_tabController.index != 0) return;
+    // Not while someone is answering, nor over the keyboard.
+    if (state.thread().typingId != null) return;
+    if (MediaQuery.viewInsetsOf(context).bottom > 0) return;
+
+    if (guide.canAutoStart(GuideFlows.groupRoom)) {
+      if (state.members.isNotEmpty) {
+        guide.maybeStart(
+          GuideFlows.groupRoom,
+          delay: const Duration(milliseconds: 600),
+        );
+        return;
+      }
+    }
+
+    final characterLines = state
+        .thread()
+        .lines
+        .where((l) => !l.isPlayer)
+        .length;
+    if (characterLines >= 3 && guide.canAutoStart(GuideFlows.groupHold)) {
+      guide.maybeStart(
+        GuideFlows.groupHold,
+        delay: const Duration(milliseconds: 500),
+      );
+      return;
+    }
+
+    final ideas = state.replyIdeasFor();
+    if (ideas.isNotEmpty && guide.canAutoStart(GuideFlows.groupIdeas)) {
+      guide.maybeStart(
+        GuideFlows.groupIdeas,
+        delay: const Duration(milliseconds: 400),
+      );
+      return;
+    }
   }
 
   /// A thread opened from the Chats list sits on top of this room. Once, and
@@ -277,15 +330,15 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
     unawaited(_chats.markOpened(widget.instanceId, memberId: member.id));
     Navigator.of(context)
         .push(
-      MaterialPageRoute(
-        builder: (_) => DirectThreadScreen(cubit: _cubit, member: member),
-      ),
-    )
+          MaterialPageRoute(
+            builder: (_) => DirectThreadScreen(cubit: _cubit, member: member),
+          ),
+        )
         .then((_) {
-      unawaited(_chats.markOpened(widget.instanceId, memberId: member.id));
-      unawaited(_chats.refresh());
-      if (closeRoomAfter && mounted && context.canPop()) context.pop();
-    });
+          unawaited(_chats.markOpened(widget.instanceId, memberId: member.id));
+          unawaited(_chats.refresh());
+          if (closeRoomAfter && mounted && context.canPop()) context.pop();
+        });
   }
 
   @override
@@ -296,7 +349,8 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
         bloc: _cubit,
         listenWhen: (prev, curr) =>
             (curr.error != null && prev.error != curr.error) ||
-            (curr.rewindError != null && prev.rewindError != curr.rewindError) ||
+            (curr.rewindError != null &&
+                prev.rewindError != curr.rewindError) ||
             (!_openedDirectThreadOnce &&
                 widget.initialMemberId != null &&
                 curr.members.isNotEmpty),
@@ -334,7 +388,8 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                     color: EverloreTheme.ash,
                     size: 18,
                   ),
-                  onPressed: () => context.canPop() ? context.pop() : context.go('/'),
+                  onPressed: () =>
+                      context.canPop() ? context.pop() : context.go('/'),
                 ),
               ),
               body: Center(
@@ -389,7 +444,9 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
               ? widget.title!
               : state.title;
 
-          final memberNamesSubtitle = state.members.map((m) => m.name).join(', ');
+          final memberNamesSubtitle = state.members
+              .map((m) => m.name)
+              .join(', ');
 
           final groupThread = state.thread(kGroupThreadKey);
           final typingMember = groupThread.typingId != null
@@ -400,21 +457,27 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
           final memberMap = {for (final m in state.members) m.id: m};
 
           final failedSends = state.failedSends
-              .where((f) => f.directWith == null || f.directWith == kGroupThreadKey)
+              .where(
+                (f) => f.directWith == null || f.directWith == kGroupThreadKey,
+              )
               .toList();
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _maybeGuide(state);
+          });
 
           return Stack(
             fit: StackFit.expand,
             children: [
               Positioned.fill(
-                child: GroupChatBackdrop(
-                  imageUrl: state.imageUrl,
-                ),
+                child: GroupChatBackdrop(imageUrl: state.imageUrl),
               ),
               Scaffold(
                 backgroundColor: Colors.transparent,
                 appBar: AppBar(
-                  backgroundColor: EverloreTheme.void0.withValues(alpha: kGroupChromeAlpha),
+                  backgroundColor: EverloreTheme.void0.withValues(
+                    alpha: kGroupChromeAlpha,
+                  ),
                   elevation: 0,
                   scrolledUnderElevation: 0,
                   leading: IconButton(
@@ -423,7 +486,8 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                       color: EverloreTheme.ash,
                       size: 18,
                     ),
-                    onPressed: () => context.canPop() ? context.pop() : context.go('/'),
+                    onPressed: () =>
+                        context.canPop() ? context.pop() : context.go('/'),
                   ),
                   title: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -459,7 +523,10 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: Center(
-                          child: _buildHeaderAvatars(context, state),
+                          child: GuideAnchor(
+                            id: GuideIds.groupRoomFaces,
+                            child: _buildHeaderAvatars(context, state),
+                          ),
                         ),
                       ),
                     ),
@@ -499,8 +566,12 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                             onCharacterTap: _openCharacterSheet,
                             someoneTyping: typingName != null,
                             composerTop: () => _composerTop,
-                            onRewindLine: canRewindGroup(state) ? _rewindTo : null,
-                            onRequestSelfie: !state.rewinding ? _requestSelfie : null,
+                            onRewindLine: canRewindGroup(state)
+                                ? _rewindTo
+                                : null,
+                            onRequestSelfie: !state.rewinding
+                                ? _requestSelfie
+                                : null,
                           ),
                         ),
                         GroupComposer(
@@ -550,7 +621,8 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
       children: [
         SizedBox(
           height: 28,
-          width: displayMembers.length * 18.0 +
+          width:
+              displayMembers.length * 18.0 +
               10.0 +
               (extraCount > 0 ? 24.0 : 0.0),
           child: Stack(
@@ -567,10 +639,7 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
                         width: 1.5,
                       ),
                     ),
-                    child: MemberAvatar(
-                      member: displayMembers[i],
-                      size: 24,
-                    ),
+                    child: MemberAvatar(member: displayMembers[i], size: 24),
                   ),
                 ),
               if (extraCount > 0)

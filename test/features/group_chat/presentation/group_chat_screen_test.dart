@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:everlore/core/guide/guide_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -23,9 +24,7 @@ Widget _host(Widget child) => BlocProvider<ChatsCubit>(
     loadTemplates: () async => const [],
   ),
   child: MaterialApp(
-    theme: ThemeData(
-      splashFactory: InkRipple.splashFactory,
-    ),
+    theme: ThemeData(splashFactory: InkRipple.splashFactory),
     home: Scaffold(body: child),
   ),
 );
@@ -61,6 +60,16 @@ class _TestRig {
 }
 
 void main() {
+  // The guide's first-visit arcs are not what these tests are about.
+  setUp(() async {
+    FlutterSecureStorage.setMockInitialValues({});
+    await guide.onSignedOut();
+    await guide.setOptOut(true);
+  });
+  tearDown(() async {
+    await guide.setOptOut(false);
+    await guide.onSignedOut();
+  });
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
     FlutterSecureStorage.setMockInitialValues({});
@@ -68,18 +77,23 @@ void main() {
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMessageHandler('flutter/assets', (ByteData? message) async {
-      if (message == null) return null;
-      final key = utf8.decode(
-        message.buffer.asUint8List(message.offsetInBytes, message.lengthInBytes),
-      );
-      if (key == 'AssetManifest.bin') {
-        return const StandardMessageCodec().encodeMessage(<String, Object?>{});
-      }
-      if (key == 'AssetManifest.json') {
-        return ByteData.view(Uint8List.fromList(utf8.encode('{}')).buffer);
-      }
-      return null;
-    });
+          if (message == null) return null;
+          final key = utf8.decode(
+            message.buffer.asUint8List(
+              message.offsetInBytes,
+              message.lengthInBytes,
+            ),
+          );
+          if (key == 'AssetManifest.bin') {
+            return const StandardMessageCodec().encodeMessage(
+              <String, Object?>{},
+            );
+          }
+          if (key == 'AssetManifest.json') {
+            return ByteData.view(Uint8List.fromList(utf8.encode('{}')).buffer);
+          }
+          return null;
+        });
   });
   late FakeGateway gateway;
   late FakeRepository repo;
@@ -124,11 +138,13 @@ void main() {
 
       // 1. Group thread rendering
       await tester.pumpWidget(
-        _host(GroupRoomScreen(
-          instanceId: instanceId,
-          title: 'Everlore Guild',
-          cubit: cubit,
-        )),
+        _host(
+          GroupRoomScreen(
+            instanceId: instanceId,
+            title: 'Everlore Guild',
+            cubit: cubit,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -141,13 +157,14 @@ void main() {
         id: 'e2',
         sequence: 1,
         lines: [
-          storedLine(jess, 'Direct message only for you', DateTime.utc(2026, 11, 4, 11, 5)),
+          storedLine(
+            jess,
+            'Direct message only for you',
+            DateTime.utc(2026, 11, 4, 11, 5),
+          ),
         ],
       );
-      gateway.pushLoaded(loadedFrame(
-        directWith: jess,
-        events: [directEvent],
-      ));
+      gateway.pushLoaded(loadedFrame(directWith: jess, events: [directEvent]));
 
       final jessMember = GroupMember(id: jess, name: 'Jess', role: 'friend');
       await tester.pumpWidget(
@@ -164,11 +181,13 @@ void main() {
       gateway.pushLoaded(loadedFrame());
 
       await tester.pumpWidget(
-        _host(GroupRoomScreen(
-          instanceId: instanceId,
-          title: 'Everlore Guild',
-          cubit: cubit,
-        )),
+        _host(
+          GroupRoomScreen(
+            instanceId: instanceId,
+            title: 'Everlore Guild',
+            cubit: cubit,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -177,7 +196,11 @@ void main() {
       // Push future-stamped wireLine to show typing
       gateway.pushLines(
         linesFrame([
-          wireLine(jess, 'upcoming message', clock.now().add(const Duration(seconds: 5))),
+          wireLine(
+            jess,
+            'upcoming message',
+            clock.now().add(const Duration(seconds: 5)),
+          ),
         ]),
       );
       await tester.pump();
@@ -192,11 +215,13 @@ void main() {
       gateway.pushLoaded(loadedFrame());
 
       await tester.pumpWidget(
-        _host(GroupRoomScreen(
-          instanceId: instanceId,
-          title: 'Everlore Guild',
-          cubit: cubit,
-        )),
+        _host(
+          GroupRoomScreen(
+            instanceId: instanceId,
+            title: 'Everlore Guild',
+            cubit: cubit,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -223,11 +248,13 @@ void main() {
       gateway.pushLoaded(loadedFrame());
 
       await tester.pumpWidget(
-        _host(GroupRoomScreen(
-          instanceId: instanceId,
-          title: 'Everlore Guild',
-          cubit: cubit,
-        )),
+        _host(
+          GroupRoomScreen(
+            instanceId: instanceId,
+            title: 'Everlore Guild',
+            cubit: cubit,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -251,17 +278,21 @@ void main() {
       expect(chatSends.first['kind'], 'action');
     });
 
-    testWidgets('failed send shows Retry and retrying sends again', (tester) async {
+    testWidgets('failed send shows Retry and retrying sends again', (
+      tester,
+    ) async {
       createRig();
       await cubit.start();
       gateway.pushLoaded(loadedFrame());
 
       await tester.pumpWidget(
-        _host(GroupRoomScreen(
-          instanceId: instanceId,
-          title: 'Everlore Guild',
-          cubit: cubit,
-        )),
+        _host(
+          GroupRoomScreen(
+            instanceId: instanceId,
+            title: 'Everlore Guild',
+            cubit: cubit,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -287,19 +318,31 @@ void main() {
       expect(gateway.chats.length, beforeRetries + 1);
     });
 
-    testWidgets('bond sheet shows meters and set it yourself slider', (tester) async {
+    testWidgets('bond sheet shows meters and set it yourself slider', (
+      tester,
+    ) async {
       createRig();
       repo.bondRows = [
         GroupBond(
           characterId: jess,
           name: 'Jess',
-          meters: const BondMeters(trust: 40, affection: 60, fear: 10, rivalry: 20),
+          meters: const BondMeters(
+            trust: 40,
+            affection: 60,
+            fear: 10,
+            rivalry: 20,
+          ),
           moments: const [
             BondMoment(evidence: 'Shared a secret', deltas: {'trust': 5}),
           ],
         ),
       ];
-      repo.setResult = const BondMeters(trust: 75, affection: 60, fear: 10, rivalry: 20);
+      repo.setResult = const BondMeters(
+        trust: 75,
+        affection: 60,
+        fear: 10,
+        rivalry: 20,
+      );
 
       await cubit.start();
       gateway.pushLoaded(loadedFrame());

@@ -126,11 +126,15 @@ class EverloreNavBar extends StatelessWidget {
                       child: Center(
                         child: slot == null
                             ? _CreateAction(onTap: onCreate)
-                            : _NavTab(
-                                slot: slot,
-                                active: currentIndex == slot.branch,
-                                showDot: slot.branch == 2 && hasUnreadChats,
-                                onTap: () => onSelect(slot.branch),
+                            : guideAnchorIf(
+                                slot.branch == 2,
+                                GuideIds.navChats,
+                                _NavTab(
+                                  slot: slot,
+                                  active: currentIndex == slot.branch,
+                                  showDot: slot.branch == 2 && hasUnreadChats,
+                                  onTap: () => onSelect(slot.branch),
+                                ),
                               ),
                       ),
                     ),
