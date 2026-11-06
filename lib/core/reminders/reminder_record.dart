@@ -25,7 +25,9 @@ class ReminderAnchor {
     if (id is! String || id.isEmpty || at == null) return null;
     return ReminderAnchor(
       instanceId: id,
-      worldTitle: raw['worldTitle'] is String ? raw['worldTitle'] as String : '',
+      worldTitle: raw['worldTitle'] is String
+          ? raw['worldTitle'] as String
+          : '',
       at: at,
     );
   }
@@ -39,6 +41,7 @@ class ReminderRecord {
     this.askCount = 0,
     this.lastAskedAt,
     this.anchor,
+    this.pushAsked = false,
   });
 
   static const empty = ReminderRecord();
@@ -48,16 +51,22 @@ class ReminderRecord {
   final DateTime? lastAskedAt;
   final ReminderAnchor? anchor;
 
+  /// The player has answered the group-chat messages ask. Shared with the
+  /// story ask so neither sheet follows the other.
+  final bool pushAsked;
+
   ReminderRecord copyWith({
     bool? enabled,
     int? askCount,
     DateTime? lastAskedAt,
     ReminderAnchor? anchor,
+    bool? pushAsked,
   }) => ReminderRecord(
     enabled: enabled ?? this.enabled,
     askCount: askCount ?? this.askCount,
     lastAskedAt: lastAskedAt ?? this.lastAskedAt,
     anchor: anchor ?? this.anchor,
+    pushAsked: pushAsked ?? this.pushAsked,
   );
 
   String encode() => jsonEncode({
@@ -65,6 +74,7 @@ class ReminderRecord {
     'askCount': askCount,
     if (lastAskedAt != null) 'lastAskedAt': lastAskedAt!.toIso8601String(),
     if (anchor != null) 'anchor': anchor!.toJson(),
+    if (pushAsked) 'pushAsked': true,
   });
 
   /// A corrupt or missing blob is an empty record, never an error: the worst
@@ -80,6 +90,7 @@ class ReminderRecord {
         askCount: asks is int ? asks.clamp(0, 2) : 0,
         lastAskedAt: DateTime.tryParse('${map['lastAskedAt']}'),
         anchor: ReminderAnchor.fromJson(map['anchor']),
+        pushAsked: map['pushAsked'] == true,
       );
     } catch (_) {
       return empty;

@@ -24,6 +24,7 @@ import '../widgets/group_message_list.dart';
 import '../widgets/group_rewind.dart';
 import '../widgets/member_avatar.dart';
 import '../widgets/members_sheet.dart';
+import '../widgets/push_ask_sheet.dart';
 import 'direct_thread_screen.dart';
 
 /// Main room screen for group chats, hosting Chat and Actions tabs.
@@ -52,6 +53,7 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
   late final TabController _tabController;
   late final ChatsCubit _chats;
   bool _openedDirectThreadOnce = false;
+  StreamSubscription<void>? _pushAskSub;
 
   double? get _composerTop => globalRectOf(_composerKey.currentContext)?.top;
 
@@ -71,6 +73,9 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
       );
       unawaited(_cubit.start());
     }
+    _pushAskSub = _cubit.pushAskDue.listen((_) {
+      if (mounted) unawaited(PushAskSheet.show(context));
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _callMarkOpened();
       // A cubit that already holds the cast raises no state change to listen to.
@@ -98,6 +103,7 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
   @override
   void dispose() {
     OnScreen.instance.leave(this);
+    unawaited(_pushAskSub?.cancel());
     _tabController.dispose();
     if (widget.cubit == null) {
       _cubit.close();

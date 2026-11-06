@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/reminders/push_ask.dart';
 import '../data/group_chat_gateway.dart';
 import '../data/group_chat_repository.dart';
 import '../models/group_chat_models.dart';
@@ -27,6 +28,13 @@ class GroupChatCubit extends Cubit<GroupChatState> {
   final GroupChatGateway _gateway;
   final GroupChatRepository _repo;
   final GroupChatClock _clock;
+  final PushAsk _pushAsk;
+
+  /// Raised once, after the player's first reply in this chat, when the ask
+  /// for messages is due. A screen shows the sheet; the cubit only says when.
+  final StreamController<void> _pushAskDue = StreamController<void>.broadcast();
+  Stream<void> get pushAskDue => _pushAskDue.stream;
+  bool _pushAskChecked = false;
 
   /// A line stamped far ahead (a phone clock running behind the server's) is
   /// shown after at most this long.
@@ -90,6 +98,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     required GroupChatGateway gateway,
     GroupChatRepository repository = const HttpGroupChatRepository(),
     GroupChatClock clock = const SystemGroupChatClock(),
+    PushAsk? pushAsk,
     this.maxRevealDelay = const Duration(seconds: 20),
     this.turnWatchdog = const Duration(seconds: 90),
     this.openTypingTimeout = const Duration(seconds: 25),
@@ -99,6 +108,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
   }) : _gateway = gateway,
        _repo = repository,
        _clock = clock,
+       _pushAsk = pushAsk ?? PushAsk.instance,
        super(GroupChatState(instanceId: instanceId)) {
     _subs
       ..add(_gateway.connectionState.listen(_setConnected))
@@ -584,9 +594,22 @@ class GroupChatCubit extends Cubit<GroupChatState> {
     }
     _reveal(key);
     _finishTurn();
+    // A character answered a line the player sent (not a message that was
+    // waiting for them): the moment to ask whether they want to hear back.
+    if (send != null && lines.any((l) => !l.isPlayer)) _maybeAskForPush();
     // Without its number a saved line cannot be rewound to; the history has it.
     if (sequence == null && eventId.isNotEmpty) _requestLoad(key);
     if (key != kGroupThreadKey) unawaited(refreshThreads());
+  }
+
+  void _maybeAskForPush() {
+    if (_pushAskChecked) return;
+    _pushAskChecked = true;
+    unawaited(
+      _pushAsk.due().then((due) {
+        if (due && !_closed) _pushAskDue.add(null);
+      }, onError: (_) {}),
+    );
   }
 
   void _onErrorFrame(Map<String, dynamic> msg) {
@@ -1325,6 +1348,7 @@ class GroupChatCubit extends Cubit<GroupChatState> {
   @override
   Future<void> close() async {
     _closed = true;
+    unawaited(_pushAskDue.close());
     _loadTimer?.call();
     _rewindTimer?.call();
     for (final cancel in _revealTimers.values) {

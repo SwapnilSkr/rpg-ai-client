@@ -17,6 +17,7 @@ import '../widgets/group_composer.dart';
 import '../widgets/group_message_list.dart';
 import '../widgets/group_rewind.dart';
 import '../widgets/member_avatar.dart';
+import '../widgets/push_ask_sheet.dart';
 
 /// Full-screen drifting backdrop for an empty direct thread.
 ///
@@ -150,6 +151,7 @@ class DirectThreadScreen extends StatefulWidget {
 class _DirectThreadScreenState extends State<DirectThreadScreen> {
   final GlobalKey _composerKey = GlobalKey();
   late final ChatsCubit _chats;
+  StreamSubscription<void>? _pushAskSub;
 
   double? get _composerTop => globalRectOf(_composerKey.currentContext)?.top;
 
@@ -163,6 +165,10 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
       Place.direct(widget.cubit.instanceId, widget.member.id),
     );
     widget.cubit.selectThread(widget.member.id);
+    // The room below hears this too; the first to claim shows the sheet.
+    _pushAskSub = widget.cubit.pushAskDue.listen((_) {
+      if (mounted) unawaited(PushAskSheet.show(context));
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(
         _chats.markOpened(
@@ -176,6 +182,7 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
   @override
   void dispose() {
     OnScreen.instance.leave(this);
+    unawaited(_pushAskSub?.cancel());
     widget.cubit.selectThread(kGroupThreadKey);
     unawaited(
       _chats.markOpened(widget.cubit.instanceId, memberId: widget.member.id),

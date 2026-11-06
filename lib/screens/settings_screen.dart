@@ -5,7 +5,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../app/theme/nexus_theme.dart';
 import '../core/auth/auth_service.dart';
 import '../core/auth/google_auth_service.dart';
+import '../core/auth/group_notifications.dart';
 import '../core/errors/user_message.dart';
+import '../core/push/push_service.dart';
 import '../core/reminders/reminder_service.dart';
 import '../core/telemetry/telemetry.dart';
 import '../shared/models/user.dart';
@@ -18,12 +20,21 @@ import 'sharing_switch_row.dart';
 /// What used to crowd the profile: the mature-themes switch, reminders,
 /// privacy and account deletion.
 class SettingsScreen extends StatefulWidget {
-  /// [user] and [reminders] are seams for tests; production reads the cached
-  /// session user and the shared reminder service.
-  const SettingsScreen({super.key, this.user, this.reminders});
+  /// [user], [reminders], [messages] and [systemAllowsMessages] are seams for
+  /// tests; production reads the cached session user, the shared reminder
+  /// service, the account's preferences and the phone's notification setting.
+  const SettingsScreen({
+    super.key,
+    this.user,
+    this.reminders,
+    this.messages = const GroupNotificationsPref(),
+    this.systemAllowsMessages,
+  });
 
   final User? user;
   final ReminderService? reminders;
+  final GroupNotificationsPref messages;
+  final Future<bool> Function()? systemAllowsMessages;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -221,6 +232,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SettingsGroup(
           children: [
             ReminderSwitchRow(service: widget.reminders),
+            if (signedIn)
+              _MessagesSwitchRow(
+                pref: widget.messages,
+                systemAllows: widget.systemAllowsMessages,
+              ),
           ],
         ),
         const SettingsSectionLabel('Privacy'),
@@ -290,6 +306,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
       body: _body(),
+    );
+  }
+}
+
+/// The switch for messages from the player's stories. Reads and writes the
+/// account's own preference; the phone's notification setting only decides
+/// whether the player is reminded to allow it.
+class _MessagesSwitchRow extends StatefulWidget {
+  const _MessagesSwitchRow({required this.pref, this.systemAllows});
+
+  final GroupNotificationsPref pref;
+  final Future<bool> Function()? systemAllows;
+
+  @override
+  State<_MessagesSwitchRow> createState() => _MessagesSwitchRowState();
+}
+
+class _MessagesSwitchRowState extends State<_MessagesSwitchRow> {
+  // Absent reads as on, so that is what shows until the account answers.
+  bool _on = true;
+  bool _updating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final on = await widget.pref.read();
+      if (!mounted || _updating) return;
+      setState(() => _on = on);
+    } catch (_) {
+      // Stays as shown; the next open reads again.
+    }
+  }
+
+  Future<bool> _systemAllows() async {
+    try {
+      return await (widget.systemAllows ??
+          PushService.instance.permissionGranted)();
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Future<void> _toggle(bool value) async {
+    final before = _on;
+    setState(() {
+      _on = value;
+      _updating = true;
+    });
+    try {
+      await widget.pref.write(value);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _on = before;
+        _updating = false;
+      });
+      showEverloreNotice(
+        context,
+        userFacingError(
+          e,
+          fallback: 'Could not update that preference. Please try again.',
+        ),
+        tone: NoticeTone.error,
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _updating = false);
+    if (value && !await _systemAllows()) {
+      if (!mounted) return;
+      showEverloreNotice(
+        context,
+        'Allow notifications for Everlore, then turn this on.',
+        tone: NoticeTone.info,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsSwitchRow(
+      icon: Icons.chat_bubble_outline_rounded,
+      title: 'Messages from your stories',
+      subtitle: "When someone writes to you, or a story moves on while you're away.",
+      value: _on,
+      onChanged: _updating ? null : _toggle,
+      busy: _updating,
     );
   }
 }

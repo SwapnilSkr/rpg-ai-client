@@ -1,3 +1,4 @@
+import 'package:everlore/core/auth/group_notifications.dart';
 import 'package:everlore/core/reminders/reminder_service.dart';
 import 'package:everlore/screens/reminder_switch_row.dart';
 import 'package:everlore/screens/settings_screen.dart';
@@ -164,6 +165,127 @@ void main() {
       expect(find.text('Blocked content'), findsOneWidget);
       expect(find.text('ACCOUNT'), findsNothing);
       expect(find.text('Delete account'), findsNothing);
+    });
+  });
+
+  group('Messages from your stories', () {
+    const signedIn = User(id: 'u1', email: 'a@b.c', username: 'a', tier: 'free');
+    const guest = User(id: 'g1', email: '', username: 'g', tier: 'free', guest: true);
+
+    Widget host(User user, GroupNotificationsPref pref, {bool allowed = true}) =>
+        MaterialApp(
+          home: SettingsScreen(
+            user: user,
+            reminders: _FakeReminders(ReminderToggleResult.off),
+            messages: pref,
+            systemAllowsMessages: () async => allowed,
+          ),
+        );
+
+    bool switchOn(WidgetTester tester) => tester
+        .widget<SettingsSwitchRow>(
+          find.ancestor(
+            of: find.text('Messages from your stories'),
+            matching: find.byType(SettingsSwitchRow),
+          ),
+        )
+        .value;
+
+    Future<void> tapSwitch(WidgetTester tester) async {
+      await tester.tap(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('Messages from your stories'),
+            matching: find.byType(SettingsSwitchRow),
+          ),
+          matching: find.byType(Switch),
+        ),
+      );
+    }
+
+    testWidgets('is hidden for a guest', (tester) async {
+      await tester.pumpWidget(
+        host(guest, GroupNotificationsPref(fetchAccount: () async => {}, store: (_) async {})),
+      );
+      await tester.pump();
+      expect(find.text('Messages from your stories'), findsNothing);
+    });
+
+    testWidgets('reads absent as on', (tester) async {
+      await tester.pumpWidget(
+        host(signedIn, GroupNotificationsPref(fetchAccount: () async => {'preferences': {}}, store: (_) async {})),
+      );
+      await tester.pump();
+      expect(switchOn(tester), isTrue);
+    });
+
+    testWidgets('reads an explicit false as off', (tester) async {
+      await tester.pumpWidget(
+        host(signedIn, GroupNotificationsPref(
+          fetchAccount: () async => {'preferences': {'group_notifications': false}},
+          store: (_) async {},
+        )),
+      );
+      await tester.pumpAndSettle();
+      expect(switchOn(tester), isFalse);
+    });
+
+    testWidgets('writes false, then true', (tester) async {
+      final written = <bool>[];
+      await tester.pumpWidget(
+        host(signedIn, GroupNotificationsPref(
+          fetchAccount: () async => {'preferences': {}},
+          store: (v) async => written.add(v),
+        )),
+      );
+      await tester.pump();
+      await tapSwitch(tester);
+      await tester.pumpAndSettle();
+      expect(written, [false]);
+      expect(switchOn(tester), isFalse);
+
+      await tapSwitch(tester);
+      await tester.pumpAndSettle();
+      expect(written, [false, true]);
+      expect(switchOn(tester), isTrue);
+    });
+
+    testWidgets('rolls back with a plain notice when the write fails', (tester) async {
+      await tester.pumpWidget(
+        host(signedIn, GroupNotificationsPref(
+          fetchAccount: () async => {'preferences': {}},
+          store: (_) async => throw Exception('offline'),
+        )),
+      );
+      await tester.pump();
+      await tapSwitch(tester);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(switchOn(tester), isTrue);
+      expect(find.text('Could not update that preference. Please try again.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 10));
+    });
+
+    testWidgets('stays as stored and shows the hint when the phone has it off', (tester) async {
+      final written = <bool>[];
+      await tester.pumpWidget(
+        host(
+          signedIn,
+          GroupNotificationsPref(
+            fetchAccount: () async => {'preferences': {'group_notifications': false}},
+            store: (v) async => written.add(v),
+          ),
+          allowed: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapSwitch(tester);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(written, [true]);
+      expect(switchOn(tester), isTrue);
+      expect(find.text('Allow notifications for Everlore, then turn this on.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 10));
     });
   });
 }

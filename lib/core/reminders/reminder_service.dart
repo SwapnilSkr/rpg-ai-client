@@ -113,7 +113,7 @@ class ReminderService {
 
   /// Whether to show the ask sheet now (spec §1.3).
   Future<bool> shouldAsk() async {
-    if (!_ready) return false;
+    if (!_ready || _record.pushAsked) return false;
     return shouldAskForReminders(
       enabled: _record.enabled,
       askCount: _record.askCount,
@@ -121,6 +121,19 @@ class ReminderService {
       now: _now(),
     );
   }
+
+  /// Whether the group-chat messages ask is still open: nobody has answered
+  /// it, and the story ask has not been answered either.
+  bool get pushAskOpen => _ready && !_record.pushAsked && _record.askCount == 0;
+
+  /// The player answered the group-chat messages ask. Closes it for good, and
+  /// the story ask with it, so nobody is asked twice by either sheet.
+  Future<void> recordPushAsk() => _serial(() async {
+    if (!_ready) return;
+    _record = _record.copyWith(pushAsked: true, lastAskedAt: _now());
+    await _store.save(_record);
+    askNow.value = false;
+  });
 
   // ── the anchor ──────────────────────────────────────────────────────────
 
