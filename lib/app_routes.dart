@@ -27,10 +27,18 @@ import 'features/group_chat/presentation/screens/chats_screen.dart';
 import 'features/group_chat/presentation/screens/group_preview_screen.dart';
 import 'features/group_chat/presentation/screens/group_room_screen.dart';
 import 'features/group_chat/state/chats_cubit.dart';
+import 'features/notifications/presentation/notifications_screen.dart';
+import 'features/notifications/state/notifications_cubit.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
-/// Reads the chats list the first time the tab shell is built, which is after
+/// A context inside the root navigator's overlay, for notices and full-screen
+/// viewers opened from code that has no screen of its own. Null before the
+/// first frame.
+BuildContext? get rootOverlayContext =>
+    _rootNavigatorKey.currentState?.overlay?.context;
+
+/// Reads the chats list and the notifications the first time the tab shell is built, which is after
 /// sign-in; the cubit itself lives above the Navigator and starts empty.
 class _RefreshChatsOnce extends StatefulWidget {
   final Widget child;
@@ -45,6 +53,7 @@ class _RefreshChatsOnceState extends State<_RefreshChatsOnce> {
   void initState() {
     super.initState();
     context.read<ChatsCubit>().refresh();
+    context.read<NotificationsCubit>().load();
   }
 
   @override
@@ -178,6 +187,11 @@ final router = GoRouter(
       name: 'membership',
       builder: (context, state) =>
           BillingScreen(source: state.uri.queryParameters['source']),
+    ),
+    GoRoute(
+      path: '/notifications',
+      name: 'notifications',
+      builder: (context, state) => const NotificationsScreen(),
     ),
     GoRoute(
       path: '/blocked-content',

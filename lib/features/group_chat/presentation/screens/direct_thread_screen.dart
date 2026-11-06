@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../core/notifications/on_screen.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../play/presentation/widgets/anchored_menu_popup.dart';
 import '../../models/group_chat_models.dart';
@@ -157,6 +158,10 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
     super.initState();
     // Kept in a field: a context can't be read once the State is going away.
     _chats = context.read<ChatsCubit>();
+    OnScreen.instance.enter(
+      this,
+      Place.direct(widget.cubit.instanceId, widget.member.id),
+    );
     widget.cubit.selectThread(widget.member.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(
@@ -170,6 +175,7 @@ class _DirectThreadScreenState extends State<DirectThreadScreen> {
 
   @override
   void dispose() {
+    OnScreen.instance.leave(this);
     widget.cubit.selectThread(kGroupThreadKey);
     unawaited(
       _chats.markOpened(widget.cubit.instanceId, memberId: widget.member.id),

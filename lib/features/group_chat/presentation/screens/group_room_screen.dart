@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../core/notifications/on_screen.dart';
 import '../../../../core/network/ws_manager.dart';
 import '../../../../shared/widgets/everlore_notice.dart';
 import '../../../../shared/widgets/everlore_session_loader.dart';
@@ -59,6 +60,7 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
     super.initState();
     // Kept in a field: a context can't be read once the State is going away.
     _chats = context.read<ChatsCubit>();
+    OnScreen.instance.enter(this, Place.room(widget.instanceId));
     _tabController = TabController(length: 2, vsync: this);
     if (widget.cubit != null) {
       _cubit = widget.cubit!;
@@ -95,6 +97,7 @@ class _GroupRoomScreenState extends State<GroupRoomScreen>
 
   @override
   void dispose() {
+    OnScreen.instance.leave(this);
     _tabController.dispose();
     if (widget.cubit == null) {
       _cubit.close();

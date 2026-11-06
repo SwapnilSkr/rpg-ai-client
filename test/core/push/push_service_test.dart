@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:everlore/core/notifications/notification_opener.dart';
 import 'package:everlore/core/push/push_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,7 +53,15 @@ class _Rig {
       hasSession: () async => session,
       tzOffsetMinutes: () => offset,
       locate: () => router.at,
-      open: opened.add,
+      opener: NotificationOpener(
+        saveExists: (_) async => true,
+        push: opened.add,
+        openFilm: (id) async {
+          films.add(id);
+          return true;
+        },
+        notice: (_) {},
+      ),
       trackOpened: () => tapsTracked++,
       routerChanges: router,
       signOutBudget: const Duration(milliseconds: 50),
@@ -64,6 +73,7 @@ class _Rig {
   final registered = <(String, int)>[];
   final deleted = <String>[];
   final opened = <String>[];
+  final films = <String>[];
   final events = <String>[];
   late final PushService service;
   bool signedIn;
@@ -219,6 +229,45 @@ void main() {
       });
       await rig.settle();
       expect(rig.opened, ['/group/a%2Fb%20c?member=x%26y%3Dz']);
+    });
+
+    test('every type opens the place it names', () async {
+      final rig = _Rig();
+      await rig.service.init();
+      rig.router.go('/discover');
+      for (final data in <Map<String, Object?>>[
+        {
+          'type': 'group_selfie',
+          'instanceId': 'i',
+          'characterId': 'c',
+          'thread': 'direct',
+        },
+        {'type': 'group_selfie', 'instanceId': 'i'},
+        {'type': 'story_reply', 'instanceId': 'i', 'thread': 'room'},
+        {'type': 'story_reply', 'instanceId': 'i'},
+        {'type': 'film_ready', 'instanceId': 'i', 'mediaId': 'm1'},
+      ]) {
+        rig.gateway.opened.add(data);
+        await rig.settle();
+      }
+      expect(rig.opened, [
+        '/group/i?member=c',
+        '/group/i',
+        '/group/i',
+        '/play/i',
+      ]);
+      expect(rig.films, ['m1']);
+    });
+
+    test('a film or reply without what it needs opens nothing', () async {
+      final rig = _Rig();
+      await rig.service.init();
+      rig.router.go('/discover');
+      rig.gateway.opened.add({'type': 'film_ready', 'instanceId': 'i'});
+      rig.gateway.opened.add({'type': 'story_reply'});
+      await rig.settle();
+      expect(rig.opened, isEmpty);
+      expect(rig.films, isEmpty);
     });
 
     test('a signed-out player stays where they are', () async {

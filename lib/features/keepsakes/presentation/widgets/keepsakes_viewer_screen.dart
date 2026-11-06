@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 
@@ -8,6 +9,7 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/widgets/neu.dart';
 import '../../../chronicle/presentation/character_memory_screen.dart';
+import '../../../notifications/state/notifications_cubit.dart';
 import '../../models/keepsake_item.dart';
 import 'keepsake_caption.dart';
 import 'keepsake_faded_tile.dart';
@@ -66,6 +68,18 @@ class _KeepsakesViewerScreenState extends State<KeepsakesViewerScreen> {
     super.initState();
     _currentIndex = widget.initialIndex.clamp(0, widget.items.isEmpty ? 0 : widget.items.length - 1);
     _pageController = PageController(initialPage: _currentIndex);
+    _markFilmSeen(_currentIndex);
+  }
+
+  /// Opening a film clears its notification. Quiet and best effort: a viewer
+  /// shown without the app-wide list (a test) just skips it.
+  void _markFilmSeen(int index) {
+    if (index < 0 || index >= widget.items.length) return;
+    final item = widget.items[index];
+    if (!item.isVideo || item.mediaId.isEmpty) return;
+    try {
+      context.read<NotificationsCubit>().filmOpened(item.mediaId);
+    } catch (_) {}
   }
 
   @override
@@ -91,6 +105,7 @@ class _KeepsakesViewerScreenState extends State<KeepsakesViewerScreen> {
 
   void _onPageChanged(int index) {
     setState(() => _currentIndex = index);
+    _markFilmSeen(index);
     _precacheNextPieces(index);
   }
 

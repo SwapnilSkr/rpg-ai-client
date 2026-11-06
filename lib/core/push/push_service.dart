@@ -10,6 +10,8 @@ import 'package:http/http.dart' as http;
 import '../../app_routes.dart';
 import '../auth/auth_service.dart';
 import '../config/env.dart';
+import '../notifications/notification_opener.dart';
+import '../notifications/on_screen.dart';
 import '../network/api_client.dart';
 import '../storage/secure_storage.dart';
 import '../telemetry/telemetry.dart';
@@ -86,10 +88,11 @@ class _FirebaseGateway implements PushGateway {
       await _android?.requestNotificationsPermission() ?? false;
 }
 
-/// Character messages on the phone: registers this device with the server,
-/// lets go of it on sign-out, and opens the right thread when a message is
-/// tapped. Nothing is shown while the app is open (the app already shows what
-/// is pending) and no code runs when a message merely arrives.
+/// Messages on the phone: registers this device with the server, lets go of
+/// it on sign-out, and opens the right place when a message is tapped (the
+/// same function a notification row and the in-app banner use). Nothing is
+/// shown by the system while the app is open (the app's own banner does that)
+/// and no code runs when a message merely arrives.
 class PushService {
   PushService({
     PushGateway? gateway,
@@ -99,7 +102,7 @@ class PushService {
     Future<bool> Function()? hasSession,
     int Function()? tzOffsetMinutes,
     Uri? Function()? locate,
-    void Function(String location)? open,
+    NotificationOpener? opener,
     Listenable? routerChanges,
     void Function()? trackOpened,
     Duration signOutBudget = const Duration(seconds: 3),
@@ -110,7 +113,7 @@ class PushService {
        _hasSession = hasSession ?? _storedSession,
        _offset = tzOffsetMinutes ?? _deviceOffset,
        _locate = locate ?? _routerLocation,
-       _open = open ?? _routerPush,
+       _opener = opener ?? NotificationOpener.instance,
        _routerChanges = routerChanges,
        _trackOpened = trackOpened ?? _trackPushOpened,
        _signOutBudget = signOutBudget;
@@ -124,7 +127,7 @@ class PushService {
   final Future<bool> Function() _hasSession;
   final int Function() _offset;
   final Uri? Function() _locate;
-  final void Function(String location) _open;
+  final NotificationOpener _opener;
   final Listenable? _routerChanges;
   final void Function() _trackOpened;
   final Duration _signOutBudget;
@@ -140,7 +143,7 @@ class PushService {
   Future<void> _queue = Future.value();
 
   /// A tapped message waiting for the app to settle on a real screen.
-  ({String instanceId, String characterId})? _pendingOpen;
+  NotificationTap? _pendingOpen;
   bool _watchingRouter = false;
 
   Listenable get _changes => _routerChanges ?? router.routerDelegate;
@@ -252,14 +255,11 @@ class PushService {
   }
 
   void _onTap(Map<String, Object?> data) {
-    // Only a direct message from a character opens anything; the ids are
-    // checked here because the data is whatever the sender put in it.
-    if (data['type'] != 'group_direct') return;
-    final instanceId = data['instanceId'];
-    final characterId = data['characterId'];
-    if (instanceId is! String || instanceId.isEmpty) return;
-    if (characterId is! String || characterId.isEmpty) return;
-    _pendingOpen = (instanceId: instanceId, characterId: characterId);
+    // The ids are checked here because the data is whatever the sender put in
+    // it; a type this build does not know opens nothing.
+    final tap = NotificationTap.fromPush(data);
+    if (tap == null) return;
+    _pendingOpen = tap;
     unawaited(_tryOpen());
     if (_pendingOpen != null && !_watchingRouter) {
       _watchingRouter = true;
@@ -286,16 +286,17 @@ class PushService {
     _trackOpened();
     const preAuth = {'/welcome', '/auth', '/onboarding'};
     if (preAuth.contains(here.path)) return;
-    // Already looking at this very thread: a second copy would need two backs.
-    if (here.path == '/group/${pending.instanceId}' &&
-        here.queryParameters['member'] == pending.characterId) {
-      return;
-    }
+    // Already looking at this very place: a second copy would need two backs.
+    final place = pending.place;
+    if (place != null && _isHere(here, place)) return;
     if (!await _hasSession()) return;
-    _open(
-      '/group/${Uri.encodeComponent(pending.instanceId)}'
-      '?member=${Uri.encodeQueryComponent(pending.characterId)}',
-    );
+    await _opener.open(pending);
+  }
+
+  bool _isHere(Uri here, Place place) {
+    final target = Uri.parse(locationOf(place));
+    return here.path == target.path &&
+        here.queryParameters['member'] == target.queryParameters['member'];
   }
 
   @visibleForTesting
@@ -367,6 +368,4 @@ class PushService {
       return null;
     }
   }
-
-  static void _routerPush(String location) => router.push(location);
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/guest/guest_limit.dart';
+import '../../../core/notifications/on_screen.dart';
 import '../../../core/guest/guest_session.dart';
 import '../../../core/guest/keep_story_host.dart';
 import 'package:flutter/services.dart';
@@ -294,6 +295,10 @@ class _PlayViewState extends State<_PlayView> {
   @override
   void initState() {
     super.initState();
+    OnScreen.instance.enter(
+      this,
+      Place.play(context.read<PlayCubit>().instanceId),
+    );
     _scrollController.addListener(_updateFollowLatest);
     ReminderService.instance.askNow.addListener(_onReminderAskNowChanged);
     // The arcs are otherwise driven entirely by state *changes*, and a
@@ -516,6 +521,7 @@ class _PlayViewState extends State<_PlayView> {
 
   @override
   void dispose() {
+    OnScreen.instance.leave(this);
     ReminderService.instance.askNow.removeListener(_onReminderAskNowChanged);
     _glowTimer?.cancel();
     _scrollController.removeListener(_updateFollowLatest);

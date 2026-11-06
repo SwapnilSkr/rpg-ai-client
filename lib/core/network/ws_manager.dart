@@ -93,6 +93,11 @@ class WsManager {
   final _groupIdeasController =
       StreamController<Map<String, dynamic>>.broadcast();
 
+  /// A new notification for this player: `{ item, unread }`. The app-wide
+  /// notifications list listens.
+  final _notificationController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
   /// Fired when the server reports this account was deleted (e.g. from another
   /// device). A live session must drop to the auth screen rather than keep
   /// running against a dead account until the next request 401s.
@@ -142,6 +147,8 @@ class WsManager {
       _mediaFailedController.stream;
   Stream<Map<String, dynamic>> get onGroupLines => _groupLinesController.stream;
   Stream<Map<String, dynamic>> get onGroupIdeas => _groupIdeasController.stream;
+  Stream<Map<String, dynamic>> get onNotification =>
+      _notificationController.stream;
 
   bool get isConnected => _isConnected;
 
@@ -340,6 +347,9 @@ class WsManager {
         break;
       case 'group_ideas':
         _groupIdeasController.add(msg);
+        break;
+      case 'notification':
+        _notificationController.add(msg);
         break;
       case 'account_deleted':
         _accountDeletedController.add(null);
