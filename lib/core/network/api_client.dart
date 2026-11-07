@@ -120,6 +120,7 @@ class ApiClient {
       message: error?.toString() ?? 'Unknown error',
       code: code is String ? code : null,
       retryAfter: retryAfter is num ? retryAfter.toInt() : null,
+      details: body is Map ? Map<String, dynamic>.from(body) : null,
     );
   }
 }
@@ -135,11 +136,18 @@ class ApiException implements Exception {
   /// Seconds until the action may be tried again, when the server said so.
   final int? retryAfter;
 
+  /// The whole decoded body when the server sent a JSON object. Refusals
+  /// carry their specifics beside `error` (`paths` of the lines a check
+  /// refused, `status`/`resets_at` of a spent allowance); null when the body
+  /// was not an object.
+  final Map<String, dynamic>? details;
+
   ApiException({
     required this.statusCode,
     required this.message,
     this.code,
     this.retryAfter,
+    this.details,
   });
 
   @override
