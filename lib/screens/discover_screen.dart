@@ -773,32 +773,24 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         EvWidthClass.regular => 2,
         EvWidthClass.expanded => 3,
       };
-      final columns = List.generate(columnCount, (_) => <Widget>[]);
-      for (var i = 0; i < visibleGroups.length; i++) {
-        columns[i % columnCount].add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: GroupCoverCard(template: visibleGroups[i]),
-          ),
-        );
-      }
 
       return RefreshIndicator(
         color: EverloreTheme.gold,
         backgroundColor: EverloreTheme.void2,
         onRefresh: _refreshAll,
-        child: SingleChildScrollView(
+        child: GridView.builder(
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final (index, column) in columns.indexed) ...[
-                if (index > 0) const SizedBox(width: 12),
-                Expanded(child: Column(children: column)),
-              ],
-            ],
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columnCount,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 132 / 198,
+          ),
+          itemCount: visibleGroups.length,
+          itemBuilder: (context, index) => GroupCoverCard(
+            template: visibleGroups[index],
           ),
         ),
       );
