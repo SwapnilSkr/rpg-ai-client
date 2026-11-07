@@ -5,10 +5,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/nexus_theme.dart';
+import '../../../../core/auth/auth_service.dart';
 import '../../../../core/guide/guide_anchor.dart';
 import '../../../../core/guide/guide_flows.dart';
 import '../../../../core/guide/guide_ids.dart';
 import '../../../../core/guide/guide_trigger.dart';
+import '../../../../shared/models/user.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../../../shared/widgets/everlore_top_bar.dart';
 import '../../../../shared/widgets/loading_shimmer.dart';
@@ -26,14 +28,31 @@ class ChatsScreen extends StatefulWidget {
 }
 
 class _ChatsScreenState extends State<ChatsScreen> {
+  User? _user;
+
   @override
   void initState() {
     super.initState();
+    _loadUser();
+    AuthService.sessionEpoch.addListener(_loadUser);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<ChatsCubit>().refresh();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    AuthService.sessionEpoch.removeListener(_loadUser);
+    super.dispose();
+  }
+
+  Future<void> _loadUser() async {
+    final user = await AuthService.resolveSessionUser();
+    if (mounted) {
+      setState(() => _user = user);
+    }
   }
 
   Future<void> _openConversation(ChatConversation conversation) async {
@@ -69,6 +88,51 @@ class _ChatsScreenState extends State<ChatsScreen> {
     if (diff.inHours < 24) return '${diff.inHours}h';
     if (diff.inDays < 7) return '${diff.inDays}d';
     return '${at.month}/${at.day}';
+  }
+
+  Widget _buildGroupActionsRow(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          InkWell(
+            onTap: () => context.push('/groups/new'),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.add, size: 18, color: EverloreTheme.gold),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Create a group',
+                    style: EverloreTheme.ui(
+                      size: 13,
+                      weight: FontWeight.w600,
+                      color: EverloreTheme.gold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => context.push('/groups/mine'),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'Your groups',
+              style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -118,6 +182,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
                           padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
                           sliver: SliverList(
                             delegate: SliverChildListDelegate([
+                              if (AuthService.canAccessForge(_user))
+                                _buildGroupActionsRow(context),
                               if (conversations.isEmpty) ...[
                                 // Empty state: cover cards are main content
                                 if (joinable.isEmpty)

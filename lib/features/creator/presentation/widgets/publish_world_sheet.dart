@@ -13,12 +13,18 @@ class PublishWorldSheet extends StatefulWidget {
   final WorldTemplate template;
   final String initialVisibility;
   final Future<bool> Function(String visibility)? onPublish;
+  final String noun;
+  final bool allowPublic;
+  final String? publicDisabledReason;
 
   const PublishWorldSheet({
     super.key,
     required this.template,
     this.initialVisibility = 'private',
     this.onPublish,
+    this.noun = 'world',
+    this.allowPublic = true,
+    this.publicDisabledReason,
   });
 
   static Future<bool?> show(
@@ -26,6 +32,9 @@ class PublishWorldSheet extends StatefulWidget {
     WorldTemplate template, {
     String initialVisibility = 'private',
     Future<bool> Function(String visibility)? onPublish,
+    String noun = 'world',
+    bool allowPublic = true,
+    String? publicDisabledReason,
   }) {
     Telemetry.instance.sheet('publish');
     return showEverloreSheet<bool>(
@@ -34,6 +43,9 @@ class PublishWorldSheet extends StatefulWidget {
         template: template,
         initialVisibility: initialVisibility,
         onPublish: onPublish,
+        noun: noun,
+        allowPublic: allowPublic,
+        publicDisabledReason: publicDisabledReason,
       ),
     );
   }
@@ -52,7 +64,10 @@ class PublishWorldSheetState extends State<PublishWorldSheet> {
   @override
   void initState() {
     super.initState();
-    _selectedVisibility = widget.initialVisibility;
+    _selectedVisibility =
+        (!widget.allowPublic && widget.initialVisibility == 'public')
+        ? 'private'
+        : widget.initialVisibility;
   }
 
   Future<void> _handlePublish() async {
@@ -90,6 +105,18 @@ class PublishWorldSheetState extends State<PublishWorldSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isGroup = widget.noun == 'group';
+    final sheetTitle = isGroup
+        ? 'Who can join this group?'
+        : 'Who can enter this world?';
+    final privateDesc = isGroup
+        ? 'Ready to chat now. Only you will see it.'
+        : 'Ready to play now. Only you will see it.';
+    final publicTitle = isGroup ? 'For everyone' : 'For every traveller';
+    final publicDesc = isGroup
+        ? 'We read every shared group first, usually within a day. You can chat in it while you wait.'
+        : 'We read every shared world first, usually within a day. You can play it while you wait.';
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -100,7 +127,7 @@ class PublishWorldSheetState extends State<PublishWorldSheet> {
             const SheetGrabHandle(),
             const SizedBox(height: 12),
             Text(
-              'Who can enter this world?',
+              sheetTitle,
               style: EverloreTheme.serifDisplay(
                 size: 20,
                 color: EverloreTheme.parchment,
@@ -110,17 +137,14 @@ class PublishWorldSheetState extends State<PublishWorldSheet> {
             const SizedBox(height: 4),
             Text(
               'You can change this later.',
-              style: EverloreTheme.ui(
-                size: 13,
-                color: EverloreTheme.ash,
-              ),
+              style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
             ),
             const SizedBox(height: 20),
             _VisibilityOption(
               value: 'private',
               groupValue: _selectedVisibility,
               title: 'Just for you',
-              description: 'Ready to play now. Only you will see it.',
+              description: privateDesc,
               onTap: _isSubmitting
                   ? null
                   : () => setState(() => _selectedVisibility = 'private'),
@@ -129,10 +153,14 @@ class PublishWorldSheetState extends State<PublishWorldSheet> {
             _VisibilityOption(
               value: 'public',
               groupValue: _selectedVisibility,
-              title: 'For every traveller',
-              description:
-                  'We read every shared world first, usually within a day. You can play it while you wait.',
-              onTap: _isSubmitting
+              title: publicTitle,
+              description: publicDesc,
+              enabled: widget.allowPublic,
+              disabledNote: widget.allowPublic
+                  ? null
+                  : (widget.publicDisabledReason ??
+                        'Every person needs a face first.'),
+              onTap: (_isSubmitting || !widget.allowPublic)
                   ? null
                   : () => setState(() => _selectedVisibility = 'public'),
             ),
@@ -190,6 +218,8 @@ class _VisibilityOption extends StatelessWidget {
   final String groupValue;
   final String title;
   final String description;
+  final bool enabled;
+  final String? disabledNote;
   final VoidCallback? onTap;
 
   const _VisibilityOption({
@@ -197,6 +227,8 @@ class _VisibilityOption extends StatelessWidget {
     required this.groupValue,
     required this.title,
     required this.description,
+    this.enabled = true,
+    this.disabledNote,
     this.onTap,
   });
 
@@ -204,6 +236,18 @@ class _VisibilityOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = isSelected
+        ? EverloreTheme.gold.withValues(alpha: 0.08)
+        : (enabled
+              ? EverloreTheme.void1.withValues(alpha: 0.6)
+              : EverloreTheme.void1.withValues(alpha: 0.3));
+
+    final effectiveBorderColor = isSelected
+        ? EverloreTheme.gold
+        : (enabled
+              ? EverloreTheme.void3.withValues(alpha: 0.8)
+              : EverloreTheme.void3.withValues(alpha: 0.4));
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -212,14 +256,10 @@ class _VisibilityOption extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isSelected
-                ? EverloreTheme.gold.withValues(alpha: 0.08)
-                : EverloreTheme.void1.withValues(alpha: 0.6),
+            color: effectiveColor,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isSelected
-                  ? EverloreTheme.gold
-                  : EverloreTheme.void3.withValues(alpha: 0.8),
+              color: effectiveBorderColor,
               width: isSelected ? 1.5 : 1.0,
             ),
           ),
@@ -235,7 +275,9 @@ class _VisibilityOption extends StatelessWidget {
                   border: Border.all(
                     color: isSelected
                         ? EverloreTheme.gold
-                        : EverloreTheme.ash.withValues(alpha: 0.6),
+                        : (enabled
+                              ? EverloreTheme.ash.withValues(alpha: 0.6)
+                              : EverloreTheme.ash.withValues(alpha: 0.25)),
                     width: 2,
                   ),
                 ),
@@ -261,7 +303,9 @@ class _VisibilityOption extends StatelessWidget {
                       title,
                       style: EverloreTheme.ui(
                         size: 15,
-                        color: EverloreTheme.parchment,
+                        color: enabled
+                            ? EverloreTheme.parchment
+                            : EverloreTheme.ash,
                         weight: FontWeight.w600,
                       ),
                     ),
@@ -270,10 +314,22 @@ class _VisibilityOption extends StatelessWidget {
                       description,
                       style: EverloreTheme.aiText.copyWith(
                         fontSize: 13,
-                        color: EverloreTheme.ash,
+                        color: enabled
+                            ? EverloreTheme.ash
+                            : EverloreTheme.ash.withValues(alpha: 0.6),
                         height: 1.4,
                       ),
                     ),
+                    if (disabledNote != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        disabledNote!,
+                        style: EverloreTheme.ui(
+                          size: 12,
+                          color: EverloreTheme.ash.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

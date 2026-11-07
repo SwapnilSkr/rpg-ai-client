@@ -24,9 +24,13 @@ import 'package:everlore/screens/settings_screen.dart';
 import 'features/moderation/presentation/blocked_content_screen.dart';
 import 'features/keepsakes/presentation/keepsakes_screen.dart';
 import 'features/group_chat/presentation/screens/chats_screen.dart';
+import 'features/group_chat/presentation/screens/create_group_screen.dart';
 import 'features/group_chat/presentation/screens/group_preview_screen.dart';
 import 'features/group_chat/presentation/screens/group_room_screen.dart';
+import 'features/group_chat/presentation/screens/my_groups_screen.dart';
 import 'features/group_chat/state/chats_cubit.dart';
+import 'features/group_chat/state/create_group_cubit.dart';
+import 'features/group_chat/state/my_groups_cubit.dart';
 import 'features/notifications/presentation/notifications_screen.dart';
 import 'features/notifications/state/notifications_cubit.dart';
 
@@ -139,6 +143,33 @@ final router = GoRouter(
       ),
     ),
     GoRoute(
+      path: '/groups/new',
+      name: 'create_group',
+      builder: (context, state) => BlocProvider(
+        create: (_) => CreateGroupCubit(),
+        child: const CreateGroupScreen(),
+      ),
+    ),
+    GoRoute(
+      path: '/groups/:templateId/edit',
+      name: 'edit_group',
+      builder: (context, state) {
+        final id = state.pathParameters['templateId']!;
+        return BlocProvider(
+          create: (_) => CreateGroupCubit()..load(id),
+          child: CreateGroupScreen(templateId: id),
+        );
+      },
+    ),
+    GoRoute(
+      path: '/groups/mine',
+      name: 'my_groups',
+      builder: (context, state) => BlocProvider(
+        create: (_) => MyGroupsCubit()..load(),
+        child: const MyGroupsScreen(),
+      ),
+    ),
+    GoRoute(
       path: '/chronicle/:instanceId',
       name: 'chronicle',
       builder: (context, state) => ChronicleScreen(
@@ -213,9 +244,8 @@ final router = GoRouter(
     // ── The persistent shell: four primary branches, each with its own stack + state,
     // wrapped by the always-on EverloreNavBar. ──
     StatefulShellRoute.indexedStack(
-      builder: (context, state, navigationShell) => _RefreshChatsOnce(
-        child: ScaffoldWithNavBar(shell: navigationShell),
-      ),
+      builder: (context, state, navigationShell) =>
+          _RefreshChatsOnce(child: ScaffoldWithNavBar(shell: navigationShell)),
       branches: [
         StatefulShellBranch(
           routes: [
