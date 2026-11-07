@@ -196,6 +196,7 @@ class ChatsCubit extends Cubit<ChatsState> {
           title: row.title,
           groupTitle: row.title,
           imageUrl: row.imageUrl,
+          imageThumbUrl: row.imageThumbUrl,
           faces: row.members,
           last: row.last,
           unread: unread(chatKey(row.instanceId), row.last),
@@ -221,6 +222,7 @@ class ChatsCubit extends Cubit<ChatsState> {
             title: member.name,
             groupTitle: row.title,
             imageUrl: row.imageUrl,
+            imageThumbUrl: row.imageThumbUrl,
             faces: [member],
             last: thread.last,
             unread: unread(

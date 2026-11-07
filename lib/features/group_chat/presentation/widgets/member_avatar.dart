@@ -9,6 +9,9 @@ class MemberAvatar extends StatelessWidget {
   final GroupMember? member;
   final String? name;
   final String? portraitUrl;
+
+  /// The small copy of the portrait; falls back to the full one if it fails.
+  final String? portraitThumbUrl;
   final double size;
   final bool hasPending;
   final VoidCallback? onTap;
@@ -18,6 +21,7 @@ class MemberAvatar extends StatelessWidget {
     this.member,
     this.name,
     this.portraitUrl,
+    this.portraitThumbUrl,
     this.size = 38,
     this.hasPending = false,
     this.onTap,
@@ -25,6 +29,7 @@ class MemberAvatar extends StatelessWidget {
 
   String get _displayName => member?.name ?? name ?? '?';
   String? get _url => member?.portraitUrl ?? portraitUrl;
+  String? get _thumb => member?.portraitThumbUrl ?? portraitThumbUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +53,8 @@ class MemberAvatar extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: _url != null && _url!.isNotEmpty
           ? EverloreNetworkImage(
-              imageUrl: _url!,
+              imageUrl: _thumb != null && _thumb!.isNotEmpty ? _thumb! : _url!,
+              fallbackUrl: _url,
               fit: BoxFit.cover,
               memCacheWidth: cacheWidth,
               // Portraits are tall: keep the face, not the chest.

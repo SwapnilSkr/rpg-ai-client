@@ -53,7 +53,10 @@ class GroupCoverCard extends StatelessWidget {
           // Full-bleed cover image
           if (template.imageUrl.isNotEmpty)
             EverloreNetworkImage(
-              imageUrl: template.imageUrl,
+              imageUrl: template.imageThumbUrl.isNotEmpty
+                  ? template.imageThumbUrl
+                  : template.imageUrl,
+              fallbackUrl: template.imageUrl,
               fit: BoxFit.cover,
               memCacheWidth: 720,
             )
@@ -126,6 +129,8 @@ class GroupCoverCard extends StatelessWidget {
                                   name: displayFaces[i].name,
                                   role: displayFaces[i].role,
                                   portraitUrl: displayFaces[i].portraitUrl,
+                                  portraitThumbUrl:
+                                      displayFaces[i].portraitThumbUrl,
                                 ),
                                 size: 20,
                               ),

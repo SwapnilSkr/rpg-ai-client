@@ -44,6 +44,12 @@ int? decodeWidthFor({
 /// restrained loading and failure treatment.
 class EverloreNetworkImage extends StatelessWidget {
   final String imageUrl;
+
+  /// Shown instead when [imageUrl] fails to load, typically the full picture
+  /// behind a small one. The [placeholder] stays up while either loads; if
+  /// this one fails too, [errorWidget] shows. Ignored when null, empty or the
+  /// same as [imageUrl].
+  final String? fallbackUrl;
   final BoxFit fit;
 
   /// Which part of the picture stays in view when [fit] crops it.
@@ -63,6 +69,7 @@ class EverloreNetworkImage extends StatelessWidget {
   const EverloreNetworkImage({
     super.key,
     required this.imageUrl,
+    this.fallbackUrl,
     this.fit = BoxFit.cover,
     this.alignment = Alignment.center,
     this.placeholder,
@@ -91,6 +98,28 @@ class EverloreNetworkImage extends StatelessWidget {
     );
   }
 
+  /// What shows when [imageUrl] fails: the fallback picture if there is one,
+  /// else the error widget. The fallback is a plain image (its own failure is
+  /// the final one), so there is exactly one retry.
+  @visibleForTesting
+  Widget buildFailure() {
+    final fallback = fallbackUrl;
+    if (fallback != null && fallback.isNotEmpty && fallback != imageUrl) {
+      return EverloreNetworkImage(
+        imageUrl: fallback,
+        fit: fit,
+        alignment: alignment,
+        placeholder: placeholder,
+        errorWidget: errorWidget,
+        semanticLabel: semanticLabel,
+        memCacheWidth: memCacheWidth,
+        memCacheHeight: memCacheHeight,
+        fullResolution: fullResolution,
+      );
+    }
+    return errorWidget ?? const _ArtworkFallback();
+  }
+
   Widget _image(int? decodeWidth, int? decodeHeight) {
     // Only one dimension may reach the provider, or ResizeImage stretches.
     final width = decodeHeight != null && decodeWidth == null ? null : decodeWidth;
@@ -104,7 +133,7 @@ class EverloreNetworkImage extends StatelessWidget {
       fadeOutDuration: const Duration(milliseconds: 120),
       placeholderFadeInDuration: const Duration(milliseconds: 120),
       placeholder: (_, __) => placeholder ?? const ArtworkLoadingPlaceholder(),
-      errorWidget: (_, __, ___) => errorWidget ?? const _ArtworkFallback(),
+      errorWidget: (_, __, ___) => buildFailure(),
       // An Image fills loose constraints; the childless DecoratedBox it
       // replaces collapsed to 0x0 there and painted a black screen. An
       // unbounded side keeps the picture's own size: infinity would throw.

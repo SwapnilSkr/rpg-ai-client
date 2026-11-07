@@ -34,7 +34,15 @@ class TemplateMember {
   final String role;
   final String? portraitUrl;
 
-  const TemplateMember({required this.name, this.role = '', this.portraitUrl});
+  /// The small copy of [portraitUrl]; null when the server sent none.
+  final String? portraitThumbUrl;
+
+  const TemplateMember({
+    required this.name,
+    this.role = '',
+    this.portraitUrl,
+    this.portraitThumbUrl,
+  });
 
   /// Null for anything without a name; it could not be shown.
   static TemplateMember? parse(Object? raw) {
@@ -42,10 +50,14 @@ class TemplateMember {
     final name = raw['name']?.toString() ?? '';
     if (name.isEmpty) return null;
     final portrait = raw['portrait_url']?.toString() ?? '';
+    final thumb = raw['portrait_thumb_url'];
     return TemplateMember(
       name: name,
       role: raw['role']?.toString() ?? '',
       portraitUrl: portrait.isEmpty ? null : portrait,
+      portraitThumbUrl: thumb is String && thumb.trim().isNotEmpty
+          ? thumb.trim()
+          : null,
     );
   }
 }
@@ -74,6 +86,9 @@ class WorldTemplate {
   final String narrativeStyle;
   final String styleNotes;
   final String imageUrl;
+
+  /// The small copy of [imageUrl] for cards; empty when the server sent none.
+  final String imageThumbUrl;
   final String imagePrompt;
   final String openingLine;
   final Map<String, StatDefinition> baseStatsTemplate;
@@ -107,6 +122,7 @@ class WorldTemplate {
     this.narrativeStyle = '',
     this.styleNotes = '',
     this.imageUrl = '',
+    this.imageThumbUrl = '',
     this.imagePrompt = '',
     this.openingLine = '',
     this.baseStatsTemplate = const {},
@@ -162,6 +178,7 @@ class WorldTemplate {
     String? narrativeStyle,
     String? styleNotes,
     String? imageUrl,
+    String? imageThumbUrl,
     String? imagePrompt,
     String? openingLine,
     Map<String, StatDefinition>? baseStatsTemplate,
@@ -193,6 +210,7 @@ class WorldTemplate {
       narrativeStyle: narrativeStyle ?? this.narrativeStyle,
       styleNotes: styleNotes ?? this.styleNotes,
       imageUrl: imageUrl ?? this.imageUrl,
+      imageThumbUrl: imageThumbUrl ?? this.imageThumbUrl,
       imagePrompt: imagePrompt ?? this.imagePrompt,
       openingLine: openingLine ?? this.openingLine,
       baseStatsTemplate: baseStatsTemplate ?? this.baseStatsTemplate,
@@ -234,6 +252,10 @@ class WorldTemplate {
       narrativeStyle: json['narrative_style'] ?? '',
       styleNotes: json['style_notes'] ?? '',
       imageUrl: json['image_url'] ?? '',
+      imageThumbUrl: switch (json['image_thumb_url']) {
+        final String s => s.trim(),
+        _ => '',
+      },
       imagePrompt: json['image_prompt'] ?? '',
       openingLine: json['opening_line'] ?? '',
       baseStatsTemplate: statsMap,

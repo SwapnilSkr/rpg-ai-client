@@ -20,6 +20,9 @@ class ChatConversation extends Equatable {
   /// The group's cover, or null.
   final String? imageUrl;
 
+  /// The small copy of [imageUrl] for the row; null when none.
+  final String? imageThumbUrl;
+
   /// A room shows every member; a direct thread shows its one member.
   final List<GroupMember> faces;
 
@@ -34,6 +37,7 @@ class ChatConversation extends Equatable {
     required this.title,
     required this.groupTitle,
     this.imageUrl,
+    this.imageThumbUrl,
     this.faces = const [],
     this.last,
     this.unread = false,
@@ -54,6 +58,7 @@ class ChatConversation extends Equatable {
     title,
     groupTitle,
     imageUrl,
+    imageThumbUrl,
     faces,
     last,
     unread,

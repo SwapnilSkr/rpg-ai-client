@@ -394,8 +394,12 @@ class _GroupPreviewScreenState extends State<GroupPreviewScreen> {
                                               name: member.name,
                                               role: member.role,
                                               portraitUrl: member.portraitUrl,
+                                              portraitThumbUrl:
+                                                  member.portraitThumbUrl,
                                             ),
                                             portraitUrl: member.portraitUrl,
+                                            portraitThumbUrl:
+                                                member.portraitThumbUrl,
                                             name: member.name,
                                             size: 64,
                                           ),

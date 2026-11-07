@@ -265,6 +265,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
             member: conversation.faces.firstOrNull,
             name: conversation.title,
             portraitUrl: conversation.faces.firstOrNull?.portraitUrl,
+            portraitThumbUrl: conversation.faces.firstOrNull?.portraitThumbUrl,
             size: 56,
           )
         : SizedBox(
@@ -288,7 +289,12 @@ class _ChatsScreenState extends State<ChatsScreen> {
                         conversation.imageUrl != null &&
                             conversation.imageUrl!.isNotEmpty
                         ? EverloreNetworkImage(
-                            imageUrl: conversation.imageUrl!,
+                            imageUrl:
+                                conversation.imageThumbUrl != null &&
+                                    conversation.imageThumbUrl!.isNotEmpty
+                                ? conversation.imageThumbUrl!
+                                : conversation.imageUrl!,
+                            fallbackUrl: conversation.imageUrl,
                             fit: BoxFit.cover,
                           )
                         : const SizedBox.shrink(),

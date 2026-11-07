@@ -17,6 +17,13 @@ List<Map<String, dynamic>> _maps(Object? v) => v is List
     ? [for (final e in v) if (e is Map) Map<String, dynamic>.from(e)]
     : const [];
 
+/// A url string, or null for a missing, null, non-string or blank value.
+String? _optUrl(Object? v) {
+  if (v is! String) return null;
+  final s = v.trim();
+  return s.isEmpty ? null : s;
+}
+
 /// A person in the chat. Ids are the server's character ids; nothing here is
 /// known ahead of time by the app.
 class GroupMember extends Equatable {
@@ -24,6 +31,10 @@ class GroupMember extends Equatable {
   final String name;
   final String role;
   final String? portraitUrl;
+
+  /// The small copy of [portraitUrl] for avatars; null when the server sent
+  /// none. [portraitUrl] always stays the full picture.
+  final String? portraitThumbUrl;
 
   /// The line under the name, picked by the server for the player's hour;
   /// null when there is none.
@@ -38,12 +49,21 @@ class GroupMember extends Equatable {
     required this.name,
     this.role = '',
     this.portraitUrl,
+    this.portraitThumbUrl,
     this.status,
     this.firstTexts = const [],
   });
 
   @override
-  List<Object?> get props => [id, name, role, portraitUrl, status, firstTexts];
+  List<Object?> get props => [
+    id,
+    name,
+    role,
+    portraitUrl,
+    portraitThumbUrl,
+    status,
+    firstTexts,
+  ];
 }
 
 /// Non-empty strings of a JSON list; anything else is no list.
@@ -355,6 +375,7 @@ class GroupSnapshot extends Equatable {
         name: name,
         role: _str(card['role']),
         portraitUrl: portrait == null ? null : _str(portrait),
+        portraitThumbUrl: _optUrl(card['portrait_thumb_url']),
         status: _str(card['status']).trim().isEmpty
             ? null
             : _str(card['status']).trim(),
@@ -670,6 +691,9 @@ class GroupChatRow extends Equatable {
   final String templateId;
   final String title;
   final String? imageUrl;
+
+  /// The small copy of [imageUrl] for list covers; null when none was sent.
+  final String? imageThumbUrl;
   final List<GroupMember> members;
 
   /// The main room's newest shown line; null for a new group, or when every
@@ -685,6 +709,7 @@ class GroupChatRow extends Equatable {
     required this.templateId,
     this.title = '',
     this.imageUrl,
+    this.imageThumbUrl,
     this.members = const [],
     this.last,
     this.pendingFrom = const [],
@@ -703,6 +728,7 @@ class GroupChatRow extends Equatable {
         templateId: _str(json['template_id']),
         title: _str(json['title']),
         imageUrl: image.isEmpty ? null : image,
+        imageThumbUrl: _optUrl(json['image_thumb_url']),
         members: [
           for (final m in _maps(json['members']))
             if (_str(m['id']).isNotEmpty && _str(m['name']).isNotEmpty)
@@ -713,6 +739,7 @@ class GroupChatRow extends Equatable {
                 portraitUrl: _str(m['portrait_url']).isEmpty
                     ? null
                     : _str(m['portrait_url']),
+                portraitThumbUrl: _optUrl(m['portrait_thumb_url']),
               ),
         ],
         last: GroupLastLine.parse(json['last']),
@@ -737,6 +764,7 @@ class GroupChatRow extends Equatable {
     templateId,
     title,
     imageUrl,
+    imageThumbUrl,
     members,
     last,
     pendingFrom,
