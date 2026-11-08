@@ -93,6 +93,7 @@ class _GroupFormViewState extends State<GroupFormView> {
               final topTitle = person.name.trim().isNotEmpty
                   ? person.name.trim()
                   : 'Person ${personIndex + 1}';
+              final ageError = state.formErrors['people.$personIndex.age'];
 
               return Padding(
                 padding: EdgeInsets.only(bottom: viewInsets.bottom),
@@ -143,8 +144,8 @@ class _GroupFormViewState extends State<GroupFormView> {
                                       initialValue: person.age != null
                                           ? person.age.toString()
                                           : '',
-                                      errorText: state
-                                          .formErrors['people.$personIndex.age'],
+                                      errorText: ageError,
+                                      showErrorText: false,
                                       keyboardType: TextInputType.number,
                                       maxLength: 3,
                                       wrapSingleLine: true,
@@ -161,6 +162,17 @@ class _GroupFormViewState extends State<GroupFormView> {
                                   ),
                                 ],
                               ),
+                              if (ageError != null && ageError.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    ageError,
+                                    style: EverloreTheme.ui(
+                                      size: 12,
+                                      color: EverloreTheme.crimson,
+                                    ),
+                                  ),
+                                ),
                               GroupClosenessPicker(
                                 label: 'To you, they are',
                                 selected: person.closeness,

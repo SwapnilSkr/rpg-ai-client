@@ -24,6 +24,8 @@ class GroupTextField extends StatefulWidget {
   final bool wrapSingleLine;
   final TextStyle? style;
   final TextStyle? hintStyle;
+  final bool showErrorText;
+  final bool underlineOnlyOnFocusOrError;
 
   const GroupTextField({
     super.key,
@@ -43,6 +45,8 @@ class GroupTextField extends StatefulWidget {
     this.wrapSingleLine = false,
     this.style,
     this.hintStyle,
+    this.showErrorText = true,
+    this.underlineOnlyOnFocusOrError = false,
   });
 
   @override
@@ -87,7 +91,9 @@ class _GroupTextFieldState extends State<GroupTextField> {
     final int? remaining = widget.maxLength != null
         ? widget.maxLength! - _controller.text.characters.length
         : null;
-    final bool showCounter = remaining != null && remaining <= 20;
+    final bool showCounter =
+        remaining != null && widget.maxLength! > 20 && remaining <= 20;
+    final bool displayError = hasError && widget.showErrorText;
 
     // Remove maxLines caps on long writing (useProseFont) or wrapSingleLine so writing grows
     final effectiveMaxLines = (widget.useProseFont || widget.wrapSingleLine)
@@ -139,8 +145,26 @@ class _GroupTextFieldState extends State<GroupTextField> {
                 color: EverloreTheme.ash.withValues(alpha: 0.75),
               ));
 
+    final defaultBorder = widget.underlineOnlyOnFocusOrError
+        ? (hasError
+              ? const UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: EverloreTheme.crimson,
+                    width: 1.0,
+                  ),
+                )
+              : InputBorder.none)
+        : UnderlineInputBorder(
+            borderSide: BorderSide(
+              color: hasError ? EverloreTheme.crimson : EverloreTheme.white10,
+              width: 1.0,
+            ),
+          );
+
     return Padding(
-      padding: const EdgeInsets.only(top: 18),
+      padding: EdgeInsets.only(
+        top: widget.underlineOnlyOnFocusOrError ? 0 : 18,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -171,6 +195,9 @@ class _GroupTextFieldState extends State<GroupTextField> {
             controller: _controller,
             onChanged: widget.onChanged,
             enabled: widget.enabled,
+            textAlignVertical: widget.underlineOnlyOnFocusOrError
+                ? TextAlignVertical.center
+                : null,
             maxLines: effectiveMaxLines,
             minLines: widget.minLines,
             maxLength: widget.maxLength,
@@ -191,22 +218,8 @@ class _GroupTextFieldState extends State<GroupTextField> {
                 horizontal: 0,
                 vertical: 8,
               ),
-              border: UnderlineInputBorder(
-                borderSide: BorderSide(
-                  color: hasError
-                      ? EverloreTheme.crimson
-                      : EverloreTheme.white10,
-                  width: 1.0,
-                ),
-              ),
-              enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(
-                  color: hasError
-                      ? EverloreTheme.crimson
-                      : EverloreTheme.white10,
-                  width: 1.0,
-                ),
-              ),
+              border: defaultBorder,
+              enabledBorder: defaultBorder,
               focusedBorder: UnderlineInputBorder(
                 borderSide: BorderSide(
                   color: hasError ? EverloreTheme.crimson : EverloreTheme.gold,
@@ -225,21 +238,23 @@ class _GroupTextFieldState extends State<GroupTextField> {
                   width: 1.5,
                 ),
               ),
-              disabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(
-                  color: EverloreTheme.white10.withValues(alpha: 0.5),
-                  width: 1.0,
-                ),
-              ),
+              disabledBorder: widget.underlineOnlyOnFocusOrError
+                  ? InputBorder.none
+                  : UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: EverloreTheme.white10.withValues(alpha: 0.5),
+                        width: 1.0,
+                      ),
+                    ),
             ),
           ),
-          if (hasError || showCounter)
+          if (displayError || showCounter)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (hasError)
+                  if (displayError)
                     Expanded(
                       child: Text(
                         widget.errorText!,
@@ -252,7 +267,7 @@ class _GroupTextFieldState extends State<GroupTextField> {
                   else
                     const Spacer(),
                   if (showCounter) ...[
-                    if (hasError) const SizedBox(width: 8),
+                    if (displayError) const SizedBox(width: 8),
                     Text(
                       '$remaining left',
                       style: EverloreTheme.ui(

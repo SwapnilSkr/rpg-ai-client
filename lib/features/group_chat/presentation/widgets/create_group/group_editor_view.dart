@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -6,13 +7,18 @@ import 'package:go_router/go_router.dart';
 import 'package:everlore/app/theme/nexus_theme.dart';
 import 'package:everlore/features/creator/presentation/widgets/publish_world_sheet.dart';
 import 'package:everlore/features/group_chat/models/group_draft.dart';
+import 'package:everlore/features/group_chat/presentation/widgets/create_group/group_fold_section.dart';
+import 'package:everlore/features/group_chat/presentation/widgets/create_group/group_person_card.dart';
+import 'package:everlore/features/group_chat/presentation/widgets/create_group/group_person_editor_sheet.dart';
+import 'package:everlore/features/group_chat/presentation/widgets/create_group/group_text_field.dart';
+import 'package:everlore/features/group_chat/presentation/widgets/member_avatar.dart';
 import 'package:everlore/features/group_chat/state/create_group_cubit.dart';
 import 'package:everlore/features/group_chat/state/create_group_state.dart';
 import 'package:everlore/shared/models/world_template.dart';
-import 'group_person_editor_card.dart';
-import 'group_text_field.dart';
+import 'package:everlore/shared/widgets/everlore_sheet.dart';
 
-/// The editing screen: one scrolling page for every field of a group.
+/// The group editor view: title, description, cast grid of GroupPersonCard,
+/// the four story folds, and bottom bar.
 class GroupEditorView extends StatefulWidget {
   final CreateGroupState state;
 
@@ -20,7 +26,6 @@ class GroupEditorView extends StatefulWidget {
 
   @visibleForTesting
   static void resetSavedState() {
-    _GroupEditorViewState._savedExpanded.clear();
     _GroupEditorViewState._savedOffsets.clear();
   }
 
@@ -29,26 +34,17 @@ class GroupEditorView extends StatefulWidget {
 }
 
 class _GroupEditorViewState extends State<GroupEditorView> {
-  static final Map<String, Set<int>> _savedExpanded = {};
   static final Map<String, double> _savedOffsets = {};
 
   late final ScrollController _scrollController;
-  final Set<int> _expandedPeople = {};
-
-  final GlobalKey _titleKey = GlobalKey();
-  final GlobalKey _topicsKey = GlobalKey();
-  final GlobalKey _openingLinesKey = GlobalKey();
-  final Map<int, GlobalKey> _personKeys = {};
+  final GlobalKey _storyKey = GlobalKey();
+  int? _openPersonIndex;
 
   String get _storageKey => widget.state.draft?.id ?? 'draft';
 
   @override
   void initState() {
     super.initState();
-    final saved = _savedExpanded[_storageKey];
-    if (saved != null) {
-      _expandedPeople.addAll(saved);
-    }
     final initialOffset = _savedOffsets[_storageKey] ?? 0.0;
     _scrollController = ScrollController(initialScrollOffset: initialOffset);
     _scrollController.addListener(() {
@@ -58,31 +54,29 @@ class _GroupEditorViewState extends State<GroupEditorView> {
     });
   }
 
-  void _togglePerson(int index) {
-    setState(() {
-      if (_expandedPeople.contains(index)) {
-        _expandedPeople.remove(index);
-      } else {
-        _expandedPeople.add(index);
-      }
-      _savedExpanded[_storageKey] = Set.from(_expandedPeople);
-    });
-  }
-
   @override
   void didUpdateWidget(covariant GroupEditorView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // If draft.id changed from null to an id, transfer saved expanded state
     if (oldWidget.state.draft?.id == null && widget.state.draft?.id != null) {
-      _savedExpanded[widget.state.draft!.id!] = Set.from(_expandedPeople);
       if (_savedOffsets.containsKey('draft')) {
         _savedOffsets[widget.state.draft!.id!] = _savedOffsets['draft']!;
       }
     }
-    // When a save fails with field errors, scroll to and expand the first person or section
-    if (widget.state.fieldErrors.isNotEmpty &&
-        !mapEquals(widget.state.fieldErrors, oldWidget.state.fieldErrors)) {
-      _handleErrorsAndScroll();
+
+    // Trigger reveal only when a path appears that was not in the old fieldErrors or old refusedPaths
+    final hasNewError =
+        widget.state.fieldErrors.keys.any(
+          (p) => !oldWidget.state.fieldErrors.containsKey(p),
+        ) ||
+        widget.state.refusedPaths.any(
+          (p) => !oldWidget.state.refusedPaths.contains(p),
+        );
+
+    if (hasNewError) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _handleErrorsAndScroll();
+      });
     }
   }
 
@@ -93,62 +87,74 @@ class _GroupEditorViewState extends State<GroupEditorView> {
   }
 
   void _handleErrorsAndScroll() {
-    final errors = widget.state.fieldErrors;
-    // Look for first person error
-    for (var i = 0; i < (widget.state.draft?.cast.length ?? 0); i++) {
+    final state = widget.state;
+    final allPaths = {...state.fieldErrors.keys, ...state.refusedPaths};
+    if (allPaths.isEmpty) return;
+
+    // 1. Check for person refusal or error: seed_cast.N...
+    final cast = state.draft?.cast ?? [];
+    for (var i = 0; i < cast.length; i++) {
       final prefix = 'seed_cast.$i';
-      final hasPersonError = errors.keys.any(
-        (k) => k == prefix || k.startsWith('$prefix.'),
+      final hasCastError = allPaths.any(
+        (p) => p == prefix || p.startsWith('$prefix.'),
       );
-      if (hasPersonError) {
-        setState(() {
-          _expandedPeople.add(i);
-          _savedExpanded[_storageKey] = Set.from(_expandedPeople);
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final target = _personKeys[i]?.currentContext;
-          if (target != null) {
-            Scrollable.ensureVisible(
-              target,
-              alignment: 0.0,
-              duration: const Duration(milliseconds: 320),
-              curve: Curves.easeInOut,
-            );
-          }
-        });
+      if (hasCastError) {
+        _openPersonEditorSheet(context, i, scrollToFirstError: true);
         return;
       }
     }
 
-    // Otherwise check top sections
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (errors.containsKey('title')) {
-        final ctx = _titleKey.currentContext;
+    // 2. Title or description errors scroll to top
+    if (allPaths.contains('title') || allPaths.contains('description')) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+      return;
+    }
+
+    // 3. Story errors: seed_prompt, global_lore, topics, opening_lines
+    if (allPaths.any(
+      (p) =>
+          p == 'seed_prompt' ||
+          p == 'global_lore' ||
+          p.startsWith('topics') ||
+          p.startsWith('opening_lines'),
+    )) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = _storyKey.currentContext;
         if (ctx != null) {
           Scrollable.ensureVisible(
             ctx,
             alignment: 0.0,
             duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOut,
           );
         }
-      } else if (errors.keys.any((k) => k.startsWith('topics'))) {
-        final ctx = _topicsKey.currentContext;
-        if (ctx != null) {
-          Scrollable.ensureVisible(
-            ctx,
-            alignment: 0.0,
-            duration: const Duration(milliseconds: 320),
-          );
-        }
-      } else if (errors.keys.any((k) => k.startsWith('opening_lines'))) {
-        final ctx = _openingLinesKey.currentContext;
-        if (ctx != null) {
-          Scrollable.ensureVisible(
-            ctx,
-            alignment: 0.0,
-            duration: const Duration(milliseconds: 320),
-          );
-        }
+      });
+    }
+  }
+
+  void _openPersonEditorSheet(
+    BuildContext context,
+    int index, {
+    bool scrollToFirstError = false,
+  }) {
+    if (_openPersonIndex == index) return;
+    if (_openPersonIndex != null) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+    _openPersonIndex = index;
+    showGroupPersonEditorSheet(
+      context,
+      personIndex: index,
+      scrollToFirstError: scrollToFirstError,
+    ).then((_) {
+      if (_openPersonIndex == index) {
+        _openPersonIndex = null;
       }
     });
   }
@@ -161,6 +167,56 @@ class _GroupEditorViewState extends State<GroupEditorView> {
       return "This line can't be saved. Change it.";
     }
     return null;
+  }
+
+  bool _canPaintEveryone(CreateGroupState state) {
+    final draft = state.draft;
+    if (draft == null || state.isBusy) return false;
+    final anyPainting = state.faces.values.any(
+      (f) => f.status == GroupFaceStatus.painting,
+    );
+    if (anyPainting) return false;
+
+    return draft.cast.any((p) {
+      final hasFace = p.portraitThumbUrl.isNotEmpty || p.portraitUrl.isNotEmpty;
+      return !hasFace;
+    });
+  }
+
+  Future<void> _paintEveryone() async {
+    final cubit = context.read<CreateGroupCubit>();
+    if (cubit.state.needsSave) {
+      final ok = await cubit.save();
+      if (!ok) {
+        if (mounted) _handleErrorsAndScroll();
+        return;
+      }
+    }
+    if (!mounted) return;
+    final cast = cubit.state.draft?.cast ?? [];
+    for (var i = 0; i < cast.length; i++) {
+      if (!mounted) return;
+      final person = cubit.state.draft?.cast[i];
+      if (person == null) continue;
+      final hasFace =
+          person.portraitThumbUrl.isNotEmpty || person.portraitUrl.isNotEmpty;
+      final faceState = cubit.state.faceOf(i);
+      if (!hasFace && faceState.status == GroupFaceStatus.idle) {
+        await cubit.requestFace(i);
+      }
+    }
+  }
+
+  Future<void> _paintFaceForPerson(int index) async {
+    final cubit = context.read<CreateGroupCubit>();
+    if (cubit.state.needsSave) {
+      final ok = await cubit.save();
+      if (!ok) {
+        _handleErrorsAndScroll();
+        return;
+      }
+    }
+    await cubit.requestFace(index);
   }
 
   void _openPublishSheet(BuildContext context) {
@@ -186,12 +242,104 @@ class _GroupEditorViewState extends State<GroupEditorView> {
       initialVisibility: draft.visibility.isNotEmpty
           ? draft.visibility
           : 'private',
-      onPublish: cubit.publish,
+      onPublish: (t) async {
+        final ok = await cubit.publish(t);
+        if (!ok && context.mounted) {
+          _handleErrorsAndScroll();
+        }
+        return ok;
+      },
       noun: 'group',
       allowPublic: allowPublic,
       publicDisabledReason: allowPublic
           ? null
           : 'Every person needs a face first.',
+    );
+  }
+
+  String _firstTwoLines(String text) {
+    final lines = text
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .take(2)
+        .toList();
+    if (lines.isEmpty) return '';
+    return lines.join(' ');
+  }
+
+  void _openSpeakerPicker(BuildContext context, int lineIndex) {
+    final draft = widget.state.draft;
+    if (draft == null) return;
+    showEverloreSheet(
+      context: context,
+      backgroundColor: EverloreTheme.void1,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SheetGrabHandle(),
+                const SizedBox(height: 16),
+                Text(
+                  'Who is speaking?',
+                  style: EverloreTheme.serifDisplay(
+                    size: 18,
+                    color: EverloreTheme.parchment,
+                    weight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: [
+                    for (final person in draft.cast)
+                      InkWell(
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          context.read<CreateGroupCubit>().setOpeningSpeaker(
+                            lineIndex,
+                            person.name,
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              MemberAvatar(
+                                name: person.name,
+                                portraitUrl: person.portraitUrl,
+                                portraitThumbUrl: person.portraitThumbUrl,
+                                size: 44,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                person.name.isNotEmpty
+                                    ? person.name
+                                    : 'Someone',
+                                style: EverloreTheme.ui(
+                                  size: 12,
+                                  weight: FontWeight.w600,
+                                  color: EverloreTheme.parchment,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -202,6 +350,12 @@ class _GroupEditorViewState extends State<GroupEditorView> {
 
     final cubit = context.read<CreateGroupCubit>();
     final isBusy = widget.state.isBusy;
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final keyboardUp = viewInsets.bottom > 0;
+
+    final noOneHasFace = draft.cast.every(
+      (p) => (p.portraitUrl.isEmpty && p.portraitThumbUrl.isEmpty),
+    );
 
     return Column(
       children: [
@@ -209,303 +363,466 @@ class _GroupEditorViewState extends State<GroupEditorView> {
           child: SingleChildScrollView(
             key: const PageStorageKey('group_editor_scroll_view'),
             controller: _scrollController,
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 36),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 36),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. Title
-                Container(
-                  key: _titleKey,
-                  child: GroupTextField(
-                    label: 'Title',
-                    hint: 'Group title…',
-                    initialValue: draft.title,
-                    errorText: _errorOf('title'),
-                    enabled: !isBusy,
-                    wrapSingleLine: true,
-                    onChanged: cubit.setTitle,
+                // 1. 72 dp spacer so backdrop art shows
+                const SizedBox(height: 72),
+
+                // 2. Title field: aiText 30
+                GroupTextField(
+                  hint: 'Group title…',
+                  initialValue: draft.title,
+                  errorText: _errorOf('title'),
+                  enabled: !isBusy,
+                  wrapSingleLine: true,
+                  style: EverloreTheme.aiText.copyWith(
+                    fontSize: 30,
+                    height: 1.2,
+                    color: EverloreTheme.parchment,
                   ),
+                  hintStyle: EverloreTheme.aiText.copyWith(
+                    fontSize: 30,
+                    height: 1.2,
+                    color: EverloreTheme.ash.withValues(alpha: 0.75),
+                  ),
+                  onChanged: cubit.setTitle,
                 ),
 
-                // 2. About this group
+                // 3. Description field at 16, no label, full text
                 GroupTextField(
-                  label: 'About this group',
-                  hint: 'Short description…',
+                  hint: 'About this group…',
                   initialValue: draft.description,
                   errorText: _errorOf('description'),
-                  maxLines: 3,
-                  minLines: 2,
-                  useProseFont: true,
                   enabled: !isBusy,
+                  useProseFont: true,
+                  maxLines: null,
+                  minLines: 1,
                   onChanged: cubit.setDescription,
                 ),
 
-                // 3. The setting
-                GroupTextField(
-                  label: 'The setting',
-                  hint: 'Where this group is and background lore…',
-                  initialValue: draft.globalLore,
-                  errorText: _errorOf('global_lore'),
-                  maxLines: 4,
-                  minLines: 2,
-                  useProseFont: true,
-                  enabled: !isBusy,
-                  onChanged: cubit.setGlobalLore,
+                const SizedBox(height: 28),
+
+                // 4. "WHO'S IN IT" section (fixed 44 dp height so cards never jump when link disappears)
+                SizedBox(
+                  height: 44,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          "WHO'S IN IT",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: EverloreTheme.ui(
+                            size: 11,
+                            weight: FontWeight.w700,
+                            color: EverloreTheme.goldDim,
+                            spacing: 1.4,
+                          ),
+                        ),
+                      ),
+                      if (_canPaintEveryone(widget.state)) ...[
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: !isBusy ? _paintEveryone : null,
+                          child: Container(
+                            height: 44,
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Text(
+                              'Paint everyone',
+                              maxLines: 1,
+                              style: EverloreTheme.ui(
+                                size: 13,
+                                weight: FontWeight.w600,
+                                color: EverloreTheme.gold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (_errorOf('seed_cast') != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _errorOf('seed_cast')!,
+                    style: EverloreTheme.ui(
+                      size: 12,
+                      color: EverloreTheme.crimson,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+
+                // Grid of GroupPersonCard
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 220,
+                    childAspectRatio: 0.76,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                  ),
+                  itemCount: draft.cast.length,
+                  itemBuilder: (context, i) {
+                    final person = draft.cast[i];
+                    final at = 'seed_cast.$i';
+                    final hasPersonError =
+                        widget.state.fieldErrors.keys.any(
+                          (k) => k == at || k.startsWith('$at.'),
+                        ) ||
+                        widget.state.refusedPaths.any(
+                          (p) => p == at || p.startsWith('$at.'),
+                        );
+
+                    return GroupPersonCard.editor(
+                      key: ValueKey('editor_card_$i'),
+                      person: person,
+                      index: i,
+                      face: widget.state.faceOf(i),
+                      faceWillReset: widget.state.faceWillReset(i),
+                      hasError: hasPersonError,
+                      errorMessage: hasPersonError ? 'Needs a look' : null,
+                      onTap: () => _openPersonEditorSheet(context, i),
+                      onPaintFace: () => _paintFaceForPerson(i),
+                    );
+                  },
                 ),
 
-                // 4. How the chat goes
-                GroupTextField(
-                  label: 'How the chat goes',
-                  hint: 'Direction for how the group behaves…',
-                  initialValue: draft.seedPrompt,
-                  errorText: _errorOf('seed_prompt'),
-                  maxLines: 4,
-                  minLines: 2,
-                  useProseFont: true,
-                  enabled: !isBusy,
-                  onChanged: cubit.setSeedPrompt,
+                if (noOneHasFace)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Tap anyone to read or change them.',
+                      style: EverloreTheme.aiText.copyWith(
+                        fontSize: 14,
+                        color: EverloreTheme.ash,
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 28),
+
+                // 5. "THE STORY" head and fold card
+                Text(
+                  'THE STORY',
+                  style: EverloreTheme.ui(
+                    size: 11,
+                    weight: FontWeight.w700,
+                    color: EverloreTheme.goldDim,
+                    spacing: 1.4,
+                  ),
                 ),
+                const SizedBox(height: 12),
 
-                const SizedBox(height: 24),
+                Container(
+                  key: _storyKey,
+                  child: GroupFoldCard(
+                    sections: [
+                      // Fold 1: How it begins (seedPrompt)
+                      GroupFoldSection(
+                        title: 'How it begins',
+                        summary: _firstTwoLines(draft.seedPrompt),
+                        hasError: _errorOf('seed_prompt') != null,
+                        child: GroupTextField(
+                          hint: 'Direction for how the group behaves…',
+                          initialValue: draft.seedPrompt,
+                          errorText: _errorOf('seed_prompt'),
+                          maxLines: null,
+                          minLines: 2,
+                          useProseFont: true,
+                          enabled: !isBusy,
+                          onChanged: cubit.setSeedPrompt,
+                        ),
+                      ),
 
-                // 5. Topics
-                _buildTopicsSection(draft, cubit, isBusy),
+                      // Fold 2: The setting (globalLore)
+                      GroupFoldSection(
+                        title: 'The setting',
+                        summary: _firstTwoLines(draft.globalLore),
+                        hasError: _errorOf('global_lore') != null,
+                        child: GroupTextField(
+                          hint: 'Where this group is and background lore…',
+                          initialValue: draft.globalLore,
+                          errorText: _errorOf('global_lore'),
+                          maxLines: null,
+                          minLines: 2,
+                          useProseFont: true,
+                          enabled: !isBusy,
+                          onChanged: cubit.setGlobalLore,
+                        ),
+                      ),
 
-                const SizedBox(height: 24),
+                      // Fold 3: What they talk about (topics)
+                      GroupFoldSection(
+                        title: 'What they talk about',
+                        summary: '${draft.topics.length} topics',
+                        hasError:
+                            _errorOf('topics') != null ||
+                            draft.topics.asMap().keys.any(
+                              (j) => _errorOf('topics.$j') != null,
+                            ),
+                        child: _buildTopicsFold(cubit, draft, isBusy),
+                      ),
 
-                // 6. Opening conversation
-                _buildOpeningConversationSection(draft, cubit, isBusy),
-
-                const SizedBox(height: 24),
-
-                // 7. Person cards
-                _buildCastSection(draft, cubit, isBusy),
+                      // Fold 4: The first conversation (openingLines)
+                      GroupFoldSection(
+                        title: 'The first conversation',
+                        summary: '${draft.openingLines.length} lines',
+                        hasError:
+                            _errorOf('opening_lines') != null ||
+                            draft.openingLines.asMap().keys.any(
+                              (j) =>
+                                  _errorOf('opening_lines.$j.name') != null ||
+                                  _errorOf('opening_lines.$j.text') != null,
+                            ),
+                        child: _buildOpeningConversationFold(
+                          context,
+                          cubit,
+                          draft,
+                          isBusy,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         ),
 
-        // Bottom bar
-        _buildBottomBar(context, draft, cubit),
+        // Bottom bar: hidden when keyboard is up
+        if (!keyboardUp) _buildBottomBar(context, draft, cubit),
       ],
     );
   }
 
-  Widget _buildTopicsSection(
-    GroupDraft draft,
+  Widget _buildTopicsFold(
     CreateGroupCubit cubit,
+    GroupDraft draft,
     bool isBusy,
   ) {
     final listError = _errorOf('topics');
 
-    return Container(
-      key: _topicsKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Topics',
-                style: EverloreTheme.ui(
-                  size: 14,
-                  weight: FontWeight.w700,
-                  color: EverloreTheme.parchment,
-                ),
-              ),
-              TextButton.icon(
-                onPressed: isBusy ? null : cubit.addTopic,
-                icon: const Icon(Icons.add, size: 14),
-                label: const Text(
-                  'Add topic',
-                  style: TextStyle(
-                    fontFamily: EverloreTheme.uiFamily,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  foregroundColor: EverloreTheme.gold,
-                  disabledForegroundColor: EverloreTheme.ash.withValues(
-                    alpha: 0.4,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (listError != null) ...[
+          Text(
+            listError,
+            style: EverloreTheme.ui(size: 12, color: EverloreTheme.crimson),
           ),
-          if (listError != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              listError,
-              style: EverloreTheme.ui(size: 12, color: EverloreTheme.crimson),
-            ),
-          ],
-          for (var i = 0; i < draft.topics.length; i++) ...[
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: GroupTextField(
-                      hint: 'A topic they talk about…',
-                      initialValue: draft.topics[i],
-                      errorText: _errorOf('topics.$i'),
-                      enabled: !isBusy,
-                      useProseFont: true,
-                      wrapSingleLine: true,
-                      onChanged: (val) => cubit.setTopic(i, val),
-                    ),
+          const SizedBox(height: 4),
+        ],
+        for (var j = 0; j < draft.topics.length; j++) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: GroupTextField(
+                    hint: 'A topic they talk about…',
+                    initialValue: draft.topics[j],
+                    errorText: _errorOf('topics.$j'),
+                    enabled: !isBusy,
+                    useProseFont: true,
+                    wrapSingleLine: true,
+                    onChanged: (val) => cubit.setTopic(j, val),
                   ),
-                  IconButton(
-                    onPressed: isBusy ? null : () => cubit.removeTopic(i),
+                ),
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: IconButton(
+                    onPressed: isBusy ? null : () => cubit.removeTopic(j),
                     icon: const Icon(
                       Icons.close,
                       size: 16,
                       color: EverloreTheme.ash,
                     ),
-                    padding: const EdgeInsets.only(top: 20),
+                    padding: const EdgeInsets.only(top: 14),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ],
-      ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: isBusy ? null : cubit.addTopic,
+          icon: const Icon(Icons.add, size: 14),
+          label: const Text(
+            'Add a topic',
+            style: TextStyle(
+              fontFamily: EverloreTheme.uiFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            foregroundColor: EverloreTheme.gold,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildOpeningConversationSection(
-    GroupDraft draft,
+  Widget _buildOpeningConversationFold(
+    BuildContext context,
     CreateGroupCubit cubit,
+    GroupDraft draft,
     bool isBusy,
   ) {
     final listError = _errorOf('opening_lines');
-    final castNames = draft.cast
-        .map((p) => p.name.trim())
-        .where((n) => n.isNotEmpty)
-        .toSet()
-        .toList();
-
-    return Container(
-      key: _openingLinesKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Opening conversation',
-                style: EverloreTheme.ui(
-                  size: 14,
-                  weight: FontWeight.w700,
-                  color: EverloreTheme.parchment,
-                ),
-              ),
-              TextButton.icon(
-                onPressed: isBusy ? null : cubit.addOpeningLine,
-                icon: const Icon(Icons.add, size: 14),
-                label: const Text(
-                  'Add line',
-                  style: TextStyle(
-                    fontFamily: EverloreTheme.uiFamily,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  foregroundColor: EverloreTheme.gold,
-                  disabledForegroundColor: EverloreTheme.ash.withValues(
-                    alpha: 0.4,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ],
-          ),
-          if (listError != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              listError,
-              style: EverloreTheme.ui(size: 12, color: EverloreTheme.crimson),
-            ),
-          ],
-          for (var i = 0; i < draft.openingLines.length; i++) ...[
-            _OpeningLineEditor(
-              index: i,
-              line: draft.openingLines[i],
-              availableNames: castNames,
-              isBusy: isBusy,
-              speakerError: _errorOf('opening_lines.$i.name'),
-              textError: _errorOf('opening_lines.$i.text'),
-              onSpeakerChanged: (name) => cubit.setOpeningSpeaker(i, name),
-              onTextChanged: (text) => cubit.setOpeningText(i, text),
-              onRemove: () => cubit.removeOpeningLine(i),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCastSection(
-    GroupDraft draft,
-    CreateGroupCubit cubit,
-    bool isBusy,
-  ) {
-    final listError = _errorOf('seed_cast');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'PEOPLE (${draft.cast.length})',
-          style: EverloreTheme.ui(
-            size: 11,
-            weight: FontWeight.w700,
-            color: EverloreTheme.goldDim,
-            spacing: 1.4,
-          ),
-        ),
         if (listError != null) ...[
-          const SizedBox(height: 4),
           Text(
             listError,
             style: EverloreTheme.ui(size: 12, color: EverloreTheme.crimson),
           ),
+          const SizedBox(height: 4),
         ],
-        const SizedBox(height: 12),
-        for (var i = 0; i < draft.cast.length; i++) ...[
-          Container(
-            key: _personKeys.putIfAbsent(i, () => GlobalKey()),
-            child: GroupPersonEditorCard(
-              index: i,
-              person: draft.cast[i],
-              isExpanded: _expandedPeople.contains(i),
-              isAdult: draft.isNsfwCapable,
-              isBusy: isBusy,
-              face: widget.state.faceOf(i),
-              faceWillReset: widget.state.faceWillReset(i),
-              errorOf: _errorOf,
-              onToggle: () => _togglePerson(i),
+        for (var j = 0; j < draft.openingLines.length; j++) ...[
+          _buildOpeningLineBubble(context, cubit, draft, j, isBusy),
+        ],
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: isBusy ? null : cubit.addOpeningLine,
+          icon: const Icon(Icons.add, size: 14),
+          label: const Text(
+            'Add a line',
+            style: TextStyle(
+              fontFamily: EverloreTheme.uiFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 14),
-        ],
+          style: TextButton.styleFrom(
+            foregroundColor: EverloreTheme.gold,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _buildOpeningLineBubble(
+    BuildContext context,
+    CreateGroupCubit cubit,
+    GroupDraft draft,
+    int lineIndex,
+    bool isBusy,
+  ) {
+    final line = draft.openingLines[lineIndex];
+    final speakerPerson = draft.cast.cast<GroupDraftPerson?>().firstWhere(
+      (p) => p?.name == line.name,
+      orElse: () => null,
+    );
+    final speakerError = _errorOf('opening_lines.$lineIndex.name');
+    final textError = _errorOf('opening_lines.$lineIndex.text');
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              MemberAvatar(
+                name: line.name,
+                portraitUrl: speakerPerson?.portraitUrl,
+                portraitThumbUrl: speakerPerson?.portraitThumbUrl,
+                size: 28,
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: isBusy
+                    ? null
+                    : () => _openSpeakerPicker(context, lineIndex),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        line.name.isNotEmpty ? line.name : 'Select speaker',
+                        style: EverloreTheme.ui(
+                          size: 12,
+                          weight: FontWeight.w700,
+                          color: EverloreTheme.gold,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 16,
+                        color: EverloreTheme.gold,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Spacer(),
+              SizedBox(
+                width: 40,
+                height: 40,
+                child: IconButton(
+                  onPressed: isBusy
+                      ? null
+                      : () => cubit.removeOpeningLine(lineIndex),
+                  icon: const Icon(
+                    Icons.close,
+                    size: 16,
+                    color: EverloreTheme.ash,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Container(
+            margin: const EdgeInsets.only(left: 36, top: 4, bottom: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+            decoration: BoxDecoration(
+              color: EverloreTheme.void3,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: GroupTextField(
+              hint: 'Opening line…',
+              initialValue: line.text,
+              errorText: textError,
+              enabled: !isBusy,
+              useProseFont: true,
+              wrapSingleLine: true,
+              underlineOnlyOnFocusOrError: true,
+              onChanged: (val) => cubit.setOpeningText(lineIndex, val),
+            ),
+          ),
+          if (speakerError != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 36, bottom: 4),
+              child: Text(
+                speakerError,
+                style: EverloreTheme.ui(size: 12, color: EverloreTheme.crimson),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -515,10 +832,6 @@ class _GroupEditorViewState extends State<GroupEditorView> {
     CreateGroupCubit cubit,
   ) {
     final isBusy = widget.state.isBusy;
-    final isSaving = widget.state.isSaving;
-    final needsSave = widget.state.needsSave;
-    final canSave = needsSave && !isBusy;
-    final canChat = draft.id != null && !widget.state.isDirty && !isBusy;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -532,233 +845,81 @@ class _GroupEditorViewState extends State<GroupEditorView> {
         top: false,
         child: Row(
           children: [
-            // Save button
+            // Share button (outlined, 104 x 48)
+            OutlinedButton(
+              onPressed: !isBusy ? () => _openPublishSheet(context) : null,
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                  color: EverloreTheme.goldDim.withValues(alpha: 0.35),
+                ),
+                foregroundColor: EverloreTheme.parchment,
+                minimumSize: const Size(104, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.ios_share, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Share',
+                    style: EverloreTheme.ui(
+                      size: 14,
+                      weight: FontWeight.w600,
+                      color: EverloreTheme.parchment,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Primary: Start chatting (gold, Expanded, 48)
             Expanded(
-              flex: 2,
               child: FilledButton(
-                onPressed: canSave ? () => cubit.save() : null,
+                onPressed: isBusy
+                    ? null
+                    : () async {
+                        if (widget.state.needsSave) {
+                          final ok = await cubit.save();
+                          if (!ok) {
+                            _handleErrorsAndScroll();
+                            return;
+                          }
+                        }
+                        final id = cubit.state.draft?.id;
+                        if (id != null && context.mounted) {
+                          context.push('/group-preview/$id');
+                        }
+                      },
                 style: FilledButton.styleFrom(
                   backgroundColor: EverloreTheme.gold,
                   disabledBackgroundColor: EverloreTheme.void3,
                   foregroundColor: EverloreTheme.void0,
                   disabledForegroundColor: EverloreTheme.ash.withValues(
-                    alpha: 0.5,
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: EverloreTheme.void0,
-                        ),
-                      )
-                    : const Text(
-                        'Save',
-                        style: TextStyle(
-                          fontFamily: EverloreTheme.uiFamily,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-              ),
-            ),
-            const SizedBox(width: 8),
-
-            // Share button
-            Expanded(
-              flex: 2,
-              child: OutlinedButton(
-                onPressed: !isBusy ? () => _openPublishSheet(context) : null,
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(
-                    color: EverloreTheme.goldDim.withValues(alpha: 0.35),
-                  ),
-                  foregroundColor: EverloreTheme.parchment,
-                  disabledForegroundColor: EverloreTheme.ash.withValues(
-                    alpha: 0.5,
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Share',
-                  style: TextStyle(
-                    fontFamily: EverloreTheme.uiFamily,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-
-            // Chat button
-            Expanded(
-              flex: 2,
-              child: FilledButton(
-                onPressed: canChat
-                    ? () => context.push('/group-preview/${draft.id}')
-                    : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: EverloreTheme.void3,
-                  disabledBackgroundColor: EverloreTheme.void4.withValues(
                     alpha: 0.4,
                   ),
-                  foregroundColor: EverloreTheme.parchment,
-                  disabledForegroundColor: EverloreTheme.ash.withValues(
-                    alpha: 0.4,
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  minimumSize: const Size.fromHeight(48),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                child: const Text(
-                  'Chat',
-                  style: TextStyle(
-                    fontFamily: EverloreTheme.uiFamily,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                child: Text(
+                  'Start chatting',
+                  style: EverloreTheme.ui(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: isBusy
+                        ? EverloreTheme.ash.withValues(alpha: 0.4)
+                        : EverloreTheme.void0,
                   ),
                 ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _OpeningLineEditor extends StatelessWidget {
-  final int index;
-  final GroupOpeningLine line;
-  final List<String> availableNames;
-  final bool isBusy;
-  final String? speakerError;
-  final String? textError;
-  final ValueChanged<String> onSpeakerChanged;
-  final ValueChanged<String> onTextChanged;
-  final VoidCallback onRemove;
-
-  const _OpeningLineEditor({
-    required this.index,
-    required this.line,
-    required this.availableNames,
-    required this.isBusy,
-    this.speakerError,
-    this.textError,
-    required this.onSpeakerChanged,
-    required this.onTextChanged,
-    required this.onRemove,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Ensure current line speaker is among items
-    final names = [...availableNames];
-    if (line.name.isNotEmpty && !names.contains(line.name)) {
-      names.add(line.name);
-    }
-    final selectedName = names.contains(line.name)
-        ? line.name
-        : (names.isNotEmpty ? names.first : '');
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Speaker dropdown
-              Container(
-                margin: const EdgeInsets.only(top: 14),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: EverloreTheme.void4.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: speakerError != null
-                        ? EverloreTheme.crimson
-                        : EverloreTheme.goldDim.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: selectedName.isNotEmpty ? selectedName : null,
-                    hint: Text(
-                      'Speaker',
-                      style: EverloreTheme.ui(
-                        size: 13,
-                        color: EverloreTheme.ash,
-                      ),
-                    ),
-                    dropdownColor: EverloreTheme.void2,
-                    style: EverloreTheme.ui(
-                      size: 13,
-                      color: EverloreTheme.parchment,
-                      weight: FontWeight.w600,
-                    ),
-                    items: [
-                      for (final name in names)
-                        DropdownMenuItem(value: name, child: Text(name)),
-                    ],
-                    onChanged: isBusy
-                        ? null
-                        : (val) {
-                            if (val != null) onSpeakerChanged(val);
-                          },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-
-              // Text field
-              Expanded(
-                child: GroupTextField(
-                  hint: 'Opening line…',
-                  initialValue: line.text,
-                  errorText: textError,
-                  enabled: !isBusy,
-                  useProseFont: true,
-                  wrapSingleLine: true,
-                  onChanged: onTextChanged,
-                ),
-              ),
-
-              // Remove
-              IconButton(
-                onPressed: isBusy ? null : onRemove,
-                icon: const Icon(
-                  Icons.close,
-                  size: 16,
-                  color: EverloreTheme.ash,
-                ),
-                padding: const EdgeInsets.only(top: 20),
-              ),
-            ],
-          ),
-          if (speakerError != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              speakerError!,
-              style: EverloreTheme.ui(size: 12, color: EverloreTheme.crimson),
-            ),
-          ],
-        ],
       ),
     );
   }

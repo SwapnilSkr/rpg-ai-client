@@ -77,7 +77,7 @@ class GroupPersonCard extends StatelessWidget {
         personalityError != null ||
         knowsPlayerError != null;
 
-    final isEmpty = !hasError && !hasName && !hasLook && person.age == null;
+    final isEmpty = !hasName && !hasLook && person.age == null;
 
     String? errorMessage;
     if (hasError) {
@@ -340,7 +340,8 @@ class GroupPersonCard extends StatelessWidget {
   }
 
   Widget _buildFormBottom() {
-    if (isEmpty) {
+    if (isEmpty || name.trim().isEmpty) {
+      final showErr = hasError && errorMessage != null;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -355,8 +356,13 @@ class GroupPersonCard extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            'Tap to describe them',
-            style: EverloreTheme.ui(size: 11, color: EverloreTheme.ash),
+            showErr ? errorMessage! : 'Tap to describe them',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: EverloreTheme.ui(
+              size: 11,
+              color: showErr ? EverloreTheme.crimson : EverloreTheme.ash,
+            ),
           ),
         ],
       );

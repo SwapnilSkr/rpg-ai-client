@@ -75,6 +75,13 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     }
   }
 
+  Future<void> _confirmStartOver(BuildContext context) async {
+    final confirmed = await showStartOverSheet(context);
+    if (confirmed && context.mounted) {
+      context.read<CreateGroupCubit>().backToForm();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<CreateGroupCubit, CreateGroupState>(
@@ -100,10 +107,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
           CreateGroupPhase.form => 'New group',
           CreateGroupPhase.drafting => '',
           CreateGroupPhase.loading => 'Group',
-          CreateGroupPhase.editing =>
-            state.draft?.title.isNotEmpty == true
-                ? state.draft!.title
-                : 'Edit group',
+          CreateGroupPhase.editing => 'Your group',
         };
 
         return PopScope(
@@ -132,8 +136,44 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                       backgroundOpacity:
                           state.phase == CreateGroupPhase.drafting ? 0.0 : 0.68,
                       actions: [
-                        if (state.phase == CreateGroupPhase.editing &&
-                            state.draft?.id != null)
+                        if (state.phase == CreateGroupPhase.editing) ...[
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: state.isSaving
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: EverloreTheme.gold,
+                                      ),
+                                    )
+                                  : state.needsSave
+                                  ? GestureDetector(
+                                      onTap: !state.isBusy
+                                          ? () => context
+                                                .read<CreateGroupCubit>()
+                                                .save()
+                                          : null,
+                                      child: Text(
+                                        'Save',
+                                        style: EverloreTheme.ui(
+                                          size: 14,
+                                          weight: FontWeight.w700,
+                                          color: EverloreTheme.gold,
+                                        ),
+                                      ),
+                                    )
+                                  : Text(
+                                      'Saved',
+                                      style: EverloreTheme.ui(
+                                        size: 13,
+                                        color: EverloreTheme.ash,
+                                      ),
+                                    ),
+                            ),
+                          ),
                           PopupMenuButton<String>(
                             icon: const Icon(
                               Icons.more_vert,
@@ -142,31 +182,58 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                             color: EverloreTheme.void2,
                             onSelected: (val) {
                               if (val == 'delete') _confirmDelete(context);
+                              if (val == 'start_over') {
+                                _confirmStartOver(context);
+                              }
                             },
                             itemBuilder: (_) => [
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.delete_outline,
-                                      color: EverloreTheme.crimson,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Delete group',
-                                      style: EverloreTheme.ui(
-                                        size: 14,
-                                        color: EverloreTheme.crimson,
-                                        weight: FontWeight.w600,
+                              if (state.draft?.id == null)
+                                PopupMenuItem(
+                                  value: 'start_over',
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.restart_alt,
+                                        color: EverloreTheme.parchment,
+                                        size: 18,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Start over',
+                                        style: EverloreTheme.ui(
+                                          size: 14,
+                                          color: EverloreTheme.parchment,
+                                          weight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
+                              if (state.draft?.id != null)
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.delete_outline,
+                                        color: EverloreTheme.crimson,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Delete group',
+                                        style: EverloreTheme.ui(
+                                          size: 14,
+                                          color: EverloreTheme.crimson,
+                                          weight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                             ],
                           ),
+                        ],
                       ],
                     ),
                     if (state.phase != CreateGroupPhase.drafting)

@@ -18,6 +18,21 @@ Future<bool> showLeaveUnsavedSheet(BuildContext context) async {
   return result == true;
 }
 
+/// Asks if the user wants to start over:
+/// "Start over?" (Start over / Keep this).
+Future<bool> showStartOverSheet(BuildContext context) async {
+  final result = await showEverloreSheet<bool>(
+    context: context,
+    builder: (sheetContext) => const _GroupConfirmSheetContent(
+      title: 'Start over?',
+      body: 'This goes back to what you typed. The writing here will be lost.',
+      confirmLabel: 'Start over',
+      cancelLabel: 'Keep this',
+    ),
+  );
+  return result == true;
+}
+
 /// Asks if the user wants to stop drafting:
 /// "Stop writing this group?" (Stop / Keep waiting).
 Future<bool> showStopDraftingSheet(BuildContext context) async {

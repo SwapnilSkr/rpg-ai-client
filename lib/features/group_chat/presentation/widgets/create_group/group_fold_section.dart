@@ -82,31 +82,39 @@ class _GroupFoldSectionState extends State<GroupFoldSection> {
                       const SizedBox(width: 10),
                     ],
                     Expanded(
-                      child: Text(
-                        widget.title,
-                        style: EverloreTheme.ui(
-                          size: 15,
-                          weight: FontWeight.w600,
-                          color: EverloreTheme.parchment,
-                        ),
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              widget.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: EverloreTheme.ui(
+                                size: 15,
+                                weight: FontWeight.w600,
+                                color: EverloreTheme.parchment,
+                              ),
+                            ),
+                          ),
+                          if (widget.summary != null &&
+                              widget.summary!.isNotEmpty &&
+                              !_isExpanded) ...[
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                widget.summary!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: EverloreTheme.aiText.copyWith(
+                                  fontSize: 14,
+                                  color: EverloreTheme.ash,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    if (widget.summary != null &&
-                        widget.summary!.isNotEmpty &&
-                        !_isExpanded) ...[
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          widget.summary!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: EverloreTheme.aiText.copyWith(
-                            fontSize: 14,
-                            color: EverloreTheme.ash,
-                          ),
-                        ),
-                      ),
-                    ],
                     const SizedBox(width: 8),
                     AnimatedRotation(
                       turns: _isExpanded ? 0.25 : 0.0,

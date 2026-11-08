@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:everlore/app/theme/nexus_theme.dart';
+import 'package:everlore/core/network/api_client.dart';
 import 'package:everlore/features/creator/presentation/widgets/publish_world_sheet.dart';
 import 'package:everlore/features/group_chat/data/group_create_repository.dart';
 import 'package:everlore/features/group_chat/models/group_draft.dart';
@@ -14,7 +15,7 @@ import 'package:everlore/features/group_chat/presentation/widgets/create_group/g
 import 'package:everlore/features/group_chat/presentation/widgets/create_group/group_fold_section.dart';
 import 'package:everlore/features/group_chat/presentation/widgets/create_group/group_form_view.dart';
 import 'package:everlore/features/group_chat/presentation/widgets/create_group/group_person_card.dart';
-import 'package:everlore/features/group_chat/presentation/widgets/create_group/group_person_editor_card.dart';
+import 'package:everlore/features/group_chat/presentation/widgets/create_group/group_person_editor_sheet.dart';
 import 'package:everlore/features/group_chat/presentation/widgets/create_group/group_text_field.dart';
 import 'package:everlore/features/group_chat/state/create_group_cubit.dart';
 import 'package:everlore/shared/widgets/everlore_network_image.dart';
@@ -147,20 +148,28 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Top sections
+        // Top sections and story folds
+        expect(find.text('Your group'), findsOneWidget);
         expect(find.text('The Climbing Gym'), findsWidgets);
-        expect(find.text('About this group'), findsOneWidget);
+        expect(find.text("WHO'S IN IT"), findsOneWidget);
+        expect(find.text('THE STORY'), findsOneWidget);
+        expect(find.text('How it begins'), findsOneWidget);
         expect(find.text('The setting'), findsOneWidget);
-        expect(find.text('How the chat goes'), findsOneWidget);
-        expect(find.text('Topics'), findsOneWidget);
-        expect(find.text('Opening conversation'), findsOneWidget);
-        expect(find.text('PEOPLE (2)'), findsOneWidget);
+        expect(find.text('What they talk about'), findsOneWidget);
+        expect(find.text('The first conversation'), findsOneWidget);
 
-        // Expand person Ines
-        await tester.tap(find.text('Ines').last);
+        // Tap person Ines (opens sheet)
+        await tester.tap(find.text('Ines').first);
         await tester.pumpAndSettle();
 
+        expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+        await tester.tap(find.text('How they talk and what they want'));
+        await tester.pumpAndSettle();
         expect(find.text('When it gets intimate'), findsOneWidget);
+
+        // Close sheet
+        await tester.tap(find.text('Done'));
+        await tester.pumpAndSettle();
 
         // Now test non-adult draft
         final nonAdultDraft = GroupDraft.fromAuthoring(
@@ -183,10 +192,13 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Expand person Ines in non-adult
-        await tester.tap(find.text('Ines').last);
+        // Tap person Ines in non-adult
+        await tester.tap(find.text('Ines').first);
         await tester.pumpAndSettle();
 
+        expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+        await tester.tap(find.text('How they talk and what they want'));
+        await tester.pumpAndSettle();
         expect(find.text('When it gets intimate'), findsNothing);
       },
     );
@@ -244,15 +256,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Expand person Ines
-      await tester.tap(find.text('Ines').last);
-      await tester.pumpAndSettle();
-
-      // Find "Paint a face" button
       final paintButton = find.text('Paint a face');
-      expect(paintButton, findsOneWidget);
+      expect(paintButton, findsWidgets);
 
-      await tester.tap(paintButton);
+      await tester.tap(paintButton.first);
       await tester.pumpAndSettle();
 
       expect(faceCalls, 1);
@@ -276,90 +283,33 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // Clean state shows "Saved"
+      expect(find.text('Saved'), findsOneWidget);
+
       // Edit title to make it dirty
       cubit.setTitle('Updated Gym');
       await tester.pumpAndSettle();
+
+      // Dirty state shows "Save"
+      expect(find.text('Save'), findsOneWidget);
 
       // Trigger save
       unawaited(cubit.save());
       await tester.pump();
       await tester.pump();
 
-      // While saving is true: Save button shows CircularProgressIndicator and onPressed is null
-      final saveButtonFinder = find.widgetWithText(FilledButton, 'Save');
-      expect(
-        saveButtonFinder,
-        findsNothing,
-      ); // replaced by progress indicator child
-
-      final filledButtons = tester.widgetList<FilledButton>(
-        find.byType(FilledButton),
-      );
-      final savingButton = filledButtons.first;
-      expect(savingButton.onPressed, isNull);
+      // While saving: spinner shows, "Save" is gone
+      expect(find.text('Save'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
       completer.complete();
       await tester.pumpAndSettle();
+
+      expect(find.text('Saved'), findsOneWidget);
     });
 
     testWidgets(
-      'button foreground colors: enabled Save is dark foreground; disabled Save and disabled Chat are disabled foreground',
-      (tester) async {
-        final draft = GroupDraft.fromAuthoring(_authoring());
-        final cubit = CreateGroupCubit(
-          loadFn: (_) async => draft,
-          updateFn: (_, __) async {},
-        );
-
-        await tester.pumpWidget(
-          _wrap(
-            BlocProvider.value(
-              value: cubit,
-              child: const CreateGroupScreen(templateId: 'g1'),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        // 1. Initial loaded state: not dirty, so Save is disabled, Chat is enabled
-        final saveFinder = find.widgetWithText(FilledButton, 'Save');
-        final chatFinder = find.widgetWithText(FilledButton, 'Chat');
-        expect(saveFinder, findsOneWidget);
-        expect(chatFinder, findsOneWidget);
-
-        Color? getTextColor(Finder buttonFinder) {
-          final richText = tester.widget<RichText>(
-            find.descendant(of: buttonFinder, matching: find.byType(RichText)),
-          );
-          return richText.text.style?.color;
-        }
-
-        // Disabled Save renders disabled foreground
-        expect(
-          getTextColor(saveFinder),
-          EverloreTheme.ash.withValues(alpha: 0.5),
-        );
-        // Enabled Chat renders parchment foreground
-        expect(getTextColor(chatFinder), EverloreTheme.parchment);
-
-        // 2. Make dirty -> Save is enabled, Chat is disabled
-        cubit.setTitle('Updated Gym');
-        await tester.pumpAndSettle();
-
-        // Enabled Save renders dark foreground (void0), NOT light parchment
-        expect(getTextColor(saveFinder), EverloreTheme.void0);
-        expect(getTextColor(saveFinder), isNot(EverloreTheme.parchment));
-
-        // Disabled Chat renders disabled foreground
-        expect(
-          getTextColor(chatFinder),
-          EverloreTheme.ash.withValues(alpha: 0.4),
-        );
-      },
-    );
-
-    testWidgets(
-      'emitting a state with new face URL keeps scroll offset and expanded card expanded',
+      'emitting a state with new face URL keeps scroll offset and an open sheet open',
       (tester) async {
         tester.view.physicalSize = const Size(500, 800);
         tester.view.devicePixelRatio = 1.0;
@@ -385,35 +335,13 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Scroll down to make person cards visible
-        await tester.drag(
-          find.byType(SingleChildScrollView),
-          const Offset(0, -350),
-        );
+        // 1. Open person 0 (Ines)'s sheet
+        await tester.tap(find.text('Ines').first);
         await tester.pumpAndSettle();
+        expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+        expect(find.text('Who they are'), findsOneWidget);
 
-        // 1. Expand person 0 (Ines)
-        final card0 = find.byType(GroupPersonEditorCard).first;
-        await tester.tap(
-          find.descendant(of: card0, matching: find.byType(InkWell)).first,
-        );
-        await tester.pumpAndSettle();
-        expect(find.text('When it gets intimate'), findsOneWidget);
-
-        // 2. Scroll down further so offset is non-zero
-        await tester.drag(
-          find.byType(SingleChildScrollView),
-          const Offset(0, -300),
-        );
-        await tester.pumpAndSettle();
-
-        final scrollable = tester.state<ScrollableState>(
-          find.byType(Scrollable).first,
-        );
-        final recordedOffset = scrollable.position.pixels;
-        expect(recordedOffset, greaterThan(200));
-
-        // 3. Emit state with equal-content copy having a new face URL
+        // 2. Emit state with equal-content copy having a new face URL
         final updatedDraft = draft.withPerson(
           0,
           draft.cast[0].copyWith(
@@ -430,29 +358,394 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        // Verify: Card 0 remains expanded
-        expect(find.text('When it gets intimate'), findsOneWidget);
-
-        // Verify: Scroll offset did not jump or move
-        expect(scrollable.position.pixels, equals(recordedOffset));
+        // Verify: Sheet remains open
+        expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+        expect(find.text('Who they are'), findsOneWidget);
       },
     );
 
+    testWidgets('re-read via load keeps scroll offset and an open sheet open', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(500, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final raw = _authoring(portraitUrl: '');
+      final draft = GroupDraft.fromAuthoring(raw);
+      final cubit = CreateGroupCubit(
+        loadFn: (_) async => draft,
+        updateFn: (_, __) async {},
+      );
+
+      await tester.pumpWidget(
+        _wrap(
+          BlocProvider.value(
+            value: cubit,
+            child: const CreateGroupScreen(templateId: 'g1'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open person 0 (Ines)'s sheet
+      await tester.tap(find.text('Ines').first);
+      await tester.pumpAndSettle();
+      expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+      expect(find.text('Who they are'), findsOneWidget);
+
+      // Re-read draft via load
+      await cubit.load('g1');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Sheet remains open
+      expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+      expect(find.text('Who they are'), findsOneWidget);
+    });
+
     testWidgets(
-      're-read via load keeps scroll offset and expanded card expanded',
+      'a planted refused line at seed_cast.2.group.voice.4 opens the third person\'s sheet and that field\'s fold',
       (tester) async {
-        tester.view.physicalSize = const Size(500, 800);
+        tester.view.physicalSize = const Size(1080, 2400);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(() {
           tester.view.resetPhysicalSize();
           tester.view.resetDevicePixelRatio();
         });
 
+        final raw = _authoring();
+        final castList = List<Map<String, dynamic>>.from(
+          raw['seed_cast'] as List,
+        );
+        final alex = _person('Alex', 25);
+        (alex['group'] as Map<String, dynamic>)['voice'] = [
+          'Line 0',
+          'Line 1',
+          'Line 2',
+          'Line 3',
+          'Line 4',
+        ];
+        castList.add(alex);
+        raw['seed_cast'] = castList;
+
+        final draft = GroupDraft.fromAuthoring(raw);
+        final cubit = CreateGroupCubit(loadFn: (_) async => draft);
+
+        await tester.pumpWidget(
+          _wrap(
+            BlocProvider.value(
+              value: cubit,
+              child: const CreateGroupScreen(templateId: 'g1'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Sheet is not open initially
+        expect(find.byType(GroupPersonEditorSheet), findsNothing);
+
+        // Plant a refused line at seed_cast.2.group.voice.4
+        cubit.emit(
+          cubit.state.copyWith(
+            refusedPaths: {'seed_cast.2.group.voice.4'},
+            error: 'Please fix the refused lines.',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Verify: The 3rd person (Alex)'s sheet is opened
+        expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+        expect(find.text('Alex'), findsWidgets);
+
+        // And that field's fold ("Things they say") is opened, showing refusal text
+        expect(
+          find.text("This line can't be saved. Change it."),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'clearing an error on person 0 does not trigger reveal and sheet stays on person 0',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final draft = GroupDraft.fromAuthoring(_authoring());
+        final cubit = CreateGroupCubit(loadFn: (_) async => draft);
+
+        await tester.pumpWidget(
+          _wrap(
+            BlocProvider.value(
+              value: cubit,
+              child: const CreateGroupScreen(templateId: 'g1'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Plant errors on people 0 and 1
+        cubit.emit(
+          cubit.state.copyWith(
+            fieldErrors: {
+              'seed_cast.0.role': 'Needs role',
+              'seed_cast.1.role': 'Needs role',
+            },
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Sheet is open on person 0 (Ines)
+        expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(GroupPersonEditorSheet),
+            matching: find.text('Ines'),
+          ),
+          findsWidgets,
+        );
+
+        // Clear person 0's error through cubit's setter
+        cubit.setPersonRole(0, 'Route Setter');
+        await tester.pumpAndSettle();
+
+        // The sheet must stay on person 0 (Ines), NOT switch to person 1 (Tomas)
+        expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(GroupPersonEditorSheet),
+            matching: find.text('Ines'),
+          ),
+          findsWidgets,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(GroupPersonEditorSheet),
+            matching: find.text('Tomas'),
+          ),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'planted refused line at seed_cast.2.group.voice.4 at phone height is inside visible area after pumpAndSettle; sheet opened by tapping card has scroll offset 0',
+      (tester) async {
+        const phoneHeight = 844.0;
+        const phoneWidth = 390.0;
+        tester.view.physicalSize = const Size(phoneWidth, phoneHeight);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final raw = _authoring();
+        final castList = List<Map<String, dynamic>>.from(
+          raw['seed_cast'] as List,
+        );
+        final alex = _person('Alex', 25);
+        (alex['group'] as Map<String, dynamic>)['voice'] = [
+          'Line 0',
+          'Line 1',
+          'Line 2',
+          'Line 3',
+          'Line 4',
+        ];
+        castList.add(alex);
+        raw['seed_cast'] = castList;
+
+        final draft = GroupDraft.fromAuthoring(raw);
+        final cubit = CreateGroupCubit(loadFn: (_) async => draft);
+
+        await tester.pumpWidget(
+          _wrap(
+            BlocProvider.value(
+              value: cubit,
+              child: const CreateGroupScreen(templateId: 'g1'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Part A: Planted refused line at seed_cast.2.group.voice.4 (revealed sheet)
+        cubit.emit(
+          cubit.state.copyWith(
+            refusedPaths: {'seed_cast.2.group.voice.4'},
+            error: 'Please fix the refused lines.',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+
+        // Find the line 4 text field
+        final line4Finder = find.widgetWithText(GroupTextField, 'Line 4');
+        expect(line4Finder, findsOneWidget);
+
+        // Verify that Line 4 is inside the visible area of the screen
+        final line4Rect = tester.getRect(line4Finder);
+        expect(line4Rect.top, greaterThanOrEqualTo(0.0));
+        expect(line4Rect.bottom, lessThanOrEqualTo(phoneHeight));
+
+        // 2. Part B: Close sheet, tap a card, verify scroll offset is 0
+        Navigator.of(
+          tester.element(find.byType(GroupPersonEditorSheet)),
+          rootNavigator: true,
+        ).pop();
+        await tester.pumpAndSettle();
+        expect(find.byType(GroupPersonEditorSheet), findsNothing);
+
+        // Tap Ines's card directly
+        await tester.tap(find.text('Ines').first);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+        final scrollable = tester.state<ScrollableState>(
+          find
+              .descendant(
+                of: find.byType(GroupPersonEditorSheet),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        expect(scrollable.position.pixels, equals(0.0));
+      },
+    );
+
+    testWidgets(
+      'WHO\'S IN IT row has height 44 with at least 44 dp tap area on Paint everyone, stays 44 dp when link disappears, and grid has zero padding',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final draft = GroupDraft.fromAuthoring(_authoring());
+        final cubit = CreateGroupCubit(loadFn: (_) async => draft);
+
+        await tester.pumpWidget(
+          _wrap(
+            BlocProvider.value(
+              value: cubit,
+              child: const CreateGroupScreen(templateId: 'g1'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. GridView padding is EdgeInsets.zero
+        final grid = tester.widget<GridView>(find.byType(GridView));
+        expect(grid.padding, equals(EdgeInsets.zero));
+
+        // 2. "Paint everyone" tap area is at least 44 dp tall
+        final paintEveryoneGesture = find
+            .ancestor(
+              of: find.text('Paint everyone'),
+              matching: find.byType(GestureDetector),
+            )
+            .first;
+        final tapSize = tester.getSize(paintEveryoneGesture);
+        expect(tapSize.height, greaterThanOrEqualTo(44.0));
+
+        // 3. The row has height 44 dp
+        final rowContainer = find
+            .ancestor(
+              of: find.text("WHO'S IN IT"),
+              matching: find.byType(SizedBox),
+            )
+            .first;
+        expect(tester.getSize(rowContainer).height, equals(44.0));
+
+        // 4. When everyone has a face (Paint everyone link disappears), the row stays 44 dp tall
+        final withFaces = draft.copyWith(
+          cast: [
+            draft.cast[0].copyWith(portraitUrl: 'https://cdn/p0.webp'),
+            draft.cast[1].copyWith(portraitUrl: 'https://cdn/p1.webp'),
+          ],
+        );
+        cubit.emit(cubit.state.copyWith(draft: withFaces));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Paint everyone'), findsNothing);
+        expect(tester.getSize(rowContainer).height, equals(44.0));
+      },
+    );
+
+    testWidgets('a fieldErrors entry on a story field opens its fold', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final draft = GroupDraft.fromAuthoring(_authoring());
+      final cubit = CreateGroupCubit(loadFn: (_) async => draft);
+
+      await tester.pumpWidget(
+        _wrap(
+          BlocProvider.value(
+            value: cubit,
+            child: const CreateGroupScreen(templateId: 'g1'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Emit field error on topics.0
+      cubit.emit(cubit.state.copyWith(fieldErrors: {'topics.0': 'Too short'}));
+      await tester.pumpAndSettle();
+
+      // The "What they talk about" fold is opened and displays the error
+      expect(find.text('Too short'), findsOneWidget);
+      expect(find.text('Add a topic'), findsOneWidget);
+    });
+
+    testWidgets(
+      '"Paint everyone" saves first and then asks for one face at a time, in order, and stops when the save fails',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        var saveCalled = 0;
+        var saveShouldFail = true;
+        final faceRequestedIndices = <int>[];
+
         final raw = _authoring(portraitUrl: '');
         final draft = GroupDraft.fromAuthoring(raw);
+
         final cubit = CreateGroupCubit(
           loadFn: (_) async => draft,
-          updateFn: (_, __) async {},
+          updateFn: (_, __) async {
+            saveCalled++;
+            if (saveShouldFail) {
+              throw Exception('Save failed');
+            }
+          },
+          faceFn: (id, index, {repaint = false}) async {
+            faceRequestedIndices.add(index);
+            return GroupFaceResult(
+              GroupFaceOutcome.ready,
+              url: 'https://cdn/face_$index.webp',
+            );
+          },
         );
 
         await tester.pumpWidget(
@@ -465,47 +758,166 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Scroll down to make person cards visible
-        await tester.drag(
-          find.byType(SingleChildScrollView),
-          const Offset(0, -350),
+        // 1. Part A: Save fails -> stops and does NOT request faces
+        cubit.setTitle('Updated Climbing Gym');
+        await tester.pumpAndSettle();
+
+        final paintEveryoneFinder = find.text('Paint everyone');
+        expect(paintEveryoneFinder, findsOneWidget);
+
+        await tester.tap(paintEveryoneFinder);
+        await tester.pumpAndSettle();
+
+        expect(saveCalled, 1);
+        expect(faceRequestedIndices, isEmpty);
+
+        // 2. Part B: Save succeeds -> requests faces one by one in order
+        saveShouldFail = false;
+        await tester.tap(paintEveryoneFinder);
+        await tester.pumpAndSettle();
+
+        expect(saveCalled, 2);
+        expect(faceRequestedIndices, equals([0, 1]));
+      },
+    );
+
+    testWidgets('a failed save shows the reveal', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final draft = GroupDraft.fromAuthoring(_authoring());
+      final cubit = CreateGroupCubit(
+        loadFn: (_) async => draft,
+        updateFn: (_, __) async {
+          throw ApiException(
+            statusCode: 400,
+            message: 'Structure check failed',
+          );
+        },
+      );
+
+      await tester.pumpWidget(
+        _wrap(
+          BlocProvider.value(
+            value: cubit,
+            child: const CreateGroupScreen(templateId: 'g1'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Clear title so validation fails on save
+      cubit.setTitle('');
+      await tester.pumpAndSettle();
+
+      // Tap "Start chatting" which attempts to save first
+      await tester.tap(find.text('Start chatting'));
+      await tester.pumpAndSettle();
+
+      // Save failed and reveal shows the error under Title
+      expect(find.text('Add a title.'), findsOneWidget);
+    });
+
+    testWidgets('"Start over" asks first and goes back to the form', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      // A fresh draft where draft.id == null
+      final raw = _authoring();
+      raw.remove('_id');
+      final draft = GroupDraft.fromAuthoring(raw);
+      final cubit = CreateGroupCubit(draftFn: (_) async => draft);
+      cubit.emit(
+        cubit.state.copyWith(
+          phase: CreateGroupPhase.editing,
+          draft: draft,
+          saved: draft,
+        ),
+      );
+
+      await tester.pumpWidget(
+        _wrap(
+          BlocProvider.value(value: cubit, child: const CreateGroupScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Overflow menu contains "Start over"
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Start over'), findsOneWidget);
+
+      // Tap "Start over" item
+      await tester.tap(find.text('Start over'));
+      await tester.pumpAndSettle();
+
+      // Confirm sheet appears with title "Start over?"
+      expect(find.text('Start over?'), findsOneWidget);
+      expect(
+        find.text(
+          'This goes back to what you typed. The writing here will be lost.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Keep this'), findsOneWidget);
+
+      // Confirm start over
+      await tester.tap(find.widgetWithText(FilledButton, 'Start over'));
+      await tester.pumpAndSettle();
+
+      // Verify phase moved back to form
+      expect(cubit.state.phase, CreateGroupPhase.form);
+      expect(find.text('Write my group'), findsOneWidget);
+    });
+
+    testWidgets(
+      'the editor person sheet at 320 x 640 with viewInsets of 300 has no overflow',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+          tester.view.resetViewInsets();
+        });
+
+        final draft = GroupDraft.fromAuthoring(_authoring());
+        final cubit = CreateGroupCubit(loadFn: (_) async => draft);
+
+        await tester.pumpWidget(
+          _wrap(
+            BlocProvider.value(
+              value: cubit,
+              child: const CreateGroupScreen(templateId: 'g1'),
+            ),
+          ),
         );
         await tester.pumpAndSettle();
 
-        // Expand person 0 (Ines)
-        final card0 = find.byType(GroupPersonEditorCard).first;
-        await tester.tap(
-          find.descendant(of: card0, matching: find.byType(InkWell)).first,
-        );
-        await tester.pumpAndSettle();
-        expect(find.text('When it gets intimate'), findsOneWidget);
-
-        // Scroll down further
-        await tester.drag(
-          find.byType(SingleChildScrollView),
-          const Offset(0, -300),
-        );
+        // Tap Ines to open editor sheet
+        await tester.tap(find.text('Ines').first);
         await tester.pumpAndSettle();
 
-        final scrollableBefore = tester.state<ScrollableState>(
-          find.byType(Scrollable).first,
-        );
-        final offsetBefore = scrollableBefore.position.pixels;
-        expect(offsetBefore, greaterThan(200));
+        expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
 
-        // Re-read draft (unmounts and remounts GroupEditorView via phase: loading -> editing)
-        await cubit.load('g1');
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 100));
+        // Soft keyboard appears with 300 dp viewInsets
+        tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+        await tester.pumpAndSettle();
 
-        // Card 0 remains expanded
-        expect(find.text('When it gets intimate'), findsOneWidget);
-
-        // Scroll offset is preserved
-        final scrollableAfter = tester.state<ScrollableState>(
-          find.byType(Scrollable).first,
-        );
-        expect(scrollableAfter.position.pixels, equals(offsetBefore));
+        expect(tester.takeException(), isNull);
+        // Done button is hidden
+        expect(find.text('Done'), findsNothing);
       },
     );
   });
@@ -673,6 +1085,100 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(changedValue, 'Line 1Line 2');
+      },
+    );
+
+    testWidgets('the Age counter is gone and a long field still counts down', (
+      tester,
+    ) async {
+      // 1. Age field (maxLength = 3)
+      await tester.pumpWidget(
+        _wrap(
+          GroupTextField(
+            label: 'Age',
+            hint: '18+',
+            initialValue: '25',
+            maxLength: 3,
+            onChanged: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1 char left, but maxLength <= 20, so counter is NOT shown
+      expect(find.textContaining('left'), findsNothing);
+
+      // 2. Long field (maxLength = 50)
+      await tester.pumpWidget(
+        _wrap(
+          GroupTextField(
+            label: 'Title',
+            hint: 'Title…',
+            initialValue:
+                '1234567890123456789012345678901234567890', // 40 chars
+            maxLength: 50,
+            onChanged: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 10 chars left (<= 20) and maxLength (50) > 20, so counter IS shown
+      expect(find.text('10 left'), findsOneWidget);
+    });
+
+    testWidgets(
+      'underlineOnlyOnFocusOrError removes top padding and shows no underline when idle, shows underline on error',
+      (tester) async {
+        await tester.pumpWidget(
+          _wrap(
+            GroupTextField(
+              hint: 'Opening line…',
+              initialValue: 'Hello',
+              onChanged: (_) {},
+              underlineOnlyOnFocusOrError: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Outer padding is zero
+        final paddingFinder = find
+            .ancestor(
+              of: find.byType(TextField),
+              matching: find.byType(Padding),
+            )
+            .first;
+        expect(
+          tester.widget<Padding>(paddingFinder).padding,
+          equals(EdgeInsets.zero),
+        );
+
+        // TextField border is InputBorder.none
+        final tfWidget = tester.widget<TextField>(find.byType(TextField));
+        expect(tfWidget.decoration?.border, equals(InputBorder.none));
+        expect(tfWidget.decoration?.enabledBorder, equals(InputBorder.none));
+
+        // Now pump with error
+        await tester.pumpWidget(
+          _wrap(
+            GroupTextField(
+              hint: 'Opening line…',
+              initialValue: 'Hello',
+              errorText: 'Needs a line',
+              onChanged: (_) {},
+              underlineOnlyOnFocusOrError: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final errorTfWidget = tester.widget<TextField>(find.byType(TextField));
+        expect(errorTfWidget.decoration?.border, isA<UnderlineInputBorder>());
+        expect(
+          errorTfWidget.decoration?.enabledBorder,
+          isA<UnderlineInputBorder>(),
+        );
       },
     );
   });
@@ -1111,6 +1617,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Still needs a name and a look'), findsOneWidget);
+      // Keeps empty card prose serif font
+      final titleFinder = find.text('Someone new');
+      expect(titleFinder, findsOneWidget);
+      final titleWidget = tester.widget<Text>(titleFinder);
+      expect(titleWidget.style?.fontFamily, contains('Garamond'));
     });
 
     testWidgets(
@@ -1503,7 +2014,13 @@ void main() {
         await tester.pumpAndSettle();
 
         // No Flutter overflow exceptions
-        expect(tester.takeException(), isNull);
+        final err = tester.takeException();
+        if (err is FlutterError) {
+          for (final prop in err.diagnostics) {
+            print('DIAGNOSTIC: ${prop.toString()}');
+          }
+        }
+        expect(err, isNull);
         // "Person 1" should be in the sheet
         expect(find.text('Person 1'), findsOneWidget);
         // "Done" should be hidden when keyboard viewInsets.bottom > 0

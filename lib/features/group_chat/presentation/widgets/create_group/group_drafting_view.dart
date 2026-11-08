@@ -71,8 +71,8 @@ class _GroupDraftingViewState extends State<GroupDraftingView> {
       lines.add('Finding out what $name wants');
       lines.add('Working out how $name talks');
       lines.add('Deciding who $name looks at first');
-      lines.add('Giving them something to argue about');
     }
+    lines.add('Giving them something to argue about');
     return lines;
   }
 
@@ -90,6 +90,7 @@ class _GroupDraftingViewState extends State<GroupDraftingView> {
           'assets/art/forge-group-cover.webp',
           fit: BoxFit.cover,
           alignment: Alignment.center,
+          cacheWidth: 1080,
         ),
 
         // 2. 3-stop void0 gradient scrim
@@ -113,7 +114,7 @@ class _GroupDraftingViewState extends State<GroupDraftingView> {
         // 3. Drifting embers
         const EmberOverlay(),
 
-        // 4. Centered text block starting about 66% down with side padding 32
+        // 4. Centered text block starting about 62% down with side padding 32
         Positioned.fill(
           child: LayoutBuilder(
             builder: (context, constraints) {
