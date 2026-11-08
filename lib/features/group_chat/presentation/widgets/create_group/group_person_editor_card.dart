@@ -133,6 +133,7 @@ class GroupPersonEditorCard extends StatelessWidget {
                     errorText: errorOf('$at.name'),
                     enabled: !isBusy,
                     maxLength: GroupFormPerson.nameMax,
+                    wrapSingleLine: true,
                     onChanged: (val) => cubit.setPersonName(index, val),
                   ),
 
@@ -144,6 +145,7 @@ class GroupPersonEditorCard extends StatelessWidget {
                     errorText: errorOf('$at.group.age'),
                     keyboardType: TextInputType.number,
                     enabled: !isBusy,
+                    wrapSingleLine: true,
                     onChanged: (val) => cubit.setPersonAge(
                       index,
                       int.tryParse(val.trim()) ?? 0,
@@ -166,6 +168,7 @@ class GroupPersonEditorCard extends StatelessWidget {
                     initialValue: person.role,
                     errorText: errorOf('$at.role'),
                     enabled: !isBusy,
+                    wrapSingleLine: true,
                     onChanged: (val) => cubit.setPersonRole(index, val),
                   ),
 
@@ -462,6 +465,7 @@ class GroupPersonEditorCard extends StatelessWidget {
                     errorText: errorOf('$at.group.voice.$j'),
                     enabled: !isBusy,
                     useProseFont: true,
+                    wrapSingleLine: true,
                     onChanged: (val) => cubit.setVoiceLine(index, j, val),
                   ),
                 ),
@@ -515,6 +519,7 @@ class GroupPersonEditorCard extends StatelessWidget {
             errorText: errorOf('$at.first_texts.$j'),
             enabled: !isBusy,
             useProseFont: true,
+            wrapSingleLine: true,
             onChanged: (val) => cubit.setFirstText(index, j, val),
           ),
         ],
@@ -549,6 +554,7 @@ class GroupPersonEditorCard extends StatelessWidget {
             errorText: errorOf('$at.statuses.$period'),
             enabled: !isBusy,
             useProseFont: true,
+            wrapSingleLine: true,
             onChanged: (val) => cubit.setStatus(index, period, val),
           ),
         ],

@@ -6,6 +6,7 @@ import 'package:everlore/features/group_chat/state/create_group_cubit.dart';
 import 'package:everlore/features/group_chat/state/create_group_state.dart';
 import 'package:everlore/shared/widgets/everlore_notice.dart';
 import 'package:everlore/shared/widgets/everlore_top_bar.dart';
+import '../widgets/create_group/group_art_backdrop.dart';
 import '../widgets/create_group/group_delete_sheet.dart';
 import '../widgets/create_group/group_drafting_view.dart';
 import '../widgets/create_group/group_editor_view.dart';
@@ -96,7 +97,8 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
             !(state.phase == CreateGroupPhase.editing && state.needsSave);
 
         final title = switch (state.phase) {
-          CreateGroupPhase.form || CreateGroupPhase.drafting => 'New group',
+          CreateGroupPhase.form => 'New group',
+          CreateGroupPhase.drafting => '',
           CreateGroupPhase.loading => 'Group',
           CreateGroupPhase.editing =>
             state.draft?.title.isNotEmpty == true
@@ -113,51 +115,64 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
           },
           child: Scaffold(
             backgroundColor: EverloreTheme.void1,
-            body: Column(
+            body: Stack(
+              fit: StackFit.expand,
               children: [
-                EverloreTopBar(
-                  title: title,
-                  showBack: true,
-                  showProfile: false,
-                  actions: [
-                    if (state.phase == CreateGroupPhase.editing &&
-                        state.draft?.id != null)
-                      PopupMenuButton<String>(
-                        icon: const Icon(
-                          Icons.more_vert,
-                          color: EverloreTheme.ash,
-                        ),
-                        color: EverloreTheme.void2,
-                        onSelected: (val) {
-                          if (val == 'delete') _confirmDelete(context);
-                        },
-                        itemBuilder: (_) => [
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.delete_outline,
-                                  color: EverloreTheme.crimson,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Delete group',
-                                  style: EverloreTheme.ui(
-                                    size: 14,
-                                    color: EverloreTheme.crimson,
-                                    weight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
+                if (state.phase == CreateGroupPhase.form ||
+                    state.phase == CreateGroupPhase.editing)
+                  GroupArtBackdrop(coverUrl: state.draft?.imageThumbUrl),
+                if (state.phase == CreateGroupPhase.drafting)
+                  Positioned.fill(child: GroupDraftingView(state: state)),
+                Column(
+                  children: [
+                    EverloreTopBar(
+                      title: title,
+                      showBack: true,
+                      showProfile: false,
+                      backgroundOpacity:
+                          state.phase == CreateGroupPhase.drafting ? 0.0 : 0.68,
+                      actions: [
+                        if (state.phase == CreateGroupPhase.editing &&
+                            state.draft?.id != null)
+                          PopupMenuButton<String>(
+                            icon: const Icon(
+                              Icons.more_vert,
+                              color: EverloreTheme.ash,
                             ),
+                            color: EverloreTheme.void2,
+                            onSelected: (val) {
+                              if (val == 'delete') _confirmDelete(context);
+                            },
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.delete_outline,
+                                      color: EverloreTheme.crimson,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Delete group',
+                                      style: EverloreTheme.ui(
+                                        size: 14,
+                                        color: EverloreTheme.crimson,
+                                        weight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                      ],
+                    ),
+                    if (state.phase != CreateGroupPhase.drafting)
+                      Expanded(child: _buildPhaseBody(context, state)),
                   ],
                 ),
-                Expanded(child: _buildPhaseBody(context, state)),
               ],
             ),
           ),
@@ -171,7 +186,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       case CreateGroupPhase.form:
         return GroupFormView(state: state);
       case CreateGroupPhase.drafting:
-        return const GroupDraftingView();
+        return GroupDraftingView(state: state);
       case CreateGroupPhase.loading:
         return _buildLoading(context, state);
       case CreateGroupPhase.editing:

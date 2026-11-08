@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:everlore/app/theme/nexus_theme.dart';
 import 'package:everlore/features/group_chat/models/group_draft.dart';
 
-/// The four authored closeness chips:
+/// The four authored closeness tiles:
 /// "Just met", "Friend", "Has a crush on you", "Rival".
+/// Arranged in two rows of two expanded tiles, never a wrap.
 class GroupClosenessPicker extends StatelessWidget {
   final GroupCloseness selected;
   final ValueChanged<GroupCloseness> onSelected;
@@ -20,11 +21,59 @@ class GroupClosenessPicker extends StatelessWidget {
   });
 
   static const _options = [
-    (GroupCloseness.acquaintance, 'Just met'),
-    (GroupCloseness.friend, 'Friend'),
-    (GroupCloseness.unrequitedAttraction, 'Has a crush on you'),
-    (GroupCloseness.rival, 'Rival'),
+    (
+      GroupCloseness.acquaintance,
+      'Just met',
+      Icons.waving_hand_outlined,
+      EverloreTheme.ash,
+    ),
+    (
+      GroupCloseness.friend,
+      'Friend',
+      Icons.handshake_outlined,
+      EverloreTheme.gold,
+    ),
+    (
+      GroupCloseness.unrequitedAttraction,
+      'Has a crush on you',
+      Icons.favorite_border,
+      EverloreTheme.rose,
+    ),
+    (GroupCloseness.rival, 'Rival', Icons.bolt_outlined, EverloreTheme.ember),
   ];
+
+  /// Canonical tone for each closeness level across all views.
+  static Color toneOf(GroupCloseness? bond, [Color? fallback]) {
+    if (fallback != null) return fallback;
+    switch (bond) {
+      case GroupCloseness.acquaintance:
+        return EverloreTheme.ash;
+      case GroupCloseness.friend:
+        return EverloreTheme.gold;
+      case GroupCloseness.unrequitedAttraction:
+        return EverloreTheme.rose;
+      case GroupCloseness.rival:
+        return EverloreTheme.ember;
+      case null:
+        return EverloreTheme.ash;
+    }
+  }
+
+  /// Canonical player-facing label for each closeness level.
+  static String labelOf(GroupCloseness? bond) {
+    switch (bond) {
+      case GroupCloseness.acquaintance:
+        return 'Just met';
+      case GroupCloseness.friend:
+        return 'Friend';
+      case GroupCloseness.unrequitedAttraction:
+        return 'Has a crush on you';
+      case GroupCloseness.rival:
+        return 'Rival';
+      case null:
+        return 'Just met';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,55 +86,90 @@ class GroupClosenessPicker extends StatelessWidget {
             child: Text(
               label!,
               style: EverloreTheme.ui(
-                size: 13,
-                color: enabled ? EverloreTheme.parchment : EverloreTheme.ash,
-                weight: FontWeight.w600,
+                size: 12,
+                weight: FontWeight.w500,
+                color: enabled
+                    ? EverloreTheme.ash
+                    : EverloreTheme.ash.withValues(alpha: 0.6),
               ),
             ),
           )
         else
           const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        Row(
           children: [
-            for (final (closeness, label) in _options) ...[
-              _buildChip(closeness, label),
-            ],
+            Expanded(child: _buildTile(_options[0])),
+            const SizedBox(width: 8),
+            Expanded(child: _buildTile(_options[1])),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(child: _buildTile(_options[2])),
+            const SizedBox(width: 8),
+            Expanded(child: _buildTile(_options[3])),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildChip(GroupCloseness closeness, String label) {
+  Widget _buildTile((GroupCloseness, String, IconData, Color) option) {
+    final (closeness, labelText, icon, tone) = option;
     final isSelected = selected == closeness;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: enabled ? () => onSelected(closeness) : null,
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? EverloreTheme.gold.withValues(alpha: 0.16)
-                : EverloreTheme.void3.withValues(alpha: 0.8),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
+
+    return SizedBox(
+      height: 48,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? () => onSelected(closeness) : null,
+          borderRadius: BorderRadius.circular(12),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
               color: isSelected
-                  ? EverloreTheme.gold
-                  : EverloreTheme.goldDim.withValues(alpha: 0.22),
-              width: isSelected ? 1.4 : 1.0,
+                  ? tone.withValues(alpha: 0.14)
+                  : EverloreTheme.void3.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? tone
+                    : EverloreTheme.goldDim.withValues(alpha: 0.22),
+                width: isSelected ? 1.4 : 1.0,
+              ),
             ),
-          ),
-          child: Text(
-            label,
-            style: EverloreTheme.ui(
-              size: 13,
-              color: isSelected ? EverloreTheme.gold : EverloreTheme.parchment,
-              weight: isSelected ? FontWeight.w600 : FontWeight.w400,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: isSelected
+                      ? tone
+                      : (enabled ? EverloreTheme.parchment : EverloreTheme.ash),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    labelText,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: EverloreTheme.ui(
+                      size: 13,
+                      color: isSelected
+                          ? tone
+                          : (enabled
+                                ? EverloreTheme.parchment
+                                : EverloreTheme.ash),
+                      weight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
