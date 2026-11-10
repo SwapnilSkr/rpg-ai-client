@@ -92,45 +92,103 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
   Widget _buildGroupActionsRow(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          InkWell(
-            onTap: () => context.push('/groups/new'),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.add, size: 18, color: EverloreTheme.gold),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Create a group',
-                    style: EverloreTheme.ui(
-                      size: 13,
-                      weight: FontWeight.w600,
-                      color: EverloreTheme.gold,
-                    ),
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        height: 72,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: EverloreTheme.goldDim.withValues(alpha: 0.28),
+            width: 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/art/forge-group-cover.webp',
+              fit: BoxFit.cover,
+              alignment: const Alignment(0.4, -0.2),
+              cacheWidth: 800,
+            ),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      EverloreTheme.void0.withValues(alpha: 0.92),
+                      EverloreTheme.void0.withValues(alpha: 0.35),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-          TextButton(
-            onPressed: () => context.push('/groups/mine'),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            Row(
+              children: [
+                Expanded(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => context.push('/groups/new'),
+                      child: Container(
+                        height: 72,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        alignment: Alignment.centerLeft,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Make your own group',
+                              style: EverloreTheme.ui(
+                                size: 15,
+                                weight: FontWeight.w700,
+                                color: EverloreTheme.parchment,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Your people, your words.',
+                              style: EverloreTheme.aiText.copyWith(
+                                fontSize: 14,
+                                color: EverloreTheme.ash,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Container(width: 1, height: 72, color: EverloreTheme.white10),
+                SizedBox(
+                  width: 92,
+                  height: 72,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => context.push('/groups/mine'),
+                      child: Center(
+                        child: Text(
+                          'Your groups',
+                          textAlign: TextAlign.center,
+                          style: EverloreTheme.ui(
+                            size: 12,
+                            weight: FontWeight.w600,
+                            color: EverloreTheme.parchment,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            child: Text(
-              'Your groups',
-              style: EverloreTheme.ui(size: 13, color: EverloreTheme.ash),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

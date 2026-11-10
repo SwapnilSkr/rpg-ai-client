@@ -19,6 +19,7 @@ import '../../../home/data/home_repository.dart';
 import '../../../templates/data/template_repository.dart';
 import '../../models/group_chat_models.dart';
 import '../../state/chats_cubit.dart';
+import '../widgets/create_group/group_face_mosaic.dart';
 import '../widgets/member_avatar.dart';
 
 /// Preview screen for a group chat world before joining.
@@ -244,7 +245,21 @@ class _GroupPreviewScreenState extends State<GroupPreviewScreen> {
                             fit: BoxFit.cover,
                           )
                         else
-                          Container(color: EverloreTheme.void2),
+                          // Mosaic fallback from template members when group has no cover;
+                          // Stack(fit: expand) inside bounded SizedBox gives bounded parent.
+                          GroupFaceMosaic(
+                            faceUrls: [
+                              for (final m
+                                  in template?.members ??
+                                      const <TemplateMember>[])
+                                // The full painting: tiles here are far larger than a thumbnail.
+                                if ((m.portraitUrl ?? m.portraitThumbUrl) !=
+                                        null &&
+                                    (m.portraitUrl ?? m.portraitThumbUrl)!
+                                        .isNotEmpty)
+                                  (m.portraitUrl ?? m.portraitThumbUrl)!,
+                            ],
+                          ),
                         // Top gradient for status bar legibility
                         Positioned(
                           top: 0,

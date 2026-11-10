@@ -5,6 +5,7 @@ import '../../../../app/theme/nexus_theme.dart';
 import '../../../../shared/models/world_template.dart';
 import '../../../../shared/widgets/everlore_network_image.dart';
 import '../../models/group_chat_models.dart';
+import 'create_group/group_face_mosaic.dart';
 import 'member_avatar.dart';
 
 /// Reusable tall cover card (132x198 or masonry width): full-bleed cover,
@@ -14,6 +15,8 @@ class GroupCoverCard extends StatelessWidget {
   final double? width;
   final double? height;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool fallbackToMosaic;
 
   const GroupCoverCard({
     super.key,
@@ -21,6 +24,8 @@ class GroupCoverCard extends StatelessWidget {
     this.width,
     this.height,
     this.onTap,
+    this.onLongPress,
+    this.fallbackToMosaic = false,
   });
 
   @override
@@ -59,6 +64,16 @@ class GroupCoverCard extends StatelessWidget {
               fallbackUrl: template.imageUrl,
               fit: BoxFit.cover,
               memCacheWidth: 720,
+            )
+          else if (fallbackToMosaic)
+            // Mosaic fallback when no cover image exists; Stack(fit: expand) bounds it
+            GroupFaceMosaic(
+              faceUrls: [
+                for (final m in template.members)
+                  if ((m.portraitThumbUrl ?? m.portraitUrl) != null &&
+                      (m.portraitThumbUrl ?? m.portraitUrl)!.isNotEmpty)
+                    (m.portraitThumbUrl ?? m.portraitUrl)!,
+              ],
             )
           else
             Container(color: EverloreTheme.void3),
@@ -152,7 +167,10 @@ class GroupCoverCard extends StatelessWidget {
     }
 
     return GestureDetector(
-      onTap: onTap ?? () => context.push('/group-preview/${template.id}', extra: template),
+      onTap:
+          onTap ??
+          () => context.push('/group-preview/${template.id}', extra: template),
+      onLongPress: onLongPress,
       behavior: HitTestBehavior.opaque,
       child: card,
     );

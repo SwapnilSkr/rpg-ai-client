@@ -219,13 +219,24 @@ class _GroupEditorViewState extends State<GroupEditorView> {
     await cubit.requestFace(index);
   }
 
-  void _openPublishSheet(BuildContext context) {
+  Future<void> _openPublishSheet(BuildContext context) async {
     final draft = widget.state.draft;
     if (draft == null) return;
     final cubit = context.read<CreateGroupCubit>();
     final allowPublic = widget.state.everyoneHasFace;
 
-    PublishWorldSheet.show(
+    final cast = draft.cast;
+    final missingCount = [
+      for (var i = 0; i < cast.length; i++) i,
+    ].where((i) => !widget.state.hasFace(i)).length;
+    final disabledReason = allowPublic
+        ? null
+        : (missingCount == 1
+              ? '1 person still needs a face.'
+              : '$missingCount people still need a face.');
+
+    var refused = false;
+    await PublishWorldSheet.show(
       context,
       WorldTemplate(
         id: draft.id ?? '',
@@ -242,19 +253,22 @@ class _GroupEditorViewState extends State<GroupEditorView> {
       initialVisibility: draft.visibility.isNotEmpty
           ? draft.visibility
           : 'private',
+      choiceButtonLabels: true,
       onPublish: (t) async {
         final ok = await cubit.publish(t);
-        if (!ok && context.mounted) {
-          _handleErrorsAndScroll();
-        }
-        return ok;
+        // A refused line can't be fixed from this sheet: close it and show the line.
+        refused =
+            !ok &&
+            (cubit.state.refusedPaths.isNotEmpty ||
+                cubit.state.fieldErrors.isNotEmpty);
+        return ok || refused;
       },
       noun: 'group',
       allowPublic: allowPublic,
-      publicDisabledReason: allowPublic
-          ? null
-          : 'Every person needs a face first.',
+      publicDisabledReason: disabledReason,
     );
+
+    if (refused && context.mounted) _handleErrorsAndScroll();
   }
 
   String _firstTwoLines(String text) {

@@ -920,6 +920,81 @@ void main() {
         expect(find.text('Done'), findsNothing);
       },
     );
+
+    testWidgets(
+      'a share refused on seed_cast.2.group.voice.4 closes the sheet and opens that person\'s sheet at that line',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final raw = _authoring();
+        final castList = List<Map<String, dynamic>>.from(
+          raw['seed_cast'] as List,
+        );
+        final alex = _person('Alex', 25);
+        (alex['group'] as Map<String, dynamic>)['voice'] = [
+          'Line 0',
+          'Line 1',
+          'Line 2',
+          'Line 3',
+          'Line 4',
+        ];
+        castList.add(alex);
+        raw['seed_cast'] = castList;
+
+        final draft = GroupDraft.fromAuthoring(raw);
+        final cubit = CreateGroupCubit(
+          loadFn: (_) async => draft,
+          publishFn: (_, __) async {
+            throw ApiException(
+              statusCode: 422,
+              message:
+                  "Some lines in this group can't be saved. Check each part and try again.",
+              details: {
+                'paths': ['seed_cast.2.group.voice.4'],
+              },
+            );
+          },
+        );
+
+        await tester.pumpWidget(
+          _wrap(
+            BlocProvider.value(
+              value: cubit,
+              child: const CreateGroupScreen(templateId: 'g1'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Editor is loaded. Tap "Share"
+        await tester.tap(find.text('Share'));
+        await tester.pumpAndSettle();
+
+        // PublishWorldSheet is now open
+        expect(find.byType(PublishWorldSheet), findsOneWidget);
+        expect(find.text('Keep it just for me'), findsOneWidget);
+
+        // Tap "Keep it just for me" to publish
+        await tester.tap(find.text('Keep it just for me'));
+        await tester.pumpAndSettle();
+
+        // With the wrapper, PublishWorldSheet closed
+        expect(find.byType(PublishWorldSheet), findsNothing);
+
+        // And Alex's person sheet is opened at that line
+        expect(find.byType(GroupPersonEditorSheet), findsOneWidget);
+        expect(find.text('Alex'), findsWidgets);
+        expect(
+          find.text("This line can't be saved. Change it."),
+          findsOneWidget,
+        );
+      },
+    );
   });
 
   group('PublishWorldSheet strings', () {

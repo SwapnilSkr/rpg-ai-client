@@ -65,29 +65,39 @@ class _ActionsTabState extends State<ActionsTab> {
           return Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.auto_awesome_outlined,
-                    color: EverloreTheme.goldDim,
-                    size: 48,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No actions yet',
-                    style: EverloreTheme.cardTitle.copyWith(
-                      color: EverloreTheme.parchment,
-                      fontSize: 18,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 28,
+                ),
+                decoration: BoxDecoration(
+                  color: EverloreTheme.void0.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.auto_awesome_outlined,
+                      color: EverloreTheme.goldDim,
+                      size: 48,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Say what you do in the chat, and they'll react.",
-                    textAlign: TextAlign.center,
-                    style: EverloreTheme.bodyDim.copyWith(fontSize: 13),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    Text(
+                      'No actions yet',
+                      style: EverloreTheme.cardTitle.copyWith(
+                        color: EverloreTheme.parchment,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Say what you do in the chat, and they'll react.",
+                      textAlign: TextAlign.center,
+                      style: EverloreTheme.bodyDim.copyWith(fontSize: 13),
+                    ),
+                  ],
+                ),
               ),
             ),
           );

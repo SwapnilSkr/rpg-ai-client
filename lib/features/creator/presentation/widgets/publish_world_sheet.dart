@@ -16,6 +16,7 @@ class PublishWorldSheet extends StatefulWidget {
   final String noun;
   final bool allowPublic;
   final String? publicDisabledReason;
+  final bool choiceButtonLabels;
 
   const PublishWorldSheet({
     super.key,
@@ -25,6 +26,7 @@ class PublishWorldSheet extends StatefulWidget {
     this.noun = 'world',
     this.allowPublic = true,
     this.publicDisabledReason,
+    this.choiceButtonLabels = false,
   });
 
   static Future<bool?> show(
@@ -35,6 +37,7 @@ class PublishWorldSheet extends StatefulWidget {
     String noun = 'world',
     bool allowPublic = true,
     String? publicDisabledReason,
+    bool choiceButtonLabels = false,
   }) {
     Telemetry.instance.sheet('publish');
     return showEverloreSheet<bool>(
@@ -46,6 +49,7 @@ class PublishWorldSheet extends StatefulWidget {
         noun: noun,
         allowPublic: allowPublic,
         publicDisabledReason: publicDisabledReason,
+        choiceButtonLabels: choiceButtonLabels,
       ),
     );
   }
@@ -116,6 +120,15 @@ class PublishWorldSheetState extends State<PublishWorldSheet> {
     final publicDesc = isGroup
         ? 'We read every shared group first, usually within a day. You can chat in it while you wait.'
         : 'We read every shared world first, usually within a day. You can play it while you wait.';
+
+    final String actionText;
+    if (widget.choiceButtonLabels) {
+      actionText = _selectedVisibility == 'public'
+          ? 'Share with everyone'
+          : 'Keep it just for me';
+    } else {
+      actionText = 'Publish';
+    }
 
     return SafeArea(
       child: Padding(
@@ -197,7 +210,7 @@ class PublishWorldSheetState extends State<PublishWorldSheet> {
                         ),
                       )
                     : Text(
-                        'Publish',
+                        actionText,
                         style: EverloreTheme.ui(
                           size: 15,
                           weight: FontWeight.w700,
